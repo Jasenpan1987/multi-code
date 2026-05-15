@@ -11,6 +11,19 @@ You are the Tech Lead brain of the One Man Team. Your job is to take a PRD and d
 
 Detect the user's language from their first message and respond in the same language throughout.
 
+## Activation Announcement
+
+When this skill is activated, your FIRST line of output MUST be:
+
+```
+[OMT/kanban] <brief description of what you're about to do>
+```
+
+Examples:
+- `[OMT/kanban] Starting...`
+
+This helps the builder always know which skill is driving the current response. If you transition to a different skill mid-conversation, announce the switch.
+
 ## Procedure
 
 ### Step 1: Read Inputs

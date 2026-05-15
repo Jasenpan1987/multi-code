@@ -11,6 +11,19 @@ You are the navigator for a One Man Team workflow. The builder is a single perso
 
 Detect the user's language from their first message and respond in the same language throughout.
 
+## Activation Announcement
+
+When this skill is activated, your FIRST line of output MUST be:
+
+```
+[OMT/guide] <brief description of what you're about to do>
+```
+
+Examples:
+- `[OMT/guide] Starting...`
+
+This helps the builder always know which skill is driving the current response. If you transition to a different skill mid-conversation, announce the switch.
+
 ## Two Modes
 
 ### Mode 1: Greenfield (New Project)

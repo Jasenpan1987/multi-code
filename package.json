@@ -1,0 +1,21 @@
+{
+  "name": "multi-code",
+  "type": "module",
+  "private": true,
+  "workspaces": ["./workspace/*"],
+  "scripts": {
+    "start": "npm start -w app",
+    "build": "npm run build -w app",
+    "lint": "pnpm -r --parallel --stream run lint",
+    "lint:fix": "pnpm -r --parallel --stream run lint:fix",
+    "type": "pnpm -r --parallel --stream run type",
+    "test": "npm run test -w app",
+    "postinstall": "chmod +x node_modules/.pnpm/node-pty@*/node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null || true"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["electron", "node-pty", "esbuild"]
+  }
+}
