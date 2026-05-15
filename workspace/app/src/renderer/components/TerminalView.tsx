@@ -79,12 +79,11 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
     const entry = terminals.get(instanceId);
     if (!entry) return;
 
-    const { fitAddon, terminal } = entry;
+    const { fitAddon } = entry;
 
-    // Fit when becoming active
+    // Fit when becoming active (delay to ensure container is sized)
     requestAnimationFrame(() => {
       fitAddon.fit();
-      terminal.focus();
     });
 
     const handleResize = () => fitAddon.fit();

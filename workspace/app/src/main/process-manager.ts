@@ -127,14 +127,18 @@ export class ProcessManager {
     sessionWatcher.watchProcess(id, cwd);
 
     ptyProcess.onData((data: string) => {
-      this.mainWindow?.webContents.send("pty-output", id, data);
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send("pty-output", id, data);
+      }
     });
 
     ptyProcess.onExit(({ exitCode }) => {
       instance.status = "stopped";
       instance.ptyProcess = null;
       sessionWatcher.unwatch(id);
-      this.mainWindow?.webContents.send("instance-exit", id, exitCode);
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send("instance-exit", id, exitCode);
+      }
     });
 
     return instance;
