@@ -1,5 +1,7 @@
 # Multi-Code
 
+> [中文文档](./README.zh-CN.md)
+
 A desktop application for managing multiple Claude Code CLI instances from a single interface. Think of it as a terminal multiplexer with a classic QQ (early-2000s chat app) aesthetic — each Claude Code session appears as a "contact" in a sidebar, with full terminal fidelity and notification support.
 
 ## Why
@@ -154,18 +156,18 @@ pnpm pack         # Package app (directory output)
 pnpm dist         # Build distributable (dmg on macOS)
 ```
 
-## 使用说明
+## Usage Guide
 
-Multi-Code 的核心定位是**轻量级 agent 调度中心**:你可以并行管理多个 Claude Code 会话,统一观察、批量发指令。需要边看代码边深度调改时,可以一键移交给 IDE 里的 Claude Code(VS Code 等)。
+Multi-Code positions itself as a **lightweight agent orchestration hub**: run multiple Claude Code sessions in parallel, watch them at a glance, send quick commands. When a session needs deep "edit code while watching the AI" work, hand it off to IDE-integrated Claude Code (VS Code etc.) with one click.
 
-### 创建新实例
+### Creating an instance
 
-1. 点击左侧 sidebar 底部的 **"+ New"** 按钮
-2. 选择项目目录(必须是绝对路径)
-3. 可选:填写一个 alias(联系人显示名)
-4. 点 Create —— 应用自动 spawn `claude` CLI 在该目录;首次进入若该目录还没历史 session,会启动新会话,否则用 `--continue` 续上
+1. Click the **"+ New"** button at the bottom of the left sidebar
+2. Select a project directory (absolute path)
+3. Optionally fill in an alias (display name in the contact list)
+4. Click Create — the app spawns `claude` in that directory. On first entry to a directory with no prior session, it starts a fresh session; otherwise it resumes the latest one with `--continue`.
 
-### 主界面布局(三栏)
+### Main layout (three columns)
 
 ```
 ┌──────────────┬─────────────────────┬─────────────────────┐
@@ -176,63 +178,63 @@ Multi-Code 的核心定位是**轻量级 agent 调度中心**:你可以并行管
 └──────────────┴─────────────────────┴─────────────────────┘
 ```
 
-- **左**:实例列表。绿色头像 = running,灰色 = stopped。右键菜单可 Restart / Remove。停止的实例右侧有 ▶ 按钮启动
-- **中**:claude 主聊天框(真终端)。底色白底 Aqua 风,适配深背景下的 ANSI diff 块
-- **右**:工具箱,手风琴式 —— 同时只能展开一个 section,展开的撑满纵向。Git 默认展开
-- **中右之间**:有一条**可拖动分栏**,左右调整聊天框 / 工具箱宽度。两侧最小 280px
+- **Left** — Instance list. Green avatar = running, gray = stopped. Right-click for Restart / Remove. Stopped instances show a ▶ button to restart.
+- **Middle** — The main claude chat (real terminal). Light Aqua-blue background tuned for ANSI diff blocks.
+- **Right** — Toolbox, accordion-style: only one section is expanded at a time and fills the available vertical space. Git is expanded by default.
+- **Between middle and right** — A **draggable splitter**. Drag to resize. Each side has a 280px minimum.
 
-### Toolbox 三个 section 详解
+### Toolbox sections
 
 #### Git
-- 显示当前 branch、文件变更计数、远端 ahead/behind
-- 列出每一个变更的文件,**点击文件名直接在 VS Code 里打开它**
-- 文件超过 20 个时只显示提示,不渲染列表
-- 严格 cwd 检查:只看 cwd 自己的 `.git`,不向父目录搜索 —— 子目录不会显示父仓库状态
+- Shows current branch, file counts, and remote ahead/behind
+- Lists each changed file — **click a file name to open it in VS Code**
+- If there are more than 20 changed files, the list is hidden and a "too many files" message is shown
+- Strict cwd check: only the cwd's own `.git` is inspected; parent directories are not searched. Subdirectories of a repo show "Not a git repository" by design.
 
 #### Quick Actions
-| 按钮 | 行为 |
-|------|------|
-| Go to Code Base | `code <cwd>` —— 用 VS Code 打开项目;已经开着会激活已有窗口 |
-| Show Cost | 在主聊天框敲 `/cost` |
-| Clear | 在主聊天框敲 `/clear` |
-| Compact | 在主聊天框敲 `/compact` |
-| Resume Elsewhere | 复制 `claude --resume <session-id>` 到剪贴板 |
+| Button | What it does |
+|--------|--------------|
+| Go to Code Base | Runs `code <cwd>` — opens the project in VS Code, or activates the existing window if it's already open |
+| Show Cost | Types `/cost` into the main terminal |
+| Clear | Types `/clear` into the main terminal |
+| Compact | Types `/compact` into the main terminal |
+| Resume Elsewhere | Copies `claude --resume <session-id>` to the clipboard |
 
 #### Terminal
-- 真实 shell PTY(用 `$SHELL`),黑底白字,跟 Terminal.app 一样
-- 在当前实例的项目目录下打开
-- 第一次展开时才创建,之后**后台保活** —— 你切到别的实例 / 折叠 section,这里跑的进程不会停
-- 可以放心跑 `vim`、`pnpm test`、`git commit` 等任何命令
+- Real shell PTY (uses your `$SHELL`), black background and white text like Terminal.app
+- Opens in the instance's project directory
+- Lazy-spawned on first expand, then **kept alive in the background** — switching to another instance or collapsing the section does not kill the process
+- Anything works: `vim`, `pnpm test`, `git commit`, etc.
 
-### 通知行为
+### Notification behavior
 
-- Agent 完成回应(`end_turn`)→ 响一次"滴滴"提示音
-- 头像闪烁 + 红点徽标
-- macOS Dock 图标弹跳(`critical` 模式,持续到你切回 app)
-- 当前选中的实例:闪烁 1.5 秒后自动消失(假定你已在看)
-- 其他实例:闪烁直到你点进去
+- Agent completes a turn (`end_turn`) → plays the "ding" notification sound
+- Avatar blinks + red dot badge appears
+- macOS Dock icon bounces (`critical` mode — keeps bouncing until you bring the app to the front)
+- For the currently selected instance: the blink auto-clears after 1.5s (you're already looking at it)
+- For other instances: keeps blinking until you click into it
 
-### 离线状态
+### Offline state
 
-- 已停止的实例显示灰色头像
-- 选中已停止的实例:聊天框中央显示大号 **OFFLINE** 字样
-- 工具箱所有 section 强制折叠,不可展开
-- 想恢复:点联系人右侧 ▶ 按钮重启 claude
+- Stopped instances have a gray avatar
+- When a stopped instance is selected: the chat area shows a large **OFFLINE** label
+- All toolbox sections are force-collapsed and cannot be expanded
+- To bring it back online: click the ▶ button on the contact entry to relaunch claude
 
-### Resume 到 IDE 的工作流
+### Resuming a session in your IDE
 
-当某个 session 进入"需要边看代码边改"的深度模式:
+When a session enters deep "edit code while watching the AI" territory:
 
-1. 工具箱 → Quick Actions → 点 **Resume Elsewhere** —— 命令已复制
-2. 在 VS Code 里打开终端(或开 iTerm/Terminal.app),`cd` 到项目根
-3. 粘贴回车 → claude 在带 IDE 的环境里继续这个 session
-4. Multi-Code 这边可以保持运行,也可以关掉
+1. Toolbox → Quick Actions → click **Resume Elsewhere** — the command is now on your clipboard
+2. Open a terminal in VS Code (or iTerm / Terminal.app), `cd` to the project root
+3. Paste and press Enter — claude continues this session in the IDE-integrated environment
+4. You can leave Multi-Code running, or close it
 
-### 数据持久化
+### Data persistence
 
-- 实例列表(目录 + alias)保存在 `~/.config/Multi-Code/contacts.json`
-- App 重启后自动恢复联系人列表(状态都是 stopped,需手动启动)
-- Session 内容由 Claude Code 自己管(`~/.claude/`),Multi-Code 不存任何对话内容
+- Instance list (directory + alias) is stored in `~/.config/Multi-Code/contacts.json`
+- On app restart, the contact list is restored (all entries start as stopped — relaunch manually)
+- Session content itself is managed by Claude Code (under `~/.claude/`); Multi-Code does not store any conversation data
 
 ## How It Works
 
