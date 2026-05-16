@@ -48,11 +48,6 @@ export function ContactList({
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-header">
-        <button className="new-instance-btn" onClick={onNew}>
-          + New
-        </button>
-      </div>
       <div className="contact-list">
         {sorted.length === 0 ? (
           <div className="sidebar-placeholder">No instances</div>
@@ -87,6 +82,9 @@ export function ContactList({
           ))
         )}
       </div>
+      <button className="new-instance-btn-bottom" onClick={onNew}>
+        + New
+      </button>
 
       {contextMenu && contextInstance && (
         <ContextMenu

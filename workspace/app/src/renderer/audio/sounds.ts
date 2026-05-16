@@ -25,6 +25,9 @@ async function loadSound(url: string): Promise<AudioBuffer | null> {
 function playBuffer(buffer: AudioBuffer | null, volume = 0.5) {
   if (!buffer) return;
   const ctx = getAudioContext();
+  if (ctx.state === "suspended") {
+    ctx.resume();
+  }
   const source = ctx.createBufferSource();
   source.buffer = buffer;
   const gain = ctx.createGain();

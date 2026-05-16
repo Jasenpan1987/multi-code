@@ -24,7 +24,11 @@ export class SessionWatcher {
    * Start watching for a spawned instance.
    * We find the session by matching cwd, since node-pty PID != claude's internal PID.
    */
-  watchProcess(instanceId: string, cwd: string) {
+  watchProcess(
+    instanceId: string,
+    cwd: string,
+    onSessionMatched?: (sessionId: string) => void
+  ) {
     // Poll for the session file to appear (claude takes a moment to register)
     let attempts = 0;
     const findSession = setInterval(() => {
@@ -39,6 +43,9 @@ export class SessionWatcher {
 
       clearInterval(findSession);
       this.startWatching(instanceId, jsonlPath);
+
+      const sessionId = path.basename(jsonlPath, ".jsonl");
+      onSessionMatched?.(sessionId);
     }, 1000);
   }
 
@@ -117,39 +124,46 @@ export class SessionWatcher {
 
       let shouldScheduleNotify = false;
 
+      const cancelPending = () => {
+        const pending = this.pendingNotify.get(instanceId);
+        if (pending) {
+          clearTimeout(pending);
+          this.pendingNotify.delete(instanceId);
+        }
+      };
+
       for (const line of lines) {
         try {
           const msg = JSON.parse(line);
           if (msg.type === "assistant") {
+            // end_turn = Claude is truly done with this turn → schedule notify
+            // tool_use  = Claude is calling a tool, still working → ignore
+            // anything else = also still working → ignore
             const stopReason = msg.message?.stop_reason;
-            if (stopReason === "end_turn" || stopReason === "tool_use") {
+            if (stopReason === "end_turn") {
               shouldScheduleNotify = true;
-            } else {
-              // Non-terminal message (None) — cancel any pending notification
-              // because Claude is still working
-              shouldScheduleNotify = false;
-              const pending = this.pendingNotify.get(instanceId);
-              if (pending) {
-                clearTimeout(pending);
-                this.pendingNotify.delete(instanceId);
-              }
             }
           } else if (msg.type === "user") {
-            // User responded — cancel pending notification (they already saw it)
-            shouldScheduleNotify = false;
-            const pending = this.pendingNotify.get(instanceId);
-            if (pending) {
-              clearTimeout(pending);
-              this.pendingNotify.delete(instanceId);
+            // Distinguish real user input (string content) from tool_result
+            // (array content). Only real user input means "user already saw
+            // the previous turn", which should cancel a pending notify.
+            const content = msg.message?.content ?? msg.content;
+            if (typeof content === "string") {
+              shouldScheduleNotify = false;
+              cancelPending();
             }
+            // tool_result: ignore — Claude is still in the middle of a turn.
           }
         } catch {
           // skip invalid JSON
         }
       }
 
-      // Schedule notification: wait 2s to confirm Claude really stopped
-      if (shouldScheduleNotify && !this.pendingNotify.has(instanceId)) {
+      // Schedule notification: wait 2s to confirm Claude really stopped.
+      // If a pending one already exists, replace it so the timer restarts
+      // from the latest end_turn (handles bursts of end_turn in one chunk).
+      if (shouldScheduleNotify) {
+        cancelPending();
         const timer = setTimeout(() => {
           this.pendingNotify.delete(instanceId);
           this.mainWindow?.webContents.send("instance-activity", instanceId, "waiting");

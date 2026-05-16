@@ -27,11 +27,31 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
       cursorBlink: true,
       fontSize: 13,
       fontFamily: "Menlo, Monaco, 'Courier New', monospace",
+      minimumContrastRatio: 7,
       theme: {
         background: "#f0f4fa",
         foreground: "#1a1a1a",
         cursor: "#333333",
         selectionBackground: "#b3d4fc",
+        // Standard 16 ANSI colors retuned for a light background.
+        // Anything that would be near-white on a dark theme becomes a
+        // readable gray/black here, while preserving hue for colored output.
+        black: "#1a1a1a",
+        red: "#c62828",
+        green: "#1e7a3a",
+        yellow: "#a65b00",
+        blue: "#2d5a8a",
+        magenta: "#8e3a8e",
+        cyan: "#0e6b75",
+        white: "#3a3a3a",
+        brightBlack: "#5a5a5a",
+        brightRed: "#d32f2f",
+        brightGreen: "#2e8b4a",
+        brightYellow: "#b8730e",
+        brightBlue: "#3a6aa3",
+        brightMagenta: "#a04aa0",
+        brightCyan: "#1f8a96",
+        brightWhite: "#1a1a1a",
       },
       allowProposedApi: true,
     });
@@ -88,7 +108,11 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
 
     const handleResize = () => fitAddon.fit();
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    window.addEventListener("layout-resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("layout-resize", handleResize);
+    };
   }, [instanceId, active]);
 
   return (

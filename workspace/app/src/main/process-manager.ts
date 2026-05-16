@@ -6,6 +6,7 @@ import fs from "fs";
 import { loadContacts, saveContacts } from "./store";
 import type { SavedContact } from "./store";
 import { sessionWatcher } from "./session-watcher";
+import { shellManager } from "./shell-manager";
 
 function findClaude(): string {
   const candidates = [
@@ -23,6 +24,16 @@ function findClaude(): string {
 
 const claudePath = findClaude();
 
+function hasExistingSession(cwd: string): boolean {
+  const encodedCwd = cwd.replace(/\//g, "-");
+  const projectDir = path.join(process.env.HOME || "", ".claude/projects", encodedCwd);
+  try {
+    return fs.readdirSync(projectDir).some((f) => f.endsWith(".jsonl"));
+  } catch {
+    return false;
+  }
+}
+
 export interface InstanceInfo {
   id: string;
   cwd: string;
@@ -30,6 +41,7 @@ export interface InstanceInfo {
   status: "running" | "stopped";
   startedAt: number;
   name: string;
+  sessionId?: string;
 }
 
 interface ManagedInstance {
@@ -39,6 +51,7 @@ interface ManagedInstance {
   status: "running" | "stopped";
   startedAt: number;
   ptyProcess: pty.IPty | null;
+  sessionId?: string;
 }
 
 export class ProcessManager {
@@ -106,7 +119,8 @@ export class ProcessManager {
       ].join(":"),
     } as Record<string, string>;
 
-    const ptyProcess = pty.spawn(claudePath, ["--continue"], {
+    const args = hasExistingSession(cwd) ? ["--continue"] : [];
+    const ptyProcess = pty.spawn(claudePath, args, {
       name: "xterm-256color",
       cols,
       rows,
@@ -124,7 +138,18 @@ export class ProcessManager {
     };
 
     // Watch the session JSONL for structured events (use cwd to find session)
-    sessionWatcher.watchProcess(id, cwd);
+    sessionWatcher.watchProcess(id, cwd, (sessionId) => {
+      const tracked = this.instances.get(id);
+      if (!tracked) return;
+      tracked.sessionId = sessionId;
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send(
+          "instance-session-id",
+          id,
+          sessionId
+        );
+      }
+    });
 
     ptyProcess.onData((data: string) => {
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
@@ -167,6 +192,7 @@ export class ProcessManager {
 
   removeInstance(id: string) {
     this.killInstance(id);
+    shellManager.kill(id);
     this.instances.delete(id);
     this.persist();
   }
@@ -224,6 +250,7 @@ export class ProcessManager {
       status: instance.status,
       startedAt: instance.startedAt,
       name: instance.alias || path.basename(instance.cwd),
+      sessionId: instance.sessionId,
     };
   }
 }

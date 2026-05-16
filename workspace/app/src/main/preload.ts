@@ -15,12 +15,24 @@ contextBridge.exposeInMainWorld("electronAPI", {
   setAlias: (id: string, alias: string) =>
     ipcRenderer.invoke("set-alias", id, alias),
   selectDirectory: () => ipcRenderer.invoke("select-directory"),
+  getGitStatus: (id: string) => ipcRenderer.invoke("get-git-status", id),
+  openInVSCode: (target: string) => ipcRenderer.invoke("open-in-vscode", target),
+
+  bounceDock: () => ipcRenderer.send("bounce-dock"),
 
   // Terminal I/O
   writeToInstance: (id: string, data: string) =>
     ipcRenderer.send("pty-input", id, data),
   resizeInstance: (id: string, cols: number, rows: number) =>
     ipcRenderer.send("pty-resize", id, cols, rows),
+
+  // Shell terminal (toolbox Terminal section)
+  spawnShell: (id: string) => ipcRenderer.invoke("shell-spawn", id),
+  killShell: (id: string) => ipcRenderer.invoke("shell-kill", id),
+  writeToShell: (id: string, data: string) =>
+    ipcRenderer.send("shell-input", id, data),
+  resizeShell: (id: string, cols: number, rows: number) =>
+    ipcRenderer.send("shell-resize", id, cols, rows),
 
   // Event listeners
   onPtyOutput: (callback: (id: string, data: string) => void) => {
@@ -45,6 +57,29 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("instance-activity", listener);
     return () => {
       ipcRenderer.removeListener("instance-activity", listener);
+    };
+  },
+  onInstanceSessionId: (callback: (id: string, sessionId: string) => void) => {
+    const listener = (_event: unknown, id: string, sessionId: string) =>
+      callback(id, sessionId);
+    ipcRenderer.on("instance-session-id", listener);
+    return () => {
+      ipcRenderer.removeListener("instance-session-id", listener);
+    };
+  },
+  onShellOutput: (callback: (id: string, data: string) => void) => {
+    const listener = (_event: unknown, id: string, data: string) =>
+      callback(id, data);
+    ipcRenderer.on("shell-output", listener);
+    return () => {
+      ipcRenderer.removeListener("shell-output", listener);
+    };
+  },
+  onShellExit: (callback: (id: string) => void) => {
+    const listener = (_event: unknown, id: string) => callback(id);
+    ipcRenderer.on("shell-exit", listener);
+    return () => {
+      ipcRenderer.removeListener("shell-exit", listener);
     };
   },
 });

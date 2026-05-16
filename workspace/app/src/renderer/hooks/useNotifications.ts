@@ -1,18 +1,11 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useRef, useCallback } from "react";
 
-interface UseNotificationsOptions {
-  selectedId: string | null;
-  soundEnabled?: boolean;
-}
-
-export function useNotifications({ selectedId, soundEnabled = true }: UseNotificationsOptions) {
+export function useNotifications() {
   const unreadRef = useRef(new Set<string>());
   const debounceTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
   const notify = useCallback(
-    (instanceId: string, instanceName: string) => {
-      if (instanceId === selectedId) return;
-
+    (instanceId: string, _instanceName: string) => {
       // Debounce: wait 500ms of silence before notifying
       const existing = debounceTimers.current.get(instanceId);
       if (existing) clearTimeout(existing);
@@ -33,10 +26,15 @@ export function useNotifications({ selectedId, soundEnabled = true }: UseNotific
         }, 500)
       );
     },
-    [selectedId, soundEnabled]
+    []
   );
 
   const markRead = useCallback((instanceId: string) => {
+    const pending = debounceTimers.current.get(instanceId);
+    if (pending) {
+      clearTimeout(pending);
+      debounceTimers.current.delete(instanceId);
+    }
     unreadRef.current.delete(instanceId);
     window.dispatchEvent(
       new CustomEvent("unread-update", {

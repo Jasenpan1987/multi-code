@@ -38,3 +38,23 @@ This is NOT a chat application. It's a **terminal multiplexer with a chat-app sk
 - Terminal rendered via `xterm.js` in Electron renderer
 - Full terminal fidelity: ANSI colors, clickable elements, permission prompts, tabs
 - No history storage, no message parsing — raw terminal pass-through
+
+## Product Positioning (refined 2026-05-16)
+
+Multi-Code is a **lightweight agent orchestration hub**, not a deep IDE-integrated coding tool.
+
+- **What it's good for:** running many agents in parallel, glancing at status, sending lightweight commands, dispatching work
+- **What it's NOT trying to be:** an IDE replacement. When deep "edit code while watching the AI" work is needed, the user hands the session off to IDE-integrated Claude Code (via `claude --resume <session-id>`)
+
+This positioning informs feature scope: features that reduce the cost of glancing at many agents are in scope; features that duplicate IDE capabilities are not.
+
+(source: 2026-05-16 toolbox ideation)
+
+## UI Layout (current + planned)
+
+- **Current (MVP):** Two columns — contact list | terminal
+- **Planned (Toolbox epic):** Three columns — contact list | terminal | toolbox
+
+The toolbox is a per-instance utility panel using an accordion (one section expanded at a time). MVP sections: Git status, Quick Actions. Designed for future extensibility (more sections added over time).
+
+(source: 2026-05-16 toolbox ideation)

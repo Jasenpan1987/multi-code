@@ -2,17 +2,26 @@ import { useEffect, useState, useCallback } from "react";
 import { ContactList } from "./components/ContactList";
 import { NewInstanceDialog } from "./components/NewInstanceDialog";
 import { TerminalView, cleanupTerminal } from "./components/TerminalView";
+import { cleanupShellTerminal } from "./components/TerminalSection";
+import { Toolbox } from "./components/Toolbox";
 import { useNotifications } from "./hooks/useNotifications";
 import { playMessageSound, playCoughSound } from "./audio/sounds";
 import type { Instance } from "../shared/types";
+
+const DEFAULT_EXPANDED_SECTION = "git";
 
 export function App() {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [unreadIds, setUnreadIds] = useState<Set<string>>(new Set());
+  const [expandedByInstance, setExpandedByInstance] = useState<
+    Map<string, string>
+  >(new Map());
+  const [hasOutput, setHasOutput] = useState<Set<string>>(new Set());
+  const [toolboxWidth, setToolboxWidth] = useState(480);
 
-  const { notify, markRead } = useNotifications({ selectedId });
+  const { notify, markRead } = useNotifications();
 
   // Load saved contacts on startup
   useEffect(() => {
@@ -38,6 +47,12 @@ export function App() {
     const cleanup = window.electronAPI.onPtyOutput((id, data) => {
       const event = new CustomEvent("pty-data", { detail: { id, data } });
       window.dispatchEvent(event);
+      setHasOutput((prev) => {
+        if (prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
     });
     return cleanup;
   }, []);
@@ -47,15 +62,24 @@ export function App() {
     const cleanup = window.electronAPI.onInstanceActivity((id) => {
       // Always play sound when agent finishes work
       playMessageSound();
+      // Bounce the Dock — macOS only bounces if app is not in front,
+      // which is exactly the QQ-style behavior we want.
+      window.electronAPI.bounceDock();
 
-      // If not selected, also flash + badge
-      if (id !== selectedId) {
-        const inst = instances.find((i) => i.id === id);
-        if (inst) notify(id, inst.name);
+      const inst = instances.find((i) => i.id === id);
+      if (!inst) return;
+
+      // Flash for every instance — including the selected one (QQ-style).
+      notify(id, inst.name);
+
+      // If it's the currently selected one, the user is already looking at it,
+      // so auto-clear the unread state shortly after.
+      if (id === selectedId) {
+        setTimeout(() => markRead(id), 1500);
       }
     });
     return cleanup;
-  }, [selectedId, instances, notify]);
+  }, [selectedId, instances, notify, markRead]);
 
   // Listen for instance exit
   useEffect(() => {
@@ -64,6 +88,22 @@ export function App() {
         prev.map((inst) =>
           inst.id === id ? { ...inst, status: "stopped" as const } : inst
         )
+      );
+      setHasOutput((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    });
+    return cleanup;
+  }, []);
+
+  // Listen for session-id matched (used by Resume Elsewhere button)
+  useEffect(() => {
+    const cleanup = window.electronAPI.onInstanceSessionId((id, sessionId) => {
+      setInstances((prev) =>
+        prev.map((inst) => (inst.id === id ? { ...inst, sessionId } : inst))
       );
     });
     return cleanup;
@@ -113,11 +153,30 @@ export function App() {
   const handleRemove = useCallback(
     (id: string) => {
       cleanupTerminal(id);
+      cleanupShellTerminal(id);
       window.electronAPI.removeInstance(id);
       setInstances((prev) => prev.filter((inst) => inst.id !== id));
+      setExpandedByInstance((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Map(prev);
+        next.delete(id);
+        return next;
+      });
       if (selectedId === id) {
         setSelectedId(null);
       }
+    },
+    [selectedId]
+  );
+
+  const handleExpandSection = useCallback(
+    (sectionId: string) => {
+      if (!selectedId) return;
+      setExpandedByInstance((prev) => {
+        const next = new Map(prev);
+        next.set(selectedId, sectionId);
+        return next;
+      });
     },
     [selectedId]
   );
@@ -163,8 +222,96 @@ export function App() {
               Click &quot;+ New&quot; to create a Claude Code instance
             </div>
           )}
+          {(() => {
+            const sel = selectedId
+              ? instances.find((i) => i.id === selectedId)
+              : null;
+            if (!sel) return null;
+            if (sel.status === "stopped") {
+              return (
+                <div className="content-offline-overlay">
+                  <div className="content-offline-text">Offline</div>
+                </div>
+              );
+            }
+            if (sel.status === "running" && !hasOutput.has(sel.id)) {
+              return (
+                <div className="content-starting-overlay">
+                  <div className="content-spinner" />
+                  <div className="content-starting-text">
+                    Starting Claude Code…
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
         </div>
       </main>
+
+      {(() => {
+        const selectedInstance = selectedId
+          ? instances.find((i) => i.id === selectedId)
+          : null;
+        if (!selectedInstance) return null;
+        const isOffline = selectedInstance.status === "stopped";
+        return (
+          <>
+            <div
+              className="resizer"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                const startX = e.clientX;
+                const startWidth = toolboxWidth;
+                let raf = 0;
+                const dispatchLayoutResize = () => {
+                  if (raf) return;
+                  raf = requestAnimationFrame(() => {
+                    raf = 0;
+                    window.dispatchEvent(new Event("layout-resize"));
+                  });
+                };
+                const onMove = (ev: MouseEvent) => {
+                  const delta = startX - ev.clientX;
+                  const next = Math.max(
+                    280,
+                    Math.min(
+                      window.innerWidth - 280 - 180,
+                      startWidth + delta
+                    )
+                  );
+                  setToolboxWidth(next);
+                  dispatchLayoutResize();
+                };
+                const onUp = () => {
+                  document.removeEventListener("mousemove", onMove);
+                  document.removeEventListener("mouseup", onUp);
+                  document.body.style.cursor = "";
+                  document.body.style.userSelect = "";
+                  if (raf) cancelAnimationFrame(raf);
+                  // Final fit after resize finishes
+                  window.dispatchEvent(new Event("layout-resize"));
+                };
+                document.addEventListener("mousemove", onMove);
+                document.addEventListener("mouseup", onUp);
+                document.body.style.cursor = "col-resize";
+                document.body.style.userSelect = "none";
+              }}
+            />
+            <Toolbox
+              instance={selectedInstance}
+              expandedSection={
+                isOffline
+                  ? ""
+                  : (expandedByInstance.get(selectedInstance.id) ??
+                    DEFAULT_EXPANDED_SECTION)
+              }
+              onExpandSection={isOffline ? () => {} : handleExpandSection}
+              width={toolboxWidth}
+            />
+          </>
+        );
+      })()}
 
       <NewInstanceDialog
         open={dialogOpen}
