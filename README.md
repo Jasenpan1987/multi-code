@@ -73,7 +73,60 @@ multi-code/
 └── tsconfig.json
 ```
 
-## Getting Started
+## Installing the .dmg (end users)
+
+> Apple Silicon Macs only (M1/M2/M3/M4). Intel Macs are not supported.
+
+You will receive a `Multi-Code-0.1.0-arm64.dmg` file directly (e.g. via Slack/Drive/AirDrop). Follow the steps below.
+
+### Prerequisite: Claude Code CLI
+
+Install the Claude Code CLI **before** launching Multi-Code:
+
+```bash
+curl -fsSL https://claude.ai/install.sh | sh
+```
+
+Verify it works:
+
+```bash
+claude --version
+```
+
+If that prints a version number, you're good.
+
+### Step 1 — Install the app
+
+1. Double-click the `Multi-Code-0.1.0-arm64.dmg` file you received
+2. In the disk window that opens, drag the **Multi-Code** icon into the **Applications** folder
+3. Eject the mounted disk (right-click → Eject, or drag it to the Trash)
+
+### Step 2 — Clear the quarantine flag (required, do once)
+
+This app is not signed with an Apple Developer certificate, so macOS Gatekeeper will block it from running by default. Run this command once in Terminal to remove the quarantine flag:
+
+```bash
+xattr -cr /Applications/Multi-Code.app
+```
+
+### Step 3 — Launch
+
+Open Multi-Code from Launchpad or the Applications folder. From now on, double-click works as normal — you don't need to repeat Step 2.
+
+### Troubleshooting
+
+**"Multi-Code can't be opened" / nothing happens on double-click**
+You skipped Step 2. Run the `xattr` command above and try again.
+
+**Created an instance but the chat window says OFFLINE**
+The `claude` CLI isn't on your PATH. Verify with `claude --version`. If that fails, reinstall the Claude Code CLI (see Prerequisite above).
+
+**Upgrading to a new version**
+Drag the new `Multi-Code.app` into Applications (replace the old one), then run `xattr -cr /Applications/Multi-Code.app` again before launching.
+
+---
+
+## Development (run from source)
 
 ### Prerequisites
 

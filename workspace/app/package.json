@@ -21,7 +21,9 @@
     "productName": "Multi-Code",
     "mac": {
       "category": "public.app-category.developer-tools",
-      "target": "dmg"
+      "target": "dmg",
+      "icon": "build/icon.icns",
+      "identity": null
     },
     "files": [
       "dist/**/*",
