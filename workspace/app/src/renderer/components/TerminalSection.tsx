@@ -14,6 +14,7 @@ interface ShellEntry {
   fitAddon: FitAddon;
   spawned: boolean;
   exited: boolean;
+  opened: boolean;
 }
 
 const shells = new Map<string, ShellEntry>();
@@ -55,7 +56,13 @@ function getOrCreateEntry(instanceId: string): ShellEntry {
     window.electronAPI.resizeShell(instanceId, cols, rows);
   });
 
-  entry = { terminal, fitAddon, spawned: false, exited: false };
+  entry = {
+    terminal,
+    fitAddon,
+    spawned: false,
+    exited: false,
+    opened: false,
+  };
   shells.set(instanceId, entry);
   return entry;
 }
@@ -71,11 +78,18 @@ export function TerminalSection({ instanceId, active }: TerminalSectionProps) {
 
     const entry = getOrCreateEntry(instanceId);
     setExited(entry.exited);
+    const container = containerRef.current;
 
-    // Attach terminal to DOM if not already attached to this container
-    if (entry.terminal.element?.parentElement !== containerRef.current) {
-      containerRef.current.innerHTML = "";
-      entry.terminal.open(containerRef.current);
+    if (!entry.opened) {
+      // First time: let xterm create its own DOM inside our container
+      container.innerHTML = "";
+      entry.terminal.open(container);
+      entry.opened = true;
+    } else if (entry.terminal.element && entry.terminal.element.parentElement !== container) {
+      // Re-mount: xterm.js does not allow open() to be called twice on the same
+      // Terminal instance. Move the existing DOM node into our new container.
+      container.innerHTML = "";
+      container.appendChild(entry.terminal.element);
     }
 
     // Spawn shell if first time (lazy)
@@ -86,7 +100,11 @@ export function TerminalSection({ instanceId, active }: TerminalSectionProps) {
 
     // Fit + push size to PTY
     requestAnimationFrame(() => {
-      entry.fitAddon.fit();
+      try {
+        entry.fitAddon.fit();
+      } catch {
+        // ignore — container may not be ready in some edge cases
+      }
       window.electronAPI.resizeShell(
         instanceId,
         entry.terminal.cols,
