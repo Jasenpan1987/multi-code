@@ -63,6 +63,7 @@ export function ContactList({
                 name={inst.name}
                 online={inst.status === "running"}
                 blink={unreadIds.has(inst.id)}
+                backend={inst.backend}
               />
               <span className="contact-name">{inst.name}</span>
               {unreadIds.has(inst.id) && <span className="unread-badge" />}

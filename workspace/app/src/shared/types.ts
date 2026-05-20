@@ -1,3 +1,5 @@
+export type BackendName = "claude" | "opencode";
+
 export interface Instance {
   id: string;
   cwd: string;
@@ -6,6 +8,7 @@ export interface Instance {
   startedAt: number;
   name: string;
   sessionId?: string;
+  backend: BackendName;
 }
 
 export interface GitFileEntry {
@@ -30,16 +33,21 @@ export type GitStatus =
 
 export interface ElectronAPI {
   // Instance management
-  createInstance: (cwd: string, alias?: string) => Promise<Instance>;
+  createInstance: (
+    cwd: string,
+    alias?: string,
+    backend?: BackendName
+  ) => Promise<Instance>;
   startInstance: (id: string) => Promise<Instance | null>;
   killInstance: (id: string) => Promise<void>;
   removeInstance: (id: string) => Promise<void>;
   restartInstance: (id: string) => Promise<Instance | null>;
   listInstances: () => Promise<Instance[]>;
   loadContacts: () => Promise<Instance[]>;
-  hasRunningInstanceAt: (cwd: string) => Promise<boolean>;
+  hasRunningInstanceAt: (cwd: string, backend?: BackendName) => Promise<boolean>;
   setAlias: (id: string, alias: string) => Promise<void>;
   selectDirectory: () => Promise<string | null>;
+  isBackendAvailable: (backend: BackendName) => Promise<boolean>;
   getGitStatus: (id: string) => Promise<GitStatus>;
   openInVSCode: (target: string) => Promise<{ ok: boolean; error?: string }>;
   bounceDock: () => void;

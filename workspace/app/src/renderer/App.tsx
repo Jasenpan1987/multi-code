@@ -6,7 +6,7 @@ import { cleanupShellTerminal } from "./components/TerminalSection";
 import { Toolbox } from "./components/Toolbox";
 import { useNotifications } from "./hooks/useNotifications";
 import { playMessageSound, playCoughSound } from "./audio/sounds";
-import type { Instance } from "../shared/types";
+import type { Instance, BackendName } from "../shared/types";
 
 const DEFAULT_EXPANDED_SECTION = "git";
 
@@ -118,8 +118,12 @@ export function App() {
   );
 
   const handleNewInstance = useCallback(
-    async (cwd: string, alias?: string) => {
-      const instance = await window.electronAPI.createInstance(cwd, alias);
+    async (cwd: string, alias?: string, backend?: BackendName) => {
+      const instance = await window.electronAPI.createInstance(
+        cwd,
+        alias,
+        backend
+      );
       setInstances((prev) => [...prev, instance]);
       setSelectedId(instance.id);
       setDialogOpen(false);
@@ -315,7 +319,6 @@ export function App() {
 
       <NewInstanceDialog
         open={dialogOpen}
-        duplicateWarning={false}
         onClose={() => setDialogOpen(false)}
         onSubmit={handleNewInstance}
       />

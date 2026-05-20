@@ -2,10 +2,13 @@ import fs from "fs";
 import path from "path";
 import { app } from "electron";
 
+import type { BackendName } from "./backends";
+
 export interface SavedContact {
   id: string;
   cwd: string;
   alias?: string;
+  backend?: BackendName;
 }
 
 const STORE_PATH = path.join(app.getPath("userData"), "contacts.json");

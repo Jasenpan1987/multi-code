@@ -3,11 +3,23 @@ import { spawn } from "child_process";
 import { processManager } from "./process-manager";
 import { shellManager } from "./shell-manager";
 import { getGitStatus } from "./git-status";
+import { isBackendAvailable } from "./backends";
+import type { BackendName } from "./backends";
 
 export function registerIpcHandlers() {
-  ipcMain.handle("create-instance", (_event, cwd: string, alias?: string) => {
-    return processManager.createInstance(cwd, alias);
-  });
+  ipcMain.handle(
+    "create-instance",
+    (_event, cwd: string, alias?: string, backend?: BackendName) => {
+      return processManager.createInstance(cwd, alias, backend);
+    }
+  );
+
+  ipcMain.handle(
+    "is-backend-available",
+    (_event, backend: BackendName) => {
+      return isBackendAvailable(backend);
+    }
+  );
 
   ipcMain.handle("kill-instance", (_event, id: string) => {
     processManager.killInstance(id);
@@ -33,9 +45,12 @@ export function registerIpcHandlers() {
     return processManager.startInstance(id);
   });
 
-  ipcMain.handle("has-running-instance-at", (_event, cwd: string) => {
-    return processManager.hasRunningInstanceAt(cwd);
-  });
+  ipcMain.handle(
+    "has-running-instance-at",
+    (_event, cwd: string, backend?: BackendName) => {
+      return processManager.hasRunningInstanceAt(cwd, backend);
+    }
+  );
 
   ipcMain.handle("set-alias", (_event, id: string, alias: string) => {
     processManager.setAlias(id, alias);

@@ -2,37 +2,16 @@ import * as pty from "node-pty";
 import { BrowserWindow } from "electron";
 import path from "path";
 import crypto from "crypto";
-import fs from "fs";
 import { loadContacts, saveContacts } from "./store";
 import type { SavedContact } from "./store";
-import { sessionWatcher } from "./session-watcher";
 import { shellManager } from "./shell-manager";
-
-function findClaude(): string {
-  const candidates = [
-    path.join(process.env.HOME || "", ".local/bin/claude"),
-    "/usr/local/bin/claude",
-    "/opt/homebrew/bin/claude",
-  ];
-
-  for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
-  }
-
-  return "claude";
-}
-
-const claudePath = findClaude();
-
-function hasExistingSession(cwd: string): boolean {
-  const encodedCwd = cwd.replace(/\//g, "-");
-  const projectDir = path.join(process.env.HOME || "", ".claude/projects", encodedCwd);
-  try {
-    return fs.readdirSync(projectDir).some((f) => f.endsWith(".jsonl"));
-  } catch {
-    return false;
-  }
-}
+import { getBackend } from "./backends";
+import type {
+  Backend,
+  BackendName,
+  CompletionDetector,
+  SessionDiscovery,
+} from "./backends";
 
 export interface InstanceInfo {
   id: string;
@@ -42,6 +21,7 @@ export interface InstanceInfo {
   startedAt: number;
   name: string;
   sessionId?: string;
+  backend: BackendName;
 }
 
 interface ManagedInstance {
@@ -52,7 +32,12 @@ interface ManagedInstance {
   startedAt: number;
   ptyProcess: pty.IPty | null;
   sessionId?: string;
+  backend: BackendName;
+  discovery: SessionDiscovery | null;
+  detector: CompletionDetector | null;
 }
+
+const DEFAULT_BACKEND: BackendName = "claude";
 
 export class ProcessManager {
   private instances = new Map<string, ManagedInstance>();
@@ -60,7 +45,6 @@ export class ProcessManager {
 
   setMainWindow(win: BrowserWindow) {
     this.mainWindow = win;
-    sessionWatcher.setMainWindow(win);
   }
 
   loadSavedContacts(): InstanceInfo[] {
@@ -74,6 +58,9 @@ export class ProcessManager {
           status: "stopped",
           startedAt: 0,
           ptyProcess: null,
+          backend: contact.backend ?? DEFAULT_BACKEND,
+          discovery: null,
+          detector: null,
         });
       }
     }
@@ -82,14 +69,23 @@ export class ProcessManager {
 
   private persist() {
     const contacts: SavedContact[] = Array.from(this.instances.values()).map(
-      (i) => ({ id: i.id, cwd: i.cwd, alias: i.alias })
+      (i) => ({
+        id: i.id,
+        cwd: i.cwd,
+        alias: i.alias,
+        backend: i.backend,
+      })
     );
     saveContacts(contacts);
   }
 
-  createInstance(cwd: string, alias?: string): InstanceInfo {
+  createInstance(
+    cwd: string,
+    alias?: string,
+    backend: BackendName = DEFAULT_BACKEND
+  ): InstanceInfo {
     const id = crypto.randomUUID();
-    const instance = this.spawnProcess(id, cwd, alias);
+    const instance = this.spawnProcess(id, cwd, alias, backend);
     this.instances.set(id, instance);
     this.persist();
     return this.toInfo(instance);
@@ -100,27 +96,29 @@ export class ProcessManager {
     if (!instance) return null;
     if (instance.status === "running") return this.toInfo(instance);
 
-    const started = this.spawnProcess(id, instance.cwd, instance.alias);
+    const started = this.spawnProcess(
+      id,
+      instance.cwd,
+      instance.alias,
+      instance.backend
+    );
     this.instances.set(id, started);
     return this.toInfo(started);
   }
 
-  private spawnProcess(id: string, cwd: string, alias?: string): ManagedInstance {
+  private spawnProcess(
+    id: string,
+    cwd: string,
+    alias: string | undefined,
+    backendName: BackendName
+  ): ManagedInstance {
     const cols = 120;
     const rows = 30;
 
-    const env = {
-      ...process.env,
-      PATH: [
-        path.join(process.env.HOME || "", ".local/bin"),
-        "/opt/homebrew/bin",
-        "/usr/local/bin",
-        process.env.PATH || "",
-      ].join(":"),
-    } as Record<string, string>;
+    const backend: Backend = getBackend(backendName);
+    const { command, args, env } = backend.spawn(cwd);
 
-    const args = hasExistingSession(cwd) ? ["--continue"] : [];
-    const ptyProcess = pty.spawn(claudePath, args, {
+    const ptyProcess = pty.spawn(command, args, {
       name: "xterm-256color",
       cols,
       rows,
@@ -135,13 +133,23 @@ export class ProcessManager {
       status: "running",
       startedAt: Date.now(),
       ptyProcess,
+      backend: backendName,
+      discovery: null,
+      detector: null,
     };
 
-    // Watch the session JSONL for structured events (use cwd to find session)
-    sessionWatcher.watchProcess(id, cwd, (sessionId) => {
+    instance.discovery = backend.discoverSessionId(cwd, (sessionId) => {
       const tracked = this.instances.get(id);
       if (!tracked) return;
       tracked.sessionId = sessionId;
+      tracked.detector = backend.createCompletionDetector(
+        sessionId,
+        (type) => {
+          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+            this.mainWindow.webContents.send("instance-activity", id, type);
+          }
+        }
+      );
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send(
           "instance-session-id",
@@ -160,13 +168,24 @@ export class ProcessManager {
     ptyProcess.onExit(({ exitCode }) => {
       instance.status = "stopped";
       instance.ptyProcess = null;
-      sessionWatcher.unwatch(id);
+      this.teardownObservers(instance);
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send("instance-exit", id, exitCode);
       }
     });
 
     return instance;
+  }
+
+  private teardownObservers(instance: ManagedInstance) {
+    if (instance.discovery) {
+      instance.discovery.cancel();
+      instance.discovery = null;
+    }
+    if (instance.detector) {
+      instance.detector.stop();
+      instance.detector = null;
+    }
   }
 
   writeToInstance(id: string, data: string) {
@@ -193,6 +212,8 @@ export class ProcessManager {
   removeInstance(id: string) {
     this.killInstance(id);
     shellManager.kill(id);
+    const instance = this.instances.get(id);
+    if (instance) this.teardownObservers(instance);
     this.instances.delete(id);
     this.persist();
   }
@@ -204,8 +225,14 @@ export class ProcessManager {
     if (instance.ptyProcess) {
       instance.ptyProcess.kill();
     }
+    this.teardownObservers(instance);
 
-    const restarted = this.spawnProcess(id, instance.cwd, instance.alias);
+    const restarted = this.spawnProcess(
+      id,
+      instance.cwd,
+      instance.alias,
+      instance.backend
+    );
     this.instances.set(id, restarted);
     return this.toInfo(restarted);
   }
@@ -214,11 +241,12 @@ export class ProcessManager {
     return Array.from(this.instances.values()).map((i) => this.toInfo(i));
   }
 
-  hasRunningInstanceAt(cwd: string): boolean {
+  hasRunningInstanceAt(cwd: string, backend?: BackendName): boolean {
     for (const instance of this.instances.values()) {
-      if (instance.cwd === cwd && instance.status === "running") {
-        return true;
-      }
+      if (instance.cwd !== cwd) continue;
+      if (instance.status !== "running") continue;
+      if (backend && instance.backend !== backend) continue;
+      return true;
     }
     return false;
   }
@@ -236,6 +264,7 @@ export class ProcessManager {
       if (instance.ptyProcess) {
         instance.ptyProcess.kill();
       }
+      this.teardownObservers(instance);
       instance.status = "stopped";
       instance.ptyProcess = null;
     }
@@ -251,6 +280,7 @@ export class ProcessManager {
       startedAt: instance.startedAt,
       name: instance.alias || path.basename(instance.cwd),
       sessionId: instance.sessionId,
+      backend: instance.backend,
     };
   }
 }

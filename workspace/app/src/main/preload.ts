@@ -2,16 +2,18 @@ import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("electronAPI", {
   // Instance management
-  createInstance: (cwd: string, alias?: string) =>
-    ipcRenderer.invoke("create-instance", cwd, alias),
+  createInstance: (cwd: string, alias?: string, backend?: string) =>
+    ipcRenderer.invoke("create-instance", cwd, alias, backend),
+  isBackendAvailable: (backend: string) =>
+    ipcRenderer.invoke("is-backend-available", backend),
   startInstance: (id: string) => ipcRenderer.invoke("start-instance", id),
   killInstance: (id: string) => ipcRenderer.invoke("kill-instance", id),
   removeInstance: (id: string) => ipcRenderer.invoke("remove-instance", id),
   restartInstance: (id: string) => ipcRenderer.invoke("restart-instance", id),
   listInstances: () => ipcRenderer.invoke("list-instances"),
   loadContacts: () => ipcRenderer.invoke("load-contacts"),
-  hasRunningInstanceAt: (cwd: string) =>
-    ipcRenderer.invoke("has-running-instance-at", cwd),
+  hasRunningInstanceAt: (cwd: string, backend?: string) =>
+    ipcRenderer.invoke("has-running-instance-at", cwd, backend),
   setAlias: (id: string, alias: string) =>
     ipcRenderer.invoke("set-alias", id, alias),
   selectDirectory: () => ipcRenderer.invoke("select-directory"),

@@ -27,19 +27,23 @@ function getColor(name: string): string {
   return COLORS[Math.abs(hash) % COLORS.length];
 }
 
+import type { BackendName } from "../../shared/types";
+
 interface AvatarProps {
   name: string;
   online: boolean;
   blink?: boolean;
+  backend: BackendName;
 }
 
-export function Avatar({ name, online, blink }: AvatarProps) {
+export function Avatar({ name, online, blink, backend }: AvatarProps) {
   const initials = getInitials(name);
   const bgColor = online ? getColor(name) : "#999";
+  const shape = backend === "opencode" ? "square" : "circle";
 
   return (
     <div
-      className={`avatar ${blink ? "blink" : ""}`}
+      className={`avatar avatar-${shape} ${blink ? "blink" : ""}`}
       style={{ backgroundColor: bgColor }}
     >
       <span className="avatar-initials">{initials}</span>
