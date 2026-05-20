@@ -62,6 +62,22 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
 
     terminals.set(instanceId, { terminal, fitAddon });
 
+    // macOS terminal emulators (Terminal.app, iTerm2) translate Cmd+Delete
+    // to \x15 (Ctrl+U) before forwarding to the PTY. xterm.js does not do
+    // this by default, so we replicate the translation here. Both Claude
+    // Code and OpenCode honor \x15 to clear the input line.
+    terminal.attachCustomKeyEventHandler((e) => {
+      if (
+        e.type === "keydown" &&
+        e.metaKey &&
+        (e.key === "Backspace" || e.key === "Delete")
+      ) {
+        window.electronAPI.writeToInstance(instanceId, "\x15");
+        return false;
+      }
+      return true;
+    });
+
     terminal.open(containerRef.current);
     fitAddon.fit();
 
