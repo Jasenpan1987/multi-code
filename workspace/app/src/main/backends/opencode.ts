@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { execSync } from "child_process";
+import Database from "better-sqlite3";
 import type {
   Backend,
   CompletionDetector,
@@ -16,6 +17,8 @@ const SEARCH_PATH = [
   "/usr/local/bin",
   process.env.PATH || "",
 ].join(":");
+
+const OPENCODE_DB = path.join(HOME, ".local/share/opencode/opencode.db");
 
 function findOpencodeBinary(): string {
   // Try PATH-resolve first (handles nvm-installed binaries etc.)
@@ -49,12 +52,169 @@ function buildEnv(): Record<string, string> {
   } as Record<string, string>;
 }
 
-class NoopSessionDiscovery implements SessionDiscovery {
-  cancel() {}
+// Open a read-only sqlite handle. Throws on failure (caller decides how to handle).
+function openDb(): Database.Database {
+  return new Database(OPENCODE_DB, { readonly: true, fileMustExist: true });
 }
 
-class NoopCompletionDetector implements CompletionDetector {
-  stop() {}
+// Find the most recently created session whose `directory` matches `cwd`.
+// Returns null if not found or if the db is currently inaccessible (e.g.
+// not yet created on first opencode launch).
+function findLatestSessionForCwd(cwd: string): string | null {
+  let db: Database.Database | null = null;
+  try {
+    db = openDb();
+    const row = db
+      .prepare(
+        "SELECT id FROM session WHERE directory = ? ORDER BY time_created DESC LIMIT 1"
+      )
+      .get(cwd) as { id: string } | undefined;
+    return row?.id ?? null;
+  } catch {
+    return null;
+  } finally {
+    db?.close();
+  }
+}
+
+class OpencodeSessionDiscovery implements SessionDiscovery {
+  private interval: ReturnType<typeof setInterval> | null = null;
+
+  constructor(cwd: string, onFound: (sessionId: string) => void) {
+    let attempts = 0;
+    this.interval = setInterval(() => {
+      attempts++;
+      if (attempts > 30) {
+        this.cancel();
+        return;
+      }
+      const sessionId = findLatestSessionForCwd(cwd);
+      if (!sessionId) return;
+
+      this.cancel();
+      onFound(sessionId);
+    }, 1000);
+  }
+
+  cancel() {
+    if (this.interval) {
+      clearInterval(this.interval);
+      this.interval = null;
+    }
+  }
+}
+
+interface OpencodeMessageData {
+  role?: string;
+  finish?: string;
+  content?: unknown;
+}
+
+class OpencodeCompletionDetector implements CompletionDetector {
+  private lastSeenTime = 0;
+  private pollInterval: ReturnType<typeof setInterval> | null = null;
+  private pendingNotify: ReturnType<typeof setTimeout> | null = null;
+  private stopped = false;
+
+  constructor(
+    private readonly sessionId: string,
+    private readonly onActivity: (type: string) => void
+  ) {
+    // Snapshot the latest message timestamp so existing rows don't trigger.
+    this.lastSeenTime = this.getCurrentLatestTime();
+    this.pollInterval = setInterval(() => this.checkForChanges(), 500);
+  }
+
+  stop() {
+    if (this.stopped) return;
+    this.stopped = true;
+    if (this.pollInterval) clearInterval(this.pollInterval);
+    if (this.pendingNotify) clearTimeout(this.pendingNotify);
+    this.pollInterval = null;
+    this.pendingNotify = null;
+  }
+
+  private cancelPending() {
+    if (this.pendingNotify) {
+      clearTimeout(this.pendingNotify);
+      this.pendingNotify = null;
+    }
+  }
+
+  private getCurrentLatestTime(): number {
+    let db: Database.Database | null = null;
+    try {
+      db = openDb();
+      const row = db
+        .prepare(
+          "SELECT MAX(time_created) AS t FROM message WHERE session_id = ?"
+        )
+        .get(this.sessionId) as { t: number | null } | undefined;
+      return row?.t ?? 0;
+    } catch {
+      return this.lastSeenTime;
+    } finally {
+      db?.close();
+    }
+  }
+
+  private checkForChanges() {
+    let db: Database.Database | null = null;
+    try {
+      db = openDb();
+      const rows = db
+        .prepare(
+          "SELECT time_created, data FROM message WHERE session_id = ? AND time_created > ? ORDER BY time_created ASC"
+        )
+        .all(this.sessionId, this.lastSeenTime) as Array<{
+        time_created: number;
+        data: string;
+      }>;
+
+      if (rows.length === 0) return;
+
+      let shouldScheduleNotify = false;
+
+      for (const row of rows) {
+        this.lastSeenTime = row.time_created;
+        let parsed: OpencodeMessageData;
+        try {
+          parsed = JSON.parse(row.data);
+        } catch {
+          continue;
+        }
+
+        if (parsed.role === "assistant") {
+          // finish === "stop"        -> assistant truly done, schedule notify
+          // finish === "tool-calls"  -> still working, ignore
+          // finish === undefined     -> intermediate streaming row, ignore
+          if (parsed.finish === "stop") {
+            shouldScheduleNotify = true;
+          }
+        } else if (parsed.role === "user") {
+          // Distinguish a real user prompt from a tool result. In opencode,
+          // user prompts have no `content` field at the top level (the prompt
+          // text lives in linked `part` rows); tool results carry payload.
+          // We treat any user-role message as "user has acted" → cancel
+          // pending notify, since it means the user already responded.
+          shouldScheduleNotify = false;
+          this.cancelPending();
+        }
+      }
+
+      if (shouldScheduleNotify) {
+        this.cancelPending();
+        this.pendingNotify = setTimeout(() => {
+          this.pendingNotify = null;
+          if (!this.stopped) this.onActivity("waiting");
+        }, 2000);
+      }
+    } catch {
+      // sqlite locked / db missing / etc — silent retry next tick
+    } finally {
+      db?.close();
+    }
+  }
 }
 
 export const opencodeBackend: Backend = {
@@ -62,7 +222,6 @@ export const opencodeBackend: Backend = {
 
   spawn(_cwd: string): SpawnConfig {
     // OpenCode handles "no prior session" gracefully — always pass --continue.
-    // (T-103 keeps spawn simple; richer session-existence detection is in T-106.)
     return {
       command: opencodePath,
       args: ["--continue"],
@@ -70,14 +229,12 @@ export const opencodeBackend: Backend = {
     };
   },
 
-  discoverSessionId(_cwd, _onFound): SessionDiscovery {
-    // Filled in by T-106 (sqlite query against ~/.local/share/opencode/opencode.db).
-    return new NoopSessionDiscovery();
+  discoverSessionId(cwd, onFound): SessionDiscovery {
+    return new OpencodeSessionDiscovery(cwd, onFound);
   },
 
-  createCompletionDetector(_sessionId, _onActivity): CompletionDetector {
-    // Filled in by T-106.
-    return new NoopCompletionDetector();
+  createCompletionDetector(sessionId, onActivity): CompletionDetector {
+    return new OpencodeCompletionDetector(sessionId, onActivity);
   },
 
   buildResumeCommand(sessionId: string): string {

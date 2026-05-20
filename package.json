@@ -2,7 +2,9 @@
   "name": "multi-code",
   "type": "module",
   "private": true,
-  "workspaces": ["./workspace/*"],
+  "workspaces": [
+    "./workspace/*"
+  ],
   "scripts": {
     "start": "npm start -w multi-code",
     "build": "npm run build -w multi-code",
@@ -10,12 +12,17 @@
     "lint:fix": "pnpm -r --parallel --stream run lint:fix",
     "type": "pnpm -r --parallel --stream run type",
     "test": "npm run test -w multi-code",
-    "postinstall": "chmod +x node_modules/.pnpm/node-pty@*/node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null || true"
+    "postinstall": "chmod +x node_modules/.pnpm/node-pty@*/node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null || true ; pnpm --filter multi-code run rebuild-native 2>/dev/null || true"
   },
   "devDependencies": {
     "typescript": "^5.8.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["electron", "node-pty", "esbuild"]
+    "onlyBuiltDependencies": [
+      "electron",
+      "node-pty",
+      "esbuild",
+      "better-sqlite3"
+    ]
   }
 }
