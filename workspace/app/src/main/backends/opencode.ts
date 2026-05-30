@@ -60,16 +60,22 @@ function openDb(): Database.Database {
 // Find the most recently created session whose `directory` matches `cwd`.
 // Returns null if not found or if the db is currently inaccessible (e.g.
 // not yet created on first opencode launch).
-function findLatestSessionForCwd(cwd: string): string | null {
+function findLatestSessionForCwd(
+  cwd: string,
+  isClaimed?: (sessionId: string) => boolean
+): string | null {
   let db: Database.Database | null = null;
   try {
     db = openDb();
-    const row = db
+    const rows = db
       .prepare(
-        "SELECT id FROM session WHERE directory = ? ORDER BY time_created DESC LIMIT 1"
+        "SELECT id FROM session WHERE directory = ? ORDER BY time_created DESC LIMIT 8"
       )
-      .get(cwd) as { id: string } | undefined;
-    return row?.id ?? null;
+      .all(cwd) as Array<{ id: string }>;
+    for (const row of rows) {
+      if (!isClaimed || !isClaimed(row.id)) return row.id;
+    }
+    return null;
   } catch {
     return null;
   } finally {
@@ -80,7 +86,11 @@ function findLatestSessionForCwd(cwd: string): string | null {
 class OpencodeSessionDiscovery implements SessionDiscovery {
   private interval: ReturnType<typeof setInterval> | null = null;
 
-  constructor(cwd: string, onFound: (sessionId: string) => void) {
+  constructor(
+    cwd: string,
+    onFound: (sessionId: string) => void,
+    isClaimed?: (sessionId: string) => boolean
+  ) {
     let attempts = 0;
     this.interval = setInterval(() => {
       attempts++;
@@ -88,8 +98,9 @@ class OpencodeSessionDiscovery implements SessionDiscovery {
         this.cancel();
         return;
       }
-      const sessionId = findLatestSessionForCwd(cwd);
+      const sessionId = findLatestSessionForCwd(cwd, isClaimed);
       if (!sessionId) return;
+      if (isClaimed && isClaimed(sessionId)) return;
 
       this.cancel();
       onFound(sessionId);
@@ -229,8 +240,8 @@ export const opencodeBackend: Backend = {
     };
   },
 
-  discoverSessionId(cwd, onFound): SessionDiscovery {
-    return new OpencodeSessionDiscovery(cwd, onFound);
+  discoverSessionId(cwd, onFound, isClaimed): SessionDiscovery {
+    return new OpencodeSessionDiscovery(cwd, onFound, isClaimed);
   },
 
   createCompletionDetector(sessionId, onActivity): CompletionDetector {

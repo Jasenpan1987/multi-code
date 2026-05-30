@@ -35,7 +35,10 @@ function hasExistingSession(cwd: string): boolean {
   }
 }
 
-function findJsonlByCwd(cwd: string): string | null {
+function findJsonlByCwd(
+  cwd: string,
+  isClaimed?: (sessionId: string) => boolean
+): string | null {
   try {
     const files = fs.readdirSync(SESSIONS_DIR);
     let bestMatch: { sessionId: string; startedAt: number } | null = null;
@@ -45,7 +48,9 @@ function findJsonlByCwd(cwd: string): string | null {
         const data = JSON.parse(
           fs.readFileSync(path.join(SESSIONS_DIR, file), "utf8")
         );
-        if (data.cwd === cwd && data.startedAt > (bestMatch?.startedAt || 0)) {
+        if (data.cwd !== cwd) continue;
+        if (isClaimed && isClaimed(data.sessionId)) continue;
+        if (data.startedAt > (bestMatch?.startedAt || 0)) {
           bestMatch = { sessionId: data.sessionId, startedAt: data.startedAt };
         }
       } catch {
@@ -178,7 +183,11 @@ class ClaudeCompletionDetector implements CompletionDetector {
 class ClaudeSessionDiscovery implements SessionDiscovery {
   private interval: ReturnType<typeof setInterval> | null = null;
 
-  constructor(cwd: string, onFound: (sessionId: string) => void) {
+  constructor(
+    cwd: string,
+    onFound: (sessionId: string) => void,
+    isClaimed?: (sessionId: string) => boolean
+  ) {
     let attempts = 0;
     this.interval = setInterval(() => {
       attempts++;
@@ -186,10 +195,13 @@ class ClaudeSessionDiscovery implements SessionDiscovery {
         this.cancel();
         return;
       }
-      const jsonlPath = findJsonlByCwd(cwd);
+      const jsonlPath = findJsonlByCwd(cwd, isClaimed);
       if (!jsonlPath) return;
 
       const sessionId = path.basename(jsonlPath, ".jsonl");
+      // Final claim check — another instance's discovery may have committed
+      // to this sessionId on the same tick. If so, keep polling.
+      if (isClaimed && isClaimed(sessionId)) return;
       this.cancel();
       onFound(sessionId);
     }, 1000);
@@ -215,8 +227,8 @@ export const claudeBackend: Backend = {
     };
   },
 
-  discoverSessionId(cwd, onFound) {
-    return new ClaudeSessionDiscovery(cwd, onFound);
+  discoverSessionId(cwd, onFound, isClaimed) {
+    return new ClaudeSessionDiscovery(cwd, onFound, isClaimed);
   },
 
   createCompletionDetector(sessionId, onActivity) {

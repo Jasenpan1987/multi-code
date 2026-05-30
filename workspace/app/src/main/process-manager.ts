@@ -138,26 +138,41 @@ export class ProcessManager {
       detector: null,
     };
 
-    instance.discovery = backend.discoverSessionId(cwd, (sessionId) => {
-      const tracked = this.instances.get(id);
-      if (!tracked) return;
-      tracked.sessionId = sessionId;
-      tracked.detector = backend.createCompletionDetector(
-        sessionId,
-        (type) => {
-          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-            this.mainWindow.webContents.send("instance-activity", id, type);
-          }
-        }
-      );
-      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-        this.mainWindow.webContents.send(
-          "instance-session-id",
-          id,
-          sessionId
-        );
+    const isSessionClaimed = (candidate: string): boolean => {
+      for (const other of this.instances.values()) {
+        if (other.id !== id && other.sessionId === candidate) return true;
       }
-    });
+      return false;
+    };
+
+    instance.discovery = backend.discoverSessionId(
+      cwd,
+      (sessionId) => {
+        const tracked = this.instances.get(id);
+        if (!tracked) return;
+        // Final guard: if another instance claimed this id between
+        // discovery's check and now, drop this assignment so the next
+        // poll picks a different jsonl.
+        if (isSessionClaimed(sessionId)) return;
+        tracked.sessionId = sessionId;
+        tracked.detector = backend.createCompletionDetector(
+          sessionId,
+          (type) => {
+            if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+              this.mainWindow.webContents.send("instance-activity", id, type);
+            }
+          }
+        );
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send(
+            "instance-session-id",
+            id,
+            sessionId
+          );
+        }
+      },
+      isSessionClaimed
+    );
 
     ptyProcess.onData((data: string) => {
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {

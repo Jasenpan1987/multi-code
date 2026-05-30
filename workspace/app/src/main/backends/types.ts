@@ -24,10 +24,16 @@ export interface Backend {
    * Calls `onFound` once when the sessionId is determined; never calls it
    * if the agent never registers a session within a reasonable window.
    * The returned handle can be used to cancel discovery early.
+   *
+   * `isClaimed` lets the caller veto a candidate sessionId that another
+   * instance has already latched onto — important when two instances run
+   * in the same cwd, because the most-recent jsonl would otherwise be
+   * picked by both.
    */
   discoverSessionId(
     cwd: string,
-    onFound: (sessionId: string) => void
+    onFound: (sessionId: string) => void,
+    isClaimed?: (sessionId: string) => boolean
   ): SessionDiscovery;
 
   /**
