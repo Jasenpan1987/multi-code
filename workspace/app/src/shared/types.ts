@@ -1,5 +1,11 @@
 export type BackendName = "claude" | "opencode";
 
+export type ThemeName = "light" | "dark" | "sepia";
+
+export interface AppSettings {
+  theme: ThemeName;
+}
+
 export interface Instance {
   id: string;
   cwd: string;
@@ -51,6 +57,10 @@ export interface ElectronAPI {
   getGitStatus: (id: string) => Promise<GitStatus>;
   openInVSCode: (target: string) => Promise<{ ok: boolean; error?: string }>;
   bounceDock: () => void;
+
+  // Settings
+  getSettings: () => Promise<AppSettings>;
+  setTheme: (theme: ThemeName) => Promise<AppSettings>;
 
   // Terminal I/O
   writeToInstance: (id: string, data: string) => void;

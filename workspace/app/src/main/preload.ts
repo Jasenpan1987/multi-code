@@ -22,6 +22,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   bounceDock: () => ipcRenderer.send("bounce-dock"),
 
+  // Settings
+  getSettings: () => ipcRenderer.invoke("settings-get"),
+  setTheme: (theme: string) => ipcRenderer.invoke("settings-set-theme", theme),
+
   // Terminal I/O
   writeToInstance: (id: string, data: string) =>
     ipcRenderer.send("pty-input", id, data),

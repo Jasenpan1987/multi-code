@@ -3,6 +3,8 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
+import { THEMES, getCurrentTheme } from "../themes";
+import { useTheme } from "../hooks/useTheme";
 
 interface TerminalViewProps {
   instanceId: string;
@@ -15,9 +17,17 @@ export function getTerminal(instanceId: string): Terminal | undefined {
   return terminals.get(instanceId)?.terminal;
 }
 
+export function applyMainThemeToAll() {
+  const palette = THEMES[getCurrentTheme()].mainTerminal;
+  for (const { terminal } of terminals.values()) {
+    terminal.options.theme = palette;
+  }
+}
+
 export function TerminalView({ instanceId, active }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
+  const { theme } = useTheme();
 
   useEffect(() => {
     if (!containerRef.current || initializedRef.current) return;
@@ -28,31 +38,7 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
       fontSize: 13,
       fontFamily: "Menlo, Monaco, 'Courier New', monospace",
       minimumContrastRatio: 7,
-      theme: {
-        background: "#f0f4fa",
-        foreground: "#1a1a1a",
-        cursor: "#333333",
-        selectionBackground: "#b3d4fc",
-        // Standard 16 ANSI colors retuned for a light background.
-        // Anything that would be near-white on a dark theme becomes a
-        // readable gray/black here, while preserving hue for colored output.
-        black: "#1a1a1a",
-        red: "#c62828",
-        green: "#1e7a3a",
-        yellow: "#a65b00",
-        blue: "#2d5a8a",
-        magenta: "#8e3a8e",
-        cyan: "#0e6b75",
-        white: "#3a3a3a",
-        brightBlack: "#5a5a5a",
-        brightRed: "#d32f2f",
-        brightGreen: "#2e8b4a",
-        brightYellow: "#b8730e",
-        brightBlue: "#3a6aa3",
-        brightMagenta: "#a04aa0",
-        brightCyan: "#1f8a96",
-        brightWhite: "#1a1a1a",
-      },
+      theme: THEMES[getCurrentTheme()].mainTerminal,
       allowProposedApi: true,
     });
 
@@ -107,6 +93,13 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
       window.removeEventListener("pty-data", handlePtyData);
     };
   }, [instanceId]);
+
+  // Re-apply theme to this instance's terminal when the app theme changes.
+  useEffect(() => {
+    const entry = terminals.get(instanceId);
+    if (!entry) return;
+    entry.terminal.options.theme = THEMES[theme].mainTerminal;
+  }, [theme, instanceId]);
 
   // Handle fit on visibility change and window resize
   useEffect(() => {

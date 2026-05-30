@@ -4,9 +4,11 @@ import { NewInstanceDialog } from "./components/NewInstanceDialog";
 import { TerminalView, cleanupTerminal } from "./components/TerminalView";
 import { cleanupShellTerminal } from "./components/TerminalSection";
 import { Toolbox } from "./components/Toolbox";
+import { ThemeToggle } from "./components/ThemeToggle";
 import { useNotifications } from "./hooks/useNotifications";
+import { ThemeContext } from "./hooks/useTheme";
 import { playMessageSound, playCoughSound } from "./audio/sounds";
-import type { Instance, BackendName } from "../shared/types";
+import type { Instance, BackendName, ThemeName } from "../shared/types";
 
 const DEFAULT_EXPANDED_SECTION = "git";
 
@@ -20,6 +22,7 @@ export function App() {
   >(new Map());
   const [hasOutput, setHasOutput] = useState<Set<string>>(new Set());
   const [toolboxWidth, setToolboxWidth] = useState(480);
+  const [theme, setThemeState] = useState<ThemeName>("light");
 
   const { notify, markRead } = useNotifications();
 
@@ -30,6 +33,20 @@ export function App() {
         setInstances(saved);
       }
     });
+  }, []);
+
+  // Load saved theme on startup and apply to <html>
+  useEffect(() => {
+    window.electronAPI.getSettings().then((settings) => {
+      setThemeState(settings.theme);
+      document.documentElement.dataset.theme = settings.theme;
+    });
+  }, []);
+
+  const setTheme = useCallback((next: ThemeName) => {
+    setThemeState(next);
+    document.documentElement.dataset.theme = next;
+    void window.electronAPI.setTheme(next);
   }, []);
 
   // Listen for unread updates
@@ -186,7 +203,9 @@ export function App() {
   );
 
   return (
+    <ThemeContext.Provider value={{ theme, setTheme }}>
     <div className="app-container">
+      <ThemeToggle />
       <ContactList
         instances={instances}
         selectedId={selectedId}
@@ -323,5 +342,6 @@ export function App() {
         onSubmit={handleNewInstance}
       />
     </div>
+    </ThemeContext.Provider>
   );
 }

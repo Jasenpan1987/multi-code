@@ -3,6 +3,8 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
+import { THEMES, getCurrentTheme } from "../themes";
+import { useTheme } from "../hooks/useTheme";
 
 interface TerminalSectionProps {
   instanceId: string;
@@ -27,6 +29,13 @@ export function cleanupShellTerminal(instanceId: string) {
   }
 }
 
+export function applyShellThemeToAll() {
+  const palette = THEMES[getCurrentTheme()].shellTerminal;
+  for (const { terminal } of shells.values()) {
+    terminal.options.theme = palette;
+  }
+}
+
 function getOrCreateEntry(instanceId: string): ShellEntry {
   let entry = shells.get(instanceId);
   if (entry) return entry;
@@ -35,12 +44,7 @@ function getOrCreateEntry(instanceId: string): ShellEntry {
     cursorBlink: true,
     fontSize: 13,
     fontFamily: "Menlo, Monaco, 'Courier New', monospace",
-    theme: {
-      background: "#000000",
-      foreground: "#ffffff",
-      cursor: "#ffffff",
-      selectionBackground: "#4a4a4a",
-    },
+    theme: THEMES[getCurrentTheme()].shellTerminal,
     allowProposedApi: true,
   });
 
@@ -71,6 +75,14 @@ export function TerminalSection({ instanceId, active }: TerminalSectionProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [exited, setExited] = useState(false);
   const [restartTick, setRestartTick] = useState(0);
+  const { theme } = useTheme();
+
+  // Re-apply theme when it changes
+  useEffect(() => {
+    const entry = shells.get(instanceId);
+    if (!entry) return;
+    entry.terminal.options.theme = THEMES[theme].shellTerminal;
+  }, [theme, instanceId]);
 
   useEffect(() => {
     if (!active) return;

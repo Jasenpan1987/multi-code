@@ -5,6 +5,8 @@ import { shellManager } from "./shell-manager";
 import { getGitStatus } from "./git-status";
 import { isBackendAvailable } from "./backends";
 import type { BackendName } from "./backends";
+import { loadSettings, saveSettings } from "./settings-store";
+import type { ThemeName } from "./settings-store";
 
 export function registerIpcHandlers() {
   ipcMain.handle(
@@ -141,4 +143,15 @@ export function registerIpcHandlers() {
       shellManager.resize(id, cols, rows);
     }
   );
+
+  ipcMain.handle("settings-get", () => {
+    return loadSettings();
+  });
+
+  ipcMain.handle("settings-set-theme", (_event, theme: ThemeName) => {
+    const current = loadSettings();
+    const next = { ...current, theme };
+    saveSettings(next);
+    return next;
+  });
 }

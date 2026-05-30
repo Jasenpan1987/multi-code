@@ -96,7 +96,9 @@
       "Bash(./node_modules/.bin/electron -e \"try { const Database = require\\('better-sqlite3'\\); const db = new Database\\(process.env.HOME + '/.local/share/opencode/opencode.db', { readonly: true, fileMustExist: true }\\); console.log\\('OK rows:', db.prepare\\('SELECT count\\(*\\) as c FROM session'\\).get\\(\\)\\); db.close\\(\\); } catch\\(e\\) { console.log\\('ERR:', e.message\\); } process.exit\\(0\\);\")",
       "Bash(pnpm remove *)",
       "Bash(./node_modules/.bin/electron /tmp/sqlite-test.js)",
-      "Bash(./node_modules/.bin/electron sqlite-test.js)"
+      "Bash(./node_modules/.bin/electron sqlite-test.js)",
+      "Bash(pnpm start *)",
+      "Bash(git *)"
     ]
   }
 }
