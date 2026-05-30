@@ -108,27 +108,47 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
     const entry = terminals.get(instanceId);
     if (!entry) return;
 
-    const { fitAddon } = entry;
+    const { terminal, fitAddon } = entry;
 
-    // Fit when becoming active (delay to ensure container is sized)
-    requestAnimationFrame(() => {
-      fitAddon.fit();
-    });
+    // Fit when becoming active (delay to ensure container is sized).
+    // Always scroll to the bottom afterwards: when the user scrolled up
+    // (or the viewport got out of sync after a resize / hide-show cycle)
+    // the prompt row can end up below the visible area until the next
+    // PTY redraw — most easily reproduced by scrolling to the bottom and
+    // then losing the prompt. scrollToBottom forces the viewport back
+    // onto the last buffer line.
+    const refit = () => {
+      try {
+        fitAddon.fit();
+      } catch {
+        // ignore — container may not be ready yet
+      }
+      terminal.scrollToBottom();
+    };
+    requestAnimationFrame(refit);
 
-    const handleResize = () => fitAddon.fit();
-    window.addEventListener("resize", handleResize);
-    window.addEventListener("layout-resize", handleResize);
+    window.addEventListener("resize", refit);
+    window.addEventListener("layout-resize", refit);
     return () => {
-      window.removeEventListener("resize", handleResize);
-      window.removeEventListener("layout-resize", handleResize);
+      window.removeEventListener("resize", refit);
+      window.removeEventListener("layout-resize", refit);
     };
   }, [instanceId, active]);
+
+  // When the user clicks back into the terminal, force the viewport to
+  // the bottom in case it got stuck mid-buffer (rare xterm.js race that
+  // hides the prompt until the next redraw).
+  const handleClick = () => {
+    const entry = terminals.get(instanceId);
+    if (entry) entry.terminal.scrollToBottom();
+  };
 
   return (
     <div
       ref={containerRef}
       className="terminal-container"
       style={{ display: active ? "block" : "none", width: "100%", height: "100%" }}
+      onClick={handleClick}
     />
   );
 }
