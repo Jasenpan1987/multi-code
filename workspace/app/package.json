@@ -1,6 +1,6 @@
 {
   "name": "multi-code",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Multi-Code — Claude Code instance manager",
   "author": "Jasen Pan",
   "main": "dist/main/index.js",
