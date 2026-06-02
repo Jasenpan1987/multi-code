@@ -74,10 +74,12 @@ export function App() {
     return cleanup;
   }, []);
 
-  // Listen for structured activity events (assistant response done, etc.)
+  // Listen for structured activity events. Fires both when a turn finishes
+  // ("waiting") and when the agent is waiting on a yes/no prompt ("prompt").
+  // Both get the same beep + flash, so we don't branch on the type here.
   useEffect(() => {
     const cleanup = window.electronAPI.onInstanceActivity((id) => {
-      // Always play sound when agent finishes work
+      // Always play sound when the agent needs attention.
       playMessageSound();
       // Bounce the Dock — macOS only bounces if app is not in front,
       // which is exactly the QQ-style behavior we want.
