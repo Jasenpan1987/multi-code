@@ -16,13 +16,5 @@
   },
   "devDependencies": {
     "typescript": "^5.8.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "electron",
-      "node-pty",
-      "esbuild",
-      "better-sqlite3"
-    ]
   }
 }
