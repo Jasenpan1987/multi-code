@@ -16,6 +16,16 @@
   --toolbox-placeholder-fg: #888;
   --terminal-section-bg: #000;
   --terminal-section-exited-fg: #ccc;
+  --compose-bg: #f6f9fe;
+  --compose-border: #7b9cc7;
+  --compose-fg: #1a1a1a;
+  --compose-textarea-bg: #fff;
+  --compose-textarea-border: #aac;
+  --compose-focus-border: #4a8ac4;
+  --compose-hint-fg: #889;
+  --compose-chip-bg: #e3edfa;
+  --compose-chip-fg: #2d5a8a;
+  --compose-chip-border: #b8cde8;
 }
 
 [data-theme="dark"] {
@@ -33,6 +43,16 @@
   --toolbox-placeholder-fg: #888;
   --terminal-section-bg: #1e1e1e;
   --terminal-section-exited-fg: #cccccc;
+  --compose-bg: #2a2a2c;
+  --compose-border: #4a4a4d;
+  --compose-fg: #d4d4d4;
+  --compose-textarea-bg: #1e1e1e;
+  --compose-textarea-border: #3c3c3c;
+  --compose-focus-border: #4a8ac4;
+  --compose-hint-fg: #888;
+  --compose-chip-bg: #333a44;
+  --compose-chip-fg: #9cc4e8;
+  --compose-chip-border: #44505e;
 }
 
 /* In dark mode, retint inner-panel text/icon colors so they remain
@@ -91,6 +111,16 @@
   --toolbox-placeholder-fg: #8a7855;
   --terminal-section-bg: #2c2418;
   --terminal-section-exited-fg: #ebd9b4;
+  --compose-bg: #f7efdc;
+  --compose-border: #c8b990;
+  --compose-fg: #3a2f1d;
+  --compose-textarea-bg: #fffaf0;
+  --compose-textarea-border: #d6c8a4;
+  --compose-focus-border: #a8895a;
+  --compose-hint-fg: #8a7855;
+  --compose-chip-bg: #ece0c4;
+  --compose-chip-fg: #5a4a30;
+  --compose-chip-border: #d6c8a4;
 }
 
 * {
@@ -806,6 +836,96 @@ body,
 
 .browse-btn:hover {
   background: linear-gradient(180deg, #fff 0%, #f0f0f0 100%);
+}
+
+/* Compose box — hotkey-summoned overlay anchored at the bottom of the active
+   terminal area. Compact, information-dense, themed via CSS variables. */
+.compose-box {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: var(--compose-bg);
+  color: var(--compose-fg);
+  border: 1px solid var(--compose-border);
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+}
+
+.compose-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.compose-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 220px;
+  padding: 2px 4px 2px 7px;
+  background: var(--compose-chip-bg);
+  color: var(--compose-chip-fg);
+  border: 1px solid var(--compose-chip-border);
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+.compose-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compose-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.compose-chip-remove:hover {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.compose-textarea {
+  width: 100%;
+  min-height: 38px;
+  max-height: 200px;
+  resize: none;
+  padding: 6px 8px;
+  background: var(--compose-textarea-bg);
+  color: var(--compose-fg);
+  border: 1px solid var(--compose-textarea-border);
+  border-radius: 4px;
+  font-family: Menlo, Monaco, "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.compose-textarea:focus {
+  outline: none;
+  border-color: var(--compose-focus-border);
+}
+
+.compose-hint {
+  font-size: 10px;
+  color: var(--compose-hint-fg);
+  user-select: none;
 }
 
 .dialog-warning {

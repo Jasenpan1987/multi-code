@@ -62,6 +62,10 @@ export interface ElectronAPI {
   getSettings: () => Promise<AppSettings>;
   setTheme: (theme: ThemeName) => Promise<AppSettings>;
 
+  // Compose box: clipboard image -> temp file (renderer has no fs access)
+  saveClipboardImage: () => Promise<string | null>;
+  deleteTempImage: (path: string) => Promise<void>;
+
   // Terminal I/O
   writeToInstance: (id: string, data: string) => void;
   resizeInstance: (id: string, cols: number, rows: number) => void;

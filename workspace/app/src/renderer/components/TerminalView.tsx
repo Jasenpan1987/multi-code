@@ -61,6 +61,16 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
         window.electronAPI.writeToInstance(instanceId, "\x15");
         return false;
       }
+      // Cmd+L summons the compose box. Swallow it (return false) so xterm
+      // never forwards an `l` or escape sequence to the PTY, then ask the
+      // app to open the box for this instance. Chosen over Ctrl+L to avoid
+      // the terminal's clear-screen binding.
+      if (e.type === "keydown" && e.metaKey && e.key.toLowerCase() === "l") {
+        window.dispatchEvent(
+          new CustomEvent("compose-open", { detail: { id: instanceId } })
+        );
+        return false;
+      }
       return true;
     });
 

@@ -1,5 +1,8 @@
-import { ipcMain, dialog, BrowserWindow, app } from "electron";
+import { ipcMain, dialog, BrowserWindow, app, clipboard } from "electron";
 import { spawn } from "child_process";
+import { writeFileSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join, resolve, dirname, basename } from "path";
 import { processManager } from "./process-manager";
 import { shellManager } from "./shell-manager";
 import { getGitStatus } from "./git-status";
@@ -7,6 +10,11 @@ import { isBackendAvailable } from "./backends";
 import type { BackendName } from "./backends";
 import { loadSettings, saveSettings } from "./settings-store";
 import type { ThemeName } from "./settings-store";
+
+// Per-process counter to disambiguate temp image filenames within the same ms.
+let tempImageCounter = 0;
+// Filenames produced by save-clipboard-image; used to gate delete-temp-image.
+const TEMP_IMAGE_NAME = /^multicode-paste-\d+-\d+\.png$/;
 
 export function registerIpcHandlers() {
   ipcMain.handle(
@@ -153,5 +161,42 @@ export function registerIpcHandlers() {
     const next = { ...current, theme };
     saveSettings(next);
     return next;
+  });
+
+  // Compose box: save the current clipboard image to a temp PNG and return its
+  // absolute path. The renderer has no fs/clipboard-image access, so this must
+  // live in the main process. Returns null (no throw) when the clipboard holds
+  // no image, or when writing the temp file fails — the caller treats either as
+  // a graceful no-op. The filename carries a per-process counter on top of the
+  // timestamp so rapid pastes within the same millisecond never collide.
+  ipcMain.handle("save-clipboard-image", (): string | null => {
+    const image = clipboard.readImage();
+    if (image.isEmpty()) return null;
+    const file = join(
+      tmpdir(),
+      `multicode-paste-${Date.now()}-${tempImageCounter++}.png`
+    );
+    try {
+      writeFileSync(file, image.toPNG());
+    } catch {
+      return null;
+    }
+    return file;
+  });
+
+  // Compose box: delete a temp image created above. Used on cancel / instance
+  // switch / chip removal. Safe if the file is already gone (force: true).
+  // Guard against arbitrary path deletion: only remove files we created, i.e.
+  // a `multicode-paste-*.png` sitting directly in the OS temp dir.
+  ipcMain.handle("delete-temp-image", (_event, path: string) => {
+    if (!path) return;
+    const resolved = resolve(path);
+    if (
+      dirname(resolved) !== resolve(tmpdir()) ||
+      !TEMP_IMAGE_NAME.test(basename(resolved))
+    ) {
+      return;
+    }
+    rmSync(resolved, { force: true });
   });
 }

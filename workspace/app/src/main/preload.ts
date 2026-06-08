@@ -26,6 +26,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getSettings: () => ipcRenderer.invoke("settings-get"),
   setTheme: (theme: string) => ipcRenderer.invoke("settings-set-theme", theme),
 
+  // Compose box: clipboard image -> temp file (renderer has no fs access)
+  saveClipboardImage: () => ipcRenderer.invoke("save-clipboard-image"),
+  deleteTempImage: (path: string) =>
+    ipcRenderer.invoke("delete-temp-image", path),
+
   // Terminal I/O
   writeToInstance: (id: string, data: string) =>
     ipcRenderer.send("pty-input", id, data),

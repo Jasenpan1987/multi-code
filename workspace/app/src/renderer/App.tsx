@@ -1,7 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { ContactList } from "./components/ContactList";
 import { NewInstanceDialog } from "./components/NewInstanceDialog";
-import { TerminalView, cleanupTerminal } from "./components/TerminalView";
+import {
+  TerminalView,
+  cleanupTerminal,
+  getTerminal,
+} from "./components/TerminalView";
+import { ComposeBox } from "./components/ComposeBox";
 import { cleanupShellTerminal } from "./components/TerminalSection";
 import { Toolbox } from "./components/Toolbox";
 import { ThemeToggle } from "./components/ThemeToggle";
@@ -23,6 +28,7 @@ export function App() {
   const [hasOutput, setHasOutput] = useState<Set<string>>(new Set());
   const [toolboxWidth, setToolboxWidth] = useState(480);
   const [theme, setThemeState] = useState<ThemeName>("light");
+  const [composeOpen, setComposeOpen] = useState(false);
 
   const { notify, markRead } = useNotifications();
 
@@ -127,6 +133,35 @@ export function App() {
     });
     return cleanup;
   }, []);
+
+  // Compose box: Cmd+L (dispatched from TerminalView's key handler) summons the
+  // box for a running claude instance. Gated here so the hotkey is a no-op for
+  // OpenCode / stopped instances (claude-only MVP). The box is per the selected
+  // instance and mounted with key={selectedId}, so it always targets selectedId.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { id } = (e as CustomEvent).detail;
+      const inst = instances.find((i) => i.id === id);
+      if (!inst || inst.backend !== "claude" || inst.status !== "running") {
+        return;
+      }
+      setComposeOpen(true);
+    };
+    window.addEventListener("compose-open", handler);
+    return () => window.removeEventListener("compose-open", handler);
+  }, [instances]);
+
+  // Discard the draft when the selected instance changes: the box is keyed by
+  // selectedId so it unmounts (cleaning up its temp images) and closing it here
+  // ensures returning to the original instance shows an empty box (Story 5).
+  useEffect(() => {
+    setComposeOpen(false);
+  }, [selectedId]);
+
+  const closeCompose = useCallback(() => {
+    setComposeOpen(false);
+    if (selectedId) getTerminal(selectedId)?.focus();
+  }, [selectedId]);
 
   const handleSelect = useCallback(
     (id: string) => {
@@ -270,6 +305,26 @@ export function App() {
               );
             }
             return null;
+          })()}
+          {(() => {
+            const sel = selectedId
+              ? instances.find((i) => i.id === selectedId)
+              : null;
+            if (
+              !composeOpen ||
+              !sel ||
+              sel.backend !== "claude" ||
+              sel.status !== "running"
+            ) {
+              return null;
+            }
+            return (
+              <ComposeBox
+                key={sel.id}
+                instanceId={sel.id}
+                onClose={closeCompose}
+              />
+            );
           })()}
         </div>
       </main>
