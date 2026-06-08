@@ -41,6 +41,19 @@ pnpm type             # Type-check (tsc --noEmit)
 pnpm test             # Run vitest
 ```
 
+## Release Process
+
+When building to **release/ship** a version (not a routine dev build):
+
+1. Run `pnpm build` and confirm it succeeds.
+2. Bump the version in `workspace/app/package.json` (the only place a version
+   lives — the root package.json is private and has none). Ask which part to
+   bump (patch/minor/major); default suggestion is **patch**.
+3. Commit the bump on its own (e.g. `chore: bump version to X.Y.Z`).
+
+Routine dev builds during development do NOT bump the version — only do this in
+a release context so the number isn't pushed on every build.
+
 ## Code Style
 
 - All project files (code, comments, commit messages) in English
