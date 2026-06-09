@@ -30,12 +30,11 @@ export function ContactList({
     instanceId: string;
   } | null>(null);
 
-  // Sort: running first, then by most recent startedAt
-  const sorted = [...instances].sort((a, b) => {
-    if (a.status === "running" && b.status !== "running") return -1;
-    if (a.status !== "running" && b.status === "running") return 1;
-    return b.startedAt - a.startedAt;
-  });
+  // Keep positions fixed: render in creation order (the order contacts are
+  // stored / appended). Status changes (start/stop) update fields in place and
+  // never reorder, so a project going online won't jump to the top. Online vs
+  // offline is conveyed by the avatar, not by position.
+  const ordered = instances;
 
   const handleContextMenu = (e: React.MouseEvent, instanceId: string) => {
     e.preventDefault();
@@ -49,10 +48,10 @@ export function ContactList({
   return (
     <aside className="sidebar">
       <div className="contact-list">
-        {sorted.length === 0 ? (
+        {ordered.length === 0 ? (
           <div className="sidebar-placeholder">No instances</div>
         ) : (
-          sorted.map((inst) => (
+          ordered.map((inst) => (
             <div
               key={inst.id}
               className={`contact-item ${selectedId === inst.id ? "selected" : ""} ${inst.status === "stopped" ? "stopped" : ""} ${unreadIds.has(inst.id) ? "unread" : ""}`}

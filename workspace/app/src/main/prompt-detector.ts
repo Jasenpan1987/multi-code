@@ -15,58 +15,44 @@ function stripAnsi(s: string): string {
   return s.replace(ANSI_RE, "");
 }
 
-// Markers that appear when the CLI is waiting on a user choice. We only need
-// ONE of these to match. They are chosen to be specific to the "waiting"
-// footer / question, not normal output. Matching is done on ANSI-stripped,
-// lowercased text.
-const PROMPT_MARKERS = [
-  "do you want to proceed?",
-  "esc to cancel",
-  "tab to amend",
-  "ctrl+e to explain",
-];
+// Markers that mean the CLI is asking a question and WAITING for the user to
+// answer. These must be specific to the question itself — NOT the input-box
+// footer. The "Esc to cancel · Tab to amend · ctrl+e to explain" hint is drawn
+// on every keystroke while you type a normal message too, so matching on it
+// beeps on every character typed and every time a project's terminal repaints.
+// "do you want to proceed?" only appears on a real permission/choice box.
+const PROMPT_MARKERS = ["do you want to proceed?"];
 
 // How much recent output to keep for cross-chunk matching. A prompt box and
-// its footer can arrive in separate PTY writes, so we match against a rolling
-// tail rather than each chunk in isolation.
+// its question line can arrive in separate PTY writes, so we match against a
+// rolling tail rather than each chunk in isolation.
 const TAIL_LIMIT = 4096;
-
-// Minimum gap between two beeps from the same detector. A prompt box redraws
-// on every arrow-key press (Yes <-> No), which would otherwise re-fire on each
-// redraw. Throttling collapses those into one beep while still letting a fresh
-// prompt some seconds later fire again. The user is the one driving the
-// redraws, so they're already looking — no need to beep again immediately.
-const REFIRE_COOLDOWN_MS = 8000;
 
 export class PromptDetector {
   private tail = "";
-  // -Infinity means "never fired", so the first matching prompt always beeps
-  // regardless of the clock's starting value.
-  private lastFiredAt = -Infinity;
-  private readonly now: () => number;
+  // Edge-triggered: we beep once when the prompt first appears, then latch
+  // until it disappears. While the box stays on screen it redraws on every
+  // arrow-key press / keystroke, but the latch swallows those redraws. Only
+  // when the marker is gone (user answered, new output flowed) do we re-arm,
+  // so the next genuine prompt beeps again.
+  private armed = true;
 
-  // `now` is injectable so tests can control time; defaults to Date.now.
-  constructor(
-    private readonly onPrompt: () => void,
-    now: () => number = () => Date.now()
-  ) {
-    this.now = now;
-  }
+  constructor(private readonly onPrompt: () => void) {}
 
   feed(chunk: string) {
     const text = stripAnsi(chunk).toLowerCase();
     this.tail = (this.tail + text).slice(-TAIL_LIMIT);
 
-    // Match against the rolling tail so a marker split across two PTY writes
-    // still matches on the chunk that completes it. The time-based cooldown
-    // (not a "marker disappeared" check) prevents re-firing on every redraw of
-    // the same box while still allowing a genuinely new prompt to beep later.
     const showing = PROMPT_MARKERS.some((m) => this.tail.includes(m));
-    if (!showing) return;
 
-    const t = this.now();
-    if (t - this.lastFiredAt < REFIRE_COOLDOWN_MS) return;
-    this.lastFiredAt = t;
+    if (!showing) {
+      // Marker gone — re-arm so the next prompt can fire.
+      this.armed = true;
+      return;
+    }
+
+    if (!this.armed) return;
+    this.armed = false;
     this.onPrompt();
   }
 }

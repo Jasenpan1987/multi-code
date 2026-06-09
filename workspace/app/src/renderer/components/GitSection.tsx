@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { GitStatus, GitFileEntry } from "../../shared/types";
 
 const POLL_INTERVAL_MS = 5000;
-const MAX_FILES = 20;
+const MAX_FILES = 50;
 
 interface GitSectionProps {
   instanceId: string;
@@ -77,7 +77,7 @@ export function GitSection({ instanceId, cwd, active }: GitSectionProps) {
         <div className="git-files">
           {tooMany ? (
             <div className="git-files-too-many">
-              ... 文件太多({totalFiles}),请去项目里看
+              Too many files ({totalFiles})… open in your editor
             </div>
           ) : (
             <>
