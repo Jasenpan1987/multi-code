@@ -48,28 +48,37 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
 
     terminals.set(instanceId, { terminal, fitAddon });
 
-    // macOS terminal emulators (Terminal.app, iTerm2) translate Cmd+Delete
-    // to \x15 (Ctrl+U) before forwarding to the PTY. xterm.js does not do
-    // this by default, so we replicate the translation here. Both Claude
-    // Code and OpenCode honor \x15 to clear the input line.
+    // macOS terminal emulators (Terminal.app, iTerm2) translate a few Cmd+
+    // shortcuts to readline-equivalent control bytes before forwarding to the
+    // PTY. xterm.js does not do this by default, so we replicate the
+    // translation here. Both Claude Code and OpenCode honor these.
     terminal.attachCustomKeyEventHandler((e) => {
-      if (
-        e.type === "keydown" &&
-        e.metaKey &&
-        (e.key === "Backspace" || e.key === "Delete")
-      ) {
-        window.electronAPI.writeToInstance(instanceId, "\x15");
-        return false;
-      }
-      // Cmd+L summons the compose box. Swallow it (return false) so xterm
-      // never forwards an `l` or escape sequence to the PTY, then ask the
-      // app to open the box for this instance. Chosen over Ctrl+L to avoid
-      // the terminal's clear-screen binding.
-      if (e.type === "keydown" && e.metaKey && e.key.toLowerCase() === "l") {
-        window.dispatchEvent(
-          new CustomEvent("compose-open", { detail: { id: instanceId } })
-        );
-        return false;
+      if (e.type === "keydown" && e.metaKey) {
+        // Cmd+Backspace / Cmd+Delete -> Ctrl+U (clear input line).
+        if (e.key === "Backspace" || e.key === "Delete") {
+          window.electronAPI.writeToInstance(instanceId, "\x15");
+          return false;
+        }
+        // Cmd+Left -> Ctrl+A (jump to line start).
+        if (e.key === "ArrowLeft") {
+          window.electronAPI.writeToInstance(instanceId, "\x01");
+          return false;
+        }
+        // Cmd+Right -> Ctrl+E (jump to line end).
+        if (e.key === "ArrowRight") {
+          window.electronAPI.writeToInstance(instanceId, "\x05");
+          return false;
+        }
+        // Cmd+L summons the compose box. Swallow it (return false) so xterm
+        // never forwards an `l` or escape sequence to the PTY, then ask the
+        // app to open the box for this instance. Chosen over Ctrl+L to avoid
+        // the terminal's clear-screen binding.
+        if (e.key.toLowerCase() === "l") {
+          window.dispatchEvent(
+            new CustomEvent("compose-open", { detail: { id: instanceId } })
+          );
+          return false;
+        }
       }
       return true;
     });

@@ -244,7 +244,7 @@ export const opencodeBackend: Backend = {
     return new OpencodeSessionDiscovery(cwd, onFound, isClaimed);
   },
 
-  createCompletionDetector(sessionId, onActivity): CompletionDetector {
+  createCompletionDetector(sessionId, onActivity, _isPtyIdle): CompletionDetector {
     return new OpencodeCompletionDetector(sessionId, onActivity);
   },
 

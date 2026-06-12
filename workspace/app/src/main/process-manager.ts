@@ -5,7 +5,6 @@ import crypto from "crypto";
 import { loadContacts, saveContacts } from "./store";
 import type { SavedContact } from "./store";
 import { shellManager } from "./shell-manager";
-import { PromptDetector } from "./prompt-detector";
 import { getBackend } from "./backends";
 import type {
   Backend,
@@ -36,7 +35,10 @@ interface ManagedInstance {
   backend: BackendName;
   discovery: SessionDiscovery | null;
   detector: CompletionDetector | null;
-  promptDetector: PromptDetector | null;
+  // Timestamp (Date.now()) of the last PTY byte received from this instance.
+  // Used by the backend's CompletionDetector to tell "screen static (waiting
+  // on user)" apart from "spinner ticking (running tool/subagent)".
+  lastPtyByteAt: number;
 }
 
 const DEFAULT_BACKEND: BackendName = "claude";
@@ -63,7 +65,7 @@ export class ProcessManager {
           backend: contact.backend ?? DEFAULT_BACKEND,
           discovery: null,
           detector: null,
-          promptDetector: null,
+          lastPtyByteAt: 0,
         });
       }
     }
@@ -139,20 +141,8 @@ export class ProcessManager {
       backend: backendName,
       discovery: null,
       detector: null,
-      promptDetector: null,
+      lastPtyByteAt: Date.now(),
     };
-
-    // Watches the raw PTY text for an interactive prompt waiting on the user
-    // (e.g. a yes/no permission box). The JSONL-based CompletionDetector only
-    // sees "turn finished" (end_turn) and can't tell an approval-pending
-    // tool_use from an auto-approved one, so this fills the gap by reading the
-    // on-screen prompt. It reuses the same "instance-activity" event, so the
-    // renderer beeps exactly as it does for a finished turn.
-    instance.promptDetector = new PromptDetector(() => {
-      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-        this.mainWindow.webContents.send("instance-activity", id, "prompt");
-      }
-    });
 
     const isSessionClaimed = (candidate: string): boolean => {
       for (const other of this.instances.values()) {
@@ -177,7 +167,8 @@ export class ProcessManager {
             if (this.mainWindow && !this.mainWindow.isDestroyed()) {
               this.mainWindow.webContents.send("instance-activity", id, type);
             }
-          }
+          },
+          (ms) => Date.now() - tracked.lastPtyByteAt >= ms
         );
         if (this.mainWindow && !this.mainWindow.isDestroyed()) {
           this.mainWindow.webContents.send(
@@ -191,7 +182,7 @@ export class ProcessManager {
     );
 
     ptyProcess.onData((data: string) => {
-      instance.promptDetector?.feed(data);
+      instance.lastPtyByteAt = Date.now();
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send("pty-output", id, data);
       }
@@ -218,8 +209,6 @@ export class ProcessManager {
       instance.detector.stop();
       instance.detector = null;
     }
-    // PromptDetector holds no timers/resources, just drop the reference.
-    instance.promptDetector = null;
   }
 
   writeToInstance(id: string, data: string) {

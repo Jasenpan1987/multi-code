@@ -85,15 +85,41 @@ function buildEnv(): Record<string, string> {
   } as Record<string, string>;
 }
 
-class ClaudeCompletionDetector implements CompletionDetector {
+// A tool_use that is unpaired for this long is treated as "Claude is blocked
+// on an interactive prompt" (permission box, AskUserQuestion, plan approval).
+// Auto-approved tools pair within ~200ms; this threshold sits well above that.
+const PROMPT_PENDING_MS = 1500;
+
+// PTY must have been silent for at least this long before a pending tool_use
+// is treated as a real user-waiting prompt. The CLI's spinner repaints at
+// least once per second while a tool/subagent is running, so this cleanly
+// separates "screen static (waiting on user)" from "spinner ticking".
+const PTY_IDLE_MS = 800;
+
+interface PendingToolUse {
+  name: string;
+  writtenAt: number;
+}
+
+export class ClaudeCompletionDetector implements CompletionDetector {
   private fileSize = 0;
   private pollInterval: ReturnType<typeof setInterval> | null = null;
   private pendingNotify: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
 
+  // Tool uses written by the assistant that haven't yet been paired with a
+  // matching tool_result from the user. While anything sits here long enough
+  // and the PTY is silent, Claude is waiting on us.
+  private pendingToolUses = new Map<string, PendingToolUse>();
+  // Edge-trigger latch: once we fire "prompt" for the current waiting state,
+  // don't fire again until every pending tool_use clears (i.e. user answered
+  // and Claude resumed).
+  private promptArmed = true;
+
   constructor(
     private readonly jsonlPath: string,
-    private readonly onActivity: (type: string) => void
+    private readonly onActivity: (type: string) => void,
+    private readonly isPtyIdle: (ms: number) => boolean
   ) {
     try {
       const stat = fs.statSync(jsonlPath);
@@ -101,7 +127,7 @@ class ClaudeCompletionDetector implements CompletionDetector {
     } catch {
       this.fileSize = 0;
     }
-    this.pollInterval = setInterval(() => this.checkForChanges(), 500);
+    this.pollInterval = setInterval(() => this.tick(), 500);
   }
 
   stop() {
@@ -118,6 +144,11 @@ class ClaudeCompletionDetector implements CompletionDetector {
       clearTimeout(this.pendingNotify);
       this.pendingNotify = null;
     }
+  }
+
+  private tick() {
+    this.checkForChanges();
+    this.checkForPrompt();
   }
 
   private checkForChanges() {
@@ -149,19 +180,51 @@ class ClaudeCompletionDetector implements CompletionDetector {
             if (stopReason === "end_turn") {
               shouldScheduleNotify = true;
             }
+            // Track every tool_use the assistant emits. They sit in
+            // pendingToolUses until a matching tool_result arrives.
+            const content = msg.message?.content;
+            if (Array.isArray(content)) {
+              for (const item of content) {
+                if (
+                  item?.type === "tool_use" &&
+                  typeof item.id === "string"
+                ) {
+                  this.pendingToolUses.set(item.id, {
+                    name: typeof item.name === "string" ? item.name : "",
+                    writtenAt: Date.now(),
+                  });
+                }
+              }
+            }
           } else if (msg.type === "user") {
-            // Distinguish real user input (string content) from tool_result
-            // (array content). Only real user input means "user already saw
-            // the previous turn", which should cancel a pending notify.
             const content = msg.message?.content ?? msg.content;
+            // String content = real user input → user already saw the turn.
             if (typeof content === "string") {
               shouldScheduleNotify = false;
               this.cancelPending();
+            }
+            // Array content may carry tool_result entries; pair them off so
+            // their tool_use leaves the pending set.
+            if (Array.isArray(content)) {
+              for (const item of content) {
+                if (
+                  item?.type === "tool_result" &&
+                  typeof item.tool_use_id === "string"
+                ) {
+                  this.pendingToolUses.delete(item.tool_use_id);
+                }
+              }
             }
           }
         } catch {
           // skip invalid JSON
         }
+      }
+
+      // Re-arm the prompt latch as soon as nothing is pending — the next
+      // genuinely new "stuck" tool_use should beep again.
+      if (this.pendingToolUses.size === 0) {
+        this.promptArmed = true;
       }
 
       // Schedule notification: wait 2s to confirm Claude really stopped.
@@ -177,6 +240,28 @@ class ClaudeCompletionDetector implements CompletionDetector {
     } catch {
       // ignore errors
     }
+  }
+
+  // Fire "prompt" once when the JSONL says Claude is stuck on an unpaired
+  // tool_use AND the PTY has gone quiet (no spinner, no streaming). The two
+  // signals together cleanly separate "waiting on user" from "running a
+  // long subagent or tool" — the latter keeps the spinner repainting.
+  private checkForPrompt() {
+    if (!this.promptArmed) return;
+    if (this.pendingToolUses.size === 0) return;
+
+    const now = Date.now();
+    let oldestAge = 0;
+    for (const tu of this.pendingToolUses.values()) {
+      const age = now - tu.writtenAt;
+      if (age > oldestAge) oldestAge = age;
+    }
+    if (oldestAge < PROMPT_PENDING_MS) return;
+
+    if (!this.isPtyIdle(PTY_IDLE_MS)) return;
+
+    this.promptArmed = false;
+    this.onActivity("prompt");
   }
 }
 
@@ -231,7 +316,7 @@ export const claudeBackend: Backend = {
     return new ClaudeSessionDiscovery(cwd, onFound, isClaimed);
   },
 
-  createCompletionDetector(sessionId, onActivity) {
+  createCompletionDetector(sessionId, onActivity, isPtyIdle) {
     // For claude, sessionId maps directly to a jsonl file under PROJECTS_DIR.
     // We need the cwd to construct the full path, but we only have sessionId
     // here. Solution: store a reverse map at discovery time. For now, find
@@ -241,7 +326,7 @@ export const claudeBackend: Backend = {
       // Return a no-op detector if we can't locate the file
       return { stop() {} };
     }
-    return new ClaudeCompletionDetector(jsonlPath, onActivity);
+    return new ClaudeCompletionDetector(jsonlPath, onActivity, isPtyIdle);
   },
 
   buildResumeCommand(sessionId: string): string {

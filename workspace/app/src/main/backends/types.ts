@@ -39,13 +39,23 @@ export interface Backend {
   /**
    * Begin watching for completion / activity events for the session.
    * `onActivity` fires with a string event type whenever the agent
-   * reaches a state that warrants notifying the user. Currently a single
-   * "waiting" event is emitted on turn completion; more types may be
-   * added later (e.g., "permission") without changing this interface.
+   * reaches a state that warrants notifying the user:
+   *   - "waiting": the assistant turn ended (end_turn) and the user
+   *     should respond.
+   *   - "prompt": the assistant is mid-turn but blocked on an
+   *     interactive question (permission box, AskUserQuestion, plan
+   *     approval, etc.). Detected from a tool_use that hasn't been
+   *     paired with a tool_result while the PTY has fallen silent.
+   *
+   * `isPtyIdle(ms)` returns true when no PTY bytes have been written
+   * for at least `ms` milliseconds. Used to disambiguate "Claude
+   * waiting on the user" (screen static) from "Claude running a
+   * subagent / long tool" (spinner is repainting).
    */
   createCompletionDetector(
     sessionId: string,
-    onActivity: (type: string) => void
+    onActivity: (type: string) => void,
+    isPtyIdle: (ms: number) => boolean
   ): CompletionDetector;
 
   buildResumeCommand(sessionId: string): string;
