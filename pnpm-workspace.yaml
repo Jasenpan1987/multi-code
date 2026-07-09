@@ -1,5 +1,11 @@
 packages:
   - "workspace/*"
+allowBuilds:
+  better-sqlite3: true
+  electron: true
+  electron-winstaller: true
+  esbuild: true
+  node-pty: true
 onlyBuiltDependencies:
   - better-sqlite3
   - electron
