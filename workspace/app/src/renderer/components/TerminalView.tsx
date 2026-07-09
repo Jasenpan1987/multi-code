@@ -13,6 +13,22 @@ interface TerminalViewProps {
 
 const terminals = new Map<string, { terminal: Terminal; fitAddon: FitAddon }>();
 
+// Number of lines of slack allowed when deciding "at the bottom". xterm's
+// viewportY equals baseY only when fully scrolled down; a couple of lines of
+// tolerance keeps the stuck-prompt workaround firing when the user is
+// effectively (but not exactly) at the bottom, while still treating a
+// deliberate scroll-up as "away from bottom".
+const AT_BOTTOM_SLACK = 2;
+
+// True when the viewport is at (or within a couple of lines of) the last
+// screenful of the buffer. Used to decide whether scrolling to the bottom is
+// wanted: when the user has scrolled up to read/select, this is false and we
+// leave the viewport alone.
+function isAtBottom(terminal: Terminal): boolean {
+  const buf = terminal.buffer.active;
+  return buf.baseY - buf.viewportY <= AT_BOTTOM_SLACK;
+}
+
 export function getTerminal(instanceId: string): Terminal | undefined {
   return terminals.get(instanceId)?.terminal;
 }
@@ -130,19 +146,21 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
     const { terminal, fitAddon } = entry;
 
     // Fit when becoming active (delay to ensure container is sized).
-    // Always scroll to the bottom afterwards: when the user scrolled up
-    // (or the viewport got out of sync after a resize / hide-show cycle)
-    // the prompt row can end up below the visible area until the next
-    // PTY redraw — most easily reproduced by scrolling to the bottom and
-    // then losing the prompt. scrollToBottom forces the viewport back
-    // onto the last buffer line.
+    // Scroll to the bottom afterwards ONLY when the user was already at/near
+    // the bottom: when the viewport got out of sync after a resize /
+    // hide-show cycle the prompt row can end up below the visible area until
+    // the next PTY redraw — most easily reproduced by scrolling to the bottom
+    // and then losing the prompt. scrollToBottom forces the viewport back onto
+    // the last buffer line. If the user has deliberately scrolled up (to read
+    // or select), leave the viewport where it is.
     const refit = () => {
+      const atBottom = isAtBottom(terminal);
       try {
         fitAddon.fit();
       } catch {
         // ignore — container may not be ready yet
       }
-      terminal.scrollToBottom();
+      if (atBottom) terminal.scrollToBottom();
     };
     requestAnimationFrame(refit);
 
@@ -154,12 +172,18 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
     };
   }, [instanceId, active]);
 
-  // When the user clicks back into the terminal, force the viewport to
-  // the bottom in case it got stuck mid-buffer (rare xterm.js race that
-  // hides the prompt until the next redraw).
+  // When the user clicks back into the terminal, force the viewport to the
+  // bottom in case it got stuck mid-buffer (rare xterm.js race that hides the
+  // prompt until the next redraw). Skip this when the user is copying/pasting
+  // (an active selection) or has scrolled up to read — otherwise a single
+  // click would yank the viewport down and interrupt them.
   const handleClick = () => {
     const entry = terminals.get(instanceId);
-    if (entry) entry.terminal.scrollToBottom();
+    if (!entry) return;
+    const { terminal } = entry;
+    if (terminal.hasSelection()) return;
+    if (!isAtBottom(terminal)) return;
+    terminal.scrollToBottom();
   };
 
   return (
