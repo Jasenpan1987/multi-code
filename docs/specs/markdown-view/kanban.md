@@ -3,7 +3,7 @@
 **Generated:** 2026-07-09
 **Source:** 2026-07-09 markdown-view ideation (no separate PRD — aligned via /omt:interview, decisions in timeline + decisions.md)
 **Total Tasks:** 5 (MVP) + 2 (phase 2, deferred)
-**Milestones:** M1 (Markdown View MVP)
+**Milestones:** M1 (Markdown View MVP) — ✅ complete 2026-07-10 (T-001..T-005 all done)
 
 ## Task Overview
 
@@ -79,7 +79,7 @@ graph TD
 
 ### T-004: Math (KaTeX) + Mermaid rendering
 - **Type:** feature
-- **Status:** ready
+- **Status:** done
 - **Description:** Extend the pipeline with math and diagrams. **Math:** install `remark-math` + `rehype-katex` + `katex`; add them to the ReactMarkdown plugin lists and import KaTeX's CSS. Inline (`$…$`) and block (`$$…$$`) math should render. **Mermaid:** install `mermaid`. Provide a custom code-block renderer to ReactMarkdown (`components={{ code: ... }}`) that detects language `mermaid`, and for those blocks calls `mermaid.render()` (async) to produce an SVG, rendering the SVG into the block. Initialize mermaid once (`mermaid.initialize({ startOnLoad: false })`). **Failure handling:** if `mermaid.render()` throws (bad syntax), catch it and fall back to rendering the block as a plain fenced code block showing the raw mermaid source (optionally a small "diagram failed to render" note). A mermaid failure must never crash the document or the app. Non-mermaid code blocks render as normal fenced code (from T-003).
 - **Acceptance:**
   - A doc with `$E = mc^2$` inline and a `$$…$$` block renders formatted math (KaTeX)
@@ -142,3 +142,4 @@ graph TD
 - 2026-07-09: T-001 + T-002 done (implemented in parallel). View section shell + per-instance open-path state wired through App→Toolbox→MarkdownSection; `read-file` IPC handler + `ReadFileResult` union added and exposed via preload. `pnpm type` / oxlint / eslint all green. T-003 now unblocked (ready).
 - 2026-07-09: T-003 done. `MarkdownSection` now reads the open file (`useEffect` keyed on `[instance.id, openPath, refreshNonce]`, stale-response guarded) and renders via react-markdown + remark-gfm. Added `open-external` IPC (`shell.openExternal`, guarded to http/https/mailto) + `openExternal` in preload/types; links routed there via a custom `a` renderer + `shouldOpenExternally` helper (relative/exotic links stay inert). No rehype-raw — raw HTML stays escaped. Added `.markdown-body` CSS (compact, theme-aware, long code scrolls in-block). Deps: react-markdown@10, remark-gfm@4. New unit test `markdownLinks.test.ts` (6 tests). type/lint/build/test green; render verified through the real pipeline. T-004 + T-005 now unblocked (ready).
 - 2026-07-09: T-005 done. Error/empty states in `MarkdownSection`: `read-file` error union mapped to one-line inline messages (not-found / unsupported / too-large) via a new `readFileErrorMessage` helper; empty state ("Paste a .md path above and press Enter.") shown when no path is open; the `.markdown-body` container now always renders and branches on empty/loading/ok/error so a failed open replaces old content (Loading branch beats stale result). New unit test `markdownErrors.test.ts` (4 tests). type/lint/test green (23 total); verified end-to-end against real bad files on disk. Only T-004 (math/mermaid) remains in the MVP.
+- 2026-07-10: T-004 done — **Markdown View MVP complete.** Math via remark-math + rehype-katex + `katex/dist/katex.min.css` (inline `$…$` and block `$$…$$`). Mermaid via a static `mermaid` import (builder chose static over dynamic): a custom `pre` renderer detects `language-mermaid` (extracted by `mermaidExtract.extractMermaid`) and hands it to a new `MermaidBlock` component that `mermaid.render()`s to SVG, initialized once, with a `cancelled` guard so switching files can't leak a stale SVG. `render()` failure is caught → degrades to a raw code block ("⚠ Diagram failed to render"), never crashes. Added `.mermaid-block` CSS. Deps: remark-math@6, rehype-katex@7, katex@0.17, mermaid@11. New unit test `mermaidExtract.test.ts` (6 tests, 29 total). type/lint/test/build green; static pipeline (math→KaTeX, mermaid routing) verified via react-dom/server, and math/valid-mermaid/broken-mermaid-degradation/no-stale-SVG confirmed by builder in a running Electron app. Bundle: main ~1.67MB + two async mermaid chunks (~420KB, ~650KB). Remaining: only the 2 deferred phase-2 items (P2-001, P2-002).

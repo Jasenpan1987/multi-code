@@ -1,9 +1,14 @@
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import type { Instance, ReadFileResult } from "../../shared/types";
 import { shouldOpenExternally } from "./markdownLinks";
 import { readFileErrorMessage } from "./markdownErrors";
+import { MermaidBlock } from "./MermaidBlock";
+import { extractMermaid } from "./mermaidExtract";
 
 interface MarkdownSectionProps {
   instance: Instance;
@@ -97,7 +102,8 @@ export function MarkdownSection({
         )}
         {openPath && !loading && result?.ok && (
           <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
+            remarkPlugins={[remarkGfm, remarkMath]}
+            rehypePlugins={[rehypeKatex]}
             components={{
               // Drop react-markdown's internal `node` prop so it doesn't
               // leak onto the real DOM anchor; route clicks externally.
@@ -110,6 +116,16 @@ export function MarkdownSection({
                   {children}
                 </a>
               ),
+              // Route fenced ```mermaid``` blocks to the diagram renderer.
+              // A fenced block is a <pre> wrapping a <code class="language-x">;
+              // detect mermaid on that inner code and render the diagram in
+              // place of the <pre> (a <div> can't live inside <pre>). Every
+              // other <pre> passes through unchanged.
+              pre: ({ children, node: _node, ...props }) => {
+                const mermaid = extractMermaid(children);
+                if (mermaid !== null) return <MermaidBlock code={mermaid} />;
+                return <pre {...props}>{children}</pre>;
+              },
             }}
           >
             {result.content}

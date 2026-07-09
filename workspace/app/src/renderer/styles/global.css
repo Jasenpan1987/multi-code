@@ -1250,3 +1250,21 @@ body,
   border-top: 1px solid rgba(128, 128, 128, 0.35);
   margin: 10px 0;
 }
+
+/* Mermaid diagrams: the SVG scales to the narrow column and overflows
+   horizontally within its own block rather than widening the layout. */
+.mermaid-block {
+  margin: 8px 0;
+  overflow-x: auto;
+}
+
+.mermaid-block svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-block-failed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
