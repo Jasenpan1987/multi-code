@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Instance, ReadFileResult } from "../../shared/types";
 import { shouldOpenExternally } from "./markdownLinks";
+import { readFileErrorMessage } from "./markdownErrors";
 
 interface MarkdownSectionProps {
   instance: Instance;
@@ -85,38 +86,41 @@ export function MarkdownSection({
           Refresh
         </button>
       </div>
-      {openPath && (
-        <div className="markdown-body">
-          {loading && (
-            <span className="markdown-section-placeholder">Loading…</span>
-          )}
-          {!loading && result?.ok && (
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                // Drop react-markdown's internal `node` prop so it doesn't
-                // leak onto the real DOM anchor; route clicks externally.
-                a: ({ href, children, node: _node, ...props }) => (
-                  <a
-                    {...props}
-                    href={href}
-                    onClick={(e) => handleLinkClick(e, href)}
-                  >
-                    {children}
-                  </a>
-                ),
-              }}
-            >
-              {result.content}
-            </ReactMarkdown>
-          )}
-          {!loading && result && !result.ok && (
-            <span className="markdown-section-placeholder">
-              Could not open: {result.path}
-            </span>
-          )}
-        </div>
-      )}
+      <div className="markdown-body">
+        {!openPath && (
+          <span className="markdown-section-placeholder">
+            Paste a .md path above and press Enter.
+          </span>
+        )}
+        {openPath && loading && (
+          <span className="markdown-section-placeholder">Loading…</span>
+        )}
+        {openPath && !loading && result?.ok && (
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              // Drop react-markdown's internal `node` prop so it doesn't
+              // leak onto the real DOM anchor; route clicks externally.
+              a: ({ href, children, node: _node, ...props }) => (
+                <a
+                  {...props}
+                  href={href}
+                  onClick={(e) => handleLinkClick(e, href)}
+                >
+                  {children}
+                </a>
+              ),
+            }}
+          >
+            {result.content}
+          </ReactMarkdown>
+        )}
+        {openPath && !loading && result && !result.ok && (
+          <span className="markdown-section-placeholder">
+            {readFileErrorMessage(result.error, result.path)}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

@@ -96,7 +96,7 @@ graph TD
 
 ### T-005: Error states + empty state
 - **Type:** feature
-- **Status:** ready
+- **Status:** done
 - **Description:** Render the non-happy states in `MarkdownSection` based on the `read-file` result. Map each `error` kind to a plain, compact inline message in the body area (no dialogs, no crash): `not-found` → "⚠ File not found: <path>"; `unsupported` → "⚠ Only .md files can be viewed: <path>"; `too-large` → "⚠ File too large to preview (>2MB): <path>". Empty state (no path opened yet for this instance) → a hint like "Paste a .md path above and press Enter." Ensure a stale render from a previous file is cleared when a new open fails (don't leave old content showing under an error).
 - **Acceptance:**
   - Opening a nonexistent path shows the not-found message, no crash, no dialog
@@ -141,3 +141,4 @@ graph TD
 - 2026-07-09: Initial breakdown from ideation. 5 MVP tasks (T-001..T-005) + 2 deferred phase-2 tasks. T-001 and T-002 ready and parallelizable; T-003 blocked on both; T-004/T-005 blocked on T-003.
 - 2026-07-09: T-001 + T-002 done (implemented in parallel). View section shell + per-instance open-path state wired through App→Toolbox→MarkdownSection; `read-file` IPC handler + `ReadFileResult` union added and exposed via preload. `pnpm type` / oxlint / eslint all green. T-003 now unblocked (ready).
 - 2026-07-09: T-003 done. `MarkdownSection` now reads the open file (`useEffect` keyed on `[instance.id, openPath, refreshNonce]`, stale-response guarded) and renders via react-markdown + remark-gfm. Added `open-external` IPC (`shell.openExternal`, guarded to http/https/mailto) + `openExternal` in preload/types; links routed there via a custom `a` renderer + `shouldOpenExternally` helper (relative/exotic links stay inert). No rehype-raw — raw HTML stays escaped. Added `.markdown-body` CSS (compact, theme-aware, long code scrolls in-block). Deps: react-markdown@10, remark-gfm@4. New unit test `markdownLinks.test.ts` (6 tests). type/lint/build/test green; render verified through the real pipeline. T-004 + T-005 now unblocked (ready).
+- 2026-07-09: T-005 done. Error/empty states in `MarkdownSection`: `read-file` error union mapped to one-line inline messages (not-found / unsupported / too-large) via a new `readFileErrorMessage` helper; empty state ("Paste a .md path above and press Enter.") shown when no path is open; the `.markdown-body` container now always renders and branches on empty/loading/ok/error so a failed open replaces old content (Loading branch beats stale result). New unit test `markdownErrors.test.ts` (4 tests). type/lint/test green (23 total); verified end-to-end against real bad files on disk. Only T-004 (math/mermaid) remains in the MVP.
