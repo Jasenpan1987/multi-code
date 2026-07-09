@@ -62,7 +62,7 @@ graph TD
 
 ### T-003: Base markdown rendering (react-markdown + remark-gfm)
 - **Type:** feature
-- **Status:** ready
+- **Status:** done
 - **Description:** Add the markdown rendering pipeline to `MarkdownSection`. Install deps: `react-markdown`, `remark-gfm`. On open-path change or Refresh, call `window.electronAPI.readFile(instanceId, path)`; on `{ ok: true }`, render `content` through `<ReactMarkdown remarkPlugins={[remarkGfm]}>`. Do NOT enable `rehype-raw` — raw HTML stays inert. Style the rendered output (headings, lists, tables, code blocks, links, blockquotes) to be readable and compact within the narrow column; add a `markdown-body` CSS block. Links should open externally (via existing `openInVSCode`/shell-open pattern or `target=_blank` guarded) rather than navigate the renderer — pick the simplest safe option and note it. Loading state while reading.
 - **Acceptance:**
   - Opening a real `.md` renders headings, lists, **bold**/*italic*, tables (gfm), fenced code blocks, links, blockquotes
@@ -79,7 +79,7 @@ graph TD
 
 ### T-004: Math (KaTeX) + Mermaid rendering
 - **Type:** feature
-- **Status:** blocked
+- **Status:** ready
 - **Description:** Extend the pipeline with math and diagrams. **Math:** install `remark-math` + `rehype-katex` + `katex`; add them to the ReactMarkdown plugin lists and import KaTeX's CSS. Inline (`$…$`) and block (`$$…$$`) math should render. **Mermaid:** install `mermaid`. Provide a custom code-block renderer to ReactMarkdown (`components={{ code: ... }}`) that detects language `mermaid`, and for those blocks calls `mermaid.render()` (async) to produce an SVG, rendering the SVG into the block. Initialize mermaid once (`mermaid.initialize({ startOnLoad: false })`). **Failure handling:** if `mermaid.render()` throws (bad syntax), catch it and fall back to rendering the block as a plain fenced code block showing the raw mermaid source (optionally a small "diagram failed to render" note). A mermaid failure must never crash the document or the app. Non-mermaid code blocks render as normal fenced code (from T-003).
 - **Acceptance:**
   - A doc with `$E = mc^2$` inline and a `$$…$$` block renders formatted math (KaTeX)
@@ -96,7 +96,7 @@ graph TD
 
 ### T-005: Error states + empty state
 - **Type:** feature
-- **Status:** blocked
+- **Status:** ready
 - **Description:** Render the non-happy states in `MarkdownSection` based on the `read-file` result. Map each `error` kind to a plain, compact inline message in the body area (no dialogs, no crash): `not-found` → "⚠ File not found: <path>"; `unsupported` → "⚠ Only .md files can be viewed: <path>"; `too-large` → "⚠ File too large to preview (>2MB): <path>". Empty state (no path opened yet for this instance) → a hint like "Paste a .md path above and press Enter." Ensure a stale render from a previous file is cleared when a new open fails (don't leave old content showing under an error).
 - **Acceptance:**
   - Opening a nonexistent path shows the not-found message, no crash, no dialog
@@ -140,3 +140,4 @@ graph TD
 
 - 2026-07-09: Initial breakdown from ideation. 5 MVP tasks (T-001..T-005) + 2 deferred phase-2 tasks. T-001 and T-002 ready and parallelizable; T-003 blocked on both; T-004/T-005 blocked on T-003.
 - 2026-07-09: T-001 + T-002 done (implemented in parallel). View section shell + per-instance open-path state wired through App→Toolbox→MarkdownSection; `read-file` IPC handler + `ReadFileResult` union added and exposed via preload. `pnpm type` / oxlint / eslint all green. T-003 now unblocked (ready).
+- 2026-07-09: T-003 done. `MarkdownSection` now reads the open file (`useEffect` keyed on `[instance.id, openPath, refreshNonce]`, stale-response guarded) and renders via react-markdown + remark-gfm. Added `open-external` IPC (`shell.openExternal`, guarded to http/https/mailto) + `openExternal` in preload/types; links routed there via a custom `a` renderer + `shouldOpenExternally` helper (relative/exotic links stay inert). No rehype-raw — raw HTML stays escaped. Added `.markdown-body` CSS (compact, theme-aware, long code scrolls in-block). Deps: react-markdown@10, remark-gfm@4. New unit test `markdownLinks.test.ts` (6 tests). type/lint/build/test green; render verified through the real pipeline. T-004 + T-005 now unblocked (ready).

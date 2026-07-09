@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow, app, clipboard } from "electron";
+import { ipcMain, dialog, BrowserWindow, app, clipboard, shell } from "electron";
 import { spawn } from "child_process";
 import { writeFileSync, rmSync, statSync, readFileSync } from "fs";
 import { tmpdir, homedir } from "os";
@@ -173,6 +173,22 @@ export function registerIpcHandlers() {
         resolve({ ok: true });
       });
     });
+  });
+
+  // Open a URL in the OS default browser. Guarded to web/mail schemes so a
+  // markdown link can never trigger arbitrary protocol handlers or navigate
+  // the renderer.
+  ipcMain.handle("open-external", async (_event, url: string) => {
+    try {
+      const scheme = new URL(url).protocol;
+      if (scheme !== "http:" && scheme !== "https:" && scheme !== "mailto:") {
+        return { ok: false, error: "unsupported-scheme" };
+      }
+      await shell.openExternal(url);
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "invalid-url" };
+    }
   });
 
   ipcMain.on("bounce-dock", () => {

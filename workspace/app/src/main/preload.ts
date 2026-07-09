@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   readFile: (instanceId: string, path: string) =>
     ipcRenderer.invoke("read-file", instanceId, path),
   openInVSCode: (target: string) => ipcRenderer.invoke("open-in-vscode", target),
+  openExternal: (url: string) => ipcRenderer.invoke("open-external", url),
 
   bounceDock: () => ipcRenderer.send("bounce-dock"),
 
