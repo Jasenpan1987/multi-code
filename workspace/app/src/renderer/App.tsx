@@ -25,6 +25,9 @@ export function App() {
   const [expandedByInstance, setExpandedByInstance] = useState<
     Map<string, string>
   >(new Map());
+  const [openPathByInstance, setOpenPathByInstance] = useState<
+    Map<string, string>
+  >(new Map());
   const [hasOutput, setHasOutput] = useState<Set<string>>(new Set());
   const [toolboxWidth, setToolboxWidth] = useState(480);
   const [theme, setThemeState] = useState<ThemeName>("light");
@@ -220,6 +223,12 @@ export function App() {
         next.delete(id);
         return next;
       });
+      setOpenPathByInstance((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Map(prev);
+        next.delete(id);
+        return next;
+      });
       if (selectedId === id) {
         setSelectedId(null);
       }
@@ -233,6 +242,18 @@ export function App() {
       setExpandedByInstance((prev) => {
         const next = new Map(prev);
         next.set(selectedId, sectionId);
+        return next;
+      });
+    },
+    [selectedId]
+  );
+
+  const handleOpenPath = useCallback(
+    (path: string) => {
+      if (!selectedId) return;
+      setOpenPathByInstance((prev) => {
+        const next = new Map(prev);
+        next.set(selectedId, path);
         return next;
       });
     },
@@ -387,6 +408,8 @@ export function App() {
                     DEFAULT_EXPANDED_SECTION)
               }
               onExpandSection={isOffline ? () => {} : handleExpandSection}
+              openPath={openPathByInstance.get(selectedInstance.id) ?? ""}
+              onOpenPath={isOffline ? () => {} : handleOpenPath}
               width={toolboxWidth}
             />
           </>

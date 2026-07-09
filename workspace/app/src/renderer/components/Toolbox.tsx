@@ -2,12 +2,15 @@ import { ToolboxSection } from "./ToolboxSection";
 import { GitSection } from "./GitSection";
 import { QuickActionsSection } from "./QuickActionsSection";
 import { TerminalSection } from "./TerminalSection";
+import { MarkdownSection } from "./MarkdownSection";
 import type { Instance } from "../../shared/types";
 
 interface ToolboxProps {
   instance: Instance;
   expandedSection: string;
   onExpandSection: (sectionId: string) => void;
+  openPath: string;
+  onOpenPath: (path: string) => void;
   width: number;
 }
 
@@ -15,6 +18,8 @@ export function Toolbox({
   instance,
   expandedSection,
   onExpandSection,
+  openPath,
+  onOpenPath,
   width,
 }: ToolboxProps) {
   const isExpanded = (id: string) => expandedSection === id;
@@ -55,6 +60,20 @@ export function Toolbox({
         <TerminalSection
           instanceId={instance.id}
           active={isExpanded("terminal")}
+        />
+      </ToolboxSection>
+
+      <ToolboxSection
+        id="view"
+        title="View"
+        expanded={isExpanded("view")}
+        onToggle={onExpandSection}
+      >
+        <MarkdownSection
+          instance={instance}
+          active={isExpanded("view")}
+          openPath={openPath}
+          onOpenPath={onOpenPath}
         />
       </ToolboxSection>
     </aside>

@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("set-alias", id, alias),
   selectDirectory: () => ipcRenderer.invoke("select-directory"),
   getGitStatus: (id: string) => ipcRenderer.invoke("get-git-status", id),
+  readFile: (instanceId: string, path: string) =>
+    ipcRenderer.invoke("read-file", instanceId, path),
   openInVSCode: (target: string) => ipcRenderer.invoke("open-in-vscode", target),
 
   bounceDock: () => ipcRenderer.send("bounce-dock"),

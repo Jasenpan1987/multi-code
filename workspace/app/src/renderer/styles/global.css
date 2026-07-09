@@ -1072,3 +1072,51 @@ body,
     opacity: 0.2;
   }
 }
+
+/* Markdown (View) section */
+.markdown-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.markdown-section-bar {
+  display: flex;
+  gap: 6px;
+}
+
+.markdown-path-input {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid #aac;
+  border-radius: 3px;
+  font-size: 11px;
+  font-family: inherit;
+  background: #fff;
+  min-width: 0;
+}
+
+.markdown-path-input:focus {
+  outline: none;
+  border-color: #4a8ac4;
+}
+
+.markdown-refresh-btn {
+  padding: 4px 10px;
+  background: linear-gradient(180deg, #f8f8f8 0%, #e8e8e8 100%);
+  border: 1px solid #aaa;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.markdown-refresh-btn:hover {
+  background: linear-gradient(180deg, #fff 0%, #f0f0f0 100%);
+}
+
+.markdown-section-placeholder {
+  color: var(--toolbox-placeholder-fg);
+  font-style: italic;
+  font-size: 11px;
+}

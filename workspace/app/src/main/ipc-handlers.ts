@@ -1,8 +1,8 @@
 import { ipcMain, dialog, BrowserWindow, app, clipboard } from "electron";
 import { spawn } from "child_process";
-import { writeFileSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join, resolve, dirname, basename } from "path";
+import { writeFileSync, rmSync, statSync, readFileSync } from "fs";
+import { tmpdir, homedir } from "os";
+import { join, resolve, dirname, basename, extname } from "path";
 import { processManager } from "./process-manager";
 import { shellManager } from "./shell-manager";
 import { getGitStatus } from "./git-status";
@@ -10,6 +10,7 @@ import { isBackendAvailable } from "./backends";
 import type { BackendName } from "./backends";
 import { loadSettings, saveSettings } from "./settings-store";
 import type { ThemeName } from "./settings-store";
+import type { ReadFileResult } from "../shared/types";
 
 // Per-process counter to disambiguate temp image filenames within the same ms.
 let tempImageCounter = 0;
@@ -84,6 +85,68 @@ export function registerIpcHandlers() {
     if (!instance) return { available: false };
     return getGitStatus(instance.cwd);
   });
+
+  // Markdown view: read a markdown file for the renderer, which has no fs
+  // access. The path may be absolute (POSIX or Windows), `~`-relative to the
+  // home dir, or relative to the instance's cwd. Returns a discriminated-union
+  // result — never throws — so any bad input (missing file, wrong extension,
+  // directory, oversized file) degrades to an { ok: false } error the renderer
+  // can render. Only .md/.markdown are allowed; the extension is checked before
+  // touching fs, and a 2 MB size cap guards against huge files.
+  ipcMain.handle(
+    "read-file",
+    (_event, instanceId: string, rawPath: string): ReadFileResult => {
+      try {
+        let resolved: string;
+        if (
+          rawPath.startsWith("/") ||
+          /^[a-zA-Z]:[\\/]/.test(rawPath)
+        ) {
+          resolved = rawPath;
+        } else if (rawPath.startsWith("~")) {
+          resolved =
+            rawPath === "~"
+              ? homedir()
+              : join(homedir(), rawPath.slice(2));
+        } else {
+          const instance = processManager
+            .listInstances()
+            .find((i) => i.id === instanceId);
+          if (!instance) {
+            return { ok: false, path: rawPath, error: "not-found" };
+          }
+          resolved = resolve(instance.cwd, rawPath);
+        }
+
+        const ext = extname(resolved).toLowerCase();
+        if (ext !== ".md" && ext !== ".markdown") {
+          return { ok: false, path: resolved, error: "unsupported" };
+        }
+
+        let stats;
+        try {
+          stats = statSync(resolved);
+        } catch {
+          return { ok: false, path: resolved, error: "not-found" };
+        }
+        if (stats.isDirectory()) {
+          return { ok: false, path: resolved, error: "unsupported" };
+        }
+        if (stats.size > 2 * 1024 * 1024) {
+          return { ok: false, path: resolved, error: "too-large" };
+        }
+
+        try {
+          const content = readFileSync(resolved, "utf8");
+          return { ok: true, path: resolved, content };
+        } catch {
+          return { ok: false, path: resolved, error: "not-found" };
+        }
+      } catch {
+        return { ok: false, path: rawPath, error: "not-found" };
+      }
+    }
+  );
 
   ipcMain.handle("open-in-vscode", async (_event, target: string) => {
     return new Promise<{ ok: boolean; error?: string }>((resolve) => {

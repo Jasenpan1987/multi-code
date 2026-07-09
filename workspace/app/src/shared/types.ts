@@ -37,6 +37,12 @@ export type GitStatus =
       stagedFiles: GitFileEntry[];
     };
 
+export type ReadFileError = "not-found" | "unsupported" | "too-large";
+
+export type ReadFileResult =
+  | { ok: true; path: string; content: string }
+  | { ok: false; path: string; error: ReadFileError };
+
 export interface ElectronAPI {
   // Instance management
   createInstance: (
@@ -55,6 +61,7 @@ export interface ElectronAPI {
   selectDirectory: () => Promise<string | null>;
   isBackendAvailable: (backend: BackendName) => Promise<boolean>;
   getGitStatus: (id: string) => Promise<GitStatus>;
+  readFile: (instanceId: string, path: string) => Promise<ReadFileResult>;
   openInVSCode: (target: string) => Promise<{ ok: boolean; error?: string }>;
   bounceDock: () => void;
 
