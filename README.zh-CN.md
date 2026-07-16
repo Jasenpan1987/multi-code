@@ -2,31 +2,36 @@
 
 > [English](./README.md)
 
-一个桌面应用,用单一界面管理多个 Claude Code CLI 实例。本质上是一个**带 QQ 经典皮肤的终端多路复用器**(QQ 是 2000 年代初的中文聊天软件)—— 每个 Claude Code 会话作为侧边栏里的"联系人"出现,保留完整的终端能力和通知。
+一个桌面应用,用单一界面管理多个终端型编码 agent 会话。支持两种后端:**Claude Code** 和 **OpenCode**,而且可以混着用。本质上是一个带 QQ 经典皮肤的终端多路复用器(QQ 是 2000 年代初的中文聊天软件),每个 agent 会话作为侧边栏里的"联系人"出现,保留完整的终端能力和通知。
+
+**零残留:** Multi-Code 直接 spawn 真实的 `claude` / `opencode` CLI,从不往它们的配置或 session 目录里写东西。卸载这个 app 不会在 `~/.claude/`、`~/.config/opencode/` 或你的项目里留下任何痕迹,它只保存自己那份很小的联系人列表(见[数据持久化](#数据持久化))。
 
 ## 为什么做这个
 
-当你同时跑多个 Claude Code 会话(不同项目),会遇到 context 串扰和漏看回复的问题。Multi-Code 给每个会话独立的终端视图,并提供统一的通知管理。
+当你同时跑多个编码 agent 会话(不同项目),会遇到 context 串扰和漏看回复的问题。Multi-Code 给每个会话独立的终端视图,并提供统一的通知管理,不管这个会话是 Claude Code 还是 OpenCode。
 
 ## 功能
 
 ### 核心
-- **实例管理** — 按项目目录 spawn / restart / remove Claude Code 会话
+- **多后端** — 每个实例跑 **Claude Code** 或 **OpenCode**。创建实例时选后端,可以任意混用,甚至同一个项目目录里两个都开
+- **实例管理** — 按项目目录 spawn / restart / remove agent 会话
 - **完整终端能力** — 用 node-pty 接真 PTY,xterm.js 渲染。不做 chat 抽象,不解析消息
-- **会话通知** — 监听 Claude 的 session JSONL 文件;agent 完成回复时播放声音、闪烁联系人、macOS Dock 弹跳
-- **持久化** — 实例列表存盘,重启后恢复
+- **会话通知** — 检测 agent 完成一轮回复(Claude 读它的 session JSONL,OpenCode 读它的 session 数据库),播放声音、闪烁联系人、macOS Dock 弹跳
+- **持久化** — 实例列表(含每个实例的后端)存盘,重启后恢复
 - **三栏布局** — 联系人列表 | 终端 | 工具箱,终端和工具箱之间有可拖拽分栏
 
 ### 工具箱(每实例独立的工具面板)
 - **Git section** — 当前 branch、文件计数(new / modified / staged)、远端 ahead/behind、可点击的文件列表(点击在 VS Code 里打开)。展开时每 5 秒轮询
 - **Quick Actions** — 一键操作按钮:
   - **Go to Code Base** — 在 VS Code 里打开项目
-  - **Show Cost / Clear / Compact** — 自动往终端敲 `/cost`、`/clear`、`/compact`
-  - **Resume Elsewhere** — 复制 `claude --resume <session-id>` 到剪贴板,方便交接给 IDE 里的 Claude Code
+  - **Show Cost / Clear / Compact** — 自动往终端敲 `/cost`、`/clear`、`/compact`(OpenCode 没有内联的 cost 命令,Show Cost 对它禁用)
+  - **Resume Elsewhere** — 复制该后端的续接命令到剪贴板,方便交接给独立终端(`claude --resume <id>` 或 `opencode --session <id>`)
 - **Terminal section** — 嵌入式真实 shell(用你的默认 `$SHELL`),在项目目录下运行。后台保活,折叠或切实例都不杀进程
+- **View section** — 内联渲染 Markdown 文件:粘贴一个 `.md` 路径(或点终端输出里的 `.md` 路径,或点 Git section 里某个变更 `.md` 旁边的 View 入口)。支持 GitHub 风格 Markdown、数学公式(KaTeX)、Mermaid 图、本地和远程图片
 
 ### 视觉 / UX
 - **QQ 美学** — Aqua 蓝渐变,紧凑头像,熟悉的侧边栏布局
+- **一眼区分后端** — Claude Code 实例是**圆形**头像,OpenCode 实例是**圆角方形**头像
 - **Dock 弹跳** — agent 完成而 app 不在前台时,macOS Dock 图标会弹跳
 
 ## 技术栈
@@ -51,10 +56,10 @@ multi-code/
 │   └── app/
 │       ├── src/
 │       │   ├── main/           # Electron 主进程
-│       │   │   ├── index.ts          # 入口、窗口创建、dock 图标
-│       │   │   ├── process-manager.ts # spawn 和管理 claude CLI 进程
+│       │   │   ├── index.ts          # 入口、窗口创建、dock 图标、mdimg:// 协议
+│       │   │   ├── process-manager.ts # spawn 和管理 agent CLI 进程(后端无关)
+│       │   │   ├── backends/          # 后端抽象:claude.ts、opencode.ts、注册表
 │       │   │   ├── shell-manager.ts  # spawn 和管理 shell PTY(工具箱 Terminal)
-│       │   │   ├── session-watcher.ts # 监听 session JSONL 的 end_turn
 │       │   │   ├── git-status.ts     # Git 状态读取(工具箱用)
 │       │   │   ├── ipc-handlers.ts    # IPC 端点注册
 │       │   │   ├── preload.ts         # context bridge(electronAPI)
@@ -81,21 +86,25 @@ multi-code/
 
 你会直接收到一个 `Multi-Code-0.1.0-arm64.dmg` 文件(比如通过 Slack / Drive / AirDrop)。按下面步骤来。
 
-### 前置依赖:Claude Code CLI
+### 前置依赖:后端 CLI
 
-启动 Multi-Code **之前**,必须先装 Claude Code CLI:
+Multi-Code 驱动的是真实的 agent CLI,启动前**至少装一个**后端。只需要装你实际会用的后端,如果只用其中一个,另一个不装也行。
+
+**Claude Code CLI**(用于 Claude Code 实例):
 
 ```bash
 curl -fsSL https://claude.ai/install.sh | sh
+claude --version   # 验证
 ```
 
-验证一下:
+**OpenCode CLI**(可选,只在要开 OpenCode 实例时需要):
 
 ```bash
-claude --version
+curl -fsSL https://opencode.ai/install | bash
+opencode --version   # 验证
 ```
 
-能输出版本号就 OK。
+对应命令能输出版本号就 OK。如果在 app 里选了某个后端但它的 CLI 没装,那个实例创建后会直接显示 OFFLINE。
 
 ### 第 1 步 — 安装 app
 
@@ -121,7 +130,7 @@ xattr -cr /Applications/Multi-Code.app
 没做第 2 步。去终端跑那行 `xattr` 命令,然后再试。
 
 **创建实例后聊天框一直显示 OFFLINE**
-`claude` CLI 不在 PATH 里。用 `claude --version` 验证一下,如果不通,回到顶部重装 Claude Code CLI。
+对应后端的 CLI 不在 PATH 里。Claude Code 实例用 `claude --version` 验证,OpenCode 实例用 `opencode --version` 验证,不通就回到顶部重装对应的 CLI。
 
 **升级到新版**
 把新的 `Multi-Code.app` 拖到 Applications(覆盖旧的),然后**再跑一次** `xattr -cr /Applications/Multi-Code.app`,然后启动。
@@ -134,7 +143,7 @@ xattr -cr /Applications/Multi-Code.app
 
 - Node.js >= 20
 - pnpm >= 9
-- Claude Code CLI 已安装,且 `claude` 在 PATH 里
+- PATH 里至少有一个后端 CLI:Claude Code(`claude`)和/或 OpenCode(`opencode`)
 
 ### 安装并运行
 
@@ -158,28 +167,32 @@ pnpm dist         # 打可分发包(macOS 上是 dmg)
 
 ## 使用说明
 
-Multi-Code 的核心定位是**轻量级 agent 调度中心**:你可以并行管理多个 Claude Code 会话,统一观察、批量发指令。需要边看代码边深度调改时,可以一键移交给 IDE 里的 Claude Code(VS Code 等)。
+Multi-Code 的核心定位是**轻量级 agent 调度中心**:你可以并行管理多个 Claude Code / OpenCode 会话,统一观察、批量发指令。需要边看代码边深度调改时,可以一键移交给 IDE 里或独立终端里的 agent。
 
 ### 创建新实例
 
 1. 点击左侧 sidebar 底部的 **"+ New"** 按钮
-2. 选择项目目录(必须是绝对路径)
-3. 可选:填写一个 alias(联系人显示名)
-4. 点 Create —— 应用自动 spawn `claude` CLI 在该目录;首次进入若该目录还没历史 session,会启动新会话,否则用 `--continue` 续上
+2. 选一个**后端**:**Claude Code** 或 **OpenCode**。选择器默认是你上次用的那个。如果选了 OpenCode 但它的 CLI 不在 PATH 里,会出一条内联提示(仍然可以创建)
+3. 选择项目目录(必须是绝对路径)
+4. 可选:填写一个 alias(联系人显示名)
+5. 点 Create,应用自动 spawn 选中的 CLI 在该目录(`claude` 或 `opencode`),有历史 session 就续上。实例头像**圆形是 Claude Code,圆角方形是 OpenCode**
+
+> 同一个目录可以同时开一个 Claude Code 实例和一个 OpenCode 实例,互不干扰。同一目录里再创建**相同**后端的实例,还是会像以前那样给你警告。
 
 ### 主界面布局(三栏)
 
 ```
 ┌──────────────┬─────────────────────┬─────────────────────┐
-│ Contact List │ Terminal (claude)   │ Toolbox             │
+│ Contact List │ Terminal (agent)    │ Toolbox             │
 │              │                     │  ▾ Git              │
 │  + New       │                     │  ▸ Quick Actions    │
 │              │                     │  ▸ Terminal         │
+│              │                     │  ▸ View             │
 └──────────────┴─────────────────────┴─────────────────────┘
 ```
 
 - **左**:实例列表。绿色头像 = running,灰色 = stopped。右键菜单可 Restart / Remove。停止的实例右侧有 ▶ 按钮启动
-- **中**:claude 主聊天框(真终端)。底色白底 Aqua 风,适配深背景下的 ANSI diff 块
+- **中**:agent 主聊天框(真终端,Claude Code 或 OpenCode 的 TUI)。底色白底 Aqua 风,适配深背景下的 ANSI diff 块
 - **右**:工具箱,手风琴式 —— 同时只能展开一个 section,展开的撑满纵向。Git 默认展开
 - **中右之间**:有一条**可拖动分栏**,左右调整聊天框 / 工具箱宽度。两侧最小 280px
 
@@ -194,11 +207,17 @@ Multi-Code 的核心定位是**轻量级 agent 调度中心**:你可以并行管
 #### Quick Actions
 | 按钮 | 行为 |
 |------|------|
-| Go to Code Base | `code <cwd>` —— 用 VS Code 打开项目;已经开着会激活已有窗口 |
-| Show Cost | 在主聊天框敲 `/cost` |
+| Go to Code Base | `code <cwd>`,用 VS Code 打开项目;已经开着会激活已有窗口 |
+| Show Cost | 在主聊天框敲 `/cost`。**OpenCode 下禁用**(没有内联 cost 命令),带说明 tooltip |
 | Clear | 在主聊天框敲 `/clear` |
 | Compact | 在主聊天框敲 `/compact` |
-| Resume Elsewhere | 复制 `claude --resume <session-id>` 到剪贴板 |
+| Resume Elsewhere | 复制该后端的续接命令(`claude --resume <session-id>` 或 `opencode --session <session-id>`)到剪贴板 |
+
+#### View
+- 在工具箱这一栏内联渲染 Markdown 文件
+- 三种打开方式:在输入框粘贴路径回车、**点终端输出里的 `.md` 路径**、点 Git section 里某个变更 `.md` 旁边的 **View** 入口
+- 支持 GitHub 风格 Markdown、数学公式(`$…$` / `$$…$$`,走 KaTeX)、Mermaid 图、图片(本地图片相对文件解析,远程 `https://` 图片直接加载)
+- 只支持 `.md` / `.markdown`,上限 2 MB,其他类型显示一条纯文本提示。Markdown 里的原始 HTML 不会被执行
 
 #### Terminal
 - 真实 shell PTY(用 `$SHELL`),黑底白字,跟 Terminal.app 一样
@@ -208,7 +227,9 @@ Multi-Code 的核心定位是**轻量级 agent 调度中心**:你可以并行管
 
 ### 通知行为
 
-- Agent 完成回应(`end_turn`)→ 响一次"滴滴"提示音
+两种后端的通知行为完全一致,只是检测来源不同(Claude Code 读 session JSONL,OpenCode 读 session 数据库)。
+
+- Agent 完成一轮回应 → 响一次"滴滴"提示音
 - 头像闪烁 + 红点徽标
 - macOS Dock 图标弹跳(`critical` 模式,持续到你切回 app)
 - 当前选中的实例:闪烁 1.5 秒后自动消失(假定你已在看)
@@ -219,29 +240,29 @@ Multi-Code 的核心定位是**轻量级 agent 调度中心**:你可以并行管
 - 已停止的实例显示灰色头像
 - 选中已停止的实例:聊天框中央显示大号 **OFFLINE** 字样
 - 工具箱所有 section 强制折叠,不可展开
-- 想恢复:点联系人右侧 ▶ 按钮重启 claude
+- 想恢复:点联系人右侧 ▶ 按钮重启它的后端 CLI
 
 ### Resume 到 IDE 的工作流
 
 当某个 session 进入"需要边看代码边改"的深度模式:
 
-1. 工具箱 → Quick Actions → 点 **Resume Elsewhere** —— 命令已复制
+1. 工具箱 → Quick Actions → 点 **Resume Elsewhere**,该后端的续接命令已复制(`claude --resume <id>` 或 `opencode --session <id>`)
 2. 在 VS Code 里打开终端(或开 iTerm/Terminal.app),`cd` 到项目根
-3. 粘贴回车 → claude 在带 IDE 的环境里继续这个 session
+3. 粘贴回车,agent 在那个环境里继续这个 session
 4. Multi-Code 这边可以保持运行,也可以关掉
 
 ### 数据持久化
 
-- 实例列表(目录 + alias)保存在 `~/.config/Multi-Code/contacts.json`
+- 实例列表(目录 + alias + 后端)保存在 `~/.config/Multi-Code/contacts.json`
 - App 重启后自动恢复联系人列表(状态都是 stopped,需手动启动)
-- Session 内容由 Claude Code 自己管(`~/.claude/`),Multi-Code 不存任何对话内容
+- Session 内容由后端 CLI 自己管(Claude Code 在 `~/.claude/`,OpenCode 在 `~/.local/share/opencode/`),Multi-Code 不存任何对话内容,也从不往这些目录里写
 
 ## 工作原理
 
-1. 用户选择一个项目目录创建实例
-2. App 通过 node-pty 在该目录 spawn `claude`(若该目录有历史 session,则用 `--continue`)
+1. 用户选一个项目目录和后端(Claude Code / OpenCode)创建实例
+2. App 通过 node-pty 在该目录 spawn 对应后端 CLI(`claude` / `opencode`,有历史 session 就续上)。后端在 `src/main/backends/` 的一个小 `Backend` 接口后面可插拔
 3. PTY stdout 实时管道到 renderer 里的 xterm.js 终端
-4. SessionWatcher 轮询 Claude session JSONL,根据 `end_turn` 事件检测完成
+4. 按后端各自的完成检测器监听一轮结束,Claude 读它的 session JSONL,OpenCode 读它的 session 数据库,都是只读,不回写任何东西
 5. 完成时:声音 + 闪烁 + Dock 弹跳。当前选中的实例 1.5 秒后自动 mark read
 6. 工具箱 sections 各自管理生命周期:
    - Git:展开期间每 5s 调用 `git`
