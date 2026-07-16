@@ -18,10 +18,11 @@ When working with multiple coding-agent sessions across different projects simul
 - **Full Terminal Fidelity** — Real PTY via node-pty, rendered in xterm.js. No chat abstraction, no message parsing
 - **Session Notifications** — Detects when an agent finishes a turn (Claude via its session JSONL, OpenCode via its session database); plays audio, flashes the contact, and bounces the macOS Dock
 - **Persistence** — Instance list (including each instance's backend) saved to disk, survives app restart
+- **Compose Box** — `Cmd+L` summons an editor over the terminal: multi-line input, mouse editing, `Enter` to send / `Shift+Enter` for a newline, and image paste (with a thumbnail preview) sent as an `@<path>` attachment. For long messages the folded TUI input makes awkward (Claude Code only)
 - **Three-Column Layout** — Contact list | terminal | toolbox, with a draggable splitter between terminal and toolbox
 
 ### Toolbox (per-instance utility panel)
-- **Git section** — Current branch, file counts (new / modified / staged), remote ahead/behind, clickable file list (opens file in VS Code). Polls every 5s while the section is expanded
+- **Git section** — Current branch, file counts (new / modified / staged), remote ahead/behind, clickable file list (opens the project in VS Code and reveals the file). Polls every 5s while the section is expanded
 - **Quick Actions** — One-click buttons for common operations:
   - **Go to Code Base** — Open the project in VS Code
   - **Show Cost / Clear / Compact** — Auto-type `/cost`, `/clear`, `/compact` into the terminal (Show Cost is disabled for OpenCode, which has no inline cost command)
@@ -32,6 +33,7 @@ When working with multiple coding-agent sessions across different projects simul
 ### Visual / UX
 - **QQ Aesthetic** — Aqua-blue gradients, compact avatars, familiar sidebar layout
 - **Backend at a glance** — Claude Code instances have **circular** avatars, OpenCode instances have **rounded-square** avatars
+- **Version badge** — The current build version shows in the top-right of the window (next to the theme toggle), so you can always tell which build is running
 - **Dock Bounce** — macOS Dock icon bounces when an agent finishes while the app is in the background
 
 ## Tech Stack
@@ -196,11 +198,21 @@ Multi-Code positions itself as a **lightweight agent orchestration hub**: run mu
 - **Right** — Toolbox, accordion-style: only one section is expanded at a time and fills the available vertical space. Git is expanded by default.
 - **Between middle and right** — A **draggable splitter**. Drag to resize. Each side has a 280px minimum.
 
+### Compose Box
+
+The TUI's own input is folded, which is awkward for long messages, multi-line content, or attaching images. Use the Compose Box instead:
+
+1. Press **`Cmd+L`** in the terminal to summon it (only for running Claude Code instances; a no-op for OpenCode / stopped instances)
+2. Type freely — **`Enter` sends**, **`Shift+Enter` inserts a newline**, **`Esc` cancels**
+3. To attach an image, just **paste it** (e.g. a screenshot) — a thumbnail chip appears; on send the image goes to claude as an `@<path>` attachment
+4. Switching instances discards the draft (each instance's draft is independent)
+
 ### Toolbox sections
 
 #### Git
 - Shows current branch, file counts, and remote ahead/behind
-- Lists each changed file — **click a file name to open it in VS Code**
+- Lists each changed file — **click a file name to open the project in VS Code and reveal the file**. If the project isn't open yet, its window is launched (rather than dropping the file into whatever window is frontmost)
+- Changed `.md` / `.markdown` files also get a **View** affordance at the end of the row — click it to preview the file inline in the View section below
 - If there are more than 20 changed files, the list is hidden and a "too many files" message is shown
 - Strict cwd check: only the cwd's own `.git` is inspected; parent directories are not searched. Subdirectories of a repo show "Not a git repository" by design.
 

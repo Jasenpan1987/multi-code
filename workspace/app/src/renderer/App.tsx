@@ -10,6 +10,7 @@ import { ComposeBox } from "./components/ComposeBox";
 import { cleanupShellTerminal } from "./components/TerminalSection";
 import { Toolbox } from "./components/Toolbox";
 import { ThemeToggle } from "./components/ThemeToggle";
+import { VersionBadge } from "./components/VersionBadge";
 import { useNotifications } from "./hooks/useNotifications";
 import { ThemeContext } from "./hooks/useTheme";
 import { playMessageSound, playCoughSound } from "./audio/sounds";
@@ -297,6 +298,7 @@ export function App() {
   return (
     <ThemeContext.Provider value={{ theme, setTheme }}>
     <div className="app-container">
+      <VersionBadge />
       <ThemeToggle />
       <ContactList
         instances={instances}

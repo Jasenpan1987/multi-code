@@ -1071,6 +1071,30 @@ body,
 }
 
 /* Theme toggle button — pinned to the top-right of the draggable titlebar */
+.version-badge {
+  position: absolute;
+  top: 10px;
+  right: 46px;
+  z-index: 10;
+  font-size: 10px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 1px rgba(30, 74, 122, 0.5);
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+  user-select: none;
+}
+
+[data-theme="dark"] .version-badge {
+  color: rgba(220, 220, 220, 0.7);
+  text-shadow: none;
+}
+
+[data-theme="sepia"] .version-badge {
+  color: rgba(90, 74, 48, 0.8);
+  text-shadow: none;
+}
+
 .theme-toggle {
   position: absolute;
   top: 4px;

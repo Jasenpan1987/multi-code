@@ -161,32 +161,57 @@ export function registerIpcHandlers() {
     }
   );
 
-  ipcMain.handle("open-in-vscode", async (_event, target: string) => {
-    return new Promise<{ ok: boolean; error?: string }>((resolve) => {
-      const child = spawn("code", [target], {
-        detached: true,
-        stdio: "ignore",
-        env: {
-          ...process.env,
-          PATH: [
-            "/opt/homebrew/bin",
-            "/usr/local/bin",
-            process.env.PATH || "",
-          ].join(":"),
-        },
-      });
-      child.once("error", (err: NodeJS.ErrnoException) => {
-        resolve({
-          ok: false,
-          error: err.code === "ENOENT" ? "not-found" : err.message,
+  // Open a target in VS Code. When `projectRoot` is provided AND differs from
+  // the target, we first open/focus the project folder, then `--goto` the file
+  // inside it — otherwise `code <file>` alone dumps the file into whatever VS
+  // Code window happens to be frontmost, without the project context. `code
+  // <folder>` opens or focuses that folder's window; a following `code --goto`
+  // routes the file into the window that owns it. When there's no projectRoot
+  // (e.g. "Go to Code Base" passing a folder), the single `code <target>` path
+  // is used, unchanged.
+  ipcMain.handle(
+    "open-in-vscode",
+    async (_event, target: string, projectRoot?: string) => {
+      const env = {
+        ...process.env,
+        PATH: [
+          "/opt/homebrew/bin",
+          "/usr/local/bin",
+          process.env.PATH || "",
+        ].join(":"),
+      };
+
+      // Run one `code` invocation, resolving ok/error from its spawn result.
+      const runCode = (args: string[]) =>
+        new Promise<{ ok: boolean; error?: string }>((resolve) => {
+          const child = spawn("code", args, {
+            detached: true,
+            stdio: "ignore",
+            env,
+          });
+          child.once("error", (err: NodeJS.ErrnoException) => {
+            resolve({
+              ok: false,
+              error: err.code === "ENOENT" ? "not-found" : err.message,
+            });
+          });
+          child.once("spawn", () => {
+            child.unref();
+            resolve({ ok: true });
+          });
         });
-      });
-      child.once("spawn", () => {
-        child.unref();
-        resolve({ ok: true });
-      });
-    });
-  });
+
+      // No project context, or target IS the project root → single open.
+      if (!projectRoot || projectRoot === target) {
+        return runCode([target]);
+      }
+
+      // Ensure the project window exists/focused, then reveal the file in it.
+      const folderResult = await runCode([projectRoot]);
+      if (!folderResult.ok) return folderResult;
+      return runCode(["--goto", target]);
+    }
+  );
 
   // Open a URL in the OS default browser. Guarded to web/mail schemes so a
   // markdown link can never trigger arbitrary protocol handlers or navigate
@@ -243,6 +268,22 @@ export function registerIpcHandlers() {
       shellManager.resize(id, cols, rows);
     }
   );
+
+  // App version for the header badge. Read straight from the app's
+  // package.json (which sits at ../../package.json relative to dist/main),
+  // because app.getVersion() falls back to Electron's own version when the app
+  // isn't launched with a packaged context (e.g. `electron dist/main/index.js`
+  // in dev). Falls back to app.getVersion() only if the file can't be read.
+  ipcMain.handle("get-app-version", () => {
+    try {
+      const pkgPath = join(__dirname, "..", "..", "package.json");
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+      if (typeof pkg.version === "string") return pkg.version;
+    } catch {
+      // fall through
+    }
+    return app.getVersion();
+  });
 
   ipcMain.handle("settings-get", () => {
     return loadSettings();

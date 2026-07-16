@@ -167,7 +167,10 @@ function FileRow({
   const previewable = isMarkdown(file.path);
 
   const handleClick = () => {
-    window.electronAPI.openInVSCode(absPath);
+    // Pass the instance cwd as the project root so VS Code opens/focuses the
+    // project window and reveals the file inside it, rather than dropping the
+    // file into whatever window is frontmost.
+    window.electronAPI.openInVSCode(absPath, cwd);
   };
 
   // Open the file in the Markdown View. stopPropagation so it doesn't also

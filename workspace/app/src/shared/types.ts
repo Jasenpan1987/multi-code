@@ -71,9 +71,15 @@ export interface ElectronAPI {
   getGitStatus: (id: string) => Promise<GitStatus>;
   getResumeCommand: (id: string) => Promise<string | null>;
   readFile: (instanceId: string, path: string) => Promise<ReadFileResult>;
-  openInVSCode: (target: string) => Promise<{ ok: boolean; error?: string }>;
+  openInVSCode: (
+    target: string,
+    projectRoot?: string
+  ) => Promise<{ ok: boolean; error?: string }>;
   openExternal: (url: string) => Promise<{ ok: boolean; error?: string }>;
   bounceDock: () => void;
+
+  // App
+  getAppVersion: () => Promise<string>;
 
   // Settings
   getSettings: () => Promise<AppSettings>;

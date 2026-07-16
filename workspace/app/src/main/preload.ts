@@ -22,10 +22,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("get-resume-command", id),
   readFile: (instanceId: string, path: string) =>
     ipcRenderer.invoke("read-file", instanceId, path),
-  openInVSCode: (target: string) => ipcRenderer.invoke("open-in-vscode", target),
+  openInVSCode: (target: string, projectRoot?: string) =>
+    ipcRenderer.invoke("open-in-vscode", target, projectRoot),
   openExternal: (url: string) => ipcRenderer.invoke("open-external", url),
 
   bounceDock: () => ipcRenderer.send("bounce-dock"),
+
+  // App
+  getAppVersion: () => ipcRenderer.invoke("get-app-version"),
 
   // Settings
   getSettings: () => ipcRenderer.invoke("settings-get"),

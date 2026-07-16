@@ -18,10 +18,11 @@
 - **完整终端能力** — 用 node-pty 接真 PTY,xterm.js 渲染。不做 chat 抽象,不解析消息
 - **会话通知** — 检测 agent 完成一轮回复(Claude 读它的 session JSONL,OpenCode 读它的 session 数据库),播放声音、闪烁联系人、macOS Dock 弹跳
 - **持久化** — 实例列表(含每个实例的后端)存盘,重启后恢复
+- **消息编辑框** — `Cmd+L` 在终端上唤起一个编辑框:多行输入、鼠标编辑、`Enter` 发送 / `Shift+Enter` 换行,还能粘贴图片(带缩略图预览)一起发出去。适合折叠 TUI 输入框里写不方便的长消息(仅 Claude Code)
 - **三栏布局** — 联系人列表 | 终端 | 工具箱,终端和工具箱之间有可拖拽分栏
 
 ### 工具箱(每实例独立的工具面板)
-- **Git section** — 当前 branch、文件计数(new / modified / staged)、远端 ahead/behind、可点击的文件列表(点击在 VS Code 里打开)。展开时每 5 秒轮询
+- **Git section** — 当前 branch、文件计数(new / modified / staged)、远端 ahead/behind、可点击的文件列表(点击在 VS Code 里打开该项目并定位文件)。展开时每 5 秒轮询
 - **Quick Actions** — 一键操作按钮:
   - **Go to Code Base** — 在 VS Code 里打开项目
   - **Show Cost / Clear / Compact** — 自动往终端敲 `/cost`、`/clear`、`/compact`(OpenCode 没有内联的 cost 命令,Show Cost 对它禁用)
@@ -32,6 +33,7 @@
 ### 视觉 / UX
 - **QQ 美学** — Aqua 蓝渐变,紧凑头像,熟悉的侧边栏布局
 - **一眼区分后端** — Claude Code 实例是**圆形**头像,OpenCode 实例是**圆角方形**头像
+- **版本号** — 窗口右上角(主题切换按钮旁)显示当前构建版本号,随时能看到跑的是哪一版
 - **Dock 弹跳** — agent 完成而 app 不在前台时,macOS Dock 图标会弹跳
 
 ## 技术栈
@@ -196,13 +198,23 @@ Multi-Code 的核心定位是**轻量级 agent 调度中心**:你可以并行管
 - **右**:工具箱,手风琴式 —— 同时只能展开一个 section,展开的撑满纵向。Git 默认展开
 - **中右之间**:有一条**可拖动分栏**,左右调整聊天框 / 工具箱宽度。两侧最小 280px
 
-### Toolbox 三个 section 详解
+### 消息编辑框(Compose Box)
+
+TUI 自带的输入框是折叠的,写长消息、多行内容或要贴图时不方便。用编辑框代替:
+
+1. 在终端里按 **`Cmd+L`** 唤起编辑框(仅对运行中的 Claude Code 实例;OpenCode / 已停止的实例无效)
+2. 随便打字,**`Enter` 发送**,**`Shift+Enter` 换行**,**`Esc` 取消**
+3. 想附图就直接 **粘贴图片**(比如截图),会出现一个缩略图 chip;发送时图片作为 `@<路径>` 附件一起发给 claude
+4. 切换实例会丢弃草稿(每个实例的草稿独立)
+
+### Toolbox 四个 section 详解
 
 #### Git
 - 显示当前 branch、文件变更计数、远端 ahead/behind
-- 列出每一个变更的文件,**点击文件名直接在 VS Code 里打开它**
+- 列出每一个变更的文件,**点击文件名会在 VS Code 里打开它**:先打开/聚焦这个项目的窗口,再定位到该文件,项目没开时会自动把整个 repo 窗口拉起来(而不是把单文件塞进当前最前面的窗口)
+- 变更文件若是 `.md` / `.markdown`,行尾还有一个 **View** 入口,点它在下方 View section 内联预览
 - 文件超过 20 个时只显示提示,不渲染列表
-- 严格 cwd 检查:只看 cwd 自己的 `.git`,不向父目录搜索 —— 子目录不会显示父仓库状态
+- 严格 cwd 检查:只看 cwd 自己的 `.git`,不向父目录搜索,子目录不会显示父仓库状态
 
 #### Quick Actions
 | 按钮 | 行为 |
