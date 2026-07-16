@@ -37,6 +37,14 @@ export type GitStatus =
       stagedFiles: GitFileEntry[];
     };
 
+// Compose box: a pasted clipboard image saved to a temp file. `path` is the
+// temp file (referenced as `@<path>` on send + cleaned up on cancel); `dataUrl`
+// is the same bytes as a data: URL for the chip thumbnail.
+export interface SavedClipboardImage {
+  path: string;
+  dataUrl: string;
+}
+
 export type ReadFileError = "not-found" | "unsupported" | "too-large";
 
 export type ReadFileResult =
@@ -61,6 +69,7 @@ export interface ElectronAPI {
   selectDirectory: () => Promise<string | null>;
   isBackendAvailable: (backend: BackendName) => Promise<boolean>;
   getGitStatus: (id: string) => Promise<GitStatus>;
+  getResumeCommand: (id: string) => Promise<string | null>;
   readFile: (instanceId: string, path: string) => Promise<ReadFileResult>;
   openInVSCode: (target: string) => Promise<{ ok: boolean; error?: string }>;
   openExternal: (url: string) => Promise<{ ok: boolean; error?: string }>;
@@ -71,7 +80,7 @@ export interface ElectronAPI {
   setTheme: (theme: ThemeName) => Promise<AppSettings>;
 
   // Compose box: clipboard image -> temp file (renderer has no fs access)
-  saveClipboardImage: () => Promise<string | null>;
+  saveClipboardImage: () => Promise<SavedClipboardImage | null>;
   deleteTempImage: (path: string) => Promise<void>;
 
   // Terminal I/O

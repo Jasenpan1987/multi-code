@@ -3,6 +3,14 @@ import path from "path";
 import { processManager } from "./process-manager";
 import { shellManager } from "./shell-manager";
 import { registerIpcHandlers } from "./ipc-handlers";
+import {
+  registerMdimgSchemePrivileged,
+  registerMdimgProtocol,
+} from "./mdimg-protocol";
+
+// Must run before app 'ready' — privileged scheme registration is only honored
+// pre-ready. The handler itself is installed after ready (in whenReady).
+registerMdimgSchemePrivileged();
 
 const iconPath = path.join(__dirname, "../renderer/assets/gaming.png");
 
@@ -32,6 +40,7 @@ app.whenReady().then(() => {
       // ignore — icon may not be loadable in dev
     }
   }
+  registerMdimgProtocol();
   registerIpcHandlers();
   createWindow();
 });

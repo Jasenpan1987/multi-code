@@ -5,6 +5,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 import { THEMES, getCurrentTheme } from "../themes";
 import { useTheme } from "../hooks/useTheme";
+import { findMdPaths } from "./mdPathMatch";
 
 interface TerminalViewProps {
   instanceId: string;
@@ -61,6 +62,42 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(new WebLinksAddon());
+
+    // Make .md / .markdown paths in the output clickable: clicking opens the
+    // file in the Markdown View (and expands it) via the same open-path bridge
+    // the Git section uses. The buffer line text is scanned per line; ranges
+    // are 1-based (xterm convention) and inclusive.
+    terminal.registerLinkProvider({
+      provideLinks(bufferLineNumber, callback) {
+        const line = terminal.buffer.active.getLine(bufferLineNumber - 1);
+        if (!line) {
+          callback(undefined);
+          return;
+        }
+        const text = line.translateToString(true);
+        const matches = findMdPaths(text);
+        if (matches.length === 0) {
+          callback(undefined);
+          return;
+        }
+        callback(
+          matches.map((match) => ({
+            text: match.path,
+            range: {
+              start: { x: match.start + 1, y: bufferLineNumber },
+              end: { x: match.end + 1, y: bufferLineNumber },
+            },
+            activate(_event, path) {
+              window.dispatchEvent(
+                new CustomEvent("md-open", {
+                  detail: { id: instanceId, path },
+                })
+              );
+            },
+          }))
+        );
+      },
+    });
 
     terminals.set(instanceId, { terminal, fitAddon });
 

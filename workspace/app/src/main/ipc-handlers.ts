@@ -6,7 +6,7 @@ import { join, resolve, dirname, basename, extname } from "path";
 import { processManager } from "./process-manager";
 import { shellManager } from "./shell-manager";
 import { getGitStatus } from "./git-status";
-import { isBackendAvailable } from "./backends";
+import { isBackendAvailable, getBackend } from "./backends";
 import type { BackendName } from "./backends";
 import { loadSettings, saveSettings } from "./settings-store";
 import type { ThemeName } from "./settings-store";
@@ -84,6 +84,19 @@ export function registerIpcHandlers() {
       .find((i) => i.id === id);
     if (!instance) return { available: false };
     return getGitStatus(instance.cwd);
+  });
+
+  // Resume Elsewhere: the command that reattaches to this instance's session
+  // from a standalone terminal. Backend-specific (claude --resume vs
+  // opencode --session), so the backend module builds it — the renderer stays
+  // backend-agnostic and just copies the string. Returns null when the
+  // instance is unknown or its sessionId hasn't been discovered yet.
+  ipcMain.handle("get-resume-command", (_event, id: string): string | null => {
+    const instance = processManager
+      .listInstances()
+      .find((i) => i.id === id);
+    if (!instance || !instance.sessionId) return null;
+    return getBackend(instance.backend).buildResumeCommand(instance.sessionId);
   });
 
   // Markdown view: read a markdown file for the renderer, which has no fs
@@ -243,25 +256,35 @@ export function registerIpcHandlers() {
   });
 
   // Compose box: save the current clipboard image to a temp PNG and return its
-  // absolute path. The renderer has no fs/clipboard-image access, so this must
-  // live in the main process. Returns null (no throw) when the clipboard holds
-  // no image, or when writing the temp file fails — the caller treats either as
-  // a graceful no-op. The filename carries a per-process counter on top of the
-  // timestamp so rapid pastes within the same millisecond never collide.
-  ipcMain.handle("save-clipboard-image", (): string | null => {
-    const image = clipboard.readImage();
-    if (image.isEmpty()) return null;
-    const file = join(
-      tmpdir(),
-      `multicode-paste-${Date.now()}-${tempImageCounter++}.png`
-    );
-    try {
-      writeFileSync(file, image.toPNG());
-    } catch {
-      return null;
+  // absolute path plus a data: URL of the same bytes (for the chip thumbnail —
+  // the renderer has no fs access to re-read it). The renderer has no
+  // fs/clipboard-image access, so this must live in the main process. Returns
+  // null (no throw) when the clipboard holds no image, or when writing the temp
+  // file fails — the caller treats either as a graceful no-op. The filename
+  // carries a per-process counter on top of the timestamp so rapid pastes
+  // within the same millisecond never collide. The data URL is built from the
+  // same in-memory PNG buffer — no second disk read.
+  ipcMain.handle(
+    "save-clipboard-image",
+    (): { path: string; dataUrl: string } | null => {
+      const image = clipboard.readImage();
+      if (image.isEmpty()) return null;
+      const file = join(
+        tmpdir(),
+        `multicode-paste-${Date.now()}-${tempImageCounter++}.png`
+      );
+      const png = image.toPNG();
+      try {
+        writeFileSync(file, png);
+      } catch {
+        return null;
+      }
+      return {
+        path: file,
+        dataUrl: `data:image/png;base64,${png.toString("base64")}`,
+      };
     }
-    return file;
-  });
+  );
 
   // Compose box: delete a temp image created above. Used on cancel / instance
   // switch / chip removal. Safe if the file is already gone (force: true).

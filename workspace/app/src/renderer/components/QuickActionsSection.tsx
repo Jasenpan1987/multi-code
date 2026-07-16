@@ -42,6 +42,7 @@ export function QuickActionsSection({
 
   const isRunning = instance.status === "running";
   const sessionId = instance.sessionId;
+  const isOpencode = instance.backend === "opencode";
 
   const handleOpenVSCode = useCallback(async () => {
     setVsCodeError(null);
@@ -64,14 +65,19 @@ export function QuickActionsSection({
 
   const handleResume = useCallback(async () => {
     if (!sessionId) return;
+    // Ask the main process (which owns the backend modules) for the resume
+    // command — claude and opencode differ, and the renderer stays backend-
+    // agnostic rather than hardcoding the flag here.
+    const command = await window.electronAPI.getResumeCommand(instance.id);
+    if (!command) return;
     try {
-      await navigator.clipboard.writeText(`claude --resume ${sessionId}`);
+      await navigator.clipboard.writeText(command);
       setResumeCopied(true);
       setTimeout(() => setResumeCopied(false), 1500);
     } catch {
       // Silently fail; clipboard might be unavailable in some contexts.
     }
-  }, [sessionId]);
+  }, [instance.id, sessionId]);
 
   if (!active) return null;
 
@@ -86,8 +92,14 @@ export function QuickActionsSection({
       <QuickActionButton
         label="Show Cost"
         onClick={() => sendSlash("/cost")}
-        disabled={!isRunning}
-        title={isRunning ? undefined : "Instance is stopped"}
+        disabled={!isRunning || isOpencode}
+        title={
+          isOpencode
+            ? "OpenCode does not have an inline cost command"
+            : isRunning
+              ? undefined
+              : "Instance is stopped"
+        }
       />
       <QuickActionButton
         label="Clear"

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { sendComposed } from "./composeSend";
+import type { SavedClipboardImage } from "../../shared/types";
 
 interface ComposeBoxProps {
   instanceId: string;
@@ -25,16 +26,16 @@ function basename(p: string): string {
  */
 export function ComposeBox({ instanceId, onClose }: ComposeBoxProps) {
   const [text, setText] = useState("");
-  const [images, setImages] = useState<string[]>([]);
+  const [images, setImages] = useState<SavedClipboardImage[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Tracks whether a send happened. On send the temp images must SURVIVE so
   // the CLI can read them while processing the turn (G7); on cancel / instance
   // switch they must be cleaned up. The unmount-cleanup effect reads this ref.
   const sentRef = useRef(false);
-  // Keep the latest attached paths reachable from the unmount cleanup without
+  // Keep the latest attached images reachable from the unmount cleanup without
   // re-subscribing the effect on every change.
-  const imagesRef = useRef<string[]>([]);
+  const imagesRef = useRef<SavedClipboardImage[]>([]);
   imagesRef.current = images;
 
   // Focus the textarea when the box opens.
@@ -55,8 +56,8 @@ export function ComposeBox({ instanceId, onClose }: ComposeBoxProps) {
   useEffect(() => {
     return () => {
       if (sentRef.current) return;
-      for (const path of imagesRef.current) {
-        void window.electronAPI.deleteTempImage(path);
+      for (const image of imagesRef.current) {
+        void window.electronAPI.deleteTempImage(image.path);
       }
     };
   }, []);
@@ -66,7 +67,13 @@ export function ComposeBox({ instanceId, onClose }: ComposeBoxProps) {
   const handleSend = () => {
     if (isEmpty) return; // empty content is a no-op; box stays open
     sentRef.current = true; // temp images must survive the send
-    sendComposed(instanceId, text, images);
+    // sendComposed's contract is paths-only — map the image objects to their
+    // temp-file paths (the `@<path>` splice is unchanged).
+    sendComposed(
+      instanceId,
+      text,
+      images.map((i) => i.path)
+    );
     onClose();
   };
 
@@ -92,14 +99,14 @@ export function ComposeBox({ instanceId, onClose }: ComposeBoxProps) {
     if (!hasImage) return;
 
     e.preventDefault();
-    void window.electronAPI.saveClipboardImage().then((path) => {
+    void window.electronAPI.saveClipboardImage().then((image) => {
       // Graceful no-op if the clipboard had no image after all.
-      if (path) setImages((prev) => [...prev, path]);
+      if (image) setImages((prev) => [...prev, image]);
     });
   };
 
   const handleRemoveImage = (path: string) => {
-    setImages((prev) => prev.filter((p) => p !== path));
+    setImages((prev) => prev.filter((i) => i.path !== path));
     void window.electronAPI.deleteTempImage(path);
   };
 
@@ -107,12 +114,20 @@ export function ComposeBox({ instanceId, onClose }: ComposeBoxProps) {
     <div className="compose-box" onClick={(e) => e.stopPropagation()}>
       {images.length > 0 && (
         <div className="compose-chips">
-          {images.map((path) => (
-            <span key={path} className="compose-chip" title={path}>
-              <span className="compose-chip-name">🖼 {basename(path)}</span>
+          {images.map((image) => (
+            <span
+              key={image.path}
+              className="compose-chip compose-chip-image"
+              title={basename(image.path)}
+            >
+              <img
+                className="compose-chip-thumb"
+                src={image.dataUrl}
+                alt={basename(image.path)}
+              />
               <button
                 className="compose-chip-remove"
-                onClick={() => handleRemoveImage(path)}
+                onClick={() => handleRemoveImage(image.path)}
                 aria-label="Remove image"
                 title="Remove"
               >

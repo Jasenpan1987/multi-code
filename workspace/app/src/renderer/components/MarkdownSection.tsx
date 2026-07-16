@@ -7,6 +7,7 @@ import "katex/dist/katex.min.css";
 import type { Instance, ReadFileResult } from "../../shared/types";
 import { shouldOpenExternally } from "./markdownLinks";
 import { readFileErrorMessage } from "./markdownErrors";
+import { resolveImageSrc } from "./markdownImages";
 import { MermaidBlock } from "./MermaidBlock";
 import { extractMermaid } from "./mermaidExtract";
 
@@ -116,6 +117,18 @@ export function MarkdownSection({
                   {children}
                 </a>
               ),
+              // Local images load through the mdimg:// protocol (resolved
+              // against the open file's directory in the main process); remote
+              // images pass through untouched. An empty/unresolvable src drops
+              // to just alt text.
+              img: ({ src, alt, node: _node, ...props }) => {
+                const resolved = resolveImageSrc(
+                  typeof src === "string" ? src : undefined,
+                  result.path
+                );
+                if (!resolved) return <span>{alt ?? ""}</span>;
+                return <img {...props} src={resolved} alt={alt ?? ""} />;
+              },
               // Route fenced ```mermaid``` blocks to the diagram renderer.
               // A fenced block is a <pre> wrapping a <code class="language-x">;
               // detect mermaid on that inner code and render the diagram in

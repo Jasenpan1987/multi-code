@@ -260,6 +260,40 @@ export function App() {
     [selectedId]
   );
 
+  // Open a file in the Markdown View AND expand the View section, in one action.
+  // Used by the Git section's per-file "View" affordance for .md entries and by
+  // clicking a .md path in the terminal.
+  const handlePreviewInView = useCallback(
+    (path: string) => {
+      if (!selectedId) return;
+      setOpenPathByInstance((prev) => {
+        const next = new Map(prev);
+        next.set(selectedId, path);
+        return next;
+      });
+      setExpandedByInstance((prev) => {
+        const next = new Map(prev);
+        next.set(selectedId, "view");
+        return next;
+      });
+    },
+    [selectedId]
+  );
+
+  // Clicking a .md path in the terminal (TerminalView's link provider) opens
+  // that file in the Markdown View and expands the View section — same action
+  // as the Git section's per-file "View" affordance. Only acts on the event's
+  // own instance so a click never targets the wrong toolbox.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { id, path } = (e as CustomEvent).detail;
+      if (id !== selectedId || typeof path !== "string" || !path) return;
+      handlePreviewInView(path);
+    };
+    window.addEventListener("md-open", handler);
+    return () => window.removeEventListener("md-open", handler);
+  }, [selectedId, handlePreviewInView]);
+
   return (
     <ThemeContext.Provider value={{ theme, setTheme }}>
     <div className="app-container">
@@ -410,6 +444,7 @@ export function App() {
               onExpandSection={isOffline ? () => {} : handleExpandSection}
               openPath={openPathByInstance.get(selectedInstance.id) ?? ""}
               onOpenPath={isOffline ? () => {} : handleOpenPath}
+              onPreviewInView={isOffline ? () => {} : handlePreviewInView}
               width={toolboxWidth}
             />
           </>

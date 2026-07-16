@@ -11,6 +11,7 @@ interface ToolboxProps {
   onExpandSection: (sectionId: string) => void;
   openPath: string;
   onOpenPath: (path: string) => void;
+  onPreviewInView: (path: string) => void;
   width: number;
 }
 
@@ -20,6 +21,7 @@ export function Toolbox({
   onExpandSection,
   openPath,
   onOpenPath,
+  onPreviewInView,
   width,
 }: ToolboxProps) {
   const isExpanded = (id: string) => expandedSection === id;
@@ -36,6 +38,7 @@ export function Toolbox({
           instanceId={instance.id}
           cwd={instance.cwd}
           active={isExpanded("git")}
+          onPreviewInView={onPreviewInView}
         />
       </ToolboxSection>
 

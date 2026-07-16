@@ -224,7 +224,7 @@ picking these up. Each is independent of the others.
 
 ### T-008: Image chip shows a thumbnail instead of just a filename
 - **Type:** feature
-- **Status:** todo
+- **Status:** done
 - **Story:** Story 4 (paste an image) — polish
 - **Gap:** Closes G9 (deferred in `gaps.md`: "MVP: filename/indicator chip is enough; thumbnail is a
   nice-to-have").
@@ -304,3 +304,16 @@ picking these up. Each is independent of the others.
   indicator to a thumbnail (closes deferred G9). Scope is chip-rendering + widening
   `save-clipboard-image` to return `{ path, dataUrl }` from the same in-memory PNG buffer; the
   temp-file + `@path` send contract is unchanged. Status: todo.
+- 2026-07-16: T-008 done. `save-clipboard-image` now returns `{ path, dataUrl }` — the `dataUrl`
+  (`data:image/png;base64,…`) is built from the same `image.toPNG()` buffer already written to disk,
+  so no second read. New `SavedClipboardImage` type in `shared/types.ts`; `saveClipboardImage`
+  signature widened (preload is an untyped passthrough, no change there). `ComposeBox` `images` state
+  is now `SavedClipboardImage[]`; the chip renders `<img class="compose-chip-thumb" src={dataUrl}>`
+  (34px square, object-fit: cover, rounded) with the filename moved to the `title`/`alt`; the ×
+  remove button is unchanged. Send maps `images.map(i => i.path)` so `sendComposed`'s paths-only
+  contract and the `@<path>` splice are untouched; unmount cleanup + `handleRemoveImage` delete by
+  `image.path` as before (temp file still survives a send). Added `.compose-chip-image` /
+  `.compose-chip-thumb` CSS by the existing chip block. type/main-build/lint/test (57, composeSend's
+  7 unchanged) / renderer-build all green; data-URL path verified end-to-end in code (main → renderer
+  `<img src>`), actual paste→thumbnail render needs eyeballing in a running app. **All 8 compose-box
+  tasks now done.**
