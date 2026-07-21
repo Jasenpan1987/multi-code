@@ -1,13 +1,15 @@
-// Sends a composed message to a running claude instance over the existing
-// pty-input path, reusing the exact channel TerminalView.onData uses.
+// Sends a composed message to a running instance over the existing pty-input
+// path, reusing the exact channel TerminalView.onData uses. Backend-agnostic:
+// claude and opencode both drive their TUI the same way here.
 //
-// Mechanism validated against claude 2.1.165 (see docs/specs/compose-box):
+// Mechanism validated against claude 2.1.165 (see docs/specs/compose-box);
+// opencode's TUI accepts the same bracketed paste + `@` file refs:
 //   - `\n` (0x0A) inserts a newline and NEVER submits; only `\r` (0x0D) submits.
 //   - Wrap the payload in bracketed-paste markers (\x1b[200~ … \x1b[201~) so
 //     long content folds into the native `[Pasted text #N]` placeholder.
 //   - Send the submitting `\r` as a SEPARATE write, NOT inside the markers.
-//   - Image refs are spliced into the payload as ` @<path>` tokens; claude
-//     reads `@<path>` as a real vision attachment, not text.
+//   - Image refs are spliced into the payload as ` @<path>` tokens; the CLI
+//     reads `@<path>` as a real file/vision attachment, not text.
 
 const PASTE_START = "\x1b[200~";
 const PASTE_END = "\x1b[201~";

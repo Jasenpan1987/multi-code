@@ -394,6 +394,23 @@ body,
   text-shadow: 0 1px 1px rgba(30, 74, 122, 0.5);
 }
 
+/* Backend badge in the header — names the current project's agent (Claude Code
+   vs OpenCode) so the backend is unmistakable at a glance. margin-right:auto
+   pushes the Online/Offline status to the far right. */
+.content-header-backend {
+  margin-left: 12px;
+  margin-right: auto;
+  font-size: 10px;
+  font-weight: bold;
+  letter-spacing: 0.3px;
+  padding: 2px 7px;
+  border-radius: 9px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  text-shadow: 0 1px 1px rgba(30, 74, 122, 0.5);
+}
+
 .content-terminal {
   flex: 1;
   position: relative;
@@ -769,6 +786,7 @@ body,
   line-height: 1.4;
 }
 
+
 /* Terminal section */
 .terminal-section {
   height: 100%;
@@ -1035,6 +1053,11 @@ body,
 
 .dialog-btn.primary:hover {
   background: linear-gradient(180deg, #7bb4e2 0%, #5a9ad4 100%);
+}
+
+.dialog-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Context Menu */
@@ -1332,4 +1355,114 @@ body,
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+/* ============================================================================
+   OpenCode backend skin — re-tints ONLY the outer chrome (titlebar, sidebar,
+   header, toolbox section headers, sidebar/quick-action buttons) from the
+   classic QQ blue to a matching green. The inner panels (content area, toolbox
+   body, terminal, compose box) stay on the shared per-theme variables and are
+   deliberately left alone. Scoped to `.app-container[data-backend="opencode"]`,
+   which App sets from the SELECTED instance's backend, so the chrome tracks
+   selection. Green shades mirror the blue palette's lightness so the QQ look
+   is preserved — only the hue shifts.
+   Blue → green reference:
+     #a8d4ff/#7eb8ee/#4f93d4/#3878b8 (gradients) → #a6e6b4/#7fd492/#4bb066/#2f9450
+     #c6d9f1/#a8c4e0 (panels)                    → #cbecd2/#a8d8b4
+     #2d5a8a (deep text/border)                  → #1f7a3d
+     #7b9cc7 (borders)                           → #7cc48f
+     #6ba3d6/#4a8ac4 (buttons)                   → #5bbf76/#3a9e54
+   ========================================================================== */
+.app-container[data-backend="opencode"] {
+  border-color: #7cc48f;
+  background: linear-gradient(180deg, #a6e6b4 0%, #7fd492 60%, #d6f2dc 100%);
+}
+
+.app-container[data-backend="opencode"]::before {
+  background: linear-gradient(180deg, #a6e6b4 0%, #7fd492 100%);
+  border-bottom-color: rgba(31, 122, 61, 0.3);
+}
+
+.app-container[data-backend="opencode"] .sidebar {
+  background: linear-gradient(180deg, #cbecd2 0%, #a8d8b4 100%);
+  border-right-color: #7cc48f;
+}
+
+.app-container[data-backend="opencode"] .contact-item {
+  border-bottom-color: rgba(124, 196, 143, 0.25);
+}
+
+.app-container[data-backend="opencode"] .contact-item.selected {
+  border-left-color: #1f7a3d;
+}
+
+.app-container[data-backend="opencode"] .start-btn {
+  background: linear-gradient(180deg, #5bbf76 0%, #3a9e54 100%);
+  border-color: #2f8446;
+}
+.app-container[data-backend="opencode"] .start-btn:hover {
+  background: linear-gradient(180deg, #6bcf86 0%, #4aae64 100%);
+}
+
+.app-container[data-backend="opencode"] .new-instance-btn-bottom {
+  background: linear-gradient(180deg, #5bbf76 0%, #3a9e54 50%, #2f8446 100%);
+  border-top-color: #1f7a3d;
+  text-shadow: 0 1px 2px rgba(20, 90, 45, 0.6);
+}
+.app-container[data-backend="opencode"] .new-instance-btn-bottom:hover {
+  background: linear-gradient(180deg, #6bcf86 0%, #5abe74 50%, #4aae64 100%);
+}
+.app-container[data-backend="opencode"] .new-instance-btn-bottom:active {
+  background: linear-gradient(180deg, #3a9e54 0%, #2f8e46 50%, #1f7a3d 100%);
+}
+
+.app-container[data-backend="opencode"] .content-header {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.55) 0%,
+      rgba(255, 255, 255, 0) 50%
+    ),
+    linear-gradient(180deg, #a6e6b4 0%, #7fd492 35%, #4bb066 75%, #2f9450 100%);
+  border-bottom-color: #1f7a3d;
+}
+.app-container[data-backend="opencode"] .content-header-name,
+.app-container[data-backend="opencode"] .content-header-status,
+.app-container[data-backend="opencode"] .content-header-backend {
+  text-shadow: 0 1px 2px rgba(20, 90, 45, 0.6);
+}
+
+.app-container[data-backend="opencode"] .resizer:hover,
+.app-container[data-backend="opencode"] .resizer:active {
+  background: #7cc48f;
+}
+
+.app-container[data-backend="opencode"] .toolbox {
+  border-left-color: #7cc48f;
+}
+
+.app-container[data-backend="opencode"] .toolbox-section-header {
+  background: linear-gradient(180deg, #cbecd2 0%, #a8d8b4 100%);
+  color: #1f7a3d;
+}
+.app-container[data-backend="opencode"] .toolbox-section-header:hover {
+  background: linear-gradient(180deg, #d6f2dc 0%, #b3e0be 100%);
+}
+
+.app-container[data-backend="opencode"] .quick-action-btn {
+  background: linear-gradient(180deg, #e6f6ea 0%, #cbecd2 100%);
+  border-color: #7cc48f;
+  color: #1f7a3d;
+}
+.app-container[data-backend="opencode"] .quick-action-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #eff9f2 0%, #d6f2dc 100%);
+}
+.app-container[data-backend="opencode"] .quick-action-btn:active:not(:disabled) {
+  background: linear-gradient(180deg, #cbecd2 0%, #a8d8b4 100%);
+}
+
+/* Header badge fill per backend — subtle, still legible on the tinted header. */
+.content-header-backend[data-backend="opencode"] {
+  background: rgba(255, 255, 255, 0.28);
+  border-color: rgba(255, 255, 255, 0.5);
 }

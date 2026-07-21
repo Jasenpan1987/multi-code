@@ -12,6 +12,10 @@ import type {
 const HOME = process.env.HOME || "";
 
 const SEARCH_PATH = [
+  // opencode's official install script drops the binary here by default; it's
+  // added to the user's shell rc, so it's on the login-shell PATH but NOT on
+  // the sparse PATH Electron inherits when launched from Finder/Dock.
+  path.join(HOME, ".opencode/bin"),
   path.join(HOME, ".local/bin"),
   "/opt/homebrew/bin",
   "/usr/local/bin",
@@ -33,6 +37,7 @@ function findOpencodeBinary(): string {
   }
 
   const candidates = [
+    path.join(HOME, ".opencode/bin/opencode"),
     path.join(HOME, ".local/bin/opencode"),
     "/opt/homebrew/bin/opencode",
     "/usr/local/bin/opencode",
@@ -249,7 +254,10 @@ export const opencodeBackend: Backend = {
   },
 
   buildResumeCommand(sessionId: string): string {
-    return `opencode --session ${sessionId}`;
+    // `opencode tui --session <id>` is the explicit form for resuming a
+    // specific session in the interactive TUI (the bare `opencode --session`
+    // shorthand also works, but this is unambiguous when pasted elsewhere).
+    return `opencode tui --session ${sessionId}`;
   },
 };
 

@@ -16,7 +16,8 @@ function basename(p: string): string {
 
 /**
  * The compose box: a hotkey-summoned overlay anchored at the bottom of the
- * active terminal for drafting a message to a claude instance. Shows every
+ * active terminal for drafting a message to a running instance (claude or
+ * opencode — both accept bracketed paste and `@<path>` file refs). Shows every
  * character (unlike the folded TUI input), supports mouse editing, multi-line
  * text, and pasted-image attachments referenced via `@<path>` on send.
  *

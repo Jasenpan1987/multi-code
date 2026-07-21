@@ -29,6 +29,19 @@ function createWindow() {
 
   processManager.setMainWindow(win);
   shellManager.setMainWindow(win);
+
+  // Swallow the browser-style reload shortcuts. Multi-Code is an app, not a web
+  // page — a reload wipes the renderer state (selected instance, terminals,
+  // unread flags) while leaving the PTYs orphaned. Cmd/Ctrl+R and
+  // Cmd/Ctrl+Shift+R are intercepted here rather than by rebuilding the whole
+  // app menu, which would mean re-declaring every default edit/window item.
+  win.webContents.on("before-input-event", (event, input) => {
+    const mod = process.platform === "darwin" ? input.meta : input.control;
+    if (mod && input.key.toLowerCase() === "r") {
+      event.preventDefault();
+    }
+  });
+
   win.loadFile(path.join(__dirname, "../renderer/index.html"));
 }
 

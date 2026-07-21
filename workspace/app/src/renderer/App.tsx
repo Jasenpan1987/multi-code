@@ -139,14 +139,16 @@ export function App() {
   }, []);
 
   // Compose box: Cmd+L (dispatched from TerminalView's key handler) summons the
-  // box for a running claude instance. Gated here so the hotkey is a no-op for
-  // OpenCode / stopped instances (claude-only MVP). The box is per the selected
-  // instance and mounted with key={selectedId}, so it always targets selectedId.
+  // box for a running instance. Gated here so the hotkey is a no-op for stopped
+  // instances. Both backends drive their TUI over the same bracketed-paste + \r
+  // channel, so the box works for claude and opencode alike. The box is per the
+  // selected instance and mounted with key={selectedId}, so it always targets
+  // selectedId.
   useEffect(() => {
     const handler = (e: Event) => {
       const { id } = (e as CustomEvent).detail;
       const inst = instances.find((i) => i.id === id);
-      if (!inst || inst.backend !== "claude" || inst.status !== "running") {
+      if (!inst || inst.status !== "running") {
         return;
       }
       setComposeOpen(true);
@@ -295,9 +297,18 @@ export function App() {
     return () => window.removeEventListener("md-open", handler);
   }, [selectedId, handlePreviewInView]);
 
+  const selectedInstance = selectedId
+    ? instances.find((i) => i.id === selectedId)
+    : null;
+  // Backend of the currently selected instance drives the outer-chrome skin
+  // (blue for claude, green for opencode). Backend is per-instance, so this
+  // rides selection rather than the global <html data-theme>. Falls back to
+  // claude when nothing is selected so the empty state keeps the classic look.
+  const activeBackend: BackendName = selectedInstance?.backend ?? "claude";
+
   return (
     <ThemeContext.Provider value={{ theme, setTheme }}>
-    <div className="app-container">
+    <div className="app-container" data-backend={activeBackend}>
       <VersionBadge />
       <ThemeToggle />
       <ContactList
@@ -311,15 +322,21 @@ export function App() {
         onRemove={handleRemove}
       />
       <main className="content">
-        {selectedId && (
+        {selectedInstance && (
           <div className="content-header">
             <span className="content-header-name">
-              {instances.find((i) => i.id === selectedId)?.name || ""}
+              {selectedInstance.name || ""}
+            </span>
+            <span
+              className="content-header-backend"
+              data-backend={selectedInstance.backend}
+            >
+              {selectedInstance.backend === "opencode"
+                ? "OpenCode"
+                : "Claude Code"}
             </span>
             <span className="content-header-status">
-              {instances.find((i) => i.id === selectedId)?.status === "running"
-                ? "Online"
-                : "Offline"}
+              {selectedInstance.status === "running" ? "Online" : "Offline"}
             </span>
           </div>
         )}
@@ -340,23 +357,27 @@ export function App() {
             </div>
           )}
           {(() => {
-            const sel = selectedId
-              ? instances.find((i) => i.id === selectedId)
-              : null;
-            if (!sel) return null;
-            if (sel.status === "stopped") {
+            if (!selectedInstance) return null;
+            if (selectedInstance.status === "stopped") {
               return (
                 <div className="content-offline-overlay">
                   <div className="content-offline-text">Offline</div>
                 </div>
               );
             }
-            if (sel.status === "running" && !hasOutput.has(sel.id)) {
+            if (
+              selectedInstance.status === "running" &&
+              !hasOutput.has(selectedInstance.id)
+            ) {
+              const label =
+                selectedInstance.backend === "opencode"
+                  ? "OpenCode"
+                  : "Claude Code";
               return (
                 <div className="content-starting-overlay">
                   <div className="content-spinner" />
                   <div className="content-starting-text">
-                    Starting Claude Code…
+                    Starting {label}…
                   </div>
                 </div>
               );
@@ -364,21 +385,17 @@ export function App() {
             return null;
           })()}
           {(() => {
-            const sel = selectedId
-              ? instances.find((i) => i.id === selectedId)
-              : null;
             if (
               !composeOpen ||
-              !sel ||
-              sel.backend !== "claude" ||
-              sel.status !== "running"
+              !selectedInstance ||
+              selectedInstance.status !== "running"
             ) {
               return null;
             }
             return (
               <ComposeBox
-                key={sel.id}
-                instanceId={sel.id}
+                key={selectedInstance.id}
+                instanceId={selectedInstance.id}
                 onClose={closeCompose}
               />
             );
@@ -387,9 +404,6 @@ export function App() {
       </main>
 
       {(() => {
-        const selectedInstance = selectedId
-          ? instances.find((i) => i.id === selectedId)
-          : null;
         if (!selectedInstance) return null;
         const isOffline = selectedInstance.status === "stopped";
         return (

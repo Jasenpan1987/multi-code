@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import type { ReactNode } from "react";
 import type { Instance } from "../../shared/types";
+import { RenameSessionDialog } from "./RenameSessionDialog";
 
 interface QuickActionsSectionProps {
   instance: Instance;
@@ -39,6 +40,7 @@ export function QuickActionsSection({
 }: QuickActionsSectionProps) {
   const [vsCodeError, setVsCodeError] = useState<string | null>(null);
   const [resumeCopied, setResumeCopied] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
 
   const isRunning = instance.status === "running";
   const sessionId = instance.sessionId;
@@ -78,6 +80,31 @@ export function QuickActionsSection({
       // Silently fail; clipboard might be unavailable in some contexts.
     }
   }, [instance.id, sessionId]);
+
+  // Rename the current CLI session. Our own dialog collects the name; how it
+  // reaches the agent differs per backend because their `/rename` commands work
+  // differently (this is the "our dialog, per-backend adapter" approach):
+  //   - claude:   `/rename <name>` takes the name inline — send it in one shot.
+  //   - opencode: `/rename` takes NO argument; it opens opencode's own inline
+  //               rename dialog. So we send `/rename\r` to open that dialog,
+  //               wait briefly for it to appear, then type the name + Enter.
+  // The alias (our contact display name, edited via the context menu) is a
+  // separate concept — this renames the agent's session itself.
+  const handleRename = useCallback(
+    (name: string) => {
+      const write = (data: string) =>
+        window.electronAPI.writeToInstance(instance.id, data);
+      if (instance.backend === "opencode") {
+        // Open opencode's rename dialog, then fill + submit once it's up.
+        write("/rename\r");
+        setTimeout(() => write(`${name}\r`), 250);
+      } else {
+        write(`/rename ${name}\r`);
+      }
+      setRenameOpen(false);
+    },
+    [instance.id, instance.backend]
+  );
 
   if (!active) return null;
 
@@ -119,6 +146,20 @@ export function QuickActionsSection({
         onClick={handleResume}
         disabled={!sessionId}
         title={sessionId ? undefined : "Session not ready — wait a moment"}
+      />
+
+      <QuickActionButton
+        label="Rename Session"
+        onClick={() => setRenameOpen(true)}
+        disabled={!isRunning}
+        title={isRunning ? undefined : "Instance is stopped"}
+      />
+
+      <RenameSessionDialog
+        open={renameOpen}
+        backendLabel={isOpencode ? "OpenCode" : "Claude Code"}
+        onClose={() => setRenameOpen(false)}
+        onSubmit={handleRename}
       />
     </div>
   );
