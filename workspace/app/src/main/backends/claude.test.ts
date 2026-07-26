@@ -3,16 +3,17 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { ClaudeCompletionDetector } from "./claude";
+import type { PromptDetail } from "../remote/promptExtract";
 
 // Helpers to build the JSONL shapes the detector parses. Only the fields the
 // detector actually inspects are populated; everything else is irrelevant.
 
-function assistantToolUse(id: string, name = "Bash"): string {
+function assistantToolUse(id: string, name = "Bash", input?: unknown): string {
   return JSON.stringify({
     type: "assistant",
     message: {
       stop_reason: "tool_use",
-      content: [{ type: "tool_use", id, name }],
+      content: [{ type: "tool_use", id, name, input }],
     },
   });
 }
@@ -29,6 +30,8 @@ function userToolResult(toolUseId: string): string {
 interface Harness {
   jsonl: string;
   events: string[];
+  // Full (type, detail) pairs, for the prompt payload a paired phone renders.
+  calls: Array<{ type: string; detail?: PromptDetail }>;
   ptyIdle: boolean;
   detector: ClaudeCompletionDetector;
   append(line: string): void;
@@ -39,9 +42,11 @@ function makeHarness(): Harness {
   const jsonl = path.join(dir, "session.jsonl");
   fs.writeFileSync(jsonl, "");
   const events: string[] = [];
+  const calls: Array<{ type: string; detail?: PromptDetail }> = [];
   const h: Harness = {
     jsonl,
     events,
+    calls,
     ptyIdle: true,
     detector: null as unknown as ClaudeCompletionDetector,
     append(line: string) {
@@ -50,7 +55,10 @@ function makeHarness(): Harness {
   };
   h.detector = new ClaudeCompletionDetector(
     jsonl,
-    (type) => events.push(type),
+    (type, detail) => {
+      events.push(type);
+      calls.push({ type, detail });
+    },
     () => h.ptyIdle
   );
   return h;
@@ -129,14 +137,89 @@ describe("ClaudeCompletionDetector prompt detection", () => {
     vi.advanceTimersByTime(2000);
     expect(h.events).toEqual(["prompt"]);
 
-    // User answers — tool_result clears the pending set, latch re-arms.
+    // User answers — tool_result clears the pending set, latch re-arms, and
+    // "prompt-cleared" goes out so a paired phone drops its option buttons.
     h.append(userToolResult("tu_1"));
     vi.advanceTimersByTime(500);
 
     // New question arrives.
     h.append(assistantToolUse("tu_2"));
     vi.advanceTimersByTime(2000);
-    expect(h.events).toEqual(["prompt", "prompt"]);
+    expect(h.events).toEqual(["prompt", "prompt-cleared", "prompt"]);
+
+    h.detector.stop();
+  });
+
+  it("emits 'prompt-cleared' exactly once when a prompt is answered", () => {
+    const h = makeHarness();
+    h.append(assistantToolUse("tu_1"));
+    h.ptyIdle = true;
+    vi.advanceTimersByTime(2000);
+
+    h.append(userToolResult("tu_1"));
+    vi.advanceTimersByTime(500);
+    expect(h.events).toEqual(["prompt", "prompt-cleared"]);
+
+    // Further idle polls with nothing pending must not repeat it — otherwise the
+    // phone would churn on every tick.
+    vi.advanceTimersByTime(5000);
+    expect(h.events).toEqual(["prompt", "prompt-cleared"]);
+
+    h.detector.stop();
+  });
+
+  it("does not emit 'prompt-cleared' for tools that never blocked", () => {
+    const h = makeHarness();
+    h.append(assistantToolUse("tu_1", "Read"));
+    h.append(userToolResult("tu_1"));
+    h.ptyIdle = true;
+
+    vi.advanceTimersByTime(5000);
+    expect(h.events).toEqual([]);
+
+    h.detector.stop();
+  });
+
+  it("carries the decoded question and options on the prompt event", () => {
+    const h = makeHarness();
+    h.append(
+      assistantToolUse("tu_1", "AskUserQuestion", {
+        questions: [
+          {
+            question: "Which database?",
+            options: [{ label: "Postgres" }, { label: "SQLite" }],
+          },
+        ],
+      })
+    );
+    h.ptyIdle = true;
+    vi.advanceTimersByTime(2000);
+
+    const detail = h.calls.find((c) => c.type === "prompt")?.detail;
+    expect(detail?.tool).toBe("AskUserQuestion");
+    expect(detail?.question).toBe("Which database?");
+    expect(detail?.options.map((o) => o.label)).toEqual([
+      "Postgres",
+      "SQLite",
+      "Other",
+    ]);
+
+    h.detector.stop();
+  });
+
+  it("decodes the oldest pending tool_use, which is the one on screen", () => {
+    const h = makeHarness();
+    h.append(assistantToolUse("tu_1", "Bash", { command: "npm test" }));
+    // A second tool_use written later must not steal the prompt payload from the
+    // one the CLI is actually blocked on.
+    vi.advanceTimersByTime(500);
+    h.append(assistantToolUse("tu_2", "Write", { file_path: "/tmp/b.ts" }));
+    h.ptyIdle = true;
+    vi.advanceTimersByTime(2000);
+
+    const detail = h.calls.find((c) => c.type === "prompt")?.detail;
+    expect(detail?.tool).toBe("Bash");
+    expect(detail?.question).toBe("Bash: npm test");
 
     h.detector.stop();
   });

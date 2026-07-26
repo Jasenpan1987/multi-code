@@ -3,6 +3,7 @@ import { GitSection } from "./GitSection";
 import { QuickActionsSection } from "./QuickActionsSection";
 import { TerminalSection } from "./TerminalSection";
 import { MarkdownSection } from "./MarkdownSection";
+import { PhoneSection } from "./PhoneSection";
 import type { Instance } from "../../shared/types";
 
 interface ToolboxProps {
@@ -78,6 +79,15 @@ export function Toolbox({
           openPath={openPath}
           onOpenPath={onOpenPath}
         />
+      </ToolboxSection>
+
+      <ToolboxSection
+        id="phone"
+        title="Phone"
+        expanded={isExpanded("phone")}
+        onToggle={onExpandSection}
+      >
+        <PhoneSection active={isExpanded("phone")} />
       </ToolboxSection>
     </aside>
   );

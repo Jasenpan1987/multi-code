@@ -1,11 +1,13 @@
 import fs from "fs";
 import path from "path";
 import type {
+  ActivityCallback,
   Backend,
   CompletionDetector,
   SessionDiscovery,
   SpawnConfig,
 } from "./types";
+import { extractPromptDetail } from "../remote/promptExtract";
 
 const HOME = process.env.HOME || "";
 const SESSIONS_DIR = path.join(HOME, ".claude/sessions");
@@ -99,6 +101,9 @@ const PTY_IDLE_MS = 800;
 interface PendingToolUse {
   name: string;
   writtenAt: number;
+  // Raw tool input, kept so a paired phone can be shown the actual question and
+  // its options rather than just "the agent is waiting".
+  input: unknown;
 }
 
 export class ClaudeCompletionDetector implements CompletionDetector {
@@ -115,10 +120,14 @@ export class ClaudeCompletionDetector implements CompletionDetector {
   // don't fire again until every pending tool_use clears (i.e. user answered
   // and Claude resumed).
   private promptArmed = true;
+  // True between firing "prompt" and the pending set draining. Used to emit
+  // exactly one "prompt-cleared" when the question is answered, so a paired
+  // phone can drop its option buttons instead of leaving a stale prompt up.
+  private promptOutstanding = false;
 
   constructor(
     private readonly jsonlPath: string,
-    private readonly onActivity: (type: string) => void,
+    private readonly onActivity: ActivityCallback,
     private readonly isPtyIdle: (ms: number) => boolean
   ) {
     try {
@@ -192,6 +201,7 @@ export class ClaudeCompletionDetector implements CompletionDetector {
                   this.pendingToolUses.set(item.id, {
                     name: typeof item.name === "string" ? item.name : "",
                     writtenAt: Date.now(),
+                    input: item.input,
                   });
                 }
               }
@@ -222,9 +232,14 @@ export class ClaudeCompletionDetector implements CompletionDetector {
       }
 
       // Re-arm the prompt latch as soon as nothing is pending — the next
-      // genuinely new "stuck" tool_use should beep again.
+      // genuinely new "stuck" tool_use should beep again. This is also the
+      // moment a reported prompt got answered, so tell listeners once.
       if (this.pendingToolUses.size === 0) {
         this.promptArmed = true;
+        if (this.promptOutstanding) {
+          this.promptOutstanding = false;
+          this.onActivity("prompt-cleared");
+        }
       }
 
       // Schedule notification: wait 2s to confirm Claude really stopped.
@@ -252,16 +267,26 @@ export class ClaudeCompletionDetector implements CompletionDetector {
 
     const now = Date.now();
     let oldestAge = 0;
+    // The oldest unpaired tool_use is the one the CLI is blocked on, so it's
+    // also the one whose question is on screen — decode that one for the phone.
+    let oldest: PendingToolUse | null = null;
     for (const tu of this.pendingToolUses.values()) {
       const age = now - tu.writtenAt;
-      if (age > oldestAge) oldestAge = age;
+      if (age > oldestAge) {
+        oldestAge = age;
+        oldest = tu;
+      }
     }
     if (oldestAge < PROMPT_PENDING_MS) return;
 
     if (!this.isPtyIdle(PTY_IDLE_MS)) return;
 
     this.promptArmed = false;
-    this.onActivity("prompt");
+    this.promptOutstanding = true;
+    const detail = oldest
+      ? (extractPromptDetail(oldest.name, oldest.input) ?? undefined)
+      : undefined;
+    this.onActivity("prompt", detail);
   }
 }
 

@@ -9,5 +9,8 @@
     "verbatimModuleSyntax": false,
     "declaration": false
   },
-  "include": ["src/main/**/*.ts", "src/shared/**/*.ts"]
+  "include": ["src/main/**/*.ts", "src/shared/**/*.ts"],
+  // Tests are run by vitest (ESM, top-level await for module mocks) and have no
+  // business in the shipped CommonJS bundle.
+  "exclude": ["src/**/*.test.ts"]
 }

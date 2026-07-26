@@ -1,0 +1,10 @@
+{
+  "name": "Multi-Code",
+  "short_name": "Multi-Code",
+  "description": "Watch and answer your coding agents from your phone",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#141518",
+  "theme_color": "#141518",
+  "orientation": "portrait-primary"
+}

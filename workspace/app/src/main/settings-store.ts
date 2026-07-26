@@ -6,9 +6,12 @@ export type ThemeName = "light" | "dark" | "sepia";
 
 export interface Settings {
   theme: ThemeName;
+  // Whether the phone-link server listens on startup. Off by default: it opens
+  // a port on the local network, so it should be an explicit opt-in.
+  remoteEnabled: boolean;
 }
 
-const DEFAULT_SETTINGS: Settings = { theme: "light" };
+const DEFAULT_SETTINGS: Settings = { theme: "light", remoteEnabled: false };
 
 const SETTINGS_PATH = path.join(app.getPath("userData"), "settings.json");
 
@@ -23,7 +26,10 @@ export function loadSettings(): Settings {
       const theme: ThemeName = isThemeName(data?.theme)
         ? data.theme
         : DEFAULT_SETTINGS.theme;
-      return { theme };
+      return {
+        theme,
+        remoteEnabled: data?.remoteEnabled === true,
+      };
     }
   } catch {
     // fall through to defaults

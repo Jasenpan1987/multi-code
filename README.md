@@ -29,6 +29,17 @@ When working with multiple coding-agent sessions across different projects simul
   - **Resume Elsewhere** — Copy the backend's resume command to clipboard for handoff to a standalone terminal (`claude --resume <id>` or `opencode --session <id>`)
 - **Terminal section** — Embedded real shell (your default `$SHELL`) running in the project's directory. Persists in background across collapses and instance switches
 - **View section** — Render a Markdown file inline: paste a `.md` path (or click a `.md` path in the terminal output, or the "View" affordance on a changed `.md` in the Git section). Supports GitHub-flavored Markdown, math (KaTeX), Mermaid diagrams, and local/remote images
+- **Phone section** — Pair a phone and watch/steer your agents from it (see [Phone Link](#phone-link) below)
+
+### Phone Link
+- **No intermediary server** — Your phone talks straight to your desktop. Nothing transits a third party, ours or anyone else's
+- **Works away from home** — Over [Tailscale](https://tailscale.com), your phone reaches the desktop from anywhere as a direct connection. On the same WiFi it just works with no setup
+- **No app install** — The desktop serves a mobile web client; scan the QR and add it to your home screen
+- **Live mirroring** — Terminal output streams in real time, and a phone joining mid-session gets a snapshot of the current screen rather than a blank one
+- **Tap to answer** — When an agent asks a question, its options render as buttons. Tap one and the agent unblocks
+- **Type to answer** — A compose box for open questions, sending the same way the desktop's `Cmd+L` box does
+- **End-to-end encrypted** — NaCl box (Curve25519 + XSalsa20-Poly1305). Your phone pins the desktop's public key at pairing, so nothing at that address can impersonate it
+- **Revocable** — Each paired phone has its own token; revoking one disconnects it immediately
 
 ### Visual / UX
 - **QQ Aesthetic** — Aqua-blue gradients, compact avatars, familiar sidebar layout
@@ -263,6 +274,48 @@ When a session enters deep "edit code while watching the AI" territory:
 3. Paste and press Enter — the agent continues this session in that environment
 4. You can leave Multi-Code running, or close it
 
+### Phone Link
+
+Watch your agents and answer their questions from your phone, so an agent
+doesn't sit blocked just because you stepped away.
+
+**Setup (once):**
+
+1. Toolbox → **Phone** → click **Phone link: OFF** to turn it on. It binds port
+   6768 and is off by default, since it opens a port on your network
+2. Click **Pair a phone** — a QR code appears
+3. Scan it with your phone's camera, then use your browser's "Add to Home
+   Screen" so it opens like an app
+
+That's it on the same WiFi. To reach your desktop **from anywhere**, install
+[Tailscale](https://tailscale.com) on both the desktop and the phone and sign
+into the same account. The Phone section tells you whether a Tailscale address
+was found — without one, pairing only works on your local network.
+
+**Using it:**
+
+- The instance list mirrors your contact list; tap one to open it
+- When an agent needs you, the phone vibrates and the instance shows a badge
+- A question with options renders as buttons — tap one to answer
+- For open questions, type in the box and hit Send
+- Expand **Terminal** to see the raw screen exactly as the desktop shows it
+
+**Security notes:**
+
+- The QR contains a device secret. Treat it like a password; generate a new one
+  if it leaks
+- Traffic is end-to-end encrypted and never passes through any server
+- Your phone pins the desktop's public key at pairing time, so nothing else at
+  that address can impersonate your desktop
+- Revoke a lost phone from the same panel — it disconnects immediately and its
+  token stops working
+
+**Limitation worth knowing:** reading prompts is reliable (parsed from the CLI's
+own session files), but *answering by button* assumes the CLI's option boxes
+accept number keys. If a CLI update changes that, the buttons may stop working
+while everything else keeps going — the terminal view is always there as a
+fallback.
+
 ### Data persistence
 
 - Instance list (directory + alias + backend) is stored in `~/.config/Multi-Code/contacts.json`
@@ -280,6 +333,7 @@ When a session enters deep "edit code while watching the AI" territory:
    - Git: shells out to `git` every 5s while expanded
    - Terminal: lazy-spawns a shell PTY on first expand, persists across collapses
 7. Instances persist to `~/.config/Multi-Code/contacts.json`
+8. When Phone Link is on, the main process also runs a WebSocket server on port 6768 that serves the mobile client and streams the same PTY bytes plus decoded prompts to paired phones. Frames are sealed with NaCl box; the phone reaches the desktop directly over LAN or Tailscale, with no relay involved
 
 ## License
 

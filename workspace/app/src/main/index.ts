@@ -7,6 +7,7 @@ import {
   registerMdimgSchemePrivileged,
   registerMdimgProtocol,
 } from "./mdimg-protocol";
+import { initRemote, shutdownRemote } from "./remote";
 
 // Must run before app 'ready' — privileged scheme registration is only honored
 // pre-ready. The handler itself is installed after ready (in whenReady).
@@ -55,6 +56,7 @@ app.whenReady().then(() => {
   }
   registerMdimgProtocol();
   registerIpcHandlers();
+  initRemote();
   createWindow();
 });
 
@@ -73,4 +75,5 @@ app.on("activate", () => {
 app.on("before-quit", () => {
   processManager.cleanup();
   shellManager.cleanup();
+  void shutdownRemote();
 });

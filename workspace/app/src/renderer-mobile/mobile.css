@@ -1,0 +1,430 @@
+/* Mobile client styling. Dark by default (this gets used at night, one-handed)
+   and sized for thumbs rather than for the desktop app's information density —
+   the QQ aesthetic doesn't transfer to a 390px-wide touch screen. */
+
+:root {
+  --m-bg: #141518;
+  --m-surface: #1d1f24;
+  --m-surface-2: #262931;
+  --m-border: #33373f;
+  --m-text: #e8eaed;
+  --m-muted: #9aa0aa;
+  --m-accent: #2f9e63;
+  --m-accent-text: #ffffff;
+  --m-warn: #d9822b;
+  --m-danger: #cf4c48;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--m-bg);
+  color: var(--m-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  overscroll-behavior: none;
+}
+
+#root {
+  height: 100%;
+}
+
+.m-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Header ------------------------------------------------------------------ */
+
+.m-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  /* Respect the notch / status bar when installed to the home screen. */
+  padding-top: max(10px, env(safe-area-inset-top));
+  background: var(--m-surface);
+  border-bottom: 1px solid var(--m-border);
+  flex: none;
+}
+
+.m-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.m-header-title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.m-header-sub {
+  font-size: 12px;
+  color: var(--m-muted);
+}
+
+.m-header-sub[data-state="connected"] {
+  color: var(--m-accent);
+}
+
+.m-header-sub[data-state="disconnected"],
+.m-header-sub[data-state="connecting"] {
+  color: var(--m-warn);
+}
+
+.m-header-sub[data-state="auth-failed"] {
+  color: var(--m-danger);
+}
+
+.m-back,
+.m-unpair {
+  background: none;
+  border: none;
+  color: var(--m-text);
+  font-size: 15px;
+  padding: 6px 8px;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.m-back {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.m-unpair {
+  color: var(--m-muted);
+  font-size: 13px;
+}
+
+/* Generic screens -------------------------------------------------------- */
+
+.m-screen {
+  padding: 24px 20px;
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+}
+
+.m-center {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  min-height: 100%;
+  gap: 14px;
+  text-align: center;
+}
+
+.m-title {
+  font-size: 22px;
+  margin: 0;
+}
+
+.m-muted {
+  color: var(--m-muted);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.m-error {
+  color: var(--m-danger);
+  font-size: 13px;
+}
+
+.m-input {
+  width: 100%;
+  background: var(--m-surface-2);
+  border: 1px solid var(--m-border);
+  border-radius: 10px;
+  color: var(--m-text);
+  padding: 12px;
+  /* 16px keeps iOS Safari from zooming when the field takes focus. */
+  font-size: 16px;
+  font-family: inherit;
+}
+
+.m-textarea {
+  resize: vertical;
+}
+
+.m-btn {
+  border: 1px solid var(--m-border);
+  border-radius: 10px;
+  background: var(--m-surface-2);
+  color: var(--m-text);
+  /* 44px is the minimum comfortable touch target. */
+  min-height: 44px;
+  padding: 0 16px;
+  font-size: 15px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.m-btn-primary {
+  background: var(--m-accent);
+  border-color: var(--m-accent);
+  color: var(--m-accent-text);
+  font-weight: 600;
+}
+
+.m-btn:disabled {
+  opacity: 0.45;
+}
+
+.m-spinner {
+  width: 26px;
+  height: 26px;
+  margin: 0 auto;
+  border: 2px solid var(--m-border);
+  border-top-color: var(--m-accent);
+  border-radius: 50%;
+  animation: m-spin 0.8s linear infinite;
+}
+
+@keyframes m-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Instance list ---------------------------------------------------------- */
+
+.m-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  -webkit-overflow-scrolling: touch;
+}
+
+.m-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 62px;
+  padding: 12px 14px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--m-border);
+  color: var(--m-text);
+  text-align: left;
+  font-family: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.m-row:active {
+  background: var(--m-surface-2);
+}
+
+.m-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--m-muted);
+  flex: none;
+}
+
+.m-dot[data-status="running"] {
+  background: var(--m-accent);
+}
+
+.m-row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.m-row-name {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.m-row-sub {
+  font-size: 12px;
+  color: var(--m-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Long paths are more recognizable by their tail than their head. */
+  direction: rtl;
+  text-align: left;
+}
+
+.m-row-backend {
+  font-size: 11px;
+  color: var(--m-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex: none;
+}
+
+.m-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--m-danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Instance detail -------------------------------------------------------- */
+
+.m-detail {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  padding-bottom: max(14px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.m-prompt {
+  background: var(--m-surface);
+  border: 1px solid var(--m-border);
+  border-left: 3px solid var(--m-warn);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.m-prompt-tool {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--m-warn);
+  font-weight: 700;
+}
+
+.m-prompt-question {
+  margin-top: 6px;
+  font-size: 15px;
+  line-height: 1.4;
+  /* Prompts often carry a shell command or path that must not be reflowed
+     into something that reads differently from what the desktop shows. */
+  word-break: break-word;
+}
+
+.m-prompt-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.m-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  background: var(--m-surface-2);
+  border: 1px solid var(--m-border);
+  border-radius: 10px;
+  color: var(--m-text);
+  text-align: left;
+  font-family: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.m-option:active {
+  border-color: var(--m-accent);
+}
+
+.m-option-index {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--m-border);
+  color: var(--m-text);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.m-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.m-option-label {
+  font-weight: 600;
+}
+
+.m-option-desc {
+  font-size: 12px;
+  color: var(--m-muted);
+  line-height: 1.35;
+}
+
+.m-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.m-disclosure {
+  background: none;
+  border: none;
+  color: var(--m-muted);
+  font-size: 13px;
+  font-family: inherit;
+  text-align: left;
+  padding: 6px 0;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.m-terminal {
+  height: 45vh;
+  background: #101010;
+  border: 1px solid var(--m-border);
+  border-radius: 8px;
+  padding: 6px;
+  overflow: hidden;
+}
+
+/* Toast ------------------------------------------------------------------ */
+
+.m-toast {
+  position: fixed;
+  left: 14px;
+  right: 14px;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  background: var(--m-surface-2);
+  border: 1px solid var(--m-danger);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.4;
+  z-index: 10;
+}

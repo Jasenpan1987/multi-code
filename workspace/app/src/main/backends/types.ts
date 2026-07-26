@@ -1,3 +1,5 @@
+import type { PromptDetail } from "../remote/promptExtract";
+
 export type BackendName = "claude" | "opencode";
 
 export interface SpawnConfig {
@@ -5,6 +7,14 @@ export interface SpawnConfig {
   args: string[];
   env: Record<string, string>;
 }
+
+/**
+ * Activity callback. `detail` is populated only for the "prompt" event, and
+ * only when the blocking tool_use could be decoded into a question plus
+ * options — it's what lets a paired phone render real buttons instead of a
+ * raw terminal. Backends that can't decode their prompts omit it.
+ */
+export type ActivityCallback = (type: string, detail?: PromptDetail) => void;
 
 export interface CompletionDetector {
   stop(): void;
@@ -46,6 +56,10 @@ export interface Backend {
    *     interactive question (permission box, AskUserQuestion, plan
    *     approval, etc.). Detected from a tool_use that hasn't been
    *     paired with a tool_result while the PTY has fallen silent.
+   *     Carries a PromptDetail second argument when the question and
+   *     its options could be decoded.
+   *   - "prompt-cleared": a previously reported prompt was answered
+   *     (on either the desktop or a paired phone).
    *
    * `isPtyIdle(ms)` returns true when no PTY bytes have been written
    * for at least `ms` milliseconds. Used to disambiguate "Claude
@@ -54,7 +68,7 @@ export interface Backend {
    */
   createCompletionDetector(
     sessionId: string,
-    onActivity: (type: string) => void,
+    onActivity: ActivityCallback,
     isPtyIdle: (ms: number) => boolean
   ): CompletionDetector;
 

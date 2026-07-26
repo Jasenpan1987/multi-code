@@ -98,7 +98,16 @@
       "Bash(./node_modules/.bin/electron /tmp/sqlite-test.js)",
       "Bash(./node_modules/.bin/electron sqlite-test.js)",
       "Bash(pnpm start *)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(pnpm --version)",
+      "Bash(pnpm pack *)",
+      "Bash(rm -f multi-code-0.1.2.tgz)",
+      "Bash(pnpm run *)",
+      "Bash(tee /tmp/multicode-dist.log)",
+      "Bash(npx vitest *)",
+      "Bash(npx eslint *)",
+      "Bash(echo \"=== MAIN TSC EXIT: $? ===\")",
+      "Bash([ -f \"$JSONL\" ])"
     ]
   }
 }

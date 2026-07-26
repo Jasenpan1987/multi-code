@@ -11,6 +11,10 @@ import type { BackendName } from "./backends";
 import { loadSettings, saveSettings } from "./settings-store";
 import type { ThemeName } from "./settings-store";
 import type { ReadFileResult } from "../shared/types";
+import { remoteServer } from "./remote/ws-server";
+import { setRemoteEnabled } from "./remote";
+import { hasTailscaleEndpoint } from "./remote/endpoints";
+import QRCode from "qrcode";
 
 // Per-process counter to disambiguate temp image filenames within the same ms.
 let tempImageCounter = 0;
@@ -295,6 +299,54 @@ export function registerIpcHandlers() {
     saveSettings(next);
     return next;
   });
+
+  // ---------------------------------------------------------------------
+  // Phone link
+  // ---------------------------------------------------------------------
+
+  ipcMain.handle("remote-get-status", () => remoteServer.getStatus());
+
+  ipcMain.handle("remote-set-enabled", (_event, enabled: boolean) =>
+    setRemoteEnabled(enabled)
+  );
+
+  // Mint a pairing token and render the offer as a QR data URL. The renderer
+  // only ever sees the image plus the URL text, never the raw token by itself,
+  // so a screenshot of the UI is the only thing that leaks it — same exposure as
+  // showing the QR at all. Returns null when the server isn't listening yet
+  // (nothing to point a phone at).
+  ipcMain.handle("remote-create-pairing", async () => {
+    const offer = remoteServer.createPairingOffer();
+    if (!offer) return null;
+    const code = Buffer.from(JSON.stringify(offer), "utf8").toString("base64url");
+    const pairingUrl = `multicode://pair?code=${code}`;
+    // The phone opens the served web client and pastes/scans there, so the
+    // human-usable form is an http URL with the payload in the fragment. A
+    // fragment never reaches a server, which matters because the token is in it.
+    const firstEndpoint = offer.endpoints[0];
+    const webUrl = firstEndpoint
+      ? `${firstEndpoint.replace(/^ws:/, "http:")}/#${code}`
+      : null;
+    try {
+      const qrDataUrl = await QRCode.toDataURL(webUrl ?? pairingUrl, {
+        margin: 1,
+        width: 240,
+      });
+      return { pairingUrl, webUrl, qrDataUrl, endpoints: offer.endpoints };
+    } catch {
+      return { pairingUrl, webUrl, qrDataUrl: null, endpoints: offer.endpoints };
+    }
+  });
+
+  ipcMain.handle("remote-revoke-device", (_event, deviceId: string) => {
+    remoteServer.revokeDevice(deviceId);
+    return remoteServer.getStatus();
+  });
+
+  // Whether a Tailscale address exists on this machine — i.e. whether the phone
+  // will still reach the desktop after leaving the house. Surfaced so the user
+  // isn't surprised by a LAN-only pairing.
+  ipcMain.handle("remote-has-tailscale", () => hasTailscaleEndpoint());
 
   // Compose box: save the current clipboard image to a temp PNG and return its
   // absolute path plus a data: URL of the same bytes (for the chip thumbnail —

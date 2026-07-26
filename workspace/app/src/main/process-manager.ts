@@ -12,6 +12,7 @@ import type {
   CompletionDetector,
   SessionDiscovery,
 } from "./backends";
+import { remoteServer } from "./remote/ws-server";
 
 export interface InstanceInfo {
   id: string;
@@ -93,6 +94,7 @@ export class ProcessManager {
     const instance = this.spawnProcess(id, cwd, alias, backend);
     this.instances.set(id, instance);
     this.persist();
+    remoteServer.broadcastInstances();
     return this.toInfo(instance);
   }
 
@@ -108,6 +110,7 @@ export class ProcessManager {
       instance.backend
     );
     this.instances.set(id, started);
+    remoteServer.broadcastInstances();
     return this.toInfo(started);
   }
 
@@ -163,10 +166,18 @@ export class ProcessManager {
         tracked.sessionId = sessionId;
         tracked.detector = backend.createCompletionDetector(
           sessionId,
-          (type) => {
-            if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          (type, detail) => {
+            // "prompt-cleared" exists for paired phones (drop the stale option
+            // buttons); the desktop UI has nothing to do with it, so it isn't
+            // forwarded to the renderer.
+            if (
+              type !== "prompt-cleared" &&
+              this.mainWindow &&
+              !this.mainWindow.isDestroyed()
+            ) {
               this.mainWindow.webContents.send("instance-activity", id, type);
             }
+            remoteServer.broadcastActivity(id, type, detail);
           },
           (ms) => Date.now() - tracked.lastPtyByteAt >= ms
         );
@@ -186,6 +197,9 @@ export class ProcessManager {
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send("pty-output", id, data);
       }
+      // Same bytes to any paired phone mirroring this instance. Also keeps the
+      // replay buffer fed, so a phone connecting later sees the current screen.
+      remoteServer.broadcastOutput(id, data);
     });
 
     ptyProcess.onExit(({ exitCode }) => {
@@ -195,6 +209,7 @@ export class ProcessManager {
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send("instance-exit", id, exitCode);
       }
+      remoteServer.broadcastExit(id, exitCode);
     });
 
     return instance;
@@ -218,6 +233,17 @@ export class ProcessManager {
     }
   }
 
+  // Send a whole prompt as one unit, the way the desktop compose box does:
+  // bracketed paste (so the TUI folds it into a [Pasted text] placeholder and
+  // multi-line text doesn't submit early), then a separate \r to submit. Used by
+  // the phone's answer box.
+  sendPrompt(id: string, text: string) {
+    const instance = this.instances.get(id);
+    if (!instance?.ptyProcess) return;
+    instance.ptyProcess.write(`\x1b[200~${text}\x1b[201~`);
+    instance.ptyProcess.write("\r");
+  }
+
   resizeInstance(id: string, cols: number, rows: number) {
     const instance = this.instances.get(id);
     if (instance?.ptyProcess) {
@@ -239,6 +265,7 @@ export class ProcessManager {
     if (instance) this.teardownObservers(instance);
     this.instances.delete(id);
     this.persist();
+    remoteServer.broadcastInstances();
   }
 
   restartInstance(id: string): InstanceInfo | null {
@@ -257,6 +284,7 @@ export class ProcessManager {
       instance.backend
     );
     this.instances.set(id, restarted);
+    remoteServer.broadcastInstances();
     return this.toInfo(restarted);
   }
 
@@ -279,6 +307,7 @@ export class ProcessManager {
     if (instance) {
       instance.alias = alias;
       this.persist();
+      remoteServer.broadcastInstances();
     }
   }
 

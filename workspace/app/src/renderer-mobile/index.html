@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover + the safe-area insets in mobile.css keep the layout
+         clear of the notch and home indicator when added to the home screen. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover"
+    />
+    <!-- Served over plain http on a LAN/Tailscale address, so no upgrade-insecure
+         directive here. connect-src allows ws: because that IS the transport;
+         confidentiality comes from the NaCl seal, not from TLS. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src ws: wss:; img-src 'self' data:"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Multi-Code" />
+    <meta name="theme-color" content="#141518" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <title>Multi-Code</title>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

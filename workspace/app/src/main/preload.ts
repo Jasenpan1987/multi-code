@@ -35,6 +35,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getSettings: () => ipcRenderer.invoke("settings-get"),
   setTheme: (theme: string) => ipcRenderer.invoke("settings-set-theme", theme),
 
+  // Phone link
+  getRemoteStatus: () => ipcRenderer.invoke("remote-get-status"),
+  setRemoteEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke("remote-set-enabled", enabled),
+  createRemotePairing: () => ipcRenderer.invoke("remote-create-pairing"),
+  revokeRemoteDevice: (deviceId: string) =>
+    ipcRenderer.invoke("remote-revoke-device", deviceId),
+  hasTailscale: () => ipcRenderer.invoke("remote-has-tailscale"),
+
   // Compose box: clipboard image -> temp file (renderer has no fs access)
   saveClipboardImage: () => ipcRenderer.invoke("save-clipboard-image"),
   deleteTempImage: (path: string) =>
@@ -100,6 +109,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("shell-exit", listener);
     return () => {
       ipcRenderer.removeListener("shell-exit", listener);
+    };
+  },
+  onRemoteStatus: (callback: (status: unknown) => void) => {
+    const listener = (_event: unknown, status: unknown) => callback(status);
+    ipcRenderer.on("remote-status", listener);
+    return () => {
+      ipcRenderer.removeListener("remote-status", listener);
     };
   },
 });

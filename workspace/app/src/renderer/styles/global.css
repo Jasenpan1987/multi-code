@@ -1466,3 +1466,279 @@ body,
   background: rgba(255, 255, 255, 0.28);
   border-color: rgba(255, 255, 255, 0.5);
 }
+
+
+/* Phone section (toolbox) — pairing + paired-device management. Follows the
+   quick-action button conventions so it reads as part of the same toolbox. */
+
+.phone-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.phone-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.phone-toggle {
+  padding: 6px 10px;
+  background: linear-gradient(180deg, #e8eef8 0%, #c6d9f1 100%);
+  border: 1px solid #7b9cc7;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  color: #2d5a8a;
+  font-weight: bold;
+}
+
+.phone-toggle[data-on="true"] {
+  background: linear-gradient(180deg, #d9f0e0 0%, #a8d8b4 100%);
+  border-color: #4bb066;
+  color: #1f7a3d;
+}
+
+.phone-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.phone-port {
+  color: #777;
+  font-size: 10px;
+}
+
+.phone-btn {
+  padding: 6px 10px;
+  background: linear-gradient(180deg, #e8eef8 0%, #c6d9f1 100%);
+  border: 1px solid #7b9cc7;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  color: #2d5a8a;
+}
+
+.phone-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #f0f4fa 0%, #d0e0f5 100%);
+}
+
+.phone-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.phone-hint,
+.phone-warn,
+.phone-error {
+  line-height: 1.45;
+  padding: 5px 7px;
+  border-radius: 3px;
+}
+
+.phone-hint {
+  color: #555;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.phone-warn {
+  color: #8a5200;
+  background: rgba(217, 130, 43, 0.1);
+}
+
+.phone-error {
+  color: #c62828;
+  background: rgba(198, 40, 40, 0.08);
+}
+
+.phone-muted {
+  color: #888;
+}
+
+.phone-endpoints {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.phone-ok {
+  color: #1f7a3d;
+  background: rgba(75, 176, 102, 0.12);
+  line-height: 1.45;
+  padding: 5px 7px;
+  border-radius: 3px;
+}
+
+.phone-warn a {
+  color: #8a5200;
+  font-weight: bold;
+}
+
+/* Each address is labelled with how far it reaches, so a VPN or LAN-only
+   address can't be mistaken for one that works from outside. */
+.phone-endpoint {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.phone-endpoint-tag {
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 9px;
+  white-space: nowrap;
+  flex: none;
+  opacity: 0.85;
+}
+
+.phone-endpoint[data-kind="tailscale"] {
+  background: rgba(75, 176, 102, 0.12);
+  color: #1f7a3d;
+}
+
+.phone-endpoint[data-kind="vpn"] {
+  /* Dimmed: it will be in the QR (harmless, the phone just skips it) but the
+     user should not expect it to work. */
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+
+.phone-endpoint[data-kind="vpn"] .phone-endpoint-tag {
+  text-decoration: none;
+}
+
+.phone-endpoint,
+.phone-url {
+  font-family: Menlo, Monaco, monospace;
+  font-size: 10px;
+  color: #2d5a8a;
+  background: rgba(0, 0, 0, 0.04);
+  padding: 3px 5px;
+  border-radius: 2px;
+  /* Endpoints and pairing URLs are long and must stay copyable verbatim. */
+  overflow-wrap: anywhere;
+}
+
+.phone-pairing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 3px;
+}
+
+.phone-qr {
+  /* Rendered as a data URL at 240px; keep it crisp rather than smoothed. */
+  image-rendering: pixelated;
+  background: #fff;
+  border-radius: 2px;
+}
+
+.phone-devices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid #d0d0d0;
+  padding-top: 7px;
+}
+
+.phone-devices-title {
+  font-weight: bold;
+  color: #555;
+}
+
+.phone-device {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.phone-device-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #bbb;
+  flex: none;
+}
+
+.phone-device-dot[data-connected="true"] {
+  background: #4bb066;
+}
+
+.phone-device-name {
+  font-weight: bold;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phone-device-state {
+  color: #888;
+  font-size: 10px;
+}
+
+.phone-revoke {
+  padding: 2px 6px;
+  font-size: 10px;
+  background: none;
+  border: 1px solid #c9a0a0;
+  border-radius: 2px;
+  color: #a33;
+  cursor: pointer;
+}
+
+.phone-revoke:hover {
+  background: rgba(198, 40, 40, 0.08);
+}
+
+[data-theme="dark"] .toolbox-section-body .phone-toggle,
+[data-theme="dark"] .toolbox-section-body .phone-btn {
+  background: linear-gradient(180deg, #3c3c3c 0%, #2d2d2d 100%);
+  border-color: #555;
+  color: #d4d4d4;
+}
+
+[data-theme="dark"] .toolbox-section-body .phone-toggle[data-on="true"] {
+  border-color: #4bb066;
+  color: #8fd9a3;
+}
+
+[data-theme="dark"] .toolbox-section-body .phone-hint {
+  color: #b0b0b0;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] .toolbox-section-body .phone-ok {
+  color: #8fd9a3;
+  background: rgba(75, 176, 102, 0.15);
+}
+
+[data-theme="dark"] .toolbox-section-body .phone-endpoint[data-kind="tailscale"] {
+  color: #8fd9a3;
+  background: rgba(75, 176, 102, 0.15);
+}
+
+[data-theme="dark"] .toolbox-section-body .phone-endpoint,
+[data-theme="dark"] .toolbox-section-body .phone-url {
+  color: #9cc4e4;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+
+[data-theme="dark"] .toolbox-section-body .phone-pairing {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] .toolbox-section-body .phone-devices {
+  border-top-color: #3c3c3c;
+}
+
+[data-theme="dark"] .toolbox-section-body .phone-devices-title,
+[data-theme="dark"] .toolbox-section-body .phone-muted {
+  color: #a0a0a0;
+}

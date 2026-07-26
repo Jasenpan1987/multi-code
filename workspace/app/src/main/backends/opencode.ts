@@ -3,6 +3,7 @@ import path from "path";
 import { execSync } from "child_process";
 import Database from "better-sqlite3";
 import type {
+  ActivityCallback,
   Backend,
   CompletionDetector,
   SessionDiscovery,
@@ -134,7 +135,7 @@ class OpencodeCompletionDetector implements CompletionDetector {
 
   constructor(
     private readonly sessionId: string,
-    private readonly onActivity: (type: string) => void
+    private readonly onActivity: ActivityCallback
   ) {
     // Snapshot the latest message timestamp so existing rows don't trigger.
     this.lastSeenTime = this.getCurrentLatestTime();

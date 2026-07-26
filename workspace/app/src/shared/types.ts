@@ -1,9 +1,21 @@
+import type { RemoteStatus } from "./remote-protocol";
+
 export type BackendName = "claude" | "opencode";
 
 export type ThemeName = "light" | "dark" | "sepia";
 
 export interface AppSettings {
   theme: ThemeName;
+  remoteEnabled: boolean;
+}
+
+// Result of minting a pairing offer: the QR image the user scans plus the same
+// payload as text, for the case where scanning isn't practical.
+export interface RemotePairing {
+  pairingUrl: string;
+  webUrl: string | null;
+  qrDataUrl: string | null;
+  endpoints: string[];
 }
 
 export interface Instance {
@@ -85,6 +97,13 @@ export interface ElectronAPI {
   getSettings: () => Promise<AppSettings>;
   setTheme: (theme: ThemeName) => Promise<AppSettings>;
 
+  // Phone link
+  getRemoteStatus: () => Promise<RemoteStatus>;
+  setRemoteEnabled: (enabled: boolean) => Promise<RemoteStatus>;
+  createRemotePairing: () => Promise<RemotePairing | null>;
+  revokeRemoteDevice: (deviceId: string) => Promise<RemoteStatus>;
+  hasTailscale: () => Promise<boolean>;
+
   // Compose box: clipboard image -> temp file (renderer has no fs access)
   saveClipboardImage: () => Promise<SavedClipboardImage | null>;
   deleteTempImage: (path: string) => Promise<void>;
@@ -106,6 +125,7 @@ export interface ElectronAPI {
   onInstanceSessionId: (callback: (id: string, sessionId: string) => void) => () => void;
   onShellOutput: (callback: (id: string, data: string) => void) => () => void;
   onShellExit: (callback: (id: string) => void) => () => void;
+  onRemoteStatus: (callback: (status: RemoteStatus) => void) => () => void;
 }
 
 declare global {
