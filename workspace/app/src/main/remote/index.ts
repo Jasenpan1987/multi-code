@@ -44,10 +44,16 @@ export function initRemote() {
   remoteServer.setStatusListener(emitStatus);
 
   // Auto-start when the user left it on. Failures (port taken) surface as
-  // `error` on the status object rather than blocking app startup.
+  // `error` on the status object rather than blocking app startup — so this must
+  // never reject: an unhandled rejection here would fire before any window
+  // exists to report it, and the user would see a crash dialog instead of the
+  // Phone section saying the port is busy.
   const settings = loadSettings();
   if (settings.remoteEnabled) {
-    void remoteServer.start().then(emitStatus);
+    void remoteServer
+      .start()
+      .catch(() => undefined)
+      .finally(emitStatus);
   }
 }
 

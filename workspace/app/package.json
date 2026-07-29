@@ -32,6 +32,9 @@
       "node_modules/**/*",
       "!node_modules/.cache"
     ],
+    "directories": {
+      "output": "release"
+    },
     "extraResources": [],
     "asar": true
   },

@@ -256,6 +256,53 @@ afterEach(async () => {
   }
 });
 
+describe("RemoteServer startup failure", () => {
+  it("reports a busy port instead of crashing the process", async () => {
+    // Regression: a failed bind emits `error` twice — listen()'s own rejection,
+    // plus a second one via the attached WebSocketServer. The handler used to be
+    // registered only after a successful listen, so that second error was
+    // unhandled, and an unhandled 'error' on a net.Server is thrown. In Electron
+    // that killed the main process: leaving another Multi-Code running turned
+    // "phone link unavailable" into "the app won't start".
+    const first = await startServer();
+    expect(first.server.isRunning()).toBe(true);
+    const busyPort = first.server.getStatus().port;
+    expect(busyPort).toBeTruthy();
+
+    const uncaught: unknown[] = [];
+    const onUncaught = (err: unknown) => uncaught.push(err);
+    process.on("uncaughtException", onUncaught);
+
+    const second = new RemoteServer();
+    try {
+      const status = await second.start(busyPort as number);
+
+      expect(status.enabled).toBe(false);
+      expect(String(status.error)).toContain("already in use");
+      // Give the deferred error a chance to surface before asserting it didn't.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(uncaught).toEqual([]);
+    } finally {
+      process.off("uncaughtException", onUncaught);
+      await second.stop();
+    }
+  });
+
+  it("leaves the already-running server untouched", async () => {
+    // A second instance failing to bind must not disturb the one that owns the
+    // port — otherwise starting a second copy would break the working one.
+    const first = await startServer();
+    const busyPort = first.server.getStatus().port as number;
+
+    const second = new RemoteServer();
+    await second.start(busyPort);
+    await second.stop();
+
+    expect(first.server.isRunning()).toBe(true);
+    expect(first.server.getStatus().port).toBe(busyPort);
+  });
+});
+
 describe("RemoteServer handshake", () => {
   it("completes a handshake and authenticates a paired device", async () => {
     const fx = await startServer();

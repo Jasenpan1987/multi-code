@@ -1,5 +1,9 @@
 node_modules/
 dist/
+# electron-builder output. Kept separate from dist/ so packaged apps can't be
+# swept back into the next build's asar — `files` includes dist/**, and when the
+# two shared a directory each build embedded the previous one's whole .app.
+release/
 .eslintcache
 *.tsbuildinfo
 *.dmg

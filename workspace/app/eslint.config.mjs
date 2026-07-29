@@ -15,6 +15,8 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ["dist/", "node_modules/", "*.config.*"],
+    // `release/` is electron-builder's output (packaged apps and compiled
+    // bundles), not source. Same reason dist/ is here.
+    ignores: ["dist/", "release/", "node_modules/", "*.config.*"],
   }
 );

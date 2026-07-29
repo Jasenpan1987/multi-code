@@ -133,14 +133,30 @@ export class RemoteServer {
 
     this.startError = undefined;
     const server = http.createServer((req, res) => this.handleHttp(req, res));
+
+    // Swallow socket errors for the whole lifetime of this server, registered
+    // BEFORE listening rather than after a successful listen.
+    //
+    // A failed bind emits `error` more than once: `listen()`'s own rejection is
+    // caught below, but the WebSocketServer attached to this http server reacts
+    // to the same failure and a second EADDRINUSE lands with no handler
+    // attached. An unhandled 'error' on a net.Server is thrown, which in Electron
+    // takes down the main process — so leaving another Multi-Code running (or any
+    // process on 6768) turned "phone link unavailable" into "the app won't
+    // start". Verified by reproducing it against a real occupied port.
+    const swallow = () => {};
+    server.on("error", swallow);
+
     const wss = new WebSocketServer({ server });
     wss.on("connection", (socket) => this.handleConnection(socket));
+    wss.on("error", swallow);
 
     try {
       await new Promise<void>((resolve, reject) => {
-        server.once("error", reject);
+        const onError = (err: Error) => reject(err);
+        server.once("error", onError);
         server.listen(port, "0.0.0.0", () => {
-          server.removeListener("error", reject);
+          server.removeListener("error", onError);
           resolve();
         });
       });
@@ -149,13 +165,10 @@ export class RemoteServer {
       server.close();
       this.startError =
         (err as NodeJS.ErrnoException)?.code === "EADDRINUSE"
-          ? `Port ${port} is already in use`
+          ? `Port ${port} is already in use — another Multi-Code may be running`
           : ((err as Error)?.message ?? "Failed to start");
       return this.getStatus();
     }
-
-    // Keep the process from being held open by an idle listener at quit time.
-    server.on("error", () => {});
 
     this.httpServer = server;
     this.wss = wss;
