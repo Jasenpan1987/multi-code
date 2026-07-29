@@ -7,7 +7,9 @@ import type {
   SessionDiscovery,
   SpawnConfig,
 } from "./types";
-import { extractPromptDetail } from "../remote/promptExtract";
+import { extractPromptDetail, keystrokeForOption } from "../remote/promptExtract";
+import type { TranscriptEntry } from "../../shared/remote-protocol";
+import { resolvePath } from "./resolvePath";
 
 const HOME = process.env.HOME || "";
 const SESSIONS_DIR = path.join(HOME, ".claude/sessions");
@@ -27,9 +29,16 @@ function findClaudeBinary(): string {
 
 const claudePath = findClaudeBinary();
 
+// Claude names its per-project directory after the cwd with slashes replaced.
+// It uses the path it resolved, so the encoding has to start from the resolved
+// form too: on macOS `/tmp` is a symlink to `/private/tmp`, and encoding the
+// unresolved path yields a directory that doesn't exist.
+export function encodeProjectDir(cwd: string): string {
+  return resolvePath(cwd).replace(/\//g, "-");
+}
+
 function hasExistingSession(cwd: string): boolean {
-  const encodedCwd = cwd.replace(/\//g, "-");
-  const projectDir = path.join(PROJECTS_DIR, encodedCwd);
+  const projectDir = path.join(PROJECTS_DIR, encodeProjectDir(cwd));
   try {
     return fs.readdirSync(projectDir).some((f) => f.endsWith(".jsonl"));
   } catch {
@@ -44,13 +53,19 @@ function findJsonlByCwd(
   try {
     const files = fs.readdirSync(SESSIONS_DIR);
     let bestMatch: { sessionId: string; startedAt: number } | null = null;
+    const target = resolvePath(cwd);
 
     for (const file of files) {
       try {
         const data = JSON.parse(
           fs.readFileSync(path.join(SESSIONS_DIR, file), "utf8")
         );
-        if (data.cwd !== cwd) continue;
+        // Compare resolved paths: the session file records the path Claude
+        // resolved, which can differ from the one the instance was configured
+        // with. A literal compare silently finds nothing, and the instance then
+        // gets no completion or prompt detection at all.
+        if (typeof data.cwd !== "string") continue;
+        if (resolvePath(data.cwd) !== target) continue;
         if (isClaimed && isClaimed(data.sessionId)) continue;
         if (data.startedAt > (bestMatch?.startedAt || 0)) {
           bestMatch = { sessionId: data.sessionId, startedAt: data.startedAt };
@@ -62,10 +77,9 @@ function findJsonlByCwd(
 
     if (!bestMatch) return null;
 
-    const encodedCwd = cwd.replace(/\//g, "-");
     const jsonlPath = path.join(
       PROJECTS_DIR,
-      encodedCwd,
+      encodeProjectDir(cwd),
       `${bestMatch.sessionId}.jsonl`
     );
     if (fs.existsSync(jsonlPath)) return jsonlPath;
@@ -354,10 +368,139 @@ export const claudeBackend: Backend = {
     return new ClaudeCompletionDetector(jsonlPath, onActivity, isPtyIdle);
   },
 
+  // Claude's option boxes accept the option's number directly, for every kind of
+  // prompt it raises, so the tool name doesn't change the answer.
+  keystrokeForChoice(_tool, index, optionCount): string | null {
+    return keystrokeForOption(index, optionCount);
+  },
+
+  readTranscript(sessionId, limit): TranscriptEntry[] {
+    const jsonlPath = findJsonlBySessionId(sessionId);
+    if (!jsonlPath) return [];
+    return readClaudeTranscript(jsonlPath, limit);
+  },
+
   buildResumeCommand(sessionId: string): string {
     return `claude --resume ${sessionId}`;
   },
 };
+
+// Turn the tail of a session JSONL into reflowable lines for the phone.
+//
+// Only the entry kinds a human skims for are kept: what the agent said, what the
+// user asked, and which tools ran. Thinking blocks, tool results, and the CLI's
+// own bookkeeping rows (file-history-delta, attachment, mode, …) are dropped —
+// on a phone they'd bury the two lines that matter.
+export function readClaudeTranscript(
+  jsonlPath: string,
+  limit: number
+): TranscriptEntry[] {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(jsonlPath, "utf8");
+  } catch {
+    return [];
+  }
+
+  const lines = raw.split("\n");
+  const entries: TranscriptEntry[] = [];
+  // Tool uses still awaiting a result, so they can be marked pending — that's
+  // the tool the agent is currently on, which is what a phone is for.
+  const unpaired = new Set<string>();
+  // Entry index -> tool_use id, so the pending flags can be resolved after the
+  // whole file is read. Local to the call: two instances read concurrently.
+  const toolEntryIds = new Map<number, string>();
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    let msg: Record<string, unknown>;
+    try {
+      msg = JSON.parse(line);
+    } catch {
+      continue;
+    }
+
+    const message = msg.message as Record<string, unknown> | undefined;
+    const content = message?.content;
+
+    if (msg.type === "user") {
+      // A string body is something the user actually typed. Array bodies are
+      // tool results, which only matter here for pairing.
+      if (typeof content === "string") {
+        const text = content.trim();
+        if (text) entries.push({ kind: "user", text });
+      } else if (Array.isArray(content)) {
+        for (const item of content) {
+          const entry = item as Record<string, unknown>;
+          if (entry?.type === "tool_result" && typeof entry.tool_use_id === "string") {
+            unpaired.delete(entry.tool_use_id);
+          }
+        }
+      }
+      continue;
+    }
+
+    if (msg.type !== "assistant" || !Array.isArray(content)) continue;
+
+    for (const item of content) {
+      const entry = item as Record<string, unknown>;
+      if (entry?.type === "text" && typeof entry.text === "string") {
+        const text = entry.text.trim();
+        if (text) entries.push({ kind: "assistant", text });
+        continue;
+      }
+      if (entry?.type === "tool_use" && typeof entry.name === "string") {
+        if (typeof entry.id === "string") unpaired.add(entry.id);
+        const summary = summarizeTranscriptTool(entry.name, entry.input);
+        entries.push({
+          kind: "tool",
+          tool: entry.name,
+          text: summary ?? "",
+        });
+        if (typeof entry.id === "string") {
+          toolEntryIds.set(entries.length - 1, entry.id);
+        }
+      }
+    }
+  }
+
+  // Resolve pending only now: a tool_use paired further down the file must not
+  // stay flagged from when it was first seen.
+  for (const [index, id] of toolEntryIds) {
+    const entry = entries[index];
+    if (entry && unpaired.has(id)) entry.pending = true;
+  }
+
+  return entries.slice(-limit);
+}
+
+// One-line description of a tool call, matching what the desktop shows.
+function summarizeTranscriptTool(name: string, input: unknown): string | undefined {
+  if (typeof input !== "object" || input === null) return undefined;
+  const record = input as Record<string, unknown>;
+  const str = (value: unknown): string | undefined =>
+    typeof value === "string" && value.length > 0 ? value : undefined;
+
+  switch (name) {
+    case "Bash":
+      return str(record.command);
+    case "Read":
+    case "Write":
+    case "Edit":
+    case "NotebookEdit":
+      return str(record.file_path);
+    case "Grep":
+      return str(record.pattern);
+    case "Glob":
+      return str(record.pattern);
+    case "WebFetch":
+      return str(record.url);
+    case "Task":
+      return str(record.description);
+    default:
+      return str(record.description) ?? str(record.command);
+  }
+}
 
 function findJsonlBySessionId(sessionId: string): string | null {
   try {

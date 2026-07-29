@@ -27,12 +27,13 @@ import {
   type RemoteInstance,
   type RemoteStatus,
   type ServerFrame,
+  type TranscriptEntry,
 } from "../../shared/remote-protocol";
 import { SealedChannel, getHostIdentity, mintDeviceToken, tokensMatch } from "./crypto";
 import { loadDevices, saveDevices, type StoredDevice } from "./device-store";
 import { buildEndpointUrls, buildEndpoints } from "./endpoints";
 import { outputBuffer } from "./output-buffer";
-import { keystrokeForOption, type PromptDetail } from "./promptExtract";
+import { type PromptDetail } from "./promptExtract";
 
 // A phone that never completes its handshake + auth in this window gets dropped,
 // so a port scanner can't hold sockets open.
@@ -72,7 +73,28 @@ export interface RemoteHost {
   writeToInstance: (id: string, data: string) => void;
   // Send a whole prompt as one paste + Enter (same path as the compose box).
   sendPrompt: (id: string, text: string) => void;
+  // Translate an option index into keystrokes using the backend that owns this
+  // instance. Must not be done here: the CLIs disagree on which keys select an
+  // option, and guessing wrong can confirm the wrong choice.
+  keystrokeForChoice: (
+    id: string,
+    tool: string,
+    index: number,
+    optionCount: number
+  ) => string | null;
+  // Reflowable conversation tail, which is what the phone shows instead of the
+  // 120-column terminal.
+  readTranscript: (id: string, limit: number) => TranscriptEntry[];
 }
+
+// How many transcript entries to send. Enough to see how the agent got to where
+// it is, few enough to stay a glance rather than a scroll.
+const TRANSCRIPT_LIMIT = 40;
+
+// Trailing delay before refreshing a watched instance's transcript. Long enough
+// that a fast-scrolling agent costs one file read per second rather than
+// thousands, short enough that the summary tracks what's on screen.
+const TRANSCRIPT_REFRESH_MS = 1000;
 
 export class RemoteServer {
   private httpServer: http.Server | null = null;
@@ -86,6 +108,13 @@ export class RemoteServer {
   // Latest prompt per instance, so a phone that connects while the agent is
   // already blocked still gets the buttons.
   private activePrompts = new Map<string, PromptDetail>();
+  // Latest activity signal per instance. Kept server-side rather than only in
+  // the phone's memory so that reopening the app (or a reconnect after a screen
+  // lock) still shows which agents are waiting, instead of a clean list that
+  // hides a blocked agent.
+  private activity = new Map<string, "waiting" | "prompt">();
+  // Pending throttled transcript refreshes, one per instance.
+  private transcriptTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   setHost(host: RemoteHost) {
     this.host = host;
@@ -141,6 +170,9 @@ export class RemoteServer {
       conn.socket.close(1001, "server stopping");
     }
     this.connections.clear();
+
+    for (const timer of this.transcriptTimers.values()) clearTimeout(timer);
+    this.transcriptTimers.clear();
 
     const wss = this.wss;
     const server = this.httpServer;
@@ -236,11 +268,24 @@ export class RemoteServer {
 
   broadcastOutput(instanceId: string, data: string) {
     outputBuffer.append(instanceId, data);
+    let hasWatcher = false;
     for (const conn of this.connections) {
       if (!conn.authed) continue;
       if (!conn.subscriptions.has(instanceId)) continue;
+      hasWatcher = true;
       this.send(conn, { type: "output", instanceId, data });
     }
+    // Output means the agent is doing something, so the summary someone is
+    // reading has gone stale. Refreshed on a trailing timer rather than per
+    // chunk: PTY output arrives thousands of times a second, and each refresh
+    // re-reads a session file or queries sqlite.
+    if (hasWatcher) this.scheduleTranscriptRefresh(instanceId);
+  }
+
+  // Current attention state for an instance, used to fill in the instance list
+  // so a freshly-opened phone sees badges immediately.
+  activityFor(instanceId: string): "waiting" | "prompt" | null {
+    return this.activity.get(instanceId) ?? null;
   }
 
   broadcastActivity(
@@ -250,12 +295,19 @@ export class RemoteServer {
   ) {
     if (activity === "prompt-cleared") {
       this.activePrompts.delete(instanceId);
+      this.activity.delete(instanceId);
       this.broadcast({ type: "prompt-cleared", instanceId });
+      // The badge lives on the instance list, so that has to be resent too.
+      this.broadcastInstances();
       return;
     }
 
     if (activity !== "waiting" && activity !== "prompt") return;
+    this.activity.set(instanceId, activity);
     this.broadcast({ type: "activity", instanceId, activity });
+    // The agent just changed state, so whoever is watching wants the updated
+    // summary, not the one from when they subscribed.
+    this.broadcastTranscript(instanceId);
 
     if (activity === "prompt" && detail) {
       this.activePrompts.set(instanceId, detail);
@@ -267,10 +319,25 @@ export class RemoteServer {
         options: detail.options,
       });
     }
+    this.broadcastInstances();
+  }
+
+  // Called when the user acts at the desk, so a phone's badge doesn't stay lit
+  // for something already handled.
+  clearActivity(instanceId: string) {
+    if (!this.activity.has(instanceId) && !this.activePrompts.has(instanceId)) {
+      return;
+    }
+    this.activity.delete(instanceId);
+    this.activePrompts.delete(instanceId);
+    this.broadcast({ type: "prompt-cleared", instanceId });
+    this.broadcastInstances();
   }
 
   broadcastExit(instanceId: string, code: number) {
     this.activePrompts.delete(instanceId);
+    this.activity.delete(instanceId);
+    this.clearTranscriptTimer(instanceId);
     outputBuffer.clear(instanceId);
     this.broadcast({ type: "exit", instanceId, code });
     this.broadcastInstances();
@@ -490,8 +557,11 @@ export class RemoteServer {
 
       case "subscribe": {
         conn.subscriptions.add(frame.instanceId);
-        // Replay the tail first so the phone's terminal isn't blank, then any
-        // prompt that's already on screen.
+        // Send the readable transcript first: it's what the phone shows by
+        // default, so it should be populated before the terminal replay.
+        this.sendTranscript(conn, frame.instanceId);
+        // Replay the tail so the terminal fallback isn't blank when opened, then
+        // any prompt that's already on screen.
         this.send(conn, {
           type: "snapshot",
           instanceId: frame.instanceId,
@@ -525,7 +595,14 @@ export class RemoteServer {
       case "choose": {
         const detail = this.activePrompts.get(frame.instanceId);
         const options: PromptOption[] = detail?.options ?? [];
-        const keys = keystrokeForOption(frame.optionIndex, options.length);
+        const keys = detail
+          ? this.host?.keystrokeForChoice(
+              frame.instanceId,
+              detail.tool,
+              frame.optionIndex,
+              options.length
+            ) ?? null
+          : null;
         if (keys === null) {
           // Either the prompt already cleared or the index doesn't map to a
           // key we trust. Say so instead of firing a guess into the PTY.
@@ -541,6 +618,54 @@ export class RemoteServer {
 
       default:
         return;
+    }
+  }
+
+  private sendTranscript(conn: Connection, instanceId: string) {
+    if (!this.host) return;
+    let entries: TranscriptEntry[];
+    try {
+      entries = this.host.readTranscript(instanceId, TRANSCRIPT_LIMIT);
+    } catch {
+      // A session file that isn't readable yet shouldn't break subscribing; the
+      // terminal view still works.
+      return;
+    }
+    if (entries.length === 0) return;
+    this.send(conn, { type: "transcript", instanceId, entries });
+  }
+
+  // Push a refreshed transcript to everyone watching this instance. Called when
+  // the agent's state changes, so the phone's summary doesn't go stale while the
+  // terminal keeps streaming.
+  private broadcastTranscript(instanceId: string) {
+    this.clearTranscriptTimer(instanceId);
+    for (const conn of this.connections) {
+      if (!conn.authed) continue;
+      if (!conn.subscriptions.has(instanceId)) continue;
+      this.sendTranscript(conn, instanceId);
+    }
+  }
+
+  // Coalesce a burst of PTY output into one refresh. A single timer per instance,
+  // not reset on every chunk, so a continuously-streaming agent still refreshes
+  // at a steady cadence instead of never (which is what resetting would cause).
+  private scheduleTranscriptRefresh(instanceId: string) {
+    if (this.transcriptTimers.has(instanceId)) return;
+    const timer = setTimeout(() => {
+      this.transcriptTimers.delete(instanceId);
+      this.broadcastTranscript(instanceId);
+    }, TRANSCRIPT_REFRESH_MS);
+    // Don't let a pending refresh hold the process open at quit time.
+    timer.unref?.();
+    this.transcriptTimers.set(instanceId, timer);
+  }
+
+  private clearTranscriptTimer(instanceId: string) {
+    const timer = this.transcriptTimers.get(instanceId);
+    if (timer) {
+      clearTimeout(timer);
+      this.transcriptTimers.delete(instanceId);
     }
   }
 

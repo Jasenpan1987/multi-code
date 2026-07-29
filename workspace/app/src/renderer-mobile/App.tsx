@@ -21,6 +21,7 @@ import type {
   RemoteInstance,
   ServerFrame,
   StoredPairing,
+  TranscriptEntry,
 } from "./types";
 
 interface ActivePrompt {
@@ -61,6 +62,9 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [prompts, setPrompts] = useState<Map<string, ActivePrompt>>(new Map());
   const [attention, setAttention] = useState<Set<string>>(new Set());
+  const [transcripts, setTranscripts] = useState<Map<string, TranscriptEntry[]>>(
+    new Map()
+  );
   const [errorToast, setErrorToast] = useState<string | null>(null);
 
   const transportRef = useRef<RemoteTransport | null>(null);
@@ -100,6 +104,14 @@ export function App() {
         if (typeof navigator.vibrate === "function") {
           navigator.vibrate(frame.activity === "prompt" ? [80, 60, 80] : 60);
         }
+        return;
+
+      case "transcript":
+        setTranscripts((prev) => {
+          const next = new Map(prev);
+          next.set(frame.instanceId, frame.entries);
+          return next;
+        });
         return;
 
       case "prompt-state":
@@ -266,6 +278,7 @@ export function App() {
         <InstanceDetail
           instance={selected}
           prompt={activePrompt}
+          transcript={transcripts.get(selected.id) ?? []}
           onChoose={handleChoose}
           onSend={handleSendPrompt}
           registerWrite={(fn) => {
@@ -379,9 +392,22 @@ function InstanceList({
             <span className="m-row-text">
               <span className="m-row-name">
                 {instance.name}
-                {attention.has(instance.id) ? (
-                  <span className="m-badge" aria-label="Needs attention">
-                    !
+                {/* `activity` comes from the desktop, so a badge survives
+                    reopening the app; `attention` covers events that arrived
+                    while this screen was already open. Without the former, a
+                    relaunched phone showed a clean list even with an agent
+                    blocked. */}
+                {instance.activity || attention.has(instance.id) ? (
+                  <span
+                    className="m-badge"
+                    data-kind={instance.activity ?? "waiting"}
+                    aria-label={
+                      instance.activity === "prompt"
+                        ? "Waiting for your answer"
+                        : "Needs attention"
+                    }
+                  >
+                    {instance.activity === "prompt" ? "?" : "!"}
                   </span>
                 ) : null}
               </span>
@@ -395,15 +421,94 @@ function InstanceList({
   );
 }
 
+// Human labels for the tools each backend reports, so the transcript reads as
+// prose instead of as API names. Unlisted tools fall back to their own name.
+const TOOL_VERBS: Record<string, string> = {
+  Bash: "Ran",
+  bash: "Ran",
+  Read: "Read",
+  read: "Read",
+  Write: "Wrote",
+  write: "Wrote",
+  Edit: "Edited",
+  edit: "Edited",
+  apply_patch: "Edited",
+  Grep: "Searched",
+  grep: "Searched",
+  Glob: "Globbed",
+  glob: "Globbed",
+  WebFetch: "Fetched",
+  webfetch: "Fetched",
+  Task: "Delegated",
+  task: "Delegated",
+  TodoWrite: "Updated todos",
+  todowrite: "Updated todos",
+};
+
+function toolVerb(tool: string): string {
+  return TOOL_VERBS[tool] ?? tool;
+}
+
+// The readable view of what the agent is doing, rendered from the CLI's own
+// structured record rather than from terminal paint — so it wraps to the screen.
+function Transcript({ entries }: { entries: TranscriptEntry[] }) {
+  const endRef = useRef<HTMLDivElement>(null);
+
+  // Keep the newest entry in view; that's the one worth reading.
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: "end" });
+  }, [entries]);
+
+  if (entries.length === 0) {
+    return (
+      <div className="m-transcript m-transcript-empty">
+        <p className="m-muted">
+          Nothing to show yet. Once the agent starts working, its progress
+          appears here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="m-transcript">
+      {entries.map((entry, index) => {
+        if (entry.kind === "tool") {
+          return (
+            <div
+              key={index}
+              className="m-entry m-entry-tool"
+              data-pending={entry.pending ? "true" : undefined}
+            >
+              <span className="m-entry-verb">{toolVerb(entry.tool ?? "")}</span>
+              {entry.text ? (
+                <span className="m-entry-target">{entry.text}</span>
+              ) : null}
+            </div>
+          );
+        }
+        return (
+          <div key={index} className={`m-entry m-entry-${entry.kind}`}>
+            {entry.text}
+          </div>
+        );
+      })}
+      <div ref={endRef} />
+    </div>
+  );
+}
+
 function InstanceDetail({
   instance,
   prompt,
+  transcript,
   onChoose,
   onSend,
   registerWrite,
 }: {
   instance: RemoteInstance;
   prompt?: ActivePrompt;
+  transcript: TranscriptEntry[];
   onChoose: (index: number) => void;
   onSend: (text: string) => void;
   registerWrite: (fn: (data: string, reset?: boolean) => void) => void;
@@ -423,6 +528,11 @@ function InstanceDetail({
     setDraft("");
   };
 
+  // Multi-select boxes can't be answered by tapping one option: the CLI wants
+  // each choice toggled and then a separate confirm step. Show them read-only
+  // with a note, rather than buttons that would half-answer and strand the agent.
+  const readOnlyOptions = prompt?.tool === "Question (multi-select)";
+
   return (
     <div className="m-detail">
       {prompt ? (
@@ -431,12 +541,19 @@ function InstanceDetail({
           {prompt.question ? (
             <div className="m-prompt-question">{prompt.question}</div>
           ) : null}
-          <div className="m-prompt-options">
+          {readOnlyOptions ? (
+            <div className="m-prompt-note">
+              This one takes several answers, so it can’t be tapped from here.
+              Type your reply below, or use the terminal.
+            </div>
+          ) : null}
+          <div className="m-prompt-options" data-readonly={readOnlyOptions || undefined}>
             {prompt.options.map((option, index) => (
               <button
                 key={`${option.label}-${index}`}
                 className="m-option"
                 onClick={() => onChoose(index)}
+                disabled={readOnlyOptions}
               >
                 <span className="m-option-index">{index + 1}</span>
                 <span className="m-option-text">
@@ -450,6 +567,11 @@ function InstanceDetail({
           </div>
         </section>
       ) : null}
+
+      {/* Shown even while a prompt is up: deciding whether to allow something
+          depends on what led to it. The terminal below stays collapsed because a
+          120-column TUI can't reflow onto a phone. */}
+      <Transcript entries={transcript} />
 
       <section className="m-compose">
         <textarea

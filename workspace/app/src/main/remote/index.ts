@@ -29,9 +29,16 @@ export function initRemote() {
         cwd: i.cwd,
         backend: i.backend,
         status: i.status,
+        // Populated so the phone's list can show which agents need attention
+        // without opening each one. Previously always undefined, which meant a
+        // phone that had just been reopened showed no badges at all.
+        activity: remoteServer.activityFor(i.id),
       })),
     writeToInstance: (id, data) => processManager.writeToInstance(id, data),
     sendPrompt: (id, text) => processManager.sendPrompt(id, text),
+    keystrokeForChoice: (id, tool, index, optionCount) =>
+      processManager.keystrokeForChoice(id, tool, index, optionCount),
+    readTranscript: (id, limit) => processManager.readTranscript(id, limit),
   });
 
   remoteServer.setStatusListener(emitStatus);

@@ -211,6 +211,31 @@ export interface ExitFrame {
   code: number;
 }
 
+// One line of the readable transcript. This is what the phone shows INSTEAD of
+// the terminal by default.
+//
+// The terminal mirror is unreadable on a phone for reasons that can't be styled
+// away: the PTY is 120 columns wide, and the CLIs paint absolutely-positioned
+// cells, so there is no reflow to a narrow screen. Rather than shrink an
+// unreadable thing, the phone renders the same information from the CLI's own
+// structured record (Claude's session JSONL, OpenCode's sqlite), which reflows
+// like normal text. The terminal stays available as the fallback.
+export interface TranscriptEntry {
+  kind: "assistant" | "user" | "tool";
+  // For "tool": the tool's name. Omitted otherwise.
+  tool?: string;
+  // Assistant/user prose, or a one-line summary of what the tool is doing.
+  text: string;
+  // Set on the tool entry the agent is currently blocked on or running.
+  pending?: boolean;
+}
+
+export interface TranscriptFrame {
+  type: "transcript";
+  instanceId: string;
+  entries: TranscriptEntry[];
+}
+
 // A structured view of an interactive prompt parsed out of the session JSONL.
 // `options` is empty for a plain question (free-text answer) and non-empty for
 // a choice, in which case the phone renders one button per entry and replies
@@ -256,6 +281,7 @@ export type ServerFrame =
   | ExitFrame
   | PromptStateFrame
   | PromptClearedFrame
+  | TranscriptFrame
   | PongFrame
   | ErrorFrame;
 

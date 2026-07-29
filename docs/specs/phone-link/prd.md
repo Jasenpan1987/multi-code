@@ -1,8 +1,8 @@
 # PRD: Phone Link
 
-**Version:** 1.0
-**Last Updated:** 2026-07-26
-**Status:** implemented (v1)
+**Version:** 1.1
+**Last Updated:** 2026-07-29
+**Status:** implemented (v1.1)
 **Owner:** Jasen
 
 ## Overview
@@ -10,8 +10,15 @@
 Let the builder watch and steer running agents from a phone, so that being away
 from the desk stops being a reason for an agent to sit idle. The desktop app
 becomes the server: it listens on port 6768, serves a mobile web client, and
-carries an end-to-end encrypted stream of terminal output and structured prompts
+carries an end-to-end encrypted stream of the conversation and structured prompts
 to any paired phone.
+
+**v1.1** addresses the gap that made v1 unusable in practice: an OpenCode agent
+blocked on a permission dialog reached the phone as a blank terminal, with no
+buttons and no badge, so it looked like the agent was still working. Three causes,
+all fixed — OpenCode never reported prompts at all, the option keystrokes were
+Claude's and did nothing on OpenCode, and the terminal mirror was unreadable on a
+phone regardless of what it contained.
 
 No intermediary server is involved in any configuration. Off-LAN reach comes
 from Tailscale, which gives both machines a routable address without any
@@ -97,6 +104,17 @@ relay is an extra candidate rather than a redesign.
 - [x] Tapping option N writes the corresponding keystroke to the PTY
 - [x] A stale or out-of-range choice is refused with a message, never guessed at
 - [x] Prompts clear on the phone when answered from either side
+- [x] Keystrokes are resolved by the backend that owns the instance, because the
+      CLIs disagree: Claude's boxes take the option's number, OpenCode's ignore
+      digits and navigate with arrows (v1.1)
+- [x] OpenCode permission dialogs ("Allow once / Allow always / Reject") reach the
+      phone as buttons (v1.1)
+- [x] OpenCode `question` boxes reach the phone with their real options, read from
+      its sqlite db (v1.1)
+- [x] Multi-select questions are shown but not tappable, because one tap can't
+      express the CLI's toggle-then-confirm flow (v1.1)
+- [x] Session discovery compares resolved paths, so an instance under a symlinked
+      cwd isn't left without any detection at all (v1.1)
 
 ### Story 4: Remote answering
 
@@ -109,7 +127,33 @@ relay is an extra candidate rather than a redesign.
       mechanism the desktop compose box uses (multi-line text doesn't submit early)
 - [x] A raw terminal view is always available as a fallback
 
-### Story 5: Pairing and revocation
+### Story 5: Knowing what the agent is doing (v1.1)
+
+**As a** builder glancing at my phone
+**I want to** read what the agent is doing in plain text
+**So that** "away from the desk" doesn't mean "blind"
+
+The v1 detail screen led with the terminal mirror, which turned out to be
+unreadable on a phone for reasons that can't be styled away: the PTY is a fixed
+120 columns and the CLIs paint absolutely-positioned cells, so there is nothing
+to reflow onto a 390px screen. It read as a black rectangle.
+
+**Acceptance Criteria:**
+- [x] The detail screen leads with a reflowable transcript, read from the CLI's own
+      structured record (Claude's session JSONL, OpenCode's sqlite) rather than
+      from terminal paint
+- [x] Assistant and user prose wraps; tool calls are one scannable line each
+- [x] The tool the agent is currently on is visually distinct
+- [x] The transcript stays visible while a prompt is up, because deciding whether
+      to allow something depends on what led to it
+- [x] The transcript refreshes while the agent is working, throttled to one read
+      per second and only for instances someone is actually watching
+- [x] The terminal remains available, collapsed, as the fallback
+- [x] The terminal's 256-color palette is set explicitly: OpenCode paints dialogs
+      with near-black backgrounds (232-238) and dim `fg 8`, which against xterm's
+      default palette rendered as invisible text on a phone
+
+### Story 6: Pairing and revocation
 
 **As a** builder
 **I want** pairing to be a QR scan, and un-pairing to be immediate
@@ -127,20 +171,28 @@ relay is an extra candidate rather than a redesign.
 
 ```
 Desktop (Electron main)                         Phone (browser / PWA)
-┌───────────────────────────────┐               ┌──────────────────────┐
-│ process-manager               │               │ transport.ts         │
-│   pty.onData ──┐              │               │   races endpoints    │
+┌────────────────────────────────┐              ┌──────────────────────┐
+│ process-manager                │              │ transport.ts         │
+│   pty.onData ──┬───────────────┼──────────────┤   races endpoints    │
 │                ├─► outputBuffer (256 KB tail) │   pins host key      │
-│                └─► remoteServer.broadcast     │   reconnect backoff  │
-│                                               │                      │
-│ backends/claude.ts                            │ App.tsx              │
-│   JSONL watcher                               │   prompt buttons     │
-│   └─► extractPromptDetail() ──► prompt-state  │   answer box         │
-│                                               │   TerminalPane       │
-│ remote/ws-server.ts                           │     (xterm.js)       │
+│                ├─► detector.onPtyData()       │   reconnect backoff  │
+│                └─► remoteServer.broadcast     │                      │
+│                                               │ App.tsx              │
+│ backends/claude.ts        (JSONL)             │   prompt buttons     │
+│   unpaired tool_use + PTY idle ──┐            │   Transcript  ◄──────┼── default
+│   readTranscript() ──────────────┤            │   answer box         │
+│                                  │            │   TerminalPane       │
+│ backends/opencode.ts      (sqlite + screen)   │     (xterm.js) ◄─────┼── fallback
+│   running tool part ─────────────┤            │                      │
+│   permission dialog text ────────┤            │                      │
+│   readTranscript() ──────────────┤            │                      │
+│                                  ▼            │                      │
+│                        prompt-state           │                      │
+│                        transcript             │                      │
+│ remote/ws-server.ts                           │                      │
 │   http :6768 ─── serves mobile bundle ────────┼──► index.html        │
 │   WebSocket ──── NaCl box sealed frames ──────┼──► sealed frames     │
-└───────────────────────────────┘               └──────────────────────┘
+└────────────────────────────────┘              └──────────────────────┘
 ```
 
 **Protocol** (`src/shared/remote-protocol.ts`, version 2). Plaintext hello
@@ -148,7 +200,15 @@ exchange establishes the shared key, then every frame is a sealed envelope
 (base64 nonce + ciphertext) wrapping JSON. Client frames: `auth`,
 `list-instances`, `subscribe`, `unsubscribe`, `input`, `prompt`, `choose`,
 `ping`. Server frames: `auth-ok`, `auth-failed`, `instances`, `snapshot`,
-`output`, `activity`, `exit`, `prompt-state`, `prompt-cleared`, `pong`, `error`.
+`output`, `activity`, `exit`, `prompt-state`, `prompt-cleared`, `transcript`,
+`pong`, `error`.
+
+**Why prompt detection differs per backend.** Claude writes a session JSONL, so a
+blocking prompt is structured data: an unpaired `tool_use` plus a quiet PTY.
+Neither half of that transfers to OpenCode. It keeps a spinner running the whole
+time it blocks (measured: longest gap between writes over a 31s dialog was
+295ms), so "PTY idle" never happens; and its permission requests are never
+persisted. Hence two detectors rather than one shared abstraction.
 
 **Why JSON rather than Orca's binary terminal frames.** Orca multiplexes many
 terminal panes over one socket, so it needs `streamId` framing. A phone shows one
@@ -174,22 +234,44 @@ Specifically:
 ## Known Limitations
 
 1. **Answering depends on CLI key handling.** Reading prompts is stable (parsed
-   from the session JSONL, which the CLI writes for itself). *Answering* assumes
-   option boxes accept number keys — a UI convention, not an API. A CLI release
-   could break the buttons while viewing keeps working; the raw terminal view is
-   the deliberate fallback. See `promptExtract.ts`. Related risk already recorded
+   from each CLI's own structured record). *Answering* depends on how its option
+   boxes handle keys, which is a UI convention, not an API. The bindings were
+   verified by driving real processes, and they differ per CLI: Claude takes the
+   option's number; OpenCode ignores digits and uses arrows, with permission rows
+   navigating left/right and question lists up/down. A CLI release could break the
+   buttons while viewing keeps working; the terminal view is the deliberate
+   fallback. See `promptExtract.ts` and `opencodePrompt.ts`. Related risk recorded
    in memory (`project_prompt_detection`).
-2. **Snapshot is a byte tail, not an emulated screen.** Replaying the tail into a
+2. **OpenCode permission dialogs are scraped from the terminal.** Unlike its
+   `question` tool, a pending permission request is not persisted anywhere — the
+   `permission` table holds only granted rules, and the live request exists only in
+   the process's memory. So the heading and option row are matched as text. The
+   fragility is contained: if the wording changes, permission detection goes quiet
+   (no false prompts) while `question` detection is unaffected. The alternative,
+   driving OpenCode's HTTP/SSE server, would mean changing how the process is
+   launched.
+3. **The permission latch relies on the db to clear.** OpenCode paints the option
+   row exactly once and never repaints it, and teardown emits no clear sequence, so
+   the terminal alone can neither refresh nor retract the signal. The latch is
+   therefore set from the terminal and cleared when the blocked tool leaves
+   `running` in the db.
+4. **Multi-select questions can't be answered from the phone.** A `question` with
+   `multiple: true` is a two-stage interaction: options are checkboxes that Enter
+   toggles, and submitting means Tab to a separate Confirm step. Tapping one option
+   can't express that, and sending the single-select keystrokes would tick a box
+   and leave the agent blocked while the phone showed the prompt as answered. These
+   are shown read-only with a note; the free-text box and terminal both still work.
+   Implementing them properly means a multi-tap UI plus a confirm action.
+5. **Snapshot is a byte tail, not an emulated screen.** Replaying the tail into a
    fresh xterm reconstructs the visible state because the TUI repaints often. The
    first bytes may be a truncated escape sequence; xterm resyncs on the next one.
-3. **Off-LAN requires Tailscale on both devices.** Without it, pairing is
+6. **Off-LAN requires Tailscale on both devices.** Without it, pairing is
    LAN-only. The UI says so rather than failing silently at the worst moment.
-4. **OpenCode prompts have no structured options.** Its detector reports
-   activity, not prompt payloads, so OpenCode instances fall back to the terminal
-   view and the free-text box.
-5. **No push notifications.** A PWA can vibrate while open; it can't wake a
-   locked phone. That needs a native shell (and, for iOS, a push server — which
-   would reintroduce a server).
+7. **No push notifications.** A PWA can vibrate while open; it can't wake a
+   locked phone. This is the largest remaining gap: an agent that blocks while the
+   phone is locked still goes unnoticed until the app is opened. On iOS, Web Push
+   needs a secure context, so it would mean serving https (`tailscale cert` can
+   issue a real cert for a `*.ts.net` name, so this is possible without a server).
 
 ## Out of Scope (v1)
 
@@ -210,7 +292,11 @@ Specifically:
 | Device store | `src/main/remote/device-store.ts` |
 | Endpoint discovery | `src/main/remote/endpoints.ts` |
 | Snapshot buffer | `src/main/remote/output-buffer.ts` |
-| Prompt decoding | `src/main/remote/promptExtract.ts` |
+| Prompt decoding (Claude) | `src/main/remote/promptExtract.ts` |
+| Prompt decoding (OpenCode) | `src/main/backends/opencodePrompt.ts` |
+| Transcript readers | `src/main/backends/claude.ts`, `src/main/backends/opencode.ts` |
+| Symlink-safe cwd matching | `src/main/backends/resolvePath.ts` |
+| Captured dialog fixture | `src/main/backends/__fixtures__/opencode-permission.txt` |
 | Desktop UI | `src/renderer/components/PhoneSection.tsx` |
 | Mobile client | `src/renderer-mobile/` |
 | Mobile bundle config | `rspack.mobile.config.ts` |

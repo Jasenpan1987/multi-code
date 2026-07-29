@@ -20,6 +20,8 @@ vi.mock("electron", () => ({
 
 const { RemoteServer } = await import("./ws-server");
 const { REMOTE_PROTOCOL_VERSION } = await import("../../shared/remote-protocol");
+type TranscriptEntry =
+  import("../../shared/remote-protocol").TranscriptEntry;
 
 type AnyRecord = Record<string, unknown>;
 
@@ -172,6 +174,9 @@ interface Fixture {
   hostPublicKey: string;
   writes: Array<{ id: string; data: string }>;
   prompts: Array<{ id: string; text: string }>;
+  // How many times the host's transcript source has been read. A getter, so it
+  // reflects the live count rather than its value at fixture creation.
+  readonly transcriptReads: number;
 }
 
 const fixtures: Fixture[] = [];
@@ -180,8 +185,17 @@ async function startServer(): Promise<Fixture> {
   const server = new RemoteServer();
   const writes: Array<{ id: string; data: string }> = [];
   const prompts: Array<{ id: string; text: string }> = [];
+  const transcript: TranscriptEntry[] = [
+    { kind: "user", text: "run the tests" },
+    { kind: "tool", tool: "Bash", text: "pnpm test", pending: true },
+  ];
+  // Counts reads so the throttling tests can assert how often the (real-world:
+  // file/sqlite-backed) transcript source is hit.
+  const reads = { count: 0 };
 
   server.setHost({
+    // Mirrors the real wiring in remote/index.ts, which fills `activity` from
+    // the server. A stub that hardcoded it would hide the bug this guards.
     listInstances: () => [
       {
         id: "inst-1",
@@ -189,10 +203,22 @@ async function startServer(): Promise<Fixture> {
         cwd: "/tmp/demo",
         backend: "claude",
         status: "running",
+        activity: server.activityFor("inst-1"),
       },
     ],
     writeToInstance: (id, data) => writes.push({ id, data }),
     sendPrompt: (id, text) => prompts.push({ id, text }),
+    // Mirrors the claude backend (digit keys), which is what the fixture's
+    // instance declares. Per-backend routing itself is tested in the backend
+    // suites; here it only needs to resolve to something.
+    keystrokeForChoice: (_id, _tool, index, optionCount) =>
+      index >= 0 && index < optionCount && optionCount <= 9
+        ? String(index + 1)
+        : null,
+    readTranscript: () => {
+      reads.count++;
+      return transcript;
+    },
   });
 
   // Port 0 = OS-assigned, so parallel test files never collide.
@@ -209,6 +235,9 @@ async function startServer(): Promise<Fixture> {
     hostPublicKey: offer.hostPublicKey,
     writes,
     prompts,
+    get transcriptReads() {
+      return reads.count;
+    },
   };
   fixtures.push(fixture);
   return fixture;
@@ -400,6 +429,131 @@ describe("RemoteServer streaming", () => {
     client.send({ type: "subscribe", instanceId: "inst-1" });
     const prompt = await client.waitFor("prompt-state");
     expect(prompt.question).toBe("Which database?");
+
+    client.close();
+  });
+
+  it("sends the readable transcript on subscribe", async () => {
+    // The transcript is what the phone shows instead of the 120-column terminal,
+    // so it has to arrive without the phone asking for it.
+    const fx = await startServer();
+    const client = await connected(fx);
+
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    const frame = await client.waitFor("transcript");
+
+    expect(frame.instanceId).toBe("inst-1");
+    expect(frame.entries).toEqual([
+      { kind: "user", text: "run the tests" },
+      { kind: "tool", tool: "Bash", text: "pnpm test", pending: true },
+    ]);
+
+    client.close();
+  });
+
+  it("refreshes the transcript when the agent's state changes", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    await client.waitFor("transcript");
+
+    // A prompt means the summary the phone is showing is now out of date.
+    fx.server.broadcastActivity("inst-1", "prompt", {
+      tool: "Permission",
+      question: "Permission required: Access external directory /etc",
+      options: [{ label: "Allow once" }, { label: "Reject" }],
+    });
+
+    const refreshed = await client.waitFor("transcript");
+    expect(refreshed.entries).toHaveLength(2);
+
+    client.close();
+  });
+
+  it("reports blocked instances in the list so a reopened phone sees them", async () => {
+    // Regression guard: `activity` used to be left undefined, so a phone that
+    // had been closed and reopened showed a clean list with an agent blocked.
+    const fx = await startServer();
+    const client = await connected(fx);
+
+    fx.server.broadcastActivity("inst-1", "prompt", {
+      tool: "Permission",
+      question: "Allow?",
+      options: [{ label: "Allow once" }],
+    });
+
+    await vi.waitFor(async () => {
+      const frame = await client.waitFor("instances");
+      const instances = frame.instances as Array<Record<string, unknown>>;
+      expect(instances[0].activity).toBe("prompt");
+    });
+
+    client.close();
+  });
+
+  it("refreshes the transcript while the agent streams output", async () => {
+    // Without this the summary was only sent on subscribe, so it sat frozen for
+    // the whole time an agent was working — the exact window a phone is for.
+    const fx = await startServer();
+    const client = await connected(fx);
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    await client.waitFor("transcript");
+
+    fx.server.broadcastOutput("inst-1", "working...\r\n");
+
+    // Arrives on a trailing timer, not per chunk.
+    const refreshed = await client.waitFor("transcript");
+    expect(refreshed.entries).toHaveLength(2);
+
+    client.close();
+  });
+
+  it("coalesces a burst of output into a single transcript refresh", async () => {
+    // PTY output can arrive thousands of times a second and each refresh re-reads
+    // a session file, so a burst must not mean a read per chunk.
+    const fx = await startServer();
+    const client = await connected(fx);
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    await client.waitFor("transcript");
+
+    const before = fx.transcriptReads;
+    for (let i = 0; i < 200; i++) {
+      fx.server.broadcastOutput("inst-1", `line ${i}\r\n`);
+    }
+    await client.waitFor("transcript");
+    // One refresh for the whole burst, not 200.
+    expect(fx.transcriptReads - before).toBe(1);
+
+    client.close();
+  });
+
+  it("doesn't read the transcript for an instance nobody is watching", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    // Connected but not subscribed.
+    const before = fx.transcriptReads;
+
+    fx.server.broadcastOutput("inst-1", "background work\r\n");
+    await new Promise((resolve) => setTimeout(resolve, 1300));
+
+    expect(fx.transcriptReads).toBe(before);
+
+    client.close();
+  });
+
+  it("clears the reported activity once the prompt is answered", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+
+    fx.server.broadcastActivity("inst-1", "prompt", {
+      tool: "Permission",
+      question: "Allow?",
+      options: [{ label: "Allow once" }],
+    });
+    expect(fx.server.activityFor("inst-1")).toBe("prompt");
+
+    fx.server.broadcastActivity("inst-1", "prompt-cleared");
+    expect(fx.server.activityFor("inst-1")).toBeNull();
 
     client.close();
   });

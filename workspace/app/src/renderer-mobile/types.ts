@@ -7,6 +7,7 @@ export {
   type PromptOption,
   type RemoteInstance,
   type ServerFrame,
+  type TranscriptEntry,
 } from "../shared/remote-protocol";
 
 export interface StoredPairing {

@@ -289,6 +289,12 @@ body {
   font-weight: 700;
 }
 
+/* Blocked on a question reads differently from "your turn": one needs an answer
+   before the agent moves at all. */
+.m-badge[data-kind="prompt"] {
+  background: var(--m-warn);
+}
+
 /* Instance detail -------------------------------------------------------- */
 
 .m-detail {
@@ -310,6 +316,80 @@ body {
   padding: 12px;
 }
 
+/* Transcript ------------------------------------------------------------- */
+
+/* The readable view of the agent's progress. This is prose, not a terminal, so
+   it wraps to the screen — which is the whole reason it exists. */
+.m-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* Tall enough to be worth reading, bounded so the compose box and the prompt
+     buttons stay reachable without scrolling past them. */
+  max-height: 52vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.m-transcript-empty {
+  max-height: none;
+}
+
+.m-entry {
+  font-size: 14px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.m-entry-assistant {
+  color: var(--m-text);
+  /* Preserve the agent's own paragraph breaks; its text is written to be read. */
+  white-space: pre-wrap;
+}
+
+.m-entry-user {
+  color: var(--m-text);
+  white-space: pre-wrap;
+  padding: 8px 10px;
+  background: var(--m-surface);
+  border-left: 3px solid var(--m-accent);
+  border-radius: 0 8px 8px 0;
+}
+
+/* Tool calls are scanned, not read, so they stay on one line and get out of the
+   way of the prose around them. */
+.m-entry-tool {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 13px;
+  color: var(--m-muted);
+}
+
+.m-entry-verb {
+  flex: none;
+  font-weight: 600;
+  color: var(--m-muted);
+}
+
+.m-entry-target {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+/* The tool the agent is on right now — the one thing worth spotting instantly. */
+.m-entry-tool[data-pending="true"] {
+  color: var(--m-warn);
+}
+
+.m-entry-tool[data-pending="true"] .m-entry-verb {
+  color: var(--m-warn);
+}
+
 .m-prompt-tool {
   font-size: 11px;
   text-transform: uppercase;
@@ -327,11 +407,24 @@ body {
   word-break: break-word;
 }
 
+.m-prompt-note {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--m-warn);
+}
+
 .m-prompt-options {
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin-top: 12px;
+}
+
+/* Multi-select: the options are shown so you know what was asked, but they
+   aren't tappable, because one tap can't express toggle-then-confirm. */
+.m-prompt-options[data-readonly] .m-option {
+  opacity: 0.6;
 }
 
 .m-option {

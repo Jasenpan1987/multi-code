@@ -13,6 +13,7 @@ import type {
   SessionDiscovery,
 } from "./backends";
 import { remoteServer } from "./remote/ws-server";
+import type { TranscriptEntry } from "../shared/remote-protocol";
 
 export interface InstanceInfo {
   id: string;
@@ -194,6 +195,10 @@ export class ProcessManager {
 
     ptyProcess.onData((data: string) => {
       instance.lastPtyByteAt = Date.now();
+      // Backends whose blocking state is only visible on screen (OpenCode's
+      // permission dialog) read it from here. Claude's detector doesn't
+      // implement this, so the call is optional.
+      instance.detector?.onPtyData?.(data);
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send("pty-output", id, data);
       }
@@ -230,6 +235,10 @@ export class ProcessManager {
     const instance = this.instances.get(id);
     if (instance?.ptyProcess) {
       instance.ptyProcess.write(data);
+      // Typing at the desk answers whatever was pending, so drop the phone's
+      // badge and stale option buttons now rather than waiting for the detector
+      // to notice. Harmless when nothing was pending.
+      remoteServer.clearActivity(id);
     }
   }
 
@@ -242,6 +251,39 @@ export class ProcessManager {
     if (!instance?.ptyProcess) return;
     instance.ptyProcess.write(`\x1b[200~${text}\x1b[201~`);
     instance.ptyProcess.write("\r");
+  }
+
+  // Ask the backend that owns this instance how to select option `index`.
+  // Routed through the backend because the CLIs use different keys and a wrong
+  // guess can confirm the wrong choice — see Backend.keystrokeForChoice.
+  keystrokeForChoice(
+    id: string,
+    tool: string,
+    index: number,
+    optionCount: number
+  ): string | null {
+    const instance = this.instances.get(id);
+    if (!instance) return null;
+    return getBackend(instance.backend).keystrokeForChoice(
+      tool,
+      index,
+      optionCount
+    );
+  }
+
+  // Reflowable conversation tail for the phone. Empty until the session has been
+  // discovered, or when the backend can't read it.
+  readTranscript(id: string, limit: number): TranscriptEntry[] {
+    const instance = this.instances.get(id);
+    if (!instance?.sessionId) return [];
+    try {
+      return getBackend(instance.backend).readTranscript(
+        instance.sessionId,
+        limit
+      );
+    } catch {
+      return [];
+    }
   }
 
   resizeInstance(id: string, cols: number, rows: number) {

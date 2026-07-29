@@ -1,4 +1,5 @@
 import type { PromptDetail } from "../remote/promptExtract";
+import type { TranscriptEntry } from "../../shared/remote-protocol";
 
 export type BackendName = "claude" | "opencode";
 
@@ -18,6 +19,18 @@ export type ActivityCallback = (type: string, detail?: PromptDetail) => void;
 
 export interface CompletionDetector {
   stop(): void;
+
+  /**
+   * Feed a chunk of PTY output to the detector, for backends whose blocking
+   * state is only visible on the painted terminal.
+   *
+   * Claude doesn't need this — its prompts are in the session JSONL. OpenCode
+   * does: its permission requests ("Allow once / Allow always / Reject") are
+   * never persisted, so reading the terminal is the only way to see one without
+   * changing how the process is launched. Optional so backends that have a
+   * structured source don't implement a no-op.
+   */
+  onPtyData?(chunk: string): void;
 }
 
 export interface SessionDiscovery {
@@ -65,12 +78,53 @@ export interface Backend {
    * for at least `ms` milliseconds. Used to disambiguate "Claude
    * waiting on the user" (screen static) from "Claude running a
    * subagent / long tool" (spinner is repainting).
+   *
+   * Note that PTY idleness is a Claude-specific signal, not a universal
+   * one. OpenCode keeps a spinner running the entire time a permission
+   * dialog is up — measured across a 31s dialog, the longest gap between
+   * writes was 295ms — so an idle threshold can never fire there. Backends
+   * are free to ignore this argument and detect blocking another way.
    */
   createCompletionDetector(
     sessionId: string,
     onActivity: ActivityCallback,
     isPtyIdle: (ms: number) => boolean
   ): CompletionDetector;
+
+  /**
+   * Translate "the user tapped option N on their phone" into the keystrokes
+   * this CLI's option box expects, or null when the choice can't be made
+   * safely (out of range, or a box this backend can't drive reliably).
+   *
+   * This MUST be per-backend: the CLIs do not agree. Claude's boxes take the
+   * option's number directly, while OpenCode's ignore digits entirely and
+   * navigate with arrows — and its two dialog kinds even use different arrows
+   * (permission is a horizontal row, question is a vertical list). Sending the
+   * wrong family of keys doesn't error, it silently does nothing or picks the
+   * wrong option, which for a permission dialog means granting the wrong thing.
+   *
+   * `tool` is the PromptDetail.tool the backend itself reported, so each
+   * backend can dispatch on values it defined.
+   */
+  keystrokeForChoice(
+    tool: string,
+    index: number,
+    optionCount: number
+  ): string | null;
+
+  /**
+   * Read the tail of the session as reflowable text, newest last.
+   *
+   * This exists because the terminal mirror can't be made readable on a phone:
+   * the PTY is a fixed 120 columns and the CLIs paint absolutely-positioned
+   * cells, so there is nothing to reflow. Both CLIs already keep a structured
+   * record of the conversation for their own use (Claude a session JSONL,
+   * OpenCode a sqlite db), and reading that gives text a phone can wrap.
+   *
+   * Returns an empty array when the session can't be read, which the phone
+   * shows as "no transcript" while leaving the terminal view available.
+   */
+  readTranscript(sessionId: string, limit: number): TranscriptEntry[];
 
   buildResumeCommand(sessionId: string): string;
 }
