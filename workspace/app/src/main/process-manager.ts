@@ -14,6 +14,7 @@ import type {
 } from "./backends";
 import { remoteServer } from "./remote/ws-server";
 import type { TranscriptEntry } from "../shared/remote-protocol";
+import { debugTrace } from "./debug-trace";
 
 export interface InstanceInfo {
   id: string;
@@ -165,9 +166,15 @@ export class ProcessManager {
         // poll picks a different jsonl.
         if (isSessionClaimed(sessionId)) return;
         tracked.sessionId = sessionId;
+        debugTrace(
+          `[discovery] ${id.slice(0, 8)} backend=${tracked.backend} session=${sessionId} at ${new Date().toISOString()}`
+        );
         tracked.detector = backend.createCompletionDetector(
           sessionId,
           (type, detail) => {
+            debugTrace(
+              `[activity] ${id.slice(0, 8)} ${type} at ${new Date().toISOString()}`
+            );
             // "prompt-cleared" exists for paired phones (drop the stale option
             // buttons); the desktop UI has nothing to do with it, so it isn't
             // forwarded to the renderer.

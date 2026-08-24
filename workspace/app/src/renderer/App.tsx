@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { ContactList } from "./components/ContactList";
 import { NewInstanceDialog } from "./components/NewInstanceDialog";
 import {
@@ -14,6 +14,7 @@ import { VersionBadge } from "./components/VersionBadge";
 import { useNotifications } from "./hooks/useNotifications";
 import { ThemeContext } from "./hooks/useTheme";
 import { playMessageSound, playCoughSound } from "./audio/sounds";
+import { shouldPlayAttentionSound } from "./audio/attentionPolicy";
 import type { Instance, BackendName, ThemeName } from "../shared/types";
 
 const DEFAULT_EXPANDED_SECTION = "git";
@@ -35,6 +36,12 @@ export function App() {
   const [composeOpen, setComposeOpen] = useState(false);
 
   const { notify, markRead } = useNotifications();
+  // Per-instance timestamp of the last audible alert, for the QQ-style
+  // burst-collapse cooldown. Only real alerts record here, so a
+  // suppressed-while-watching event doesn't eat cooldown. Lifted out of the
+  // effect below because the effect re-subscribes on every instances change
+  // and a ref inside it would reset the cooldown each time.
+  const lastSoundAtRef = useRef(new Map<string, number>());
 
   // Load saved contacts on startup
   useEffect(() => {
@@ -87,13 +94,35 @@ export function App() {
   // Listen for structured activity events. Fires both when a turn finishes
   // ("waiting") and when the agent is waiting on a yes/no prompt ("prompt").
   // Both get the same beep + flash, so we don't branch on the type here.
+  //
+  // The beep and dock bounce are gated by the QQ-style attention policy:
+  // silent while the user is already looking at this instance (window focused
+  // and instance selected), and collapsed when "prompt" + "waiting" land in
+  // one burst (5s per-instance cooldown). "prompt" is urgent — the agent is
+  // blocked until the user acts — so it sounds even while the user is
+  // watching, and its badge is not auto-cleared. The badge flash still
+  // happens either way, and a paired phone keeps receiving every activity.
   useEffect(() => {
-    const cleanup = window.electronAPI.onInstanceActivity((id) => {
-      // Always play sound when the agent needs attention.
-      playMessageSound();
-      // Bounce the Dock — macOS only bounces if app is not in front,
-      // which is exactly the QQ-style behavior we want.
-      window.electronAPI.bounceDock();
+    const cleanup = window.electronAPI.onInstanceActivity((id, type) => {
+      const urgent = type === "prompt";
+      const now = Date.now();
+      const lastSoundAt = lastSoundAtRef.current.get(id) ?? 0;
+      if (
+        shouldPlayAttentionSound({
+          isSelected: id === selectedId,
+          windowFocused: document.hasFocus(),
+          lastSoundAt,
+          now,
+          urgent,
+        })
+      ) {
+        lastSoundAtRef.current.set(id, now);
+        // Play sound when the agent needs attention (gated above).
+        playMessageSound();
+        // Bounce the Dock — macOS only bounces if app is not in front,
+        // which is exactly the QQ-style behavior we want.
+        window.electronAPI.bounceDock();
+      }
 
       const inst = instances.find((i) => i.id === id);
       if (!inst) return;
@@ -102,8 +131,10 @@ export function App() {
       notify(id, inst.name);
 
       // If it's the currently selected one, the user is already looking at it,
-      // so auto-clear the unread state shortly after.
-      if (id === selectedId) {
+      // so auto-clear the unread state shortly after — unless the agent is
+      // blocked on a prompt, in which case the red dot stays until the user
+      // actually reads/answers it.
+      if (id === selectedId && !urgent) {
         setTimeout(() => markRead(id), 1500);
       }
     });

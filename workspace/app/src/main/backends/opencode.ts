@@ -16,12 +16,14 @@ import {
   keystrokeForQuestion,
   MULTI_QUESTION_TOOL_LABEL,
   PERMISSION_TOOL,
+  permissionSubject,
   QUESTION_TOOL_LABEL,
   visibleText,
   type OpencodePromptDetail,
 } from "./opencodePrompt";
 import type { TranscriptEntry } from "../../shared/remote-protocol";
 import { resolvePath } from "./resolvePath";
+import { debugTrace } from "../debug-trace";
 
 const HOME = process.env.HOME || "";
 
@@ -72,8 +74,10 @@ function buildEnv(): Record<string, string> {
 }
 
 // Open a read-only sqlite handle. Throws on failure (caller decides how to handle).
-function openDb(): Database.Database {
-  return new Database(OPENCODE_DB, { readonly: true, fileMustExist: true });
+// `dbPath` is overridable so tests can point the detector at a scratch database;
+// production always uses the real OpenCode store.
+function openDb(dbPath: string = OPENCODE_DB): Database.Database {
+  return new Database(dbPath, { readonly: true, fileMustExist: true });
 }
 
 
@@ -123,13 +127,12 @@ class OpencodeSessionDiscovery implements SessionDiscovery {
     onFound: (sessionId: string) => void,
     isClaimed?: (sessionId: string) => boolean
   ) {
-    let attempts = 0;
+    // Poll until the session appears, for as long as the instance lives.
+    // No attempt cap, for the same reason as the Claude backend: session
+    // rows can appear long after spawn, and giving up silently kills every
+    // notification for the instance's lifetime. The process manager cancels
+    // this handle on exit/restart/removal, so an uncapped poll can't leak.
     this.interval = setInterval(() => {
-      attempts++;
-      if (attempts > 30) {
-        this.cancel();
-        return;
-      }
       const sessionId = findLatestSessionForCwd(cwd, isClaimed);
       if (!sessionId) return;
       if (isClaimed && isClaimed(sessionId)) return;
@@ -239,11 +242,24 @@ function extractQuestionDetail(raw: string): OpencodePromptDetail | null {
   };
 }
 
-class OpencodeCompletionDetector implements CompletionDetector {
+export class OpencodeCompletionDetector implements CompletionDetector {
   private lastSeenTime = 0;
   private pollInterval: ReturnType<typeof setInterval> | null = null;
   private pendingNotify: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
+
+  // Message ids whose finish="stop" already scheduled a "waiting" notify.
+  // OpenCode updates rows in place (see checkForChanges), so a single message
+  // is re-read on every cost/token update; without this set, each re-read
+  // would beep again.
+  private notifiedStopIds = new Set<string>();
+  // Watermark (max time_created) for user rows treated as "the user acted".
+  // A user row only counts when it was CREATED after the detector attached —
+  // a genuinely new message. OpenCode updates rows in place long after
+  // insertion (cost/token bookkeeping), and a detector that attaches after
+  // the user typed (discovery needs a tick or two) must not let that late
+  // update cancel a completion notify for the turn that just finished.
+  private lastUserActionAt = 0;
 
   // Bounded tail of recently painted terminal text, the only place a permission
   // request is visible at all.
@@ -269,12 +285,28 @@ class OpencodeCompletionDetector implements CompletionDetector {
   // it clears.
   private promptReported = false;
 
+  // Subject line of the permission dialog currently latched, so a second
+  // dialog can be told apart from spinner repaints of the first one (see
+  // onPtyData).
+  private permissionSubject = "";
+
   constructor(
     private readonly sessionId: string,
-    private readonly onActivity: ActivityCallback
+    private readonly onActivity: ActivityCallback,
+    private readonly dbPath: string = OPENCODE_DB
   ) {
-    // Snapshot the latest message timestamp so existing rows don't trigger.
-    this.lastSeenTime = this.getCurrentLatestTime();
+    // Snapshot the latest message timestamps so existing rows don't trigger.
+    // `time_updated` rather than `time_created`: OpenCode inserts a message
+    // row when streaming starts and writes its final `finish` in place
+    // afterwards, so the only column that moves when a turn actually
+    // completes is time_updated. `time_created` is snapshotted separately to
+    // tell genuinely-new user messages apart from late updates to old ones.
+    const { updated, created } = this.snapshotWatermarks();
+    this.lastSeenTime = updated;
+    this.lastUserActionAt = created;
+    debugTrace(
+      `[oc-attach] session=${this.sessionId.slice(-8)} watermarkUpdated=${updated} watermarkCreated=${created} at ${new Date().toISOString()}`
+    );
     this.pollInterval = setInterval(() => this.tick(), PTY_CHECK_MS);
   }
 
@@ -295,12 +327,25 @@ class OpencodeCompletionDetector implements CompletionDetector {
     if (this.ptyWindow.length > PTY_WINDOW_BYTES) {
       this.ptyWindow = this.ptyWindow.slice(-PTY_WINDOW_BYTES);
     }
-    // Latch as soon as the dialog appears. Checked here rather than on the poll
+    // Latch as soon as a dialog appears. Checked here rather than on the poll
     // tick because the option row is painted once and could otherwise be evicted
     // between ticks by a burst of output.
-    if (!this.permissionSeen && hasPermissionDialog(this.ptyWindow)) {
-      this.permissionSeen = true;
-      this.permissionText = this.ptyWindow;
+    //
+    // A dialog whose subject differs from the latched one is a NEW block, so
+    // re-arm the latch. Without this, two permission dialogs raised back to
+    // back are treated as one: `permissionSeen` only clears when no tool is in
+    // flight (checkForPrompt), and the tool released by the first answer is
+    // usually still running when the second dialog paints, so the second one
+    // would never be reported or notified.
+    if (hasPermissionDialog(this.ptyWindow)) {
+      const subject = permissionSubject(this.ptyWindow) ?? "";
+      if (!this.permissionSeen || this.permissionSubject !== subject) {
+        this.permissionSeen = true;
+        this.permissionSubject = subject;
+        this.permissionText = this.ptyWindow;
+        this.blockedSince = 0;
+        this.promptReported = false;
+      }
     }
   }
 
@@ -316,18 +361,19 @@ class OpencodeCompletionDetector implements CompletionDetector {
     }
   }
 
-  private getCurrentLatestTime(): number {
+  private snapshotWatermarks(): { updated: number; created: number } {
     let db: Database.Database | null = null;
     try {
-      db = openDb();
+      db = openDb(this.dbPath);
       const row = db
         .prepare(
-          "SELECT MAX(time_created) AS t FROM message WHERE session_id = ?"
+          "SELECT MAX(time_updated) AS t, MAX(time_created) AS c FROM message WHERE session_id = ?"
         )
-        .get(this.sessionId) as { t: number | null } | undefined;
-      return row?.t ?? 0;
-    } catch {
-      return this.lastSeenTime;
+        .get(this.sessionId) as { t: number | null; c: number | null } | undefined;
+      return { updated: row?.t ?? 0, created: row?.c ?? 0 };
+    } catch (err) {
+      debugTrace(`[oc-snapshot] session=${this.sessionId.slice(-8)} err=${(err as Error).message}`);
+      return { updated: this.lastSeenTime, created: this.lastUserActionAt };
     } finally {
       db?.close();
     }
@@ -336,13 +382,22 @@ class OpencodeCompletionDetector implements CompletionDetector {
   private checkForChanges() {
     let db: Database.Database | null = null;
     try {
-      db = openDb();
+      db = openDb(this.dbPath);
+      // Watermark on time_updated, not time_created. OpenCode writes a
+      // message row when the assistant starts streaming (finish unset) and
+      // then UPDATEs it in place — `finish: "stop"` lands seconds or minutes
+      // after time_created, so a time_created watermark reads every row once,
+      // before its final state exists, and completion notifications never
+      // fire. Rows are therefore re-read on every in-place update; the
+      // idempotency sets below make that safe.
       const rows = db
         .prepare(
-          "SELECT time_created, data FROM message WHERE session_id = ? AND time_created > ? ORDER BY time_created ASC"
+          "SELECT id, time_created, time_updated, data FROM message WHERE session_id = ? AND time_updated > ? ORDER BY time_updated ASC"
         )
         .all(this.sessionId, this.lastSeenTime) as Array<{
+        id: string;
         time_created: number;
+        time_updated: number;
         data: string;
       }>;
 
@@ -351,7 +406,7 @@ class OpencodeCompletionDetector implements CompletionDetector {
       let shouldScheduleNotify = false;
 
       for (const row of rows) {
-        this.lastSeenTime = row.time_created;
+        this.lastSeenTime = Math.max(this.lastSeenTime, row.time_updated);
         let parsed: OpencodeMessageData;
         try {
           parsed = JSON.parse(row.data);
@@ -362,8 +417,9 @@ class OpencodeCompletionDetector implements CompletionDetector {
         if (parsed.role === "assistant") {
           // finish === "stop"        -> assistant truly done, schedule notify
           // finish === "tool-calls"  -> still working, ignore
-          // finish === undefined     -> intermediate streaming row, ignore
-          if (parsed.finish === "stop") {
+          // finish === undefined     -> intermediate streaming state, ignore
+          if (parsed.finish === "stop" && !this.notifiedStopIds.has(row.id)) {
+            this.notifiedStopIds.add(row.id);
             shouldScheduleNotify = true;
           }
         } else if (parsed.role === "user") {
@@ -372,8 +428,19 @@ class OpencodeCompletionDetector implements CompletionDetector {
           // text lives in linked `part` rows); tool results carry payload.
           // We treat any user-role message as "user has acted" → cancel
           // pending notify, since it means the user already responded.
-          shouldScheduleNotify = false;
-          this.cancelPending();
+          //
+          // Only rows CREATED after the detector attached count. OpenCode
+          // re-writes user rows in place long after insertion (cost/token
+          // bookkeeping), so a late update to a row the user typed just
+          // before discovery attached must not cancel the completion notify
+          // for the turn that just finished — that was the exact failure
+          // mode where asking a question right after starting an instance
+          // swallowed the "waiting" notification forever.
+          if (row.time_created > this.lastUserActionAt) {
+            this.lastUserActionAt = row.time_created;
+            shouldScheduleNotify = false;
+            this.cancelPending();
+          }
         }
       }
 
@@ -384,7 +451,8 @@ class OpencodeCompletionDetector implements CompletionDetector {
           if (!this.stopped) this.onActivity("waiting");
         }, 2000);
       }
-    } catch {
+    } catch (err) {
+      debugTrace(`[oc-changes] session=${this.sessionId.slice(-8)} err=${(err as Error).message}`);
       // sqlite locked / db missing / etc — silent retry next tick
     } finally {
       db?.close();
@@ -401,7 +469,7 @@ class OpencodeCompletionDetector implements CompletionDetector {
   } {
     let db: Database.Database | null = null;
     try {
-      db = openDb();
+      db = openDb(this.dbPath);
       const rows = db
         .prepare(
           "SELECT data FROM part WHERE session_id = ? ORDER BY time_created DESC LIMIT 60"
@@ -430,7 +498,8 @@ class OpencodeCompletionDetector implements CompletionDetector {
         }
       }
       return { question, anyInFlight };
-    } catch {
+    } catch (err) {
+      debugTrace(`[oc-scan] session=${this.sessionId.slice(-8)} err=${(err as Error).message}`);
       // sqlite locked / db missing — report nothing rather than guessing, so a
       // transient failure can't clear a live prompt.
       return { question: null, anyInFlight: true };
@@ -464,6 +533,7 @@ class OpencodeCompletionDetector implements CompletionDetector {
     if (this.permissionSeen && !anyInFlight) {
       this.permissionSeen = false;
       this.permissionText = "";
+      this.permissionSubject = "";
     }
 
     const blocked = question !== null || this.permissionSeen;

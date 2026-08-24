@@ -1,11 +1,11 @@
 {
   "name": "multi-code",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Multi-Code — Claude Code instance manager",
   "author": "Jasen Pan",
   "main": "dist/main/index.js",
   "scripts": {
-    "start": "pnpm build && electron dist/main/index.js",
+    "start": "pnpm build && electron .",
     "build": "pnpm build:renderer && pnpm build:mobile && pnpm build:main",
     "build:renderer": "rspack build --config rspack.renderer.config.ts",
     "build:mobile": "rspack build --config rspack.mobile.config.ts",

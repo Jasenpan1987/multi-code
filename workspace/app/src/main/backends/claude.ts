@@ -312,13 +312,17 @@ class ClaudeSessionDiscovery implements SessionDiscovery {
     onFound: (sessionId: string) => void,
     isClaimed?: (sessionId: string) => boolean
   ) {
-    let attempts = 0;
+    // Poll until the session appears, for as long as the instance lives.
+    //
+    // There is deliberately NO attempt cap. The session jsonl is only created
+    // once the first user message lands, and that can come minutes after the
+    // CLI spawns (a fresh project sitting at the input prompt). Giving up
+    // after a fixed window — as an earlier version did — silently killed
+    // completion AND prompt notifications for the instance's whole lifetime:
+    // the user types their first message, the agent finishes the turn, and
+    // nothing ever beeps. Cleanup is safe without a cap because the process
+    // manager cancels this handle on instance exit/restart/removal.
     this.interval = setInterval(() => {
-      attempts++;
-      if (attempts > 30) {
-        this.cancel();
-        return;
-      }
       const jsonlPath = findJsonlByCwd(cwd, isClaimed);
       if (!jsonlPath) return;
 
