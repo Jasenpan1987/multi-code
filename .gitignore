@@ -6,5 +6,8 @@ dist/
 release/
 .eslintcache
 *.tsbuildinfo
+# OMT scratch: per-task notes on judgment calls, read by qa and deleted once the
+# task is accepted. Working notes, not documentation.
+.omt/
 *.dmg
 *.dmg.blockmap

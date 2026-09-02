@@ -8,6 +8,7 @@ import {
   registerMdimgProtocol,
 } from "./mdimg-protocol";
 import { initRemote, shutdownRemote } from "./remote";
+import { shutdownManagerMcp } from "./manager-mcp";
 
 // Must run before app 'ready' — privileged scheme registration is only honored
 // pre-ready. The handler itself is installed after ready (in whenReady).
@@ -76,4 +77,9 @@ app.on("before-quit", () => {
   processManager.cleanup();
   shellManager.cleanup();
   void shutdownRemote();
+  // Stops the listener and deletes the mcp-config file, which holds a bearer
+  // token that grants tool access to every managed session. No matching init
+  // call here on purpose: the manager MCP server starts lazily on the first
+  // manager spawn, since the spawn needs its port to write that config.
+  void shutdownManagerMcp();
 });
