@@ -1,7 +1,20 @@
 import { useState } from "react";
 import { ContextMenu } from "./ContextMenu";
 import { Avatar } from "./Avatar";
-import type { Instance } from "../../shared/types";
+import { formatTokens } from "./formatTokens";
+import type { ContextUsage, Instance } from "../../shared/types";
+
+// The row shows an abbreviated count; the exact figure, its age and the model go
+// in the tooltip. No percentage: the context window size isn't recorded in either
+// CLI's transcript, and a wrong denominator would be worse than none.
+function contextTitle(usage: ContextUsage): string {
+  const parts = [`${usage.inputTokens.toLocaleString()} tokens in context`];
+  if (usage.model) parts.push(usage.model);
+  if (usage.updatedAt > 0) {
+    parts.push(`as of ${new Date(usage.updatedAt).toLocaleTimeString()}`);
+  }
+  return parts.join(" · ");
+}
 
 interface ContactListProps {
   instances: Instance[];
@@ -65,6 +78,14 @@ export function ContactList({
                 backend={inst.backend}
               />
               <span className="contact-name">{inst.name}</span>
+              {inst.contextUsage && (
+                <span
+                  className="contact-context"
+                  title={contextTitle(inst.contextUsage)}
+                >
+                  {formatTokens(inst.contextUsage.inputTokens)}
+                </span>
+              )}
               {unreadIds.has(inst.id) && <span className="unread-badge" />}
               {inst.status === "stopped" && (
                 <button

@@ -46,6 +46,11 @@ export interface Instance {
   name: string;
   sessionId?: string;
   backend: BackendName;
+  // Absent until the session has an assistant turn, or when its transcript
+  // can't be read. The main process caches this: reading it touches a
+  // multi-megabyte transcript, and listInstances() is called on every phone
+  // broadcast.
+  contextUsage?: ContextUsage;
 }
 
 export interface GitFileEntry {

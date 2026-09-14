@@ -52,6 +52,44 @@ export function App() {
     });
   }, []);
 
+  // Context usage is polled, not watched. It only moves when a turn completes,
+  // and the main process throttles the underlying transcript read, so asking is
+  // cheap. Two triggers: agent activity (a turn just ended, so the number just
+  // changed) and a slow interval as a backstop for anything that ends without
+  // firing an activity event.
+  //
+  // Only the usage field is merged in — the rest of each instance is owned by the
+  // event handlers below, and replacing whole objects here would race with them.
+  const refreshContextUsage = useCallback(() => {
+    void window.electronAPI.listInstances().then((fresh) => {
+      const byId = new Map(fresh.map((i) => [i.id, i]));
+      setInstances((prev) =>
+        prev.map((inst) => {
+          const next = byId.get(inst.id);
+          if (!next) return inst;
+          if (
+            next.contextUsage?.inputTokens === inst.contextUsage?.inputTokens &&
+            next.contextUsage?.updatedAt === inst.contextUsage?.updatedAt
+          ) {
+            // Same object back so the list doesn't re-render on every poll.
+            return inst;
+          }
+          return { ...inst, contextUsage: next.contextUsage };
+        })
+      );
+    });
+  }, []);
+
+  useEffect(() => {
+    refreshContextUsage();
+    const timer = setInterval(refreshContextUsage, 30_000);
+    return () => clearInterval(timer);
+  }, [refreshContextUsage]);
+
+  useEffect(() => {
+    return window.electronAPI.onInstanceActivity(() => refreshContextUsage());
+  }, [refreshContextUsage]);
+
   // Load saved theme on startup and apply to <html>
   useEffect(() => {
     window.electronAPI.getSettings().then((settings) => {

@@ -2,7 +2,7 @@
 
 **Generated:** 2026-09-02
 **PRD Version:** 1.0
-**Total Tasks:** 11
+**Total Tasks:** 12
 **Milestones:** M1 (See who's full), M2 (Manager can look), M3 (Manager can dispatch), M4 (Handoff + safety regression)
 
 ## Task Overview
@@ -10,6 +10,7 @@
 ```mermaid
 graph TD
     T201[T-201: Backend context-usage reader] --> T202[T-202: Context usage in ContactList]
+    T201 --> T212[T-212: Context window percentage]
     T201 --> T205[T-205: Read-only MCP tools]
     T204[T-204: MCP server skeleton] --> T205
     T204 --> T209[T-209: Manager instance kind + spawn injection]
@@ -107,7 +108,7 @@ the UI. No manager involved, nothing writes to any terminal.
 
 ### T-202: Context usage in ContactList
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done (2026-09-15 — count shipped, percentage split out to T-212; visual acceptance unverified, see below)
 - **Requirement:** `prd.md#r7--context-usage-in-the-ui`
 - **Code:** `workspace/app/src/renderer/components/ContactList.tsx`, `workspace/app/src/main/ipc-handlers.ts`, `workspace/app/src/main/preload.ts`, `workspace/app/src/shared/types.ts`
 - **Description:** Surface T-201's number per contact. Add `contextUsage?: ContextUsage` to
@@ -128,6 +129,53 @@ the UI. No manager involved, nothing writes to any terminal.
 - **Blocks:** T-211 · **Blocked by:** T-201 · **Parallel with:** T-203, T-204
 - **Notes:** This is the one M1 deliverable the user sees, and it is useful on its own
   regardless of whether the manager ships.
+- **Outcome (2026-09-15):** `Instance.contextUsage` populated from a cache on
+  `ManagedInstance`, refreshed in `listInstances()` behind a 20s TTL and immediately
+  on the `waiting` activity. Rendered right-aligned on the contact row via
+  `formatTokens`, with the exact figure, model and age in the tooltip.
+  **The percentage was split out to T-212**: the window size is in neither
+  transcript, and the two backends expose it in completely different places (see
+  that task). A wrong denominator is worse than none.
+  **Two acceptance criteria are unverified** — both backends showing a figure, and
+  the row staying single-line. The user's Multi-Code was running and holding port
+  6768, so a second instance would have contended for it and for `contacts.json`.
+  Verified instead: the compiled reader against the four largest real transcripts
+  on this machine (8–10.8MB) returned 413k–719k tokens with the correct model in
+  18–24ms each. **Confirm the two visual criteria on the next app restart.**
+
+---
+
+### T-212: Context window percentage
+- **Type:** feature
+- **Status:** backlog
+- **Requirement:** `prd.md#r7--context-usage-in-the-ui`
+- **Code:** `workspace/app/src/main/`, `workspace/app/src/renderer/components/ContactList.tsx`
+- **Description:** Turn T-202's absolute count into "how full is it", which is the
+  question the user actually has. Needs a window size, which **neither CLI records in
+  its transcript**, and the two backends keep it in different places:
+  - **OpenCode: exact and reliable.** `~/.config/opencode/opencode.json` has
+    `provider.<providerID>.models.<modelID>.limit.context` (observed 1000000 for the
+    Bedrock 1M models). `ContextUsage.model` from T-201 is the `modelID`; the
+    `providerID` is in the same transcript record if needed to disambiguate.
+  - **Claude: inferred, and fragile.** The transcript records the family name only
+    (`claude-opus-5`). The window shows up via the `[1m]` suffix on
+    `env.ANTHROPIC_DEFAULT_<FAMILY>_MODEL` in `~/.claude/settings.json` — observed
+    `au.anthropic.claude-opus-5[1m]` on this machine. That goes stale if the user
+    switches model with `/model` mid-session, so the mapping must be able to say
+    "don't know".
+  Show a percentage only where the window is known. Where it isn't, keep T-202's
+  bare count — do not fall back to a default window. Showing 45% for a session
+  actually at 226% is worse than showing no percentage at all.
+- **Acceptance:**
+  - An OpenCode instance whose model is in `opencode.json` shows a percentage
+    matching `limit.context`
+  - A claude instance on a `[1m]` model shows a percentage against 1M, not 200k
+  - A model absent from both sources shows the bare count, no percentage
+  - The row still fits on one line with the percentage present
+  - Unit tests cover both lookups plus the unknown case
+- **Blocks:** none · **Blocked by:** T-201 (done) · **Parallel with:** everything in M2/M3
+- **Notes:** Optional polish on M1, not a prerequisite for the manager. Do it when
+  the absolute number proves not to be enough in daily use.
 
 ---
 

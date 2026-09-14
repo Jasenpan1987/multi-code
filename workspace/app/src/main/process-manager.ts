@@ -14,6 +14,7 @@ import type {
 } from "./backends";
 import { remoteServer } from "./remote/ws-server";
 import type { TranscriptEntry } from "../shared/remote-protocol";
+import type { ContextUsage } from "../shared/types";
 import { debugTrace } from "./debug-trace";
 
 export interface InstanceInfo {
@@ -25,6 +26,7 @@ export interface InstanceInfo {
   name: string;
   sessionId?: string;
   backend: BackendName;
+  contextUsage?: ContextUsage;
 }
 
 interface ManagedInstance {
@@ -42,7 +44,17 @@ interface ManagedInstance {
   // Used by the backend's CompletionDetector to tell "screen static (waiting
   // on user)" apart from "spinner ticking (running tool/subagent)".
   lastPtyByteAt: number;
+  // Cached context usage plus when it was read. Optional so the two places that
+  // build a ManagedInstance don't need to seed them; absent means "never read".
+  contextUsage?: ContextUsage;
+  contextUsageAt?: number;
 }
+
+// Reading context usage parses a transcript that reaches 8MB+, and
+// listInstances() runs on every phone broadcast, so the read is throttled
+// instead of happening per call. A turn takes far longer than this to complete,
+// so nothing user-visible lags behind.
+const CONTEXT_USAGE_TTL_MS = 20_000;
 
 const DEFAULT_BACKEND: BackendName = "claude";
 
@@ -175,6 +187,10 @@ export class ProcessManager {
             debugTrace(
               `[activity] ${id.slice(0, 8)} ${type} at ${new Date().toISOString()}`
             );
+            // A finished turn is exactly when context usage moved, so refresh
+            // now instead of waiting for the TTL. Cheap: once per turn, not per
+            // list call.
+            if (type === "waiting") this.refreshContextUsage(tracked);
             // "prompt-cleared" exists for paired phones (drop the stale option
             // buttons); the desktop UI has nothing to do with it, so it isn't
             // forwarded to the renderer.
@@ -338,7 +354,37 @@ export class ProcessManager {
   }
 
   listInstances(): InstanceInfo[] {
+    this.refreshStaleContextUsage();
     return Array.from(this.instances.values()).map((i) => this.toInfo(i));
+  }
+
+  // Re-read context usage for any instance whose cached figure has aged out.
+  // Only sessions that have been discovered are worth reading — before that
+  // there is no transcript to look at.
+  private refreshStaleContextUsage() {
+    const now = Date.now();
+    for (const instance of this.instances.values()) {
+      if (!instance.sessionId) continue;
+      if (now - (instance.contextUsageAt ?? 0) < CONTEXT_USAGE_TTL_MS) continue;
+      this.refreshContextUsage(instance);
+    }
+  }
+
+  private refreshContextUsage(instance: ManagedInstance) {
+    if (!instance.sessionId) return;
+    instance.contextUsageAt = Date.now();
+    try {
+      const usage = getBackend(instance.backend).readContextUsage(
+        instance.sessionId
+      );
+      // Keep the last known figure when a read comes back empty. A stopped
+      // instance still has a real transcript, and a transient failure (sqlite
+      // locked mid-write) shouldn't blank a number the user was reading.
+      if (usage) instance.contextUsage = usage;
+    } catch {
+      // Backends are documented to return null rather than throw, but a
+      // surprise here must not take down a list call.
+    }
   }
 
   hasRunningInstanceAt(cwd: string, backend?: BackendName): boolean {
@@ -382,6 +428,9 @@ export class ProcessManager {
       name: instance.alias || path.basename(instance.cwd),
       sessionId: instance.sessionId,
       backend: instance.backend,
+      // Cache only — refreshing happens in listInstances and on activity, never
+      // here, since this runs once per instance per broadcast.
+      contextUsage: instance.contextUsage,
     };
   }
 }

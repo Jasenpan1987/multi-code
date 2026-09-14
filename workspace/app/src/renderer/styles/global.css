@@ -291,6 +291,22 @@ body,
   color: #1a1a1a;
 }
 
+/* Context usage, right-aligned on the same line as the project name. No
+   per-theme override: the sidebar keeps the QQ blue in every theme (see the
+   variables block at the top of this file).
+
+   `font-weight: normal` because `.contact-item.unread` bolds the whole row, and
+   a number that thickens on every notification reads as if it changed.
+   `tabular-nums` keeps it from shifting width as the digits change. */
+.contact-context {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: normal;
+  color: #6c8099;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
 .start-btn {
   margin-left: auto;
   background: linear-gradient(180deg, #6ba3d6 0%, #4a8ac4 100%);
