@@ -239,6 +239,31 @@ Kept here because each answer constrains the design.
   be `application/json` rather than SSE. Cost of the choice: protocol revisions
   are ours to track. Mitigated by pinning accepted versions in one set literal and
   by the client being the CLI on the same machine.
+- **Q8 — Drive OpenCode instances over its HTTP API instead of the PTY?**
+  Discovered 2026-09-15: OpenCode (1.18.30) ships an HTTP server with an OpenAPI
+  3.1 spec at `/doc` and 162 endpoints, and `--port` / `--hostname` are top-level
+  CLI options, not just `serve` subcommand ones. It covers most of this epic
+  directly: `POST /api/session/{id}/prompt` (send), `.../wait`, `.../compact`,
+  `.../interrupt`, `GET /api/session/{id}/history`.
+
+  The part that matters most is the blocked check. `GET /api/permission/request`,
+  `GET /api/question/request` and `GET /api/session/{id}/permission` report
+  pending decisions **exactly**, where R5's PTY-side gate has to infer them from a
+  detector. And a structured POST cannot approve a dialog by accident, so the
+  measured escalation in the verification log simply doesn't exist on this path.
+
+  Cost of taking it: spawn must pass an explicit `--port` (verified 2026-09-15
+  that the TUI listens on nothing by default), must set
+  `OPENCODE_SERVER_PASSWORD` (the server warns `is not set; server is unsecured`),
+  and we need an instance→OpenCode-sessionID mapping. It also means two genuinely
+  different transports behind the same tools, which `tech-conventions.md`'s
+  multi-backend rule says to express as a `Backend` method rather than scattered
+  `if (backend === ...)` branches.
+
+  Does not affect M1. Decide before T-203, since a precise gate for half the
+  fleet changes what that task has to cover. Note the API's `GET
+  /api/session/{id}/context` is **not** token usage (returns `{"data": []}`), and
+  session-level `tokens`/`cost` are lifetime totals, so T-201 stands as specified.
 - **Q7 — Detector coverage for the blocked check.** R5's state check is only as
   good as the `prompt` event. Claude's detection of a blocked state is threshold-
   based, so there is a window where a session is on a dialog but not yet reported

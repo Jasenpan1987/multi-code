@@ -1,5 +1,6 @@
 import type { PromptDetail } from "../remote/promptExtract";
 import type { TranscriptEntry } from "../../shared/remote-protocol";
+import type { ContextUsage } from "../../shared/types";
 
 export type BackendName = "claude" | "opencode";
 
@@ -125,6 +126,21 @@ export interface Backend {
    * shows as "no transcript" while leaving the terminal view available.
    */
   readTranscript(sessionId: string, limit: number): TranscriptEntry[];
+
+  /**
+   * How full this session's context window is, from the newest assistant turn.
+   *
+   * Returns null when the session has no assistant turn yet, or can't be read.
+   * That is deliberately distinct from zero: a fresh session and an unreadable
+   * one both have unknown usage, and showing "0" for either would read as "plenty
+   * of room left" when we simply don't know.
+   *
+   * Both CLIs record per-turn usage and lifetime totals, and only the former
+   * answers this question — the totals reach millions of tokens against a
+   * 200k–1M window. Claude keeps it in the session JSONL's assistant records
+   * (`message.usage`), OpenCode in its sqlite `message` rows (`data.tokens`).
+   */
+  readContextUsage(sessionId: string): ContextUsage | null;
 
   buildResumeCommand(sessionId: string): string;
 }

@@ -57,7 +57,7 @@ the UI. No manager involved, nothing writes to any terminal.
 
 ### T-201: Backend context-usage reader
 - **Type:** data
-- **Status:** ready
+- **Status:** done (2026-09-15 — `readContextUsage` on both backends, 22 tests)
 - **Requirement:** `prd.md#r7--context-usage-in-the-ui`
 - **Knowledge:** `../../knowledge/tech-conventions.md#multi-backend-pattern-added-2026-05-18`
 - **Code:** `workspace/app/src/main/backends/`
@@ -93,6 +93,15 @@ the UI. No manager involved, nothing writes to any terminal.
     mid-write JSONL is normal.
   - OpenCode's db must be opened read-only, the way `openDb` already does it in
     `opencode.ts` — never take a write lock on a db the CLI owns.
+- **Outcome (2026-09-15):** `Backend.readContextUsage(sessionId)` with
+  `readClaudeContextUsage(jsonlPath)` and `readOpencodeContextUsage(sessionId, dbPath?)`
+  behind it; `ContextUsage` in `shared/types.ts`. 22 tests in
+  `backends/contextUsage.test.ts`.
+  **`ContextUsage` also carries `model?: string`**, beyond what this task specified —
+  the window size is in neither transcript, so T-202 needs the model name to map to
+  one, and it sits in the record this reader already parses. Both readers walk
+  backwards to the newest assistant turn that reported non-zero usage, skipping
+  the trailing user message (opencode) and errored all-zero turns (both).
 
 ---
 
@@ -294,6 +303,11 @@ wait, read the result, forward it. Writes are gated on target state.
 - **Notes:** This is the highest-risk task in the epic and the reason M3 can't start
   earlier. Do not let a write tool merge before it. The hazard is not hypothetical — see the
   PRD verification log for the reproduction and the file it modified.
+  **Settle `prd.md#still-open` Q8 before starting.** OpenCode exposes pending
+  permission and question requests over HTTP, which would make the gate exact for
+  those instances instead of inferred, and would remove the PTY hazard for them
+  entirely. That changes what this task has to cover, so it is a prerequisite
+  decision, not a follow-up.
 
 ---
 

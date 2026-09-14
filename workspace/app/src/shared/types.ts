@@ -18,6 +18,25 @@ export interface RemotePairing {
   endpoints: string[];
 }
 
+// How full a session's context window is, read from the newest assistant turn in
+// its transcript.
+//
+// `inputTokens` is the input side only — prompt plus cache reads and writes —
+// because that is what occupies the window. Output tokens are excluded so the
+// figure means the same thing on both backends. Note this is per-turn, not
+// cumulative: both CLIs also record lifetime totals, and those run to millions
+// against a 200k–1M window, so they say nothing about fullness.
+export interface ContextUsage {
+  inputTokens: number;
+  // When that turn happened (ms since epoch), so the UI can tell a live figure
+  // from one left over by a session that stopped days ago.
+  updatedAt: number;
+  // Model that produced the turn. The transcript never records the window size,
+  // so a caller wanting a percentage has to map from this. Absent when the
+  // transcript didn't name one, in which case there is no percentage to show.
+  model?: string;
+}
+
 export interface Instance {
   id: string;
   cwd: string;

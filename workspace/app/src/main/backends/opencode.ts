@@ -22,6 +22,7 @@ import {
   type OpencodePromptDetail,
 } from "./opencodePrompt";
 import type { TranscriptEntry } from "../../shared/remote-protocol";
+import type { ContextUsage } from "../../shared/types";
 import { resolvePath } from "./resolvePath";
 import { debugTrace } from "../debug-trace";
 
@@ -673,6 +674,75 @@ export function readOpencodeTranscript(
   }
 }
 
+// How full the window is, from the newest assistant message that reported usage.
+//
+// Summed from the input side only: `tokens.input` plus `tokens.cache.read` and
+// `tokens.cache.write`. The JSON also carries a pre-summed `tokens.total`, which
+// is deliberately not used because it includes `output` — output isn't occupying
+// the window on the next turn, and including it would make this number
+// incomparable with the claude backend's.
+//
+// Do NOT use the `session` table's `tokens_*` columns for this. Those are lifetime
+// totals: a real session was observed at `tokens_cache_read` of 17.1M against a
+// 200k–1M window, which would read as "impossibly full" every time.
+//
+// `dbPath` is overridable for tests, matching the detector's convention.
+export function readOpencodeContextUsage(
+  sessionId: string,
+  dbPath?: string
+): ContextUsage | null {
+  let db: Database.Database | null = null;
+  try {
+    db = dbPath ? openDb(dbPath) : openDb();
+    // Newest first, then pick. The most recent row is frequently a user message
+    // carrying no usage at all, so `LIMIT 1` would report nothing for a session
+    // that has perfectly good numbers one row back.
+    const rows = db
+      .prepare(
+        "SELECT data, time_updated FROM message WHERE session_id = ? " +
+          "ORDER BY time_updated DESC LIMIT 40"
+      )
+      .all(sessionId) as Array<{ data: string; time_updated: number }>;
+
+    for (const row of rows) {
+      let message: Record<string, unknown>;
+      try {
+        message = JSON.parse(row.data);
+      } catch {
+        continue;
+      }
+      if (message.role !== "assistant") continue;
+
+      const tokens = message.tokens as Record<string, unknown> | undefined;
+      if (!tokens) continue;
+      const cache = tokens.cache as Record<string, unknown> | undefined;
+
+      const inputTokens =
+        finiteNumber(tokens.input) +
+        finiteNumber(cache?.read) +
+        finiteNumber(cache?.write);
+      // All zeros says nothing; keep walking back to a turn that does.
+      if (inputTokens <= 0) continue;
+
+      return {
+        inputTokens,
+        updatedAt: finiteNumber(row.time_updated),
+        model: typeof message.modelID === "string" ? message.modelID : undefined,
+      };
+    }
+
+    return null;
+  } catch {
+    return null;
+  } finally {
+    db?.close();
+  }
+}
+
+function finiteNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
 export const opencodeBackend: Backend = {
   name: "opencode",
 
@@ -698,6 +768,10 @@ export const opencodeBackend: Backend = {
 
   readTranscript(sessionId, limit): TranscriptEntry[] {
     return readOpencodeTranscript(sessionId, limit);
+  },
+
+  readContextUsage(sessionId): ContextUsage | null {
+    return readOpencodeContextUsage(sessionId);
   },
 
   keystrokeForChoice(tool, index, optionCount): string | null {

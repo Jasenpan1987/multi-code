@@ -9,6 +9,7 @@ import type {
 } from "./types";
 import { extractPromptDetail, keystrokeForOption } from "../remote/promptExtract";
 import type { TranscriptEntry } from "../../shared/remote-protocol";
+import type { ContextUsage } from "../../shared/types";
 import { resolvePath } from "./resolvePath";
 
 const HOME = process.env.HOME || "";
@@ -384,6 +385,12 @@ export const claudeBackend: Backend = {
     return readClaudeTranscript(jsonlPath, limit);
   },
 
+  readContextUsage(sessionId): ContextUsage | null {
+    const jsonlPath = findJsonlBySessionId(sessionId);
+    if (!jsonlPath) return null;
+    return readClaudeContextUsage(jsonlPath);
+  },
+
   buildResumeCommand(sessionId: string): string {
     return `claude --resume ${sessionId}`;
   },
@@ -476,6 +483,71 @@ export function readClaudeTranscript(
   }
 
   return entries.slice(-limit);
+}
+
+// How full the window is, from the newest assistant turn that reported usage.
+//
+// The three input fields are summed because they are disjoint parts of the same
+// prompt: `input_tokens` is what wasn't cached, `cache_read_input_tokens` what was
+// served from cache, `cache_creation_input_tokens` what was written into it this
+// turn. Their sum is what the model actually read. `output_tokens` is excluded —
+// it isn't occupying the window on the next turn.
+export function readClaudeContextUsage(jsonlPath: string): ContextUsage | null {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(jsonlPath, "utf8");
+  } catch {
+    return null;
+  }
+
+  const lines = raw.split("\n");
+  // Backwards, stopping at the first usable record. These files reach 8MB+, and
+  // only the newest turn answers the question, so parsing forward to the end
+  // would be most of the cost for none of the benefit.
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    let record: Record<string, unknown>;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (record.type !== "assistant") continue;
+
+    const message = record.message as Record<string, unknown> | undefined;
+    const usage = message?.usage as Record<string, unknown> | undefined;
+    if (!usage) continue;
+
+    const inputTokens =
+      finiteNumber(usage.input_tokens) +
+      finiteNumber(usage.cache_creation_input_tokens) +
+      finiteNumber(usage.cache_read_input_tokens);
+    // A turn that reported all zeros (an errored request, for instance) tells us
+    // nothing, so keep walking back to one that does.
+    if (inputTokens <= 0) continue;
+
+    return {
+      inputTokens,
+      updatedAt: parseIsoMs(record.timestamp),
+      model: typeof message?.model === "string" ? message.model : undefined,
+    };
+  }
+
+  return null;
+}
+
+function finiteNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+// Claude writes an ISO 8601 timestamp on every record. 0 means "unknown", which
+// the UI shows as a usage figure with no age rather than pretending it's now.
+function parseIsoMs(value: unknown): number {
+  if (typeof value !== "string") return 0;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : 0;
 }
 
 // One-line description of a tool call, matching what the desktop shows.
