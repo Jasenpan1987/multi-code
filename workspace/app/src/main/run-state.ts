@@ -16,20 +16,30 @@ export type WriteVerdict =
   | { ok: true }
   | { ok: false; reason: string };
 
-// How long the terminal must have been silent before a non-idle instance is treated
-// as suspect.
+// How long the terminal must have been silent to count as "no reaction".
 //
-// Both CLIs repaint a spinner while they work — claude's detector relies on that,
-// noting it repaints "at least once per second", and OpenCode's keeps painting even
-// through a permission dialog. So a working session is never quiet for a whole
-// second. A quiet one that hasn't reported finishing is either blocked on something
-// the detector hasn't recognised yet, or doing something we can't see; either way it
-// is not a safe target.
-//
-// This is deliberately shorter than the detector's own path to declaring a prompt
-// (1500ms of unpaired tool_use plus 800ms of PTY silence for claude), so it covers
-// the window where a dialog is already up and the detector hasn't said so.
+// Both CLIs echo input and start animating within a beat of receiving it, so a
+// second of nothing right after a write means the write did not land as a prompt.
 const SUSPICIOUS_SILENCE_MS = 1000;
+
+// How long after a write silence still means anything.
+//
+// **Silence on its own cannot tell an idle session from one sitting on a dialog.**
+// Both are a static screen waiting for a human, and an earlier version of this file
+// claimed otherwise — that a working session is never quiet, so quiet implies
+// trouble. That was wrong, and it made the gate refuse ordinary targets: measured
+// 2026-09-15, an idle OpenCode session was refused with "has produced no terminal
+// output for 81s" simply because it was waiting for input, which is what idle looks
+// like. A session resumed with --continue never reports `waiting` for its old
+// history, so it sits in `starting`/`busy` indefinitely and every dispatch to it was
+// rejected.
+//
+// So silence is only consulted inside a window after *we* wrote something, where the
+// absence of any reaction is itself the signal — most usefully, it catches a second
+// dispatch when the first one landed on a dialog. Outside that window, quiet is just
+// quiet, and the detector's `prompt` event is the only thing that knows about
+// dialogs.
+const REACTION_WINDOW_MS = 8000;
 
 /**
  * Tracks one instance's state from the events the backend detector emits, plus the
@@ -44,6 +54,9 @@ const SUSPICIOUS_SILENCE_MS = 1000;
  */
 export class RunStateTracker {
   private current: RunState = "starting";
+  // When something last wrote to this instance. 0 means never, which is why a
+  // freshly resumed session that nobody has typed at is never judged on silence.
+  private lastWriteAt = 0;
 
   state(): RunState {
     return this.current;
@@ -67,17 +80,19 @@ export class RunStateTracker {
   }
 
   /** Called when bytes are written to this instance, from any source. */
-  onWrite() {
+  onWrite(now = Date.now()) {
     // Even a write while blocked lands as an answer to that dialog rather than as a
     // prompt, so the instance is no longer parked — the detector's `prompt-cleared`
     // will follow. Treating it as busy here keeps the next write gated on silence
     // rather than waving it straight through.
     this.current = "busy";
+    this.lastWriteAt = now;
   }
 
   /** The pty exited. */
   onExit() {
     this.current = "starting";
+    this.lastWriteAt = 0;
   }
 
   /**
@@ -86,7 +101,7 @@ export class RunStateTracker {
    * Refusals name the state, because the caller passes the reason up to the manager,
    * which has to relay something actionable to the user rather than "no".
    */
-  canAcceptWrite(ptySilentMs: number): WriteVerdict {
+  canAcceptWrite(ptySilentMs: number, now = Date.now()): WriteVerdict {
     if (this.current === "blocked") {
       return {
         ok: false,
@@ -96,22 +111,19 @@ export class RunStateTracker {
       };
     }
 
-    if (this.current === "idle") {
-      // It said it finished and nothing has been sent since, so the quiet is expected
-      // and the silence check would reject every legitimate write.
-      return { ok: true };
-    }
-
-    if (ptySilentMs >= SUSPICIOUS_SILENCE_MS) {
+    // Only inside the reaction window, and only when we were the ones who wrote. A
+    // static screen is what idle looks like, so judging silence outside this window
+    // refuses perfectly good targets — see REACTION_WINDOW_MS.
+    const wroteRecently =
+      this.lastWriteAt > 0 && now - this.lastWriteAt <= REACTION_WINDOW_MS;
+    if (wroteRecently && ptySilentMs >= SUSPICIOUS_SILENCE_MS) {
       return {
         ok: false,
         reason:
-          this.current === "starting"
-            ? "still starting up and has gone quiet, which usually means it is waiting on something " +
-              "(the CLI asks about trusting a new folder on first launch). Check it in Multi-Code."
-            : `working but has produced no terminal output for ${Math.round(ptySilentMs / 1000)}s. ` +
-              "Both CLIs animate while they work, so silence means it is probably waiting on " +
-              "something that hasn't been recognised yet. Check it in Multi-Code.",
+          `not reacting: something was sent ${Math.round((now - this.lastWriteAt) / 1000)}s ago ` +
+          `and its terminal has been silent for ${Math.round(ptySilentMs / 1000)}s. ` +
+          "Both CLIs echo input immediately, so that write probably landed somewhere " +
+          "unexpected — check it in Multi-Code before sending more.",
       };
     }
 
@@ -120,3 +132,4 @@ export class RunStateTracker {
 }
 
 export const SUSPICIOUS_SILENCE_MS_FOR_TESTS = SUSPICIOUS_SILENCE_MS;
+export const REACTION_WINDOW_MS_FOR_TESTS = REACTION_WINDOW_MS;

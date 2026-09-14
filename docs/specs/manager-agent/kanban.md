@@ -493,9 +493,18 @@ wait, read the result, forward it. Writes are gated on target state.
   permission dialog — so a working session is never quiet that long. This covers the
   window where a dialog is up but the detector hasn't recognised it yet, since claude
   needs 1500ms of unpaired tool_use plus 800ms of silence to decide.
-  **Residual window: the first 1000ms after a dialog appears.** A write inside it
-  passes both checks. Not closable from the PTY side; Q8's HTTP route would close it
-  for OpenCode. Documented rather than papered over.
+  **Corrected same day: that guard was wrong and refused ordinary targets.** Silence
+  cannot distinguish idle from blocked — both are a static screen waiting for a human.
+  Measured in real use: an idle OpenCode session was refused with "has produced no
+  terminal output for 81s" purely for waiting for input. A session resumed with
+  `--continue` never reports `waiting` for its old history, so it sits in
+  `starting`/`busy` indefinitely and *every* dispatch to it was rejected.
+  Silence is now only consulted inside an 8s window after **we** wrote something,
+  where the absence of any reaction is itself the signal — it catches a second
+  dispatch when the first landed on a dialog. Outside that window quiet is just quiet.
+  **Residual window is therefore the detector's own latency** (~2.3s for claude:
+  1500ms unpaired tool_use + 800ms silence). Not closable from the PTY side; Q8's
+  HTTP route would close it for OpenCode.
   `sendPrompt` and `writeToInstance` deliberately do **not** consult the gate — they
   carry the user's own keystrokes from the desktop or their phone, and answering a
   dialog is exactly what a user is allowed to do. The gate is for writes nobody is

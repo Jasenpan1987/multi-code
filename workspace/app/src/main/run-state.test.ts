@@ -7,7 +7,11 @@
 // be sitting on a dialog is never writable.
 
 import { describe, expect, it } from "vitest";
-import { RunStateTracker, SUSPICIOUS_SILENCE_MS_FOR_TESTS as QUIET } from "./run-state";
+import {
+  RunStateTracker,
+  SUSPICIOUS_SILENCE_MS_FOR_TESTS as QUIET,
+  REACTION_WINDOW_MS_FOR_TESTS as WINDOW,
+} from "./run-state";
 
 function tracker(...activity: string[]) {
   const t = new RunStateTracker();
@@ -96,44 +100,49 @@ describe("canAcceptWrite — idle", () => {
   });
 });
 
-describe("canAcceptWrite — the silence guard", () => {
-  it("allows a busy target that is still animating", () => {
-    // Both CLIs repaint a spinner while working, and the CLI queues the input —
-    // verified 2026-09-02, the screen showed `queued` and the task ran after.
-    const t = tracker("waiting");
-    t.onWrite();
-    expect(t.canAcceptWrite(0).ok).toBe(true);
-    expect(t.canAcceptWrite(QUIET - 1).ok).toBe(true);
+describe("canAcceptWrite — the reaction window", () => {
+  const T0 = 10_000_000;
+
+  it("allows a target nobody has written to, however long it has been quiet", () => {
+    // This is the regression that mattered. A session resumed with --continue never
+    // reports `waiting` for its old history, so it stays `starting` forever. Measured
+    // 2026-09-15: an idle OpenCode session was refused with "no terminal output for
+    // 81s" purely for waiting for input, which is what idle looks like.
+    const t = new RunStateTracker();
+    expect(t.canAcceptWrite(81_000, T0).ok).toBe(true);
+    expect(t.canAcceptWrite(600_000, T0).ok).toBe(true);
   });
 
-  it("refuses a busy target that has gone quiet", () => {
-    // This is the Q7 window: a dialog is up but the detector hasn't said `prompt`
-    // yet, because claude needs 1500ms of unpaired tool_use plus 800ms of silence to
-    // decide. A working session is never quiet this long.
+  it("allows a busy target that went quiet long after the last write", () => {
     const t = tracker("waiting");
-    t.onWrite();
-    const v = t.canAcceptWrite(QUIET);
+    t.onWrite(T0);
+    expect(t.canAcceptWrite(60_000, T0 + WINDOW + 1).ok).toBe(true);
+  });
+
+  it("refuses when a recent write produced no reaction at all", () => {
+    // Most usefully this catches a second dispatch when the first one landed on a
+    // dialog: the CLI echoes input immediately, so silence means it didn't.
+    const t = tracker("waiting");
+    t.onWrite(T0);
+    const v = t.canAcceptWrite(QUIET, T0 + 2000);
     expect(v.ok).toBe(false);
-    if (!v.ok) expect(v.reason).toMatch(/no terminal output/);
+    if (!v.ok) {
+      expect(v.reason).toMatch(/not reacting/);
+      expect(v.reason).toMatch(/2s ago/);
+    }
   });
 
-  it("refuses a starting instance that has gone quiet", () => {
-    // First launch of a new directory parks on the CLI's trust dialog, whose default
-    // is "No, exit". Writing into that is how you kill a fresh manager.
-    const v = new RunStateTracker().canAcceptWrite(QUIET);
-    expect(v.ok).toBe(false);
-    if (!v.ok) expect(v.reason).toMatch(/trusting a new folder/);
-  });
-
-  it("allows a starting instance that is still painting", () => {
-    expect(new RunStateTracker().canAcceptWrite(0).ok).toBe(true);
-  });
-
-  it("reports the silence in seconds, so the reason reads sensibly", () => {
+  it("allows a recent write that is being echoed normally", () => {
     const t = tracker("waiting");
-    t.onWrite();
-    const v = t.canAcceptWrite(4200);
-    if (!v.ok) expect(v.reason).toContain("4s");
+    t.onWrite(T0);
+    expect(t.canAcceptWrite(QUIET - 1, T0 + 2000).ok).toBe(true);
+  });
+
+  it("forgets the write after an exit, so a restarted instance isn't judged on it", () => {
+    const t = tracker("waiting");
+    t.onWrite(T0);
+    t.onExit();
+    expect(t.canAcceptWrite(60_000, T0 + 1000).ok).toBe(true);
   });
 });
 
