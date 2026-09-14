@@ -62,6 +62,28 @@ export interface Instance {
   runState?: "starting" | "idle" | "busy" | "blocked";
 }
 
+// One tool call made by the manager agent, as shown in the toolbox's Manager
+// section. Refusals are entries too — `status: "error"` with the reason in
+// `result` — because a dispatch that was blocked is the thing the user most needs
+// to see.
+export interface ManagerActivityEntry {
+  id: number;
+  // When the call started, not when it finished.
+  at: number;
+  tool: string;
+  // Session the call was aimed at, for the tools that take one.
+  target?: string;
+  // The arguments as JSON, truncated. Verbatim rather than prettified: for a write
+  // the user needs to read exactly what was sent.
+  payload: string;
+  // `running` while the handler is still working, which matters for the tools that
+  // wait on another session rather than answering immediately.
+  status: "running" | "ok" | "error";
+  // What the tool returned, or the refusal reason when `status` is `error`.
+  result?: string;
+  durationMs?: number;
+}
+
 export interface GitFileEntry {
   path: string;
   code: string;
@@ -141,6 +163,9 @@ export interface ElectronAPI {
   revokeRemoteDevice: (deviceId: string) => Promise<RemoteStatus>;
   hasTailscale: () => Promise<boolean>;
 
+  // Manager activity feed
+  getManagerActivity: () => Promise<ManagerActivityEntry[]>;
+
   // Compose box: clipboard image -> temp file (renderer has no fs access)
   saveClipboardImage: () => Promise<SavedClipboardImage | null>;
   deleteTempImage: (path: string) => Promise<void>;
@@ -163,6 +188,11 @@ export interface ElectronAPI {
   onShellOutput: (callback: (id: string, data: string) => void) => () => void;
   onShellExit: (callback: (id: string) => void) => () => void;
   onRemoteStatus: (callback: (status: RemoteStatus) => void) => () => void;
+  // One entry per push, inserted or updated. The renderer merges on `id` rather
+  // than re-fetching, so a long-running call flips from running to done in place.
+  onManagerActivity: (
+    callback: (entry: ManagerActivityEntry) => void
+  ) => () => void;
 }
 
 declare global {

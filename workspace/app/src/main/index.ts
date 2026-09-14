@@ -8,7 +8,7 @@ import {
   registerMdimgProtocol,
 } from "./mdimg-protocol";
 import { initRemote, shutdownRemote } from "./remote";
-import { shutdownManagerMcp } from "./manager-mcp";
+import { initManagerActivityFeed, shutdownManagerMcp } from "./manager-mcp";
 
 // Must run before app 'ready' — privileged scheme registration is only honored
 // pre-ready. The handler itself is installed after ready (in whenReady).
@@ -58,6 +58,7 @@ app.whenReady().then(() => {
   registerMdimgProtocol();
   registerIpcHandlers();
   initRemote();
+  initManagerActivityFeed();
   createWindow();
 });
 

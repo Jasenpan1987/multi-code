@@ -1816,3 +1816,183 @@ body,
 [data-theme="dark"] .toolbox-section-body .phone-muted {
   color: #a0a0a0;
 }
+
+
+/* Manager section (toolbox) — the manager agent's tool calls, newest first.
+   Dense on purpose: this is a log the user scans, so a row is one line until
+   clicked. */
+
+.manager-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.manager-hint {
+  color: #555;
+  background: rgba(0, 0, 0, 0.03);
+  line-height: 1.45;
+  padding: 5px 7px;
+  border-radius: 3px;
+}
+
+.manager-entry {
+  border: 1px solid #e0e0e0;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.02);
+  overflow: hidden;
+}
+
+.manager-entry-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 6px;
+  background: none;
+  border: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.manager-entry-head:disabled {
+  cursor: default;
+}
+
+.manager-entry-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #bbb;
+  flex: none;
+  /* Baseline-aligned row, so nudge the dot onto the text's optical centre. */
+  align-self: center;
+}
+
+.manager-entry[data-status="ok"] .manager-entry-dot {
+  background: #4bb066;
+}
+
+.manager-entry[data-status="error"] .manager-entry-dot {
+  background: #c62828;
+}
+
+.manager-entry[data-status="running"] .manager-entry-dot {
+  background: #d9822b;
+}
+
+.manager-entry-tool {
+  font-family: Menlo, Monaco, monospace;
+  font-size: 10px;
+  font-weight: bold;
+  color: #2d5a8a;
+  flex: none;
+}
+
+.manager-entry-target {
+  color: #444;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manager-entry-time {
+  margin-left: auto;
+  color: #888;
+  font-size: 10px;
+  white-space: nowrap;
+  flex: none;
+}
+
+.manager-entry-preview {
+  padding: 0 6px 4px 19px;
+  color: #666;
+  font-size: 10px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manager-entry-preview[data-error="true"] {
+  color: #c62828;
+}
+
+.manager-entry-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 6px 6px 19px;
+}
+
+.manager-entry-payload,
+.manager-entry-result {
+  margin: 0;
+  padding: 4px 6px;
+  border-radius: 2px;
+  font-family: Menlo, Monaco, monospace;
+  font-size: 10px;
+  line-height: 1.4;
+  /* Payloads are prose and JSON, both of which have to stay readable verbatim —
+     wrap rather than scroll sideways. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  /* A transcript tail can be thousands of characters; cap it so one entry can't
+     push the rest of the feed off the panel. */
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.manager-entry-payload {
+  color: #2d5a8a;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.manager-entry-result {
+  color: #444;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.manager-entry-result[data-error="true"] {
+  color: #c62828;
+  background: rgba(198, 40, 40, 0.08);
+}
+
+[data-theme="dark"] .toolbox-section-body .manager-hint {
+  color: #b0b0b0;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] .toolbox-section-body .manager-entry {
+  border-color: #3c3c3c;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="dark"] .toolbox-section-body .manager-entry-tool {
+  color: #9cc4e4;
+}
+
+[data-theme="dark"] .toolbox-section-body .manager-entry-target {
+  color: #d4d4d4;
+}
+
+[data-theme="dark"] .toolbox-section-body .manager-entry-preview {
+  color: #a0a0a0;
+}
+
+[data-theme="dark"] .toolbox-section-body .manager-entry-preview[data-error="true"],
+[data-theme="dark"] .toolbox-section-body .manager-entry-result[data-error="true"] {
+  color: #e88;
+}
+
+[data-theme="dark"] .toolbox-section-body .manager-entry-payload {
+  color: #9cc4e4;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .toolbox-section-body .manager-entry-result {
+  color: #c8c8c8;
+  background: rgba(255, 255, 255, 0.04);
+}

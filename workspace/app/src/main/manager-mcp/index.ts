@@ -11,13 +11,16 @@
 // to write the --mcp-config the manager is launched with. So the order is always
 // start server, read port, write config, spawn.
 
+import { BrowserWindow } from "electron";
 import { managerMcpServer } from "./server";
 import { MCP_SERVER_NAME, removeMcpConfig, writeMcpConfig } from "./config";
 import { buildReadTools } from "./read-tools";
 import { buildWriteTools } from "./write-tools";
+import { managerActivityLog } from "./activity-log";
 import { processManager } from "../process-manager";
 import type { McpServerInfo } from "./server";
 import type { SpawnOptions } from "../backends";
+import type { ManagerActivityEntry } from "../../shared/types";
 
 let toolsRegistered = false;
 
@@ -100,6 +103,26 @@ export function managerToolNames(): string[] {
 
 export function getManagerMcpInfo(): McpServerInfo {
   return managerMcpServer.getInfo();
+}
+
+// Pushes each tool call to the renderer so the Manager section is live without
+// polling. Called once at startup, not on the first manager spawn: the log itself
+// costs nothing when empty, and a listener attached late would drop the calls the
+// manager makes in its opening turn.
+export function initManagerActivityFeed() {
+  managerActivityLog.setListener((entry: ManagerActivityEntry) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send("manager-activity", entry);
+      }
+    }
+  });
+}
+
+// The whole feed, for a renderer that just mounted. The log lives in main
+// precisely so this survives a reload.
+export function getManagerActivity(): ManagerActivityEntry[] {
+  return managerActivityLog.list();
 }
 
 export async function shutdownManagerMcp(): Promise<void> {

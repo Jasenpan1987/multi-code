@@ -46,6 +46,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("remote-revoke-device", deviceId),
   hasTailscale: () => ipcRenderer.invoke("remote-has-tailscale"),
 
+  // Manager activity feed
+  getManagerActivity: () => ipcRenderer.invoke("manager-activity-list"),
+
   // Compose box: clipboard image -> temp file (renderer has no fs access)
   saveClipboardImage: () => ipcRenderer.invoke("save-clipboard-image"),
   deleteTempImage: (path: string) =>
@@ -118,6 +121,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("remote-status", listener);
     return () => {
       ipcRenderer.removeListener("remote-status", listener);
+    };
+  },
+  onManagerActivity: (callback: (entry: unknown) => void) => {
+    const listener = (_event: unknown, entry: unknown) => callback(entry);
+    ipcRenderer.on("manager-activity", listener);
+    return () => {
+      ipcRenderer.removeListener("manager-activity", listener);
     };
   },
 });

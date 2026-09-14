@@ -14,7 +14,7 @@ import type { ReadFileResult } from "../shared/types";
 import { remoteServer } from "./remote/ws-server";
 import { setRemoteEnabled } from "./remote";
 import { hasTailscaleEndpoint } from "./remote/endpoints";
-import { ensureManagerMcpStarted } from "./manager-mcp";
+import { ensureManagerMcpStarted, getManagerActivity } from "./manager-mcp";
 import { ensureManagerWorkspace } from "./manager-workspace";
 import QRCode from "qrcode";
 
@@ -378,6 +378,11 @@ export function registerIpcHandlers() {
     remoteServer.revokeDevice(deviceId);
     return remoteServer.getStatus();
   });
+
+  // Everything the manager has done, newest first. Live updates arrive on the
+  // "manager-activity" event; this is for a renderer that just mounted or
+  // reloaded.
+  ipcMain.handle("manager-activity-list", () => getManagerActivity());
 
   // Whether a Tailscale address exists on this machine — i.e. whether the phone
   // will still reach the desktop after leaving the house. Surfaced so the user

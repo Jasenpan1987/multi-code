@@ -17,6 +17,7 @@
 
 import http from "http";
 import crypto from "crypto";
+import { managerActivityLog } from "./activity-log";
 
 // Advertised in the initialize result. A client that asked for a different
 // revision still gets this one and decides for itself whether it can proceed —
@@ -316,31 +317,36 @@ export class ManagerMcpServer {
     }
   }
 
+  // Also the single choke point where the activity feed is recorded. Every call
+  // travels through here — reads, writes, refusals, and anything a later task
+  // registers — so logging here means no tool can be added that dispatches work
+  // invisibly, which is the condition the manager was given its autonomy under.
   private async callTool(
     id: string | number | null,
     params: Record<string, unknown> | undefined
   ): Promise<object> {
     const name = typeof params?.name === "string" ? params.name : "";
+    const args =
+      typeof params?.arguments === "object" && params.arguments !== null
+        ? (params.arguments as Record<string, unknown>)
+        : {};
+
+    const logId = managerActivityLog.start(name || "(no tool name)", args);
+
     const tool = this.tools.get(name);
     if (!tool) {
       // Name the tools that do exist. The manager reaching for a tool it doesn't
       // have is usually a stale idea of what's registered, and a bare "unknown"
       // leaves it guessing.
       const known = [...this.tools.keys()].join(", ") || "(none)";
-      return errorResponse(
-        id,
-        INVALID_PARAMS,
-        `Unknown tool: ${name}. Available: ${known}`
-      );
+      const message = `Unknown tool: ${name}. Available: ${known}`;
+      managerActivityLog.finish(logId, { ok: false, text: message });
+      return errorResponse(id, INVALID_PARAMS, message);
     }
-
-    const args =
-      typeof params?.arguments === "object" && params.arguments !== null
-        ? (params.arguments as Record<string, unknown>)
-        : {};
 
     try {
       const text = await tool.handler(args);
+      managerActivityLog.finish(logId, { ok: true, text });
       return {
         jsonrpc: "2.0",
         id,
@@ -352,6 +358,7 @@ export class ManagerMcpServer {
       // it — a JSON-RPC error would just be an opaque failure. This is the path
       // every refusal in the later write tools travels.
       const reason = err instanceof Error ? err.message : String(err);
+      managerActivityLog.finish(logId, { ok: false, text: reason });
       return {
         jsonrpc: "2.0",
         id,

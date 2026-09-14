@@ -419,7 +419,7 @@ this milestone writes to another session's terminal.
 
 ### T-210: Manager activity feed
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done (2026-09-15 — 20 tests, verified in the running app against the live MCP server)
 - **Requirement:** `prd.md#r5--safety-boundary`
 - **Code:** `workspace/app/src/renderer/components/`, `workspace/app/src/main/manager-mcp/`
 - **Description:** Every manager tool call, visible. A Toolbox section listing, newest
@@ -436,6 +436,27 @@ this milestone writes to another session's terminal.
 - **Blocks:** T-211 · **Blocked by:** T-205 · **Parallel with:** none
 - **Notes:** Land this before M3's write tools, so the first dispatch the manager ever makes
   is already observable.
+- **Outcome (2026-09-15):** `manager-mcp/activity-log.ts` (a capped in-memory log
+  with one listener), recorded from **`ManagerMcpServer.callTool`** rather than from
+  each tool. That is the single point every call passes through, so a tool added by a
+  later task cannot dispatch work invisibly — which is the property the requirement
+  actually needs, and per-tool logging would not give it. Rendered by
+  `renderer/components/ManagerSection.tsx` as a new "Manager" toolbox section. 20 tests.
+  **Entries are two-phase — recorded as `running` on entry, rewritten on return.**
+  T-208's `wait_for_idle` can run for minutes, and a feed that only recorded
+  completions would be blank during exactly the stretch the user is watching.
+  A call for an unregistered tool is logged too: the manager reaching for a tool it
+  doesn't have looks identical to a broken feature from the outside.
+  Cost of the design: 200 entries, payload and result truncated at 4k chars each, and
+  nothing persisted to disk. The feed is for watching, not auditing, and a restart
+  drops it.
+  **Verified in the running app 2026-09-15** over CDP, against the live MCP server
+  (port and token from `userData/manager-mcp.json`): `list_sessions` recorded green
+  with a one-line summary; `read_session` on a stopped session and `send_task` aimed
+  at the manager itself both recorded red **with their refusal reason on the collapsed
+  row**, no click needed. Expanding showed the exact arguments plus the full reason.
+  `location.reload()` in the renderer left all three entries intact, confirming the
+  log lives in main.
 
 ---
 
@@ -522,7 +543,7 @@ wait, read the result, forward it. Writes are gated on target state.
 
 ### T-206: `send_task` behind the state gate
 - **Type:** feature
-- **Status:** done (2026-09-15 — 13 tests; activity-feed acceptance waits on T-210)
+- **Status:** done (2026-09-15 — 13 tests; activity-feed acceptance met by T-210)
 - **Requirement:** `prd.md#requirements` (R2), `prd.md#r5--safety-boundary`
 - **Code:** `workspace/app/src/main/manager-mcp/`, `workspace/app/src/main/process-manager.ts`
 - **Description:** `send_task(alias, text)` — hand a session work. Consults
@@ -560,10 +581,10 @@ wait, read the result, forward it. Writes are gated on target state.
   what the manager had separately determined by shelling out. Same run confirmed the
   UTF-8 fix (Chinese in the transcript rendered correctly) and OpenCode context usage
   from a real database rather than the mocked one.
-  **The activity-feed acceptance criterion is still not met**: T-210 doesn't exist yet,
-  so dispatches are invisible in the UI. The user authorised the manager to act without
-  per-action approval *on the condition that nothing is invisible*, so T-210 should
-  land before this is leaned on.
+  **The activity-feed acceptance criterion was not met when this shipped** — T-210 did
+  not exist yet, so dispatches were invisible in the UI. **Met as of T-210 (same day):**
+  every `send_task`, accepted or refused, now appears in the Manager toolbox section
+  with its target, its text and, on a refusal, the reason.
 
 ---
 

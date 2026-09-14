@@ -4,6 +4,7 @@ import { QuickActionsSection } from "./QuickActionsSection";
 import { TerminalSection } from "./TerminalSection";
 import { MarkdownSection } from "./MarkdownSection";
 import { PhoneSection } from "./PhoneSection";
+import { ManagerSection } from "./ManagerSection";
 import type { Instance } from "../../shared/types";
 
 interface ToolboxProps {
@@ -88,6 +89,15 @@ export function Toolbox({
         onToggle={onExpandSection}
       >
         <PhoneSection active={isExpanded("phone")} />
+      </ToolboxSection>
+
+      <ToolboxSection
+        id="manager"
+        title="Manager"
+        expanded={isExpanded("manager")}
+        onToggle={onExpandSection}
+      >
+        <ManagerSection active={isExpanded("manager")} />
       </ToolboxSection>
     </aside>
   );
