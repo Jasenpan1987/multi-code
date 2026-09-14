@@ -110,7 +110,7 @@ the UI. No manager involved, nothing writes to any terminal.
 
 ### T-202: Context usage in ContactList
 - **Type:** feature
-- **Status:** done (2026-09-15 — count shipped, percentage split out to T-212; visual acceptance unverified, see below)
+- **Status:** done (2026-09-15 — count shipped, percentage split out to T-212; visual acceptance verified via CDP)
 - **Requirement:** `prd.md#r7--context-usage-in-the-ui`
 - **Code:** `workspace/app/src/renderer/components/ContactList.tsx`, `workspace/app/src/main/ipc-handlers.ts`, `workspace/app/src/main/preload.ts`, `workspace/app/src/shared/types.ts`
 - **Description:** Surface T-201's number per contact. Add `contextUsage?: ContextUsage` to
@@ -138,12 +138,12 @@ the UI. No manager involved, nothing writes to any terminal.
   **The percentage was split out to T-212**: the window size is in neither
   transcript, and the two backends expose it in completely different places (see
   that task). A wrong denominator is worse than none.
-  **Two acceptance criteria are unverified** — both backends showing a figure, and
-  the row staying single-line. The user's Multi-Code was running and holding port
-  6768, so a second instance would have contended for it and for `contacts.json`.
-  Verified instead: the compiled reader against the four largest real transcripts
-  on this machine (8–10.8MB) returned 413k–719k tokens with the correct model in
-  18–24ms each. **Confirm the two visual criteria on the next app restart.**
+  **Visual criteria verified 2026-09-15** by driving the running app over CDP
+  (`--remote-debugging-port`, then `Runtime.evaluate` in the renderer — osascript's
+  `click at` does not reach Electron's web content). A running OpenCode instance
+  showed `12k` on a single line; stopped contacts showed nothing rather than `0`.
+  Also verified the compiled reader against the four largest real transcripts on this
+  machine (8–10.8MB): 413k–719k tokens with the correct model, 18–24ms each.
 
 ---
 
@@ -552,10 +552,18 @@ wait, read the result, forward it. Writes are gated on target state.
   The tool description carries the cost argument explicitly — "do NOT use it to ask
   how something is going, read_session answers that for free" — because without it
   the manager spends a target's whole turn on a status question.
-  **The activity-feed acceptance criterion is not met**: T-210 doesn't exist yet, so
-  dispatches are currently invisible in the UI. The user authorised the manager to act
-  without per-action approval *on the condition that nothing is invisible*, so T-210
-  should land before this is leaned on.
+  **Verified end-to-end against a live OpenCode session, 2026-09-15.** Started the
+  instance over CDP, called the live MCP server directly (its port and bearer token are
+  in `userData/manager-mcp.json`), dispatched
+  "git branch --show-current, and how many commits behind origin/dev", waited, then
+  read it back: the session had run both git commands and answered `uat 157` — matching
+  what the manager had separately determined by shelling out. Same run confirmed the
+  UTF-8 fix (Chinese in the transcript rendered correctly) and OpenCode context usage
+  from a real database rather than the mocked one.
+  **The activity-feed acceptance criterion is still not met**: T-210 doesn't exist yet,
+  so dispatches are invisible in the UI. The user authorised the manager to act without
+  per-action approval *on the condition that nothing is invisible*, so T-210 should
+  land before this is leaned on.
 
 ---
 
