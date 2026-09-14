@@ -193,6 +193,15 @@ body,
   flex-shrink: 0;
 }
 
+/* New keeps `width: 100%` for when it stands alone, which inside a flex row means
+   it claims the whole strip and pushes the Manager button out of view entirely.
+   Let it share instead. */
+.sidebar-actions .new-instance-btn-bottom {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+}
+
 /* Same chrome as New, narrower and quieter — it is a one-time action, and once the
    manager exists this button is gone for good. */
 .new-manager-btn {

@@ -390,7 +390,13 @@ function errorResponse(
 function sendJson(res: http.ServerResponse, status: number, body: object) {
   const payload = JSON.stringify(body);
   res.writeHead(status, {
-    "content-type": "application/json",
+    // charset is not optional in practice. JSON defaults to UTF-8 per RFC 8259,
+    // but HTTP/1.1's own default for text is ISO-8859-1, and a client taking that
+    // path renders every non-ASCII byte as mojibake. Observed 2026-09-15: an
+    // OpenCode transcript containing Chinese arrived at the manager as
+    // "ÈáçÊñ∞ËØªÂèñ" — the exact mac-roman reading of correct UTF-8 bytes — which
+    // made reading any non-English session useless.
+    "content-type": "application/json; charset=utf-8",
     "content-length": Buffer.byteLength(payload),
   });
   res.end(payload);

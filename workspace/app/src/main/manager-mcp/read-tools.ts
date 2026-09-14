@@ -134,7 +134,14 @@ export function formatSessionList(instances: InstanceInfo[], now = Date.now()): 
       `context=${i.contextUsage ? `${i.contextUsage.inputTokens} tokens` : "unknown"}`,
     ];
     if (i.contextUsage?.model) fields.push(`model=${i.contextUsage.model}`);
-    fields.push(`last-activity=${formatAge(i.lastActivityAt, now)}`);
+    // `lastActivityAt` only exists for turns this app run observed, so a session
+    // resumed with --continue reports "never" despite a long history — measured
+    // 2026-09-15, where every session including a busy one read as never and the
+    // manager correctly complained the field told it nothing. The transcript's
+    // newest assistant turn is the same information and survives a restart, so it
+    // stands in when the live signal hasn't fired yet.
+    const activityAt = i.lastActivityAt ?? i.contextUsage?.updatedAt;
+    fields.push(`last-activity=${formatAge(activityAt, now)}`);
     fields.push(`cwd=${i.cwd}`);
     return fields.join(" | ");
   });

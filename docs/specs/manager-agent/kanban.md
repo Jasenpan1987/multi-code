@@ -2,7 +2,7 @@
 
 **Generated:** 2026-09-02
 **PRD Version:** 1.0
-**Total Tasks:** 13
+**Total Tasks:** 14
 **Milestones:** M1 (See who's full), M2 (Manager can look), M3 (Manager can dispatch), M4 (Handoff + safety regression)
 
 ## Task Overview
@@ -22,6 +22,7 @@ graph TD
     T203 --> T207
     T203 --> T208
     T205 --> T210[T-210: Manager activity feed]
+    T205 --> T214[T-214: Read a stopped session]
     T202 --> T211[T-211: Safety regression + E2E QA]
     T206 --> T211
     T207 --> T211
@@ -312,18 +313,69 @@ this milestone writes to another session's terminal.
   - **cwd is `userData/manager/`, not `~/.config/Multi-Code/manager/`** — the latter
     came from the storage-path assumption T-205 disproved.
   - **`--add-dir` is not passed.** It grants *tool access*, not read access, so it
-    would let the coordinator edit every one of the user's repos. It isn't needed
-    either: progress comes from `read_session`, and anything needing real code can be
-    dispatched to the session that owns it. This also dissolves **Q4** — with no
-    `--add-dir` the CLI's own directory boundary confines the manager to its own
-    workspace, so it can write its notes and nothing else, with no permission-mode
-    juggling.
+    would let the coordinator edit every one of the user's repos with the file tools.
+    It isn't needed either: progress comes from `read_session`, and anything needing
+    real code can be dispatched to the session that owns it.
+
+    **Correction (2026-09-15): this does NOT confine the manager, and an earlier
+    version of this entry wrongly claimed it did.** Observed in real use: the manager
+    ran `cd /Users/jasenpan/code/apra/apra-amcos-portals-backend && git ...` and read
+    that repo's state fine. The CLI's directory boundary governs the file tools, not
+    `Bash`, and this user's settings allow `Bash(*)`. So omitting `--add-dir` reduces
+    the surface but does not bound it — anything reachable by a shell command is
+    still reachable. **Q4 therefore remains open**, and the honest position is that
+    the manager is currently as privileged as the user's own `Bash` rules allow.
   Also fixed `restartInstance`, which didn't forward `isManager` — restarting the
   manager would have produced one with no tools: alive, addressable, useless.
   Verified end-to-end: `claudeBackend.spawn` produced the right command line, the CLI
   connected with **no permission prompt** (so the allowlist works), read its seeded
   guidance, called `list_sessions` unprompted and answered correctly ("18 sessions,
   11 running, 7 stopped, most context is multi-code at 531,012 tokens").
+
+---
+
+### T-214: Read a stopped session's transcript
+- **Type:** feature
+- **Status:** backlog
+- **Requirement:** `prd.md#requirements` (R1)
+- **Code:** `workspace/app/src/main/backends/`, `workspace/app/src/main/process-manager.ts`, `workspace/app/src/main/manager-mcp/read-tools.ts`
+- **Description:** `read_session` refuses a stopped session, per T-205's acceptance.
+  Real use hit this on the **first** question asked of the manager: "has
+  portals-backend pulled the latest dev branch?" — a stopped session, so the manager
+  couldn't read it and said so, then worked around it by shelling out to `git`. The
+  transcript is a file on disk and reading it is harmless; the refusal costs a real
+  capability for no safety gain.
+
+  Two parts, and the second is the one that bites:
+
+  1. **Drop the `status === "stopped"` guard** in `read_session`, and mark the state
+     in the output instead so the manager doesn't present stale work as current.
+
+  2. **A stopped instance usually has no `sessionId`.** It survives a stop within one
+     app run, but `loadSavedContacts` rebuilds instances from `contacts.json`, which
+     doesn't store it — so after a restart every stopped contact has none, which is
+     also why they all report `context=unknown`. Needs a
+     `Backend.findLatestSessionId(cwd): string | null`: claude scans
+     `PROJECTS_DIR/<encoded-cwd>/*.jsonl` for the newest by mtime, opencode queries
+     its `session` table by directory.
+
+  **Do not write the result into `sessionId`.** `spawnProcess`'s `isSessionClaimed`
+  check treats any instance holding a session id as the owner of that live session,
+  so a stopped contact pre-filled from disk would veto a *running* instance in the
+  same directory during discovery — and this user has exactly that shape (two
+  contacts on `apra-amcos-portals-backend`). Keep it in a separate field that only
+  the read paths consult, leaving `sessionId` to discovery alone.
+- **Acceptance:**
+  - `read_session` on a stopped instance returns its transcript, labelled stopped
+  - Works after an app restart, when the instance never had a `sessionId` in memory
+  - Context usage appears for stopped contacts too, so the contact list is useful
+    the moment the app opens rather than only after starting something
+  - Discovery for a running instance is unaffected when another contact in the same
+    directory has a disk-resolved id — regression test for the claim interaction
+  - Both backends covered by unit tests
+- **Blocks:** none · **Blocked by:** T-201 (done), T-205 (done) · **Parallel with:** everything
+- **Notes:** Fixes the "nothing shows until you start something" gap left by T-202 at
+  the same time, since both want the same disk-resolved session id.
 
 ---
 

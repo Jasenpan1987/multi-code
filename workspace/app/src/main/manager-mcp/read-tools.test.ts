@@ -175,6 +175,43 @@ describe("formatSessionList", () => {
     expect(out).toContain("status=stopped");
   });
 
+  it("falls back to the transcript's age when no live activity was seen", () => {
+    // A session resumed with --continue has a long history but fires no activity
+    // this app run, so lastActivityAt is absent and "never" would be misleading.
+    const out = formatSessionList(
+      [
+        instance({
+          lastActivityAt: undefined,
+          contextUsage: { inputTokens: 100, updatedAt: now - 5 * 60_000 },
+        }),
+      ],
+      now
+    );
+    expect(out).toContain("last-activity=5m ago");
+    expect(out).not.toContain("last-activity=never");
+  });
+
+  it("prefers the live activity signal over the transcript's age", () => {
+    const out = formatSessionList(
+      [
+        instance({
+          lastActivityAt: now - 60_000,
+          contextUsage: { inputTokens: 100, updatedAt: now - 3 * 3_600_000 },
+        }),
+      ],
+      now
+    );
+    expect(out).toContain("last-activity=1m ago");
+  });
+
+  it("still says never when there is neither signal", () => {
+    const out = formatSessionList(
+      [instance({ lastActivityAt: undefined, contextUsage: undefined })],
+      now
+    );
+    expect(out).toContain("last-activity=never");
+  });
+
   it("warns that status is coarse, so the manager doesn't over-read it", () => {
     const out = formatSessionList([instance()], now);
     expect(out).toMatch(/does not distinguish/);

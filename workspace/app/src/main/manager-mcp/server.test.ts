@@ -225,6 +225,27 @@ describe("methods and routing", () => {
     expect(body.id).toBe(1);
   });
 
+  it("declares utf-8 on the response, so non-ASCII text survives the hop", async () => {
+    // Without the charset, a client can fall back to HTTP/1.1's ISO-8859-1 default
+    // and every non-ASCII byte arrives as mojibake. Observed with a Chinese
+    // transcript reaching the manager as "ÈáçÊñ∞ËØªÂèñ".
+    const { endpoint, token } = await startWith({
+      name: "chinese",
+      description: "returns non-ASCII",
+      inputSchema: { type: "object", properties: {} },
+      handler: () => "重新读取再原子重命名",
+    });
+    const res = await post(endpoint, token, {
+      jsonrpc: "2.0",
+      id: 11,
+      method: "tools/call",
+      params: { name: "chinese" },
+    });
+    expect(res.headers.get("content-type")).toBe("application/json; charset=utf-8");
+    const body = await res.json();
+    expect(body.result.content[0].text).toBe("重新读取再原子重命名");
+  });
+
   it("answers ping", async () => {
     const { endpoint, token } = await startWith(HEALTH);
     const body = await (

@@ -264,6 +264,19 @@ Kept here because each answer constrains the design.
   fleet changes what that task has to cover. Note the API's `GET
   /api/session/{id}/context` is **not** token usage (returns `{"data": []}`), and
   session-level `tokens`/`cost` are lifetime totals, so T-201 stands as specified.
+- **Q4 — reopened 2026-09-15. What actually bounds the manager?**
+  T-209 left out `--add-dir` on the reasoning that the CLI's directory boundary would
+  then confine the manager to its own workspace. **That reasoning is wrong.** In real
+  use the manager ran `cd <a user repo> && git …` and read that repo's state without
+  trouble: the boundary governs the file tools (Read/Edit/Write), not `Bash`, and this
+  user's settings allow `Bash(*)`.
+
+  So the manager is currently as privileged as the user's own Bash rules allow, and
+  omitting `--add-dir` narrows the surface without bounding it. Options, none chosen
+  yet: pass `--settings` with a manager-specific deny list (`Edit`, `Write`, plus
+  `Bash` patterns that write); accept the privilege and rely on T-210's visibility;
+  or give the manager its own permission mode. Worth settling before T-206 and T-207
+  add tools that make the manager act on other sessions rather than just read them.
 - **Q7 — Detector coverage for the blocked check.** R5's state check is only as
   good as the `prompt` event. Claude's detection of a blocked state is threshold-
   based, so there is a window where a session is on a dialog but not yet reported

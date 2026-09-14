@@ -91,16 +91,44 @@ function findJsonlByCwd(
   }
 }
 
+// Markers the CLI sets on its own child processes. Multi-Code may itself have been
+// launched from inside a Claude Code session — `pnpm start` typed at an agent's
+// prompt is enough — and then every agent it spawns inherits them, with real
+// consequences:
+//
+//   CLAUDE_CODE_CHILD_SESSION  turns transcript saving OFF, which silently breaks
+//                              session discovery, completion detection and context
+//                              usage, since all three read that transcript
+//   CLAUDE_CODE_EXECPATH       pins the child to the parent's CLI version instead
+//                              of whatever the launcher resolves to
+//   CLAUDE_CODE_SESSION_ID     hands the child an id that isn't its own
+//   CLAUDE_EFFORT              forces the parent's effort level, and its cost
+//
+// Observed 2026-09-15: an app started this way produced agents with "Transcript
+// saving is off" and no session file at all. Each instance we spawn is its own
+// top-level session, so these are cleared rather than passed through.
+const INHERITED_CLI_MARKERS = [
+  "CLAUDE_CODE_CHILD_SESSION",
+  "CLAUDE_CODE_SESSION_ID",
+  "CLAUDE_CODE_EXECPATH",
+  "CLAUDE_CODE_ENTRYPOINT",
+  "CLAUDECODE",
+  "CLAUDE_PID",
+  "CLAUDE_EFFORT",
+];
+
 function buildEnv(): Record<string, string> {
+  const env = { ...process.env } as Record<string, string>;
+  for (const key of INHERITED_CLI_MARKERS) delete env[key];
   return {
-    ...process.env,
+    ...env,
     PATH: [
       path.join(HOME, ".local/bin"),
       "/opt/homebrew/bin",
       "/usr/local/bin",
       process.env.PATH || "",
     ].join(":"),
-  } as Record<string, string>;
+  };
 }
 
 // A tool_use that is unpaired for this long is treated as "Claude is blocked
