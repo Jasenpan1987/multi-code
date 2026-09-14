@@ -23,7 +23,10 @@ function instance(over: Partial<InstanceInfo> = {}): InstanceInfo {
 
 interface Harness {
   tool: ToolLike;
+  toolNamed: (name: string) => ToolLike;
   sent: Array<{ id: string; text: string }>;
+  commands: Array<{ id: string; command: string }>;
+  started: string[];
 }
 type ToolLike = ReturnType<typeof buildWriteTools>[number];
 
@@ -32,6 +35,8 @@ function harness(
   verdict: WriteVerdict = { ok: true }
 ): Harness {
   const sent: Array<{ id: string; text: string }> = [];
+  const commands: Array<{ id: string; command: string }> = [];
+  const started: string[] = [];
   const host: ManagerWriteHost = {
     listInstances: () => instances,
     sendTask: (id, text) => {
@@ -40,9 +45,25 @@ function harness(
       sent.push({ id, text });
       return { ok: true };
     },
+    runCommand: (id, command) => {
+      if (!verdict.ok) return verdict;
+      commands.push({ id, command });
+      return { ok: true };
+    },
+    startSession: (id) => {
+      started.push(id);
+      const found = instances.find((i) => i.id === id);
+      return found ? { ...found, status: "running" } : null;
+    },
   };
-  const tool = buildWriteTools(host).find((t) => t.name === "send_task")!;
-  return { tool, sent };
+  const tools = buildWriteTools(host);
+  return {
+    tool: tools.find((t) => t.name === "send_task")!,
+    toolNamed: (name) => tools.find((t) => t.name === name)!,
+    sent,
+    commands,
+    started,
+  };
 }
 
 describe("send_task — the gate", () => {
@@ -145,5 +166,155 @@ describe("send_task — the description steers the model", () => {
     const { tool } = harness();
     const text = JSON.stringify(tool.inputSchema);
     expect(text).toMatch(/cannot see this conversation/);
+  });
+
+  it("points at wait_for_idle rather than at re-reading", () => {
+    // Polling read_session in a loop is what made the manager take minutes to
+    // confirm a one-second command, because each poll costs it a whole turn.
+    const out = harness().tool.handler({ name: "msk", text: "x" });
+    expect(out).toMatch(/wait_for_idle/);
+  });
+});
+
+describe("run_command — the allowlist", () => {
+  it("runs an allowed command", () => {
+    const h = harness();
+    const out = h.toolNamed("run_command").handler({
+      name: "msk",
+      command: "/clear",
+    });
+    expect(h.commands).toEqual([{ id: "id-1", command: "/clear" }]);
+    expect(out).toContain("Ran /clear in msk");
+  });
+
+  it("allows the commands the user asked for by name", () => {
+    // /clear and /new were the two the user tried and could not get through, so a
+    // regression here reintroduces the exact complaint.
+    const h = harness();
+    for (const command of ["/clear", "/new", "/compact", "/context", "/handoff"]) {
+      h.toolNamed("run_command").handler({ name: "msk", command });
+    }
+    expect(h.commands.map((c) => c.command)).toEqual([
+      "/clear",
+      "/new",
+      "/compact",
+      "/context",
+      "/handoff",
+    ]);
+  });
+
+  it("refuses a command that is not on the list, naming the list", () => {
+    const h = harness();
+    expect(() =>
+      h.toolNamed("run_command").handler({ name: "msk", command: "/exit" })
+    ).toThrow(/not an allowed command/);
+    expect(h.commands).toHaveLength(0);
+  });
+
+  // Exact match, so nothing can ride along behind an allowed command.
+  it("refuses an allowed command carrying arguments", () => {
+    const h = harness();
+    expect(() =>
+      h
+        .toolNamed("run_command")
+        .handler({ name: "msk", command: "/compact && rm -rf ." })
+    ).toThrow(/not an allowed command/);
+    expect(h.commands).toHaveLength(0);
+  });
+
+  it("refuses plain text with no leading slash", () => {
+    const h = harness();
+    expect(() =>
+      h.toolNamed("run_command").handler({ name: "msk", command: "clear" })
+    ).toThrow(/not an allowed command/);
+    expect(h.commands).toHaveLength(0);
+  });
+
+  it("writes nothing when the gate refuses", () => {
+    const h = harness([instance({ runState: "blocked" })], {
+      ok: false,
+      reason: "waiting on a decision from you",
+    });
+    expect(() =>
+      h.toolNamed("run_command").handler({ name: "msk", command: "/clear" })
+    ).toThrow(/msk is waiting on a decision/);
+    expect(h.commands).toHaveLength(0);
+  });
+
+  it("refuses to run a command in the manager itself", () => {
+    const h = harness([instance({ name: "Manager", isManager: true })]);
+    expect(() =>
+      h.toolNamed("run_command").handler({ name: "Manager", command: "/clear" })
+    ).toThrow(/That is you/);
+    expect(h.commands).toHaveLength(0);
+  });
+
+  it("warns that /clear leaves nothing to read afterwards", () => {
+    // Otherwise the manager reads the now-empty transcript and reports failure.
+    const out = harness()
+      .toolNamed("run_command")
+      .handler({ name: "msk", command: "/clear" });
+    expect(out).toMatch(/leave nothing in the/);
+  });
+
+  it("steers toward /handoff over /clear in its description", () => {
+    const { toolNamed } = harness();
+    expect(toolNamed("run_command").description).toMatch(/Prefer \/handoff/);
+  });
+});
+
+describe("start_session", () => {
+  it("starts a stopped session", () => {
+    const h = harness([instance({ status: "stopped", runState: undefined })]);
+    const out = h.toolNamed("start_session").handler({ name: "msk" });
+    expect(h.started).toEqual(["id-1"]);
+    expect(out).toContain("Started msk");
+  });
+
+  it("is a no-op on one already running", () => {
+    const h = harness();
+    const out = h.toolNamed("start_session").handler({ name: "msk" });
+    expect(h.started).toHaveLength(0);
+    expect(out).toMatch(/already running/);
+  });
+
+  it("reports a start that failed rather than claiming success", () => {
+    const h = harness([instance({ status: "stopped" })]);
+    // A host that can't find the instance returns null — the shape a real failure
+    // takes in startInstance.
+    const host: ManagerWriteHost = {
+      listInstances: () => [instance({ status: "stopped" })],
+      sendTask: () => ({ ok: true }),
+      runCommand: () => ({ ok: true }),
+      startSession: () => null,
+    };
+    const tool = buildWriteTools(host).find((t) => t.name === "start_session")!;
+    expect(() => tool.handler({ name: "msk" })).toThrow(/Could not start msk/);
+    expect(h.started).toHaveLength(0);
+  });
+
+  it("refuses to start the manager itself", () => {
+    const h = harness([
+      instance({ name: "Manager", isManager: true, status: "stopped" }),
+    ]);
+    expect(() =>
+      h.toolNamed("start_session").handler({ name: "Manager" })
+    ).toThrow(/That is you/);
+    expect(h.started).toHaveLength(0);
+  });
+
+  // The point of the tool. Its absence is why the manager kept telling the user to
+  // go and start things by hand.
+  it("tells the model that starting sessions is its job", () => {
+    const { toolNamed } = harness();
+    expect(toolNamed("start_session").description).toMatch(
+      /instead of asking the user/
+    );
+  });
+
+  it("warns that a fresh session has no history", () => {
+    const h = harness([instance({ status: "stopped" })]);
+    const out = h.toolNamed("start_session").handler({ name: "msk" });
+    expect(out).toMatch(/no history to read/);
   });
 });

@@ -183,6 +183,9 @@ export interface ElectronAPI {
   // Event listeners
   onPtyOutput: (callback: (id: string, data: string) => void) => () => void;
   onInstanceExit: (callback: (id: string, code: number) => void) => () => void;
+  // Fires whenever an instance starts, including when the manager started it
+  // through a tool rather than the user clicking play.
+  onInstanceStarted: (callback: (instance: Instance) => void) => () => void;
   onInstanceActivity: (callback: (id: string, type: string) => void) => () => void;
   onInstanceSessionId: (callback: (id: string, sessionId: string) => void) => () => void;
   onShellOutput: (callback: (id: string, data: string) => void) => () => void;

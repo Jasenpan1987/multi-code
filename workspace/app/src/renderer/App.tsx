@@ -197,6 +197,19 @@ export function App() {
     return cleanup;
   }, []);
 
+  // Listen for instances starting. The user clicking play already updates this
+  // list from the IPC return value; this is for the starts the user didn't make —
+  // the manager's `start_session` tool goes straight to the main process, and
+  // without this the row kept saying OFFLINE while the session was running.
+  useEffect(() => {
+    const cleanup = window.electronAPI.onInstanceStarted((started) => {
+      setInstances((prev) =>
+        prev.map((inst) => (inst.id === started.id ? { ...inst, ...started } : inst))
+      );
+    });
+    return cleanup;
+  }, []);
+
   // Listen for session-id matched (used by Resume Elsewhere button)
   useEffect(() => {
     const cleanup = window.electronAPI.onInstanceSessionId((id, sessionId) => {

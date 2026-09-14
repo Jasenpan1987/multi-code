@@ -74,9 +74,16 @@ const CONTEXT_USAGE_TTL_MS = 20_000;
 
 const DEFAULT_BACKEND: BackendName = "claude";
 
+// How long to let the slash-command autocomplete menu draw before submitting, and
+// again between the two submissions. Both CLIs render a TUI frame in well under
+// this; the cost of being generous is a fifth of a second on a command the manager
+// then waits seconds for anyway.
+const MENU_SETTLE_MS = 120;
+
 export class ProcessManager {
   private instances = new Map<string, ManagedInstance>();
   private mainWindow: BrowserWindow | null = null;
+  private activityListeners = new Set<(id: string, type: string) => void>();
   // Set from outside rather than resolved here: the options carry the manager MCP
   // server's port and bearer token, and importing that module would close a cycle
   // (it imports this one to reach the instance list). main/index.ts and the
@@ -90,6 +97,33 @@ export class ProcessManager {
 
   setManagerSpawnOptions(opts: SpawnOptions | null) {
     this.managerSpawnOptions = opts;
+  }
+
+  // Subscribe to activity from any instance, returning an unsubscribe function.
+  //
+  // Exists for the manager's `wait_for_idle`, which has to know the moment a turn
+  // ends. The alternative was polling a transcript, and polling is what made the
+  // manager slow: each poll costs it a whole model turn to decide to poll again, so
+  // waiting on one session ran into minutes. A listener costs nothing while idle.
+  //
+  // `type` is the backend detector's event, plus `exit` when the pty dies — a waiter
+  // has to give up on a session that is no longer there.
+  onActivity(listener: (id: string, type: string) => void): () => void {
+    this.activityListeners.add(listener);
+    return () => {
+      this.activityListeners.delete(listener);
+    };
+  }
+
+  private emitActivity(id: string, type: string) {
+    for (const listener of this.activityListeners) {
+      try {
+        listener(id, type);
+      } catch {
+        // A broken waiter must not take down the detector callback that feeds
+        // every other consumer of this event.
+      }
+    }
   }
 
   // The manager is a singleton. Callers check before offering to create one, and
@@ -177,7 +211,16 @@ export class ProcessManager {
     );
     this.instances.set(id, started);
     remoteServer.broadcastInstances();
-    return this.toInfo(started);
+    const info = this.toInfo(started);
+    // Push to the renderer as well as returning, because this is no longer only
+    // reached from an IPC call the renderer made. The manager's `start_session`
+    // tool calls it directly, and without this the desktop went on showing the
+    // session as OFFLINE while its process was up and working — observed
+    // 2026-09-15, with a live `claude --continue` behind an OFFLINE panel.
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send("instance-started", info);
+    }
+    return info;
   }
 
   private spawnProcess(
@@ -268,6 +311,7 @@ export class ProcessManager {
               this.mainWindow.webContents.send("instance-activity", id, type);
             }
             remoteServer.broadcastActivity(id, type, detail);
+            this.emitActivity(id, type);
           },
           (ms) => Date.now() - tracked.lastPtyByteAt >= ms
         );
@@ -305,6 +349,9 @@ export class ProcessManager {
         this.mainWindow.webContents.send("instance-exit", id, exitCode);
       }
       remoteServer.broadcastExit(id, exitCode);
+      // Wakes anything waiting on this instance to finish a turn. Without it a
+      // waiter would sit out its whole timeout on a session that has gone.
+      this.emitActivity(id, "exit");
     });
 
     return instance;
@@ -375,6 +422,50 @@ export class ProcessManager {
     const verdict = this.canAcceptWrite(id);
     if (!verdict.ok) return verdict;
     this.sendPrompt(id, text);
+    return { ok: true };
+  }
+
+  // Run a slash command in an instance, on behalf of something automated.
+  //
+  // Separate from trySendTask because a slash command is not text: **a leading `/`
+  // opens the CLI's autocomplete menu, and that menu swallows the first carriage
+  // return.** A command delivered the way a task is delivered arrives on screen and
+  // never runs, which is exactly the failure the user hit — the manager reported
+  // "sent but not executed" and was telling the truth.
+  //
+  // So: type the command, let the menu render, submit it, then submit again. The
+  // delay matters as much as the second return; both returns fired back-to-back land
+  // before the menu has drawn and the second one is swallowed too.
+  //
+  // No bracketed paste here, unlike sendPrompt. Pasted text is what the TUI folds
+  // into a `[Pasted text]` placeholder, and a placeholder is not a command.
+  tryRunCommand(id: string, command: string): WriteVerdict {
+    const verdict = this.canAcceptWrite(id);
+    if (!verdict.ok) return verdict;
+
+    const instance = this.instances.get(id);
+    if (!instance?.ptyProcess) {
+      return { ok: false, reason: "not running — start it in Multi-Code first" };
+    }
+
+    const ptyProcess = instance.ptyProcess;
+    instance.runState.onWrite();
+    ptyProcess.write(command);
+    // Fire-and-forget: the caller gets its verdict now rather than holding the tool
+    // call open for a quarter of a second. A write to a pty that exits in between is
+    // swallowed by node-pty, so the re-check is about correctness of state, not
+    // about avoiding a throw.
+    setTimeout(() => {
+      const still = this.instances.get(id);
+      if (still?.ptyProcess !== ptyProcess) return;
+      ptyProcess.write("\r");
+      setTimeout(() => {
+        const alive = this.instances.get(id);
+        if (alive?.ptyProcess !== ptyProcess) return;
+        ptyProcess.write("\r");
+      }, MENU_SETTLE_MS);
+    }, MENU_SETTLE_MS);
+
     return { ok: true };
   }
 

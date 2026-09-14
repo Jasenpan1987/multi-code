@@ -16,6 +16,7 @@ import { managerMcpServer } from "./server";
 import { MCP_SERVER_NAME, removeMcpConfig, writeMcpConfig } from "./config";
 import { buildReadTools } from "./read-tools";
 import { buildWriteTools } from "./write-tools";
+import { buildWaitTools } from "./wait-tools";
 import { managerActivityLog } from "./activity-log";
 import { processManager } from "../process-manager";
 import type { McpServerInfo } from "./server";
@@ -39,12 +40,25 @@ function registerTools() {
     managerMcpServer.registerTool(tool);
   }
 
-  // Write tools go through trySendTask, never sendPrompt: that is where the
-  // write-safety gate lives. Registering them here rather than inside the read
-  // builder keeps the distinction visible at the call site.
+  // Write tools go through the try* methods, never sendPrompt or writeToInstance:
+  // that is where the write-safety gate lives. Registering them here rather than
+  // inside the read builder keeps the distinction visible at the call site.
   for (const tool of buildWriteTools({
     listInstances: () => processManager.listInstances(),
     sendTask: (id, text) => processManager.trySendTask(id, text),
+    runCommand: (id, command) => processManager.tryRunCommand(id, command),
+    // Not gated: starting a stopped process writes nothing into anyone's terminal,
+    // and it is the capability whose absence made the manager tell the user to go
+    // and start sessions by hand.
+    startSession: (id) => processManager.startInstance(id),
+  })) {
+    managerMcpServer.registerTool(tool);
+  }
+
+  for (const tool of buildWaitTools({
+    listInstances: () => processManager.listInstances(),
+    runStateOf: (id) => processManager.runStateOf(id),
+    onActivity: (listener) => processManager.onActivity(listener),
   })) {
     managerMcpServer.registerTool(tool);
   }

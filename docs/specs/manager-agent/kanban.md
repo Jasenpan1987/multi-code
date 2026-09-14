@@ -2,7 +2,7 @@
 
 **Generated:** 2026-09-02
 **PRD Version:** 1.0
-**Total Tasks:** 14
+**Total Tasks:** 15 (T-215 added 2026-09-15 from real use)
 **Milestones:** M1 (See who's full), M2 (Manager can look), M3 (Manager can dispatch), M4 (Handoff + safety regression)
 
 ## Task Overview
@@ -590,7 +590,7 @@ wait, read the result, forward it. Writes are gated on target state.
 
 ### T-208: `wait_for_idle`
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done (2026-09-15 — 15 tests; measured 4s end-to-end where polling took 1–2 minutes)
 - **Requirement:** `prd.md#requirements` (R2)
 - **Code:** `workspace/app/src/main/manager-mcp/`
 - **Description:** `wait_for_idle(alias, timeoutMs = 600000)` resolves when the target's
@@ -611,6 +611,90 @@ wait, read the result, forward it. Writes are gated on target state.
 - **Blocks:** T-211 · **Blocked by:** T-203, T-204 · **Parallel with:** T-206, T-207
 - **Notes:** The `blocked` early-resolve matters more than the happy path: without it the
   manager waits ten minutes on a session that has been sitting on a dialog the whole time.
+- **Outcome (2026-09-15):** `manager-mcp/wait-tools.ts`, on a new
+  `processManager.onActivity(listener)` subscription — the detector's events already
+  existed but had no subscriber seam, only hardcoded consumers. 15 tests.
+  **Prompted by the user's own complaint that the manager was slow.** Without this
+  it checked on a dispatched session by reading the transcript, deciding nothing had
+  changed, and reading again — and each of those cycles costs the manager a full
+  model turn. Measured 2026-09-15: dispatching one slash command and confirming it
+  ran took one to two minutes, nearly all of it the manager thinking between polls,
+  while the target had finished in seconds.
+  Departures from this task's spec:
+  - **Default timeout is 300s, not 600s, capped at 900s.** Ten minutes of silence
+    is indistinguishable from a hang from the user's side.
+  - **A timeout resolves, it does not reject.** Handed an error, the model reports
+    the task as failed; nothing failed, the session is still working. The text says
+    so explicitly.
+  - **It does not report which backend answered.** The distinction the task wanted
+    to surface (opencode's structured `finish` field vs claude's inferred pairing)
+    is real but is not something the manager can act on, and every extra sentence in
+    a tool result is context it pays for on every call.
+  - Already-`idle` returns immediately **and says the task probably never arrived**,
+    because a bare "idle" reads as "your work is done" to a model that dispatched
+    nothing.
+  **Verified end-to-end 2026-09-15** against a live claude session: `send_task` then
+  `wait_for_idle` returned `dist finished after 3s`, 4s of wall clock in total, and
+  `read_session` showed the answer. The activity feed recorded the wait as `running`
+  for 3.5s, which is the two-phase logging from T-210 doing its job.
+
+---
+
+### T-215: `start_session`, and the guidance that tells the manager to use it
+- **Type:** feature
+- **Status:** done (2026-09-15 — 20 tests; verified end-to-end)
+- **Requirement:** `prd.md#r6--the-manager-instance`
+- **Code:** `workspace/app/src/main/manager-mcp/write-tools.ts`, `workspace/app/src/main/manager-workspace.ts`, `workspace/app/src/main/process-manager.ts`, `workspace/app/src/renderer/App.tsx`
+- **Description:** Added in response to the user's first complaint after living with
+  the manager for a day: *"this manager acts like an idiot. It keeps telling me to go
+  and run something in some project myself. I am the CEO, he is my employee."*
+  Two causes, both real, neither of them the model being weak:
+  1. **It could not start a stopped session.** Every write tool refuses a stopped
+     target, and 7 of the user's 19 contacts are stopped at any time, so the only
+     move available was to ask the user to press play. `start_session(name)` closes
+     that: it calls `startInstance`, is not gated (starting a process writes nothing
+     into anybody's terminal), and is a no-op on one already running.
+  2. **The seeded guidance never mentioned the write tools.** `CLAUDE.md` was written
+     at T-209, when only `list_sessions` and `read_session` existed, and
+     `ensureManagerWorkspace` wrote it once and never again — so when `send_task`
+     shipped, every existing manager kept reading a file describing a read-only
+     coordinator. Confirmed on this machine: the file was byte-identical to what
+     T-209 seeded, tools section listing two read tools, weeks after the write tools
+     landed.
+- **What changed**
+  - `start_session` tool, plus `wait_for_idle` and `run_command` named in the
+    guidance alongside it.
+  - **Guidance rewritten around responsibility.** A "Never hand the work back"
+    section naming the only three reasons to go back to the user (a decision that is
+    theirs, a session blocked on a dialog, something genuinely impossible), an
+    explicit "don't poll `read_session` in a loop", and run states corrected to
+    `idle | busy | blocked | starting | stopped` — the old text claimed status was
+    only running or stopped, which stopped being true at T-203.
+  - **The guidance file can now be upgraded without clobbering user edits.**
+    `manager-workspace.ts` keeps the sha256 of every version it has ever seeded. A
+    file matching one of them is ours and gets rewritten; anything else is the user's
+    and is never touched. `ensureManagerWorkspace` moved onto `prepareManagerSpawn`,
+    so it runs on create *and* start *and* restart — seeding only at create is why
+    the file went stale in the first place. The v1 bytes are checked in at
+    `main/__fixtures__/manager-guidance-v1.md` so the upgrade path is tested against
+    a real previous version. **Adding a new version means adding the outgoing hash to
+    `SEEDED_HASHES`**, or existing users stop being upgraded and the bug returns.
+  - **Fixed: a session the manager started still showed OFFLINE.** `startInstance`
+    only ever returned its result to the IPC caller, so a start that came from a tool
+    left the renderer believing the session was stopped — observed with a live
+    `claude --continue` sitting behind an OFFLINE panel. It now also pushes
+    `instance-started`, which `App.tsx` merges.
+- **Acceptance:**
+  - Manager can start a stopped session without involving the user ✅
+  - An untouched v1 guidance file is upgraded on the next manager start ✅
+  - An edited guidance file is never modified ✅
+  - A tool-started session shows as running in the desktop UI ✅
+- **Blocks:** T-211 · **Blocked by:** T-204, T-209 · **Parallel with:** none
+- **Notes:** The lesson worth keeping is that both halves of the user's complaint were
+  capability gaps wearing a personality costume. The manager sounded meek because the
+  only honest thing it could say was "I can't"; nothing about its prompt needed
+  softening, it needed hands. Any future "the manager is being unhelpful" report
+  should start by asking which tool it was missing.
 
 ---
 
@@ -621,7 +705,7 @@ escalation is covered by a test that fails if the gate ever regresses.
 
 ### T-207: `run_command` with allowlist and double carriage return
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done (2026-09-15 — 12 tests; `/context` verified executing in a real session)
 - **Requirement:** `prd.md#requirements` (R3), `prd.md#r5--safety-boundary`
 - **Code:** `workspace/app/src/main/manager-mcp/`, `workspace/app/src/main/process-manager.ts`
 - **Description:** `run_command(alias, command)` — drive one allowlisted slash command,
@@ -646,6 +730,28 @@ escalation is covered by a test that fails if the gate ever regresses.
 - **Blocks:** T-211 · **Blocked by:** T-203, T-204 · **Parallel with:** T-206, T-208
 - **Notes:** Keep the allowlist a plain constant in one place, not a config surface. Adding
   a command should be a code change someone reviews.
+- **Outcome (2026-09-15):** `run_command` in `manager-mcp/write-tools.ts` on top of
+  `processManager.tryRunCommand`. 12 tests.
+  **`/clear` and `/new` are on the allowlist, reversing this task's decision to
+  exclude `/clear`.** The user asked for both by name after hitting the gap in real
+  use: these are their sessions, clearing one is ordinary fleet management, and a
+  manager that has to ask them to go and do it by hand is the abdication they were
+  complaining about. `/handoff` is still steered toward in the tool description
+  whenever there is work worth landing first. Allowlist is now `/clear`, `/new`,
+  `/compact`, `/context`, `/handoff`, matched **exactly** — an allowed command
+  carrying arguments is refused, so nothing rides along behind one.
+  **The double carriage return needs a delay, which this task did not say.** Two
+  returns written back-to-back both land before the autocomplete menu has drawn and
+  both get swallowed. `MENU_SETTLE_MS = 120` sits between the command and the first
+  return, and between the two returns.
+  **This was the user's second complaint, and the manager had been telling the
+  truth.** It reported a `/clear` as "sent but not executed", which is exactly what
+  happens when a slash command goes out through `send_task`: one `\r`, eaten by the
+  menu, command displayed and never run. What made it look like a lie was the
+  retry — the second attempt's return submitted the *first* attempt's command, so
+  the session did eventually run it.
+  Verified 2026-09-15 in a real claude session: `/context` rendered its usage grid,
+  twice across two runs, with nothing typed by hand.
 
 ---
 
@@ -672,6 +778,6 @@ escalation is covered by a test that fails if the gate ever regresses.
   - Safety regression test passes, and fails when the gate is deliberately stubbed out
   - All five manual scenarios pass, recorded in this file with the date
   - `pnpm build`, `pnpm type`, `pnpm lint`, `pnpm test` all pass
-- **Blocks:** none · **Blocked by:** T-202, T-206, T-207, T-208, T-210 · **Parallel with:** none
+- **Blocks:** none · **Blocked by:** T-202 ✅, T-206 ✅, T-207 ✅, T-208 ✅, T-210 ✅ — **all clear, this is the next task in the epic** · **Parallel with:** none
 - **Notes:** The fourth manual scenario is the one that matters. Everything else is
   features working; that one is the difference between this feature and a security hole.

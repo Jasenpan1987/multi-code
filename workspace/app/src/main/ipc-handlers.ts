@@ -27,6 +27,13 @@ import QRCode from "qrcode";
 // one-directional: manager-mcp imports process-manager to reach the instance list,
 // and the reverse would close a cycle.
 async function prepareManagerSpawn(): Promise<void> {
+  // Also the only place the guidance file gets a chance to be upgraded. Seeding it
+  // in create-manager alone was not enough: a user who already had a manager never
+  // ran that path again, so their role file kept describing the read-only manager of
+  // T-209 while the write tools shipped underneath it — which is why the manager
+  // handed work back instead of doing it. Runs on create, start and restart; an
+  // edited file is left alone. See manager-workspace.ts.
+  ensureManagerWorkspace();
   processManager.setManagerSpawnOptions(await ensureManagerMcpStarted());
 }
 
