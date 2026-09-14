@@ -13,17 +13,26 @@
 
 import { managerMcpServer } from "./server";
 import { removeMcpConfig, writeMcpConfig } from "./config";
+import { buildReadTools } from "./read-tools";
+import { processManager } from "../process-manager";
 import type { McpServerInfo } from "./server";
 
 let toolsRegistered = false;
 
-// Registered once per process. Later tasks add their tools here — the read-only
-// pair (list_sessions, read_session) and then the gated write tools — each taking
-// what it needs through a host object injected from this layer, never by
-// importing process-manager into server.ts.
+// Registered once per process. This is the only layer that knows about
+// process-manager, and the dependency must stay one-directional: a manager spawn
+// needs the server's port, so process-manager importing this module would close a
+// cycle. Spawn wiring belongs above both, in main/index.ts or ipc-handlers.
 function registerTools() {
   if (toolsRegistered) return;
   toolsRegistered = true;
+
+  for (const tool of buildReadTools({
+    listInstances: () => processManager.listInstances(),
+    readTranscript: (id, limit) => processManager.readTranscript(id, limit),
+  })) {
+    managerMcpServer.registerTool(tool);
+  }
 
   managerMcpServer.registerTool({
     name: "manager_health",

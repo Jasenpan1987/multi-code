@@ -27,6 +27,7 @@ export interface InstanceInfo {
   sessionId?: string;
   backend: BackendName;
   contextUsage?: ContextUsage;
+  lastActivityAt?: number;
 }
 
 interface ManagedInstance {
@@ -48,6 +49,10 @@ interface ManagedInstance {
   // build a ManagedInstance don't need to seed them; absent means "never read".
   contextUsage?: ContextUsage;
   contextUsageAt?: number;
+  // When this instance last reported activity (a turn ending, or blocking on a
+  // prompt). Distinct from lastPtyByteAt, which moves on every repaint of the
+  // spinner. Absent until the first activity.
+  lastActivityAt?: number;
 }
 
 // Reading context usage parses a transcript that reaches 8MB+, and
@@ -187,6 +192,10 @@ export class ProcessManager {
             debugTrace(
               `[activity] ${id.slice(0, 8)} ${type} at ${new Date().toISOString()}`
             );
+            // Recorded for every activity except the bookkeeping one, so the
+            // manager can tell a session that just finished from one that has
+            // been idle for hours.
+            if (type !== "prompt-cleared") tracked.lastActivityAt = Date.now();
             // A finished turn is exactly when context usage moved, so refresh
             // now instead of waiting for the TTL. Cheap: once per turn, not per
             // list call.
@@ -431,6 +440,7 @@ export class ProcessManager {
       // Cache only — refreshing happens in listInstances and on activity, never
       // here, since this runs once per instance per broadcast.
       contextUsage: instance.contextUsage,
+      lastActivityAt: instance.lastActivityAt,
     };
   }
 }

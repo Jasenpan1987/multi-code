@@ -51,6 +51,9 @@ export interface Instance {
   // multi-megabyte transcript, and listInstances() is called on every phone
   // broadcast.
   contextUsage?: ContextUsage;
+  // Last time this instance reported activity — a turn ending, or blocking on a
+  // prompt. Not every PTY repaint. Absent until the first one.
+  lastActivityAt?: number;
 }
 
 export interface GitFileEntry {

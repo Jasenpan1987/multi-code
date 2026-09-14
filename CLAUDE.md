@@ -63,8 +63,17 @@ a release context so the number isn't pushed on every build.
 
 ## Data Storage
 
-- Instance list persisted at `~/.config/Multi-Code/contacts.json`
-- Each instance has: id, cwd (project directory), alias (display name)
+Everything persisted lives in Electron's `app.getPath("userData")`, which on macOS
+is `~/Library/Application Support/<name>/` — `multi-code` in dev, and whatever
+`productName` resolves to for a packaged build. Never hardcode these paths; call
+`app.getPath("userData")`.
+
+- `contacts.json` — the instance list. Each entry: id, cwd (project directory),
+  alias (display name), backend
+- `settings.json` — theme, phone-link enabled
+- `remote-identity.json`, `remote-devices.json` — phone-link keys and paired devices
+- `manager-mcp.json` — the manager's `--mcp-config`, written 0600 because it carries
+  a bearer token; removed on shutdown
 
 ## IPC Pattern
 

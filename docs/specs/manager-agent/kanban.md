@@ -227,7 +227,7 @@ this milestone writes to another session's terminal.
 
 ### T-205: Read-only MCP tools — `list_sessions`, `read_session`
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done (2026-09-15 — 33 tests, verified end-to-end against a real CLI on real data)
 - **Requirement:** `prd.md#requirements` (R1)
 - **Code:** `workspace/app/src/main/manager-mcp/`
 - **Description:** The manager's two read tools.
@@ -252,6 +252,23 @@ this milestone writes to another session's terminal.
 - **Blocks:** T-210, T-211 · **Blocked by:** T-201, T-204 · **Parallel with:** T-209
 - **Notes:** `readTranscript` drops tool results and keeps a one-line summary per tool,
   which is why reading is cheap. Don't "improve" it by including tool output.
+- **Outcome (2026-09-15):** `manager-mcp/read-tools.ts` (`buildReadTools(host)` plus
+  exported formatters), registered in `manager-mcp/index.ts`. 33 tests.
+  **This task's `status` spec could not be met: `idle | busy | blocked` is T-203's
+  output and does not exist yet** — T-205's Blocked-by omitted T-203. Rather than
+  build half of the safety-critical state tracking here, `list_sessions` reports the
+  real `running | stopped` and its output ends with a line telling the model that
+  status does not distinguish mid-task from finished-and-waiting. Added
+  `lastActivityAt` (from the detector, excluding `prompt-cleared`) as an interim
+  staleness signal. **T-203 should upgrade the field and delete that caveat line.**
+  Verified end-to-end: a real `claude` process, given the user's actual 18 contacts
+  and their real transcripts, called `list_sessions` then
+  `read_session {"name":"multi-code","limit":30}` unprompted, picked the highest-usage
+  session out of 18, and described its current work correctly from the transcript.
+  Also corrected `CLAUDE.md`, which claimed `contacts.json` lives at
+  `~/.config/Multi-Code/` — it is in Electron's userData dir
+  (`~/Library/Application Support/multi-code/`), and `~/.config/Multi-Code/` does not
+  exist.
 
 ---
 
@@ -328,6 +345,9 @@ wait, read the result, forward it. Writes are gated on target state.
   `ManagedInstance` keeps none of it.
   - Track a per-instance state derived from those events: `idle`, `busy`, `blocked`.
     `prompt` → `blocked`; `prompt-cleared` → back to `busy`/`idle`; `waiting` → `idle`.
+    **T-205 is waiting on this.** It ships `status: running | stopped` plus a caveat
+    line in `list_sessions`' output saying status can't tell mid-task from
+    finished-and-waiting. When this lands, upgrade that field and delete the caveat.
   - Expose `canAcceptWrite(id): { ok: true } | { ok: false; reason: string }`. Refuse when
     `blocked` or `stopped`, with a reason naming the state so a tool can pass it up.
   - **Address Q7.** Claude's blocked detection is threshold-based
