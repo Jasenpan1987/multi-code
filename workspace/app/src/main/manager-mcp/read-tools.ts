@@ -130,7 +130,11 @@ export function formatSessionList(instances: InstanceInfo[], now = Date.now()): 
     const fields = [
       `name=${i.name}`,
       `backend=${i.backend}`,
-      `status=${i.status}`,
+      // runState is the live one and only exists while running; `status` covers the
+      // stopped case. Reported as one field because the distinction between "stopped"
+      // and "running but idle" is not one the manager needs to reason about
+      // separately.
+      `status=${i.runState ?? i.status}`,
       `context=${i.contextUsage ? `${i.contextUsage.inputTokens} tokens` : "unknown"}`,
     ];
     if (i.contextUsage?.model) fields.push(`model=${i.contextUsage.model}`);
@@ -151,12 +155,12 @@ export function formatSessionList(instances: InstanceInfo[], now = Date.now()): 
     "",
     ...lines,
     "",
-    // Said plainly because the manager will otherwise infer a finer state than
-    // exists here and act on it. `running` covers both "working right now" and
-    // "finished and waiting for someone", and those need opposite handling.
-    "status is only running or stopped: it does not distinguish a session that is " +
-      "mid-task from one that finished and is waiting. Use last-activity as a hint, " +
-      "and read_session when it matters.",
+    // Spelled out because these drive different actions, and `blocked` in particular
+    // is one the manager must hand back to the user rather than try to resolve.
+    "status: idle = finished its turn, waiting for input · busy = working · " +
+      "blocked = stopped on a decision only the user can make (a permission prompt, " +
+      "a question, a plan approval) — tell them, you cannot answer it for them · " +
+      "starting = just spawned · stopped = not running.",
   ].join("\n");
 }
 

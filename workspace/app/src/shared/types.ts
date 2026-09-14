@@ -57,6 +57,9 @@ export interface Instance {
   // The coordinator. At most one, sorted first in the contact list, and the only
   // instance that gets the fleet-driving MCP tools.
   isManager?: boolean;
+  // Finer-grained than `status`, and only present while running: whether it is idle,
+  // working, blocked on a decision, or still starting up.
+  runState?: "starting" | "idle" | "busy" | "blocked";
 }
 
 export interface GitFileEntry {

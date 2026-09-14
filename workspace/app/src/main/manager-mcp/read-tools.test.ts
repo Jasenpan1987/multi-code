@@ -212,9 +212,26 @@ describe("formatSessionList", () => {
     expect(out).toContain("last-activity=never");
   });
 
-  it("warns that status is coarse, so the manager doesn't over-read it", () => {
+  it("reports the live run state rather than just running", () => {
+    const out = formatSessionList([instance({ runState: "blocked" })], now);
+    expect(out).toContain("status=blocked");
+    expect(out).not.toContain("status=running");
+  });
+
+  it("falls back to stopped when there is no live state", () => {
+    const out = formatSessionList(
+      [instance({ status: "stopped", runState: undefined })],
+      now
+    );
+    expect(out).toContain("status=stopped");
+  });
+
+  it("explains each state, and that blocked belongs to the user", () => {
+    // Without this the manager treats blocked as something to work around, which is
+    // how it ends up trying to answer a permission prompt on the user's behalf.
     const out = formatSessionList([instance()], now);
-    expect(out).toMatch(/does not distinguish/);
+    expect(out).toMatch(/blocked = stopped on a decision only the user can make/);
+    expect(out).toMatch(/you cannot answer it for them/);
   });
 
   it("handles an empty fleet without pretending something is wrong", () => {

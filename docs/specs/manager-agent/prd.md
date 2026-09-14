@@ -239,7 +239,19 @@ Kept here because each answer constrains the design.
   be `application/json` rather than SSE. Cost of the choice: protocol revisions
   are ours to track. Mitigated by pinning accepted versions in one set literal and
   by the client being the CLI on the same machine.
-- **Q8 — Drive OpenCode instances over its HTTP API instead of the PTY?**
+- **Q8 — resolved 2026-09-15: one PTY path for both backends.** The HTTP API stays
+  documented below as a later optimisation, not the v1 route. Reasoning: one code
+  path means one write-safety gate rather than two, `sendPrompt` has been carrying
+  the phone's traffic for months, and the API route would add `--port` plus a server
+  password plus an instance→sessionID mapping to every OpenCode spawn before a single
+  task could be dispatched. OpenCode's blocked detection is also not the weak side
+  here — it reads sqlite `finish` states and the painted permission dialog, where
+  claude's is threshold-based. Revisit if the residual detection window in Q7 proves
+  to matter in practice, since the API closes it outright for OpenCode.
+
+  Original analysis follows.
+
+  **Drive OpenCode instances over its HTTP API instead of the PTY?**
   Discovered 2026-09-15: OpenCode (1.18.30) ships an HTTP server with an OpenAPI
   3.1 spec at `/doc` and 162 endpoints, and `--port` / `--hostname` are top-level
   CLI options, not just `serve` subcommand ones. It covers most of this epic

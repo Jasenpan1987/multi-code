@@ -447,7 +447,7 @@ wait, read the result, forward it. Writes are gated on target state.
 
 ### T-203: Write-safety state gate
 - **Type:** feature
-- **Status:** ready
+- **Status:** done (2026-09-15 — `run-state.ts`, 18 tests)
 - **Requirement:** `prd.md#r5--safety-boundary`
 - **Code:** `workspace/app/src/main/process-manager.ts`, `workspace/app/src/main/backends/`
 - **Description:** A single authoritative answer to "is it safe to write to this instance
@@ -479,6 +479,27 @@ wait, read the result, forward it. Writes are gated on target state.
     what doesn't
   - `pnpm type`, `pnpm lint`, `pnpm test` pass
 - **Blocks:** T-206, T-207, T-208 · **Blocked by:** none · **Parallel with:** T-201, T-204
+- **Outcome (2026-09-15):** `main/run-state.ts` — a `RunStateTracker` per instance,
+  fed by the detector's activity events and by our own writes, plus
+  `processManager.canAcceptWrite(id)`. Extracted rather than written inline so it
+  could be tested at all: process-manager imports electron and node-pty, neither of
+  which loads under plain-node vitest. 18 tests.
+  States are `starting | idle | busy | blocked`, and `list_sessions` now reports them
+  (T-205's caveat line about status being coarse is gone).
+  **Q7 answered with a second guard.** Beyond the detector's `prompt` event, a write
+  is refused whenever a non-idle instance has produced **no PTY output for 1000ms**.
+  Both CLIs animate a spinner while working — claude's own detector relies on it
+  repainting at least once a second, and OpenCode's keeps painting through a
+  permission dialog — so a working session is never quiet that long. This covers the
+  window where a dialog is up but the detector hasn't recognised it yet, since claude
+  needs 1500ms of unpaired tool_use plus 800ms of silence to decide.
+  **Residual window: the first 1000ms after a dialog appears.** A write inside it
+  passes both checks. Not closable from the PTY side; Q8's HTTP route would close it
+  for OpenCode. Documented rather than papered over.
+  `sendPrompt` and `writeToInstance` deliberately do **not** consult the gate — they
+  carry the user's own keystrokes from the desktop or their phone, and answering a
+  dialog is exactly what a user is allowed to do. The gate is for writes nobody is
+  watching.
 - **Notes:** This is the highest-risk task in the epic and the reason M3 can't start
   earlier. Do not let a write tool merge before it. The hazard is not hypothetical — see the
   PRD verification log for the reproduction and the file it modified.
@@ -492,7 +513,7 @@ wait, read the result, forward it. Writes are gated on target state.
 
 ### T-206: `send_task` behind the state gate
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done (2026-09-15 — 13 tests; activity-feed acceptance waits on T-210)
 - **Requirement:** `prd.md#requirements` (R2), `prd.md#r5--safety-boundary`
 - **Code:** `workspace/app/src/main/manager-mcp/`, `workspace/app/src/main/process-manager.ts`
 - **Description:** `send_task(alias, text)` — hand a session work. Consults
@@ -513,6 +534,19 @@ wait, read the result, forward it. Writes are gated on target state.
 - **Blocks:** T-211 · **Blocked by:** T-203, T-204 · **Parallel with:** T-207, T-208
 - **Notes:** Resist adding retry-on-blocked. The right response to a blocked target is to
   tell the user, because whatever it's blocked on is a decision only they can make.
+- **Outcome (2026-09-15):** `manager-mcp/write-tools.ts` plus
+  `processManager.trySendTask`, which is `canAcceptWrite` followed by `sendPrompt` and
+  nothing else. 13 tests, and the load-bearing ones are negative: a refused call must
+  leave **zero** bytes written, since a tool that returns an error after writing would
+  look safe and not be.
+  Refuses self-dispatch, empty text, and an unknown name (listing the valid ones).
+  The tool description carries the cost argument explicitly — "do NOT use it to ask
+  how something is going, read_session answers that for free" — because without it
+  the manager spends a target's whole turn on a status question.
+  **The activity-feed acceptance criterion is not met**: T-210 doesn't exist yet, so
+  dispatches are currently invisible in the UI. The user authorised the manager to act
+  without per-action approval *on the condition that nothing is invisible*, so T-210
+  should land before this is leaned on.
 
 ---
 

@@ -14,6 +14,7 @@
 import { managerMcpServer } from "./server";
 import { MCP_SERVER_NAME, removeMcpConfig, writeMcpConfig } from "./config";
 import { buildReadTools } from "./read-tools";
+import { buildWriteTools } from "./write-tools";
 import { processManager } from "../process-manager";
 import type { McpServerInfo } from "./server";
 import type { SpawnOptions } from "../backends";
@@ -31,6 +32,16 @@ function registerTools() {
   for (const tool of buildReadTools({
     listInstances: () => processManager.listInstances(),
     readTranscript: (id, limit) => processManager.readTranscript(id, limit),
+  })) {
+    managerMcpServer.registerTool(tool);
+  }
+
+  // Write tools go through trySendTask, never sendPrompt: that is where the
+  // write-safety gate lives. Registering them here rather than inside the read
+  // builder keeps the distinction visible at the call site.
+  for (const tool of buildWriteTools({
+    listInstances: () => processManager.listInstances(),
+    sendTask: (id, text) => processManager.trySendTask(id, text),
   })) {
     managerMcpServer.registerTool(tool);
   }

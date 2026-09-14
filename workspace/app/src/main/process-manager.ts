@@ -17,6 +17,7 @@ import { remoteServer } from "./remote/ws-server";
 import type { TranscriptEntry } from "../shared/remote-protocol";
 import type { ContextUsage } from "../shared/types";
 import { debugTrace } from "./debug-trace";
+import { RunStateTracker, type RunState, type WriteVerdict } from "./run-state";
 
 export interface InstanceInfo {
   id: string;
@@ -30,6 +31,8 @@ export interface InstanceInfo {
   contextUsage?: ContextUsage;
   lastActivityAt?: number;
   isManager?: boolean;
+  // Only meaningful while running; `status` already says stopped.
+  runState?: RunState;
 }
 
 interface ManagedInstance {
@@ -58,6 +61,9 @@ interface ManagedInstance {
   // The coordinator instance. Spawned with the manager MCP tools attached; at most
   // one exists.
   isManager?: boolean;
+  // Whether it is safe to write to this instance right now. See run-state.ts for
+  // the hazard this exists to prevent.
+  runState: RunStateTracker;
 }
 
 // Reading context usage parses a transcript that reaches 8MB+, and
@@ -111,6 +117,7 @@ export class ProcessManager {
           detector: null,
           lastPtyByteAt: 0,
           isManager: contact.isManager,
+          runState: new RunStateTracker(),
         });
       }
     }
@@ -212,6 +219,7 @@ export class ProcessManager {
       detector: null,
       lastPtyByteAt: Date.now(),
       isManager,
+      runState: new RunStateTracker(),
     };
 
     const isSessionClaimed = (candidate: string): boolean => {
@@ -240,6 +248,7 @@ export class ProcessManager {
             debugTrace(
               `[activity] ${id.slice(0, 8)} ${type} at ${new Date().toISOString()}`
             );
+            tracked.runState.onActivity(type);
             // Recorded for every activity except the bookkeeping one, so the
             // manager can tell a session that just finished from one that has
             // been idle for hours.
@@ -290,6 +299,7 @@ export class ProcessManager {
     ptyProcess.onExit(({ exitCode }) => {
       instance.status = "stopped";
       instance.ptyProcess = null;
+      instance.runState.onExit();
       this.teardownObservers(instance);
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send("instance-exit", id, exitCode);
@@ -311,9 +321,29 @@ export class ProcessManager {
     }
   }
 
+  // Whether it is safe for something automated to write to this instance right now.
+  // Deliberately not consulted by writeToInstance or sendPrompt: those carry the
+  // user's own keystrokes from the desktop or their phone, and the user is allowed to
+  // answer a dialog. This gate is for writes nobody is watching — see run-state.ts.
+  canAcceptWrite(id: string): WriteVerdict {
+    const instance = this.instances.get(id);
+    if (!instance) return { ok: false, reason: "no such instance" };
+    if (!instance.ptyProcess) {
+      return { ok: false, reason: "not running — start it in Multi-Code first" };
+    }
+    return instance.runState.canAcceptWrite(Date.now() - instance.lastPtyByteAt);
+  }
+
+  runStateOf(id: string): RunState | undefined {
+    const instance = this.instances.get(id);
+    if (!instance?.ptyProcess) return undefined;
+    return instance.runState.state();
+  }
+
   writeToInstance(id: string, data: string) {
     const instance = this.instances.get(id);
     if (instance?.ptyProcess) {
+      instance.runState.onWrite();
       instance.ptyProcess.write(data);
       // Typing at the desk answers whatever was pending, so drop the phone's
       // badge and stale option buttons now rather than waiting for the detector
@@ -329,8 +359,23 @@ export class ProcessManager {
   sendPrompt(id: string, text: string) {
     const instance = this.instances.get(id);
     if (!instance?.ptyProcess) return;
+    instance.runState.onWrite();
     instance.ptyProcess.write(`\x1b[200~${text}\x1b[201~`);
     instance.ptyProcess.write("\r");
+  }
+
+  // Dispatch a task to an instance on behalf of something automated, refusing when
+  // the target isn't safe to write to. Separate from sendPrompt, which carries the
+  // user's own keystrokes and is theirs to aim wherever they like.
+  //
+  // Writing to a *busy* target is fine and deliberate: the CLI queues it, verified
+  // 2026-09-02 — the screen showed `queued` and the task ran once the current turn
+  // finished. Don't add a queue of our own on top of that one.
+  trySendTask(id: string, text: string): WriteVerdict {
+    const verdict = this.canAcceptWrite(id);
+    if (!verdict.ok) return verdict;
+    this.sendPrompt(id, text);
+    return { ok: true };
   }
 
   // Ask the backend that owns this instance how to select option `index`.
@@ -493,6 +538,7 @@ export class ProcessManager {
       contextUsage: instance.contextUsage,
       lastActivityAt: instance.lastActivityAt,
       isManager: instance.isManager,
+      runState: instance.ptyProcess ? instance.runState.state() : undefined,
     };
   }
 }
