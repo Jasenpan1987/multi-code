@@ -748,6 +748,13 @@ export const opencodeBackend: Backend = {
 
   spawn(_cwd: string): SpawnConfig {
     // OpenCode handles "no prior session" gracefully — always pass --continue.
+    //
+    // SpawnOptions is deliberately ignored: it exists for the manager instance, and
+    // the manager is claude-only for now. OpenCode does support MCP, but through a
+    // different config shape, and `--allowedTools` has no equivalent — so a manager
+    // running here would stop for a permission prompt on every tool call. The
+    // create path refuses to make an OpenCode manager rather than silently
+    // producing one that can't work.
     return {
       command: opencodePath,
       args: ["--continue"],

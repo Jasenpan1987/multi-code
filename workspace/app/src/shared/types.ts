@@ -54,6 +54,9 @@ export interface Instance {
   // Last time this instance reported activity — a turn ending, or blocking on a
   // prompt. Not every PTY repaint. Absent until the first one.
   lastActivityAt?: number;
+  // The coordinator. At most one, sorted first in the contact list, and the only
+  // instance that gets the fleet-driving MCP tools.
+  isManager?: boolean;
 }
 
 export interface GitFileEntry {
@@ -97,6 +100,10 @@ export interface ElectronAPI {
     alias?: string,
     backend?: BackendName
   ) => Promise<Instance>;
+  // Rejects when one already exists. Takes no arguments: the manager's directory
+  // is Multi-Code's own, and it only runs on claude.
+  createManager: () => Promise<Instance>;
+  hasManager: () => Promise<boolean>;
   startInstance: (id: string) => Promise<Instance | null>;
   killInstance: (id: string) => Promise<void>;
   removeInstance: (id: string) => Promise<void>;

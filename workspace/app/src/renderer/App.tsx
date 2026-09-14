@@ -261,6 +261,24 @@ export function App() {
     []
   );
 
+  // No dialog: the manager has nothing to configure. Its directory belongs to
+  // Multi-Code and it only runs on claude, so the button does the whole job.
+  const handleNewManager = useCallback(async () => {
+    try {
+      const instance = await window.electronAPI.createManager();
+      setInstances((prev) => [...prev, instance]);
+      setSelectedId(instance.id);
+      playCoughSound();
+    } catch (err) {
+      // Main rejects when one already exists, which shouldn't be reachable since
+      // the button hides then — but a silent no-op would be worse than a message.
+      window.alert(
+        err instanceof Error ? err.message : "Could not create the manager."
+      );
+    }
+  }, []
+  );
+
   const handleStart = useCallback(async (id: string) => {
     const instance = await window.electronAPI.startInstance(id);
     if (instance) {
@@ -386,6 +404,7 @@ export function App() {
         unreadIds={unreadIds}
         onSelect={handleSelect}
         onNew={() => setDialogOpen(true)}
+        onNewManager={handleNewManager}
         onStart={handleStart}
         onRestart={handleRestart}
         onRemove={handleRemove}

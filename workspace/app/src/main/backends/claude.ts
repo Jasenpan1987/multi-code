@@ -6,6 +6,7 @@ import type {
   CompletionDetector,
   SessionDiscovery,
   SpawnConfig,
+  SpawnOptions,
 } from "./types";
 import { extractPromptDetail, keystrokeForOption } from "../remote/promptExtract";
 import type { TranscriptEntry } from "../../shared/remote-protocol";
@@ -347,8 +348,18 @@ class ClaudeSessionDiscovery implements SessionDiscovery {
 export const claudeBackend: Backend = {
   name: "claude",
 
-  spawn(cwd: string): SpawnConfig {
+  spawn(cwd: string, opts?: SpawnOptions): SpawnConfig {
     const args = hasExistingSession(cwd) ? ["--continue"] : [];
+
+    // No --strict-mcp-config: it would hide the user's own MCP servers from the
+    // manager, and those are theirs to make use of. Ours is additive.
+    if (opts?.mcpConfigPath) {
+      args.push("--mcp-config", opts.mcpConfigPath);
+    }
+    if (opts?.allowedTools?.length) {
+      args.push("--allowedTools", opts.allowedTools.join(","));
+    }
+
     return {
       command: claudePath,
       args,

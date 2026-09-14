@@ -11,6 +11,27 @@ export interface SpawnConfig {
 }
 
 /**
+ * Extra spawn wiring for an instance that isn't a plain project session. Only the
+ * manager uses this today.
+ *
+ * Both fields are needed together or not at all: an MCP server the instance can
+ * reach but whose tools it must ask permission for on every call is useless to an
+ * agent that is supposed to coordinate unattended. Measured 2026-09-02 — without
+ * the allowlist the CLI answers "Claude requested permissions to use
+ * mcp__multi-code__manager_health, but you haven't granted it yet" and the tool
+ * never runs.
+ */
+export interface SpawnOptions {
+  // Path to a JSON file in `--mcp-config` form. A file rather than the inline JSON
+  // form because it carries a bearer token, and argv is world-readable via `ps`.
+  mcpConfigPath?: string;
+  // Fully-qualified tool names to pre-approve, e.g. `mcp__multi-code__list_sessions`.
+  // Enumerated rather than wildcarded: the write tools should each need a
+  // deliberate line of code before the manager can use them unattended.
+  allowedTools?: string[];
+}
+
+/**
  * Activity callback. `detail` is populated only for the "prompt" event, and
  * only when the blocking tool_use could be decoded into a question plus
  * options — it's what lets a paired phone render real buttons instead of a
@@ -41,7 +62,12 @@ export interface SessionDiscovery {
 export interface Backend {
   readonly name: BackendName;
 
-  spawn(cwd: string): SpawnConfig;
+  /**
+   * Build the command line for a new instance. `opts` is present only for the
+   * manager instance; a backend that can't honour it should ignore it rather than
+   * fail, and say so in its implementation.
+   */
+  spawn(cwd: string, opts?: SpawnOptions): SpawnConfig;
 
   /**
    * Begin trying to discover the sessionId for an instance running in `cwd`.

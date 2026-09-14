@@ -29,21 +29,27 @@ function getColor(name: string): string {
 
 import type { BackendName } from "../../shared/types";
 
+// The manager is always this colour rather than one hashed from its name: there is
+// only ever one, and it should be recognisable at a glance instead of blending in
+// with whatever colour its name happened to land on. Matches the QQ chrome blue.
+const MANAGER_COLOR = "#2d5a8a";
+
 interface AvatarProps {
   name: string;
   online: boolean;
   blink?: boolean;
   backend: BackendName;
+  isManager?: boolean;
 }
 
-export function Avatar({ name, online, blink, backend }: AvatarProps) {
+export function Avatar({ name, online, blink, backend, isManager }: AvatarProps) {
   const initials = getInitials(name);
-  const bgColor = online ? getColor(name) : "#999";
+  const bgColor = !online ? "#999" : isManager ? MANAGER_COLOR : getColor(name);
   const shape = backend === "opencode" ? "square" : "circle";
 
   return (
     <div
-      className={`avatar avatar-${shape} ${blink ? "blink" : ""}`}
+      className={`avatar avatar-${shape} ${isManager ? "avatar-manager" : ""} ${blink ? "blink" : ""}`}
       style={{ backgroundColor: bgColor }}
     >
       <span className="avatar-initials">{initials}</span>

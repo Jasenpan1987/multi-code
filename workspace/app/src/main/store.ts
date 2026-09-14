@@ -9,6 +9,10 @@ export interface SavedContact {
   cwd: string;
   alias?: string;
   backend?: BackendName;
+  // The coordinator instance. At most one exists, and it is spawned differently:
+  // it gets the manager MCP tools and its cwd is a directory Multi-Code owns
+  // rather than one of the user's projects.
+  isManager?: boolean;
 }
 
 const STORE_PATH = path.join(app.getPath("userData"), "contacts.json");

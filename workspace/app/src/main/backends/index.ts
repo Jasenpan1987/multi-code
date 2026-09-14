@@ -21,4 +21,11 @@ export function isBackendAvailable(name: BackendName): boolean {
   return true;
 }
 
-export type { Backend, BackendName, SpawnConfig, CompletionDetector, SessionDiscovery } from "./types";
+export type {
+  Backend,
+  BackendName,
+  SpawnConfig,
+  SpawnOptions,
+  CompletionDetector,
+  SessionDiscovery,
+} from "./types";

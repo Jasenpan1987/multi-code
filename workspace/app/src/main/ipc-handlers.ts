@@ -14,7 +14,25 @@ import type { ReadFileResult } from "../shared/types";
 import { remoteServer } from "./remote/ws-server";
 import { setRemoteEnabled } from "./remote";
 import { hasTailscaleEndpoint } from "./remote/endpoints";
+import { ensureManagerMcpStarted } from "./manager-mcp";
+import { ensureManagerWorkspace } from "./manager-workspace";
 import QRCode from "qrcode";
+
+// The manager's tools live behind a server that has to be listening before the
+// manager spawns, because the spawn needs its port to write the --mcp-config it is
+// launched with. Called on every path that can start the manager — create, start,
+// restart — since the port is OS-assigned and changes across app runs.
+//
+// Lives here rather than in process-manager so the dependency stays
+// one-directional: manager-mcp imports process-manager to reach the instance list,
+// and the reverse would close a cycle.
+async function prepareManagerSpawn(): Promise<void> {
+  processManager.setManagerSpawnOptions(await ensureManagerMcpStarted());
+}
+
+function isManagerInstance(id: string): boolean {
+  return processManager.listInstances().some((i) => i.id === id && i.isManager);
+}
 
 // Per-process counter to disambiguate temp image filenames within the same ms.
 let tempImageCounter = 0;
@@ -44,7 +62,8 @@ export function registerIpcHandlers() {
     processManager.removeInstance(id);
   });
 
-  ipcMain.handle("restart-instance", (_event, id: string) => {
+  ipcMain.handle("restart-instance", async (_event, id: string) => {
+    if (isManagerInstance(id)) await prepareManagerSpawn();
     return processManager.restartInstance(id);
   });
 
@@ -56,8 +75,25 @@ export function registerIpcHandlers() {
     return processManager.loadSavedContacts();
   });
 
-  ipcMain.handle("start-instance", (_event, id: string) => {
+  ipcMain.handle("start-instance", async (_event, id: string) => {
+    if (isManagerInstance(id)) await prepareManagerSpawn();
     return processManager.startInstance(id);
+  });
+
+  // Separate from create-instance: the manager picks no directory (Multi-Code owns
+  // its cwd), no backend (claude only), and there can be just one. Bundling it into
+  // the same call would mean a dialog whose fields are all inapplicable.
+  ipcMain.handle("has-manager", () => processManager.hasManager());
+
+  ipcMain.handle("create-manager", async () => {
+    if (processManager.hasManager()) {
+      throw new Error("A manager already exists; only one is supported.");
+    }
+    // Seed the guidance file before spawning, so the CLI picks up the role on its
+    // very first turn rather than the turn after.
+    const { dir } = ensureManagerWorkspace();
+    await prepareManagerSpawn();
+    return processManager.createInstance(dir, "Manager", "claude", true);
   });
 
   ipcMain.handle(

@@ -11,6 +11,7 @@ import type {
   BackendName,
   CompletionDetector,
   SessionDiscovery,
+  SpawnOptions,
 } from "./backends";
 import { remoteServer } from "./remote/ws-server";
 import type { TranscriptEntry } from "../shared/remote-protocol";
@@ -28,6 +29,7 @@ export interface InstanceInfo {
   backend: BackendName;
   contextUsage?: ContextUsage;
   lastActivityAt?: number;
+  isManager?: boolean;
 }
 
 interface ManagedInstance {
@@ -53,6 +55,9 @@ interface ManagedInstance {
   // prompt). Distinct from lastPtyByteAt, which moves on every repaint of the
   // spinner. Absent until the first activity.
   lastActivityAt?: number;
+  // The coordinator instance. Spawned with the manager MCP tools attached; at most
+  // one exists.
+  isManager?: boolean;
 }
 
 // Reading context usage parses a transcript that reaches 8MB+, and
@@ -66,9 +71,28 @@ const DEFAULT_BACKEND: BackendName = "claude";
 export class ProcessManager {
   private instances = new Map<string, ManagedInstance>();
   private mainWindow: BrowserWindow | null = null;
+  // Set from outside rather than resolved here: the options carry the manager MCP
+  // server's port and bearer token, and importing that module would close a cycle
+  // (it imports this one to reach the instance list). main/index.ts and the
+  // create-manager IPC handler own the ordering — start the server, then set this,
+  // then spawn.
+  private managerSpawnOptions: SpawnOptions | null = null;
 
   setMainWindow(win: BrowserWindow) {
     this.mainWindow = win;
+  }
+
+  setManagerSpawnOptions(opts: SpawnOptions | null) {
+    this.managerSpawnOptions = opts;
+  }
+
+  // The manager is a singleton. Callers check before offering to create one, and
+  // createInstance refuses a second regardless.
+  hasManager(): boolean {
+    for (const instance of this.instances.values()) {
+      if (instance.isManager) return true;
+    }
+    return false;
   }
 
   loadSavedContacts(): InstanceInfo[] {
@@ -86,6 +110,7 @@ export class ProcessManager {
           discovery: null,
           detector: null,
           lastPtyByteAt: 0,
+          isManager: contact.isManager,
         });
       }
     }
@@ -99,6 +124,7 @@ export class ProcessManager {
         cwd: i.cwd,
         alias: i.alias,
         backend: i.backend,
+        isManager: i.isManager,
       })
     );
     saveContacts(contacts);
@@ -107,10 +133,23 @@ export class ProcessManager {
   createInstance(
     cwd: string,
     alias?: string,
-    backend: BackendName = DEFAULT_BACKEND
+    backend: BackendName = DEFAULT_BACKEND,
+    isManager = false
   ): InstanceInfo {
+    if (isManager) {
+      if (this.hasManager()) {
+        throw new Error("A manager already exists; only one is supported.");
+      }
+      // The manager's tools depend on `--allowedTools`, which OpenCode has no
+      // equivalent for — it would stop for a permission prompt on every call.
+      // Refuse rather than create one that can't coordinate.
+      if (backend !== "claude") {
+        throw new Error(`The manager must run on claude, not ${backend}.`);
+      }
+    }
+
     const id = crypto.randomUUID();
-    const instance = this.spawnProcess(id, cwd, alias, backend);
+    const instance = this.spawnProcess(id, cwd, alias, backend, isManager);
     this.instances.set(id, instance);
     this.persist();
     remoteServer.broadcastInstances();
@@ -126,7 +165,8 @@ export class ProcessManager {
       id,
       instance.cwd,
       instance.alias,
-      instance.backend
+      instance.backend,
+      instance.isManager
     );
     this.instances.set(id, started);
     remoteServer.broadcastInstances();
@@ -137,13 +177,20 @@ export class ProcessManager {
     id: string,
     cwd: string,
     alias: string | undefined,
-    backendName: BackendName
+    backendName: BackendName,
+    isManager?: boolean
   ): ManagedInstance {
     const cols = 120;
     const rows = 30;
 
     const backend: Backend = getBackend(backendName);
-    const { command, args, env } = backend.spawn(cwd);
+    // Manager options only for the manager. A project session must never get the
+    // fleet-driving tools, which is why this is keyed off the instance rather than
+    // applied globally.
+    const { command, args, env } = backend.spawn(
+      cwd,
+      isManager ? (this.managerSpawnOptions ?? undefined) : undefined
+    );
 
     const ptyProcess = pty.spawn(command, args, {
       name: "xterm-256color",
@@ -164,6 +211,7 @@ export class ProcessManager {
       discovery: null,
       detector: null,
       lastPtyByteAt: Date.now(),
+      isManager,
     };
 
     const isSessionClaimed = (candidate: string): boolean => {
@@ -355,7 +403,10 @@ export class ProcessManager {
       id,
       instance.cwd,
       instance.alias,
-      instance.backend
+      instance.backend,
+      // Must be carried through, or restarting the manager silently produces one
+      // with no tools — it would look alive and be unable to do anything.
+      instance.isManager
     );
     this.instances.set(id, restarted);
     remoteServer.broadcastInstances();
@@ -441,6 +492,7 @@ export class ProcessManager {
       // here, since this runs once per instance per broadcast.
       contextUsage: instance.contextUsage,
       lastActivityAt: instance.lastActivityAt,
+      isManager: instance.isManager,
     };
   }
 }

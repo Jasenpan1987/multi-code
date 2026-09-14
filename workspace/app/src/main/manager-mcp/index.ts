@@ -12,10 +12,11 @@
 // start server, read port, write config, spawn.
 
 import { managerMcpServer } from "./server";
-import { removeMcpConfig, writeMcpConfig } from "./config";
+import { MCP_SERVER_NAME, removeMcpConfig, writeMcpConfig } from "./config";
 import { buildReadTools } from "./read-tools";
 import { processManager } from "../process-manager";
 import type { McpServerInfo } from "./server";
+import type { SpawnOptions } from "../backends";
 
 let toolsRegistered = false;
 
@@ -51,11 +52,16 @@ function registerTools() {
   });
 }
 
-// Starts the server if it isn't already up and returns the path to pass as
-// `claude --mcp-config`, or null when the server couldn't bind or the config
-// couldn't be written. Null is not fatal: the caller spawns the manager without
-// the flag, and getManagerMcpInfo carries the reason for the UI to show.
-export async function ensureManagerMcpStarted(): Promise<string | null> {
+// Starts the server if it isn't already up and returns everything the manager's
+// spawn needs, or null when the server couldn't bind or the config couldn't be
+// written. Null is not fatal: the caller spawns the manager without the flags, and
+// getManagerMcpInfo carries the reason for the UI to show.
+//
+// Returns both the config path and the tool allowlist together, because either
+// without the other is useless. Measured 2026-09-02: with the config alone, the CLI
+// answers "Claude requested permissions to use mcp__multi-code__manager_health, but
+// you haven't granted it yet" and the handler never runs.
+export async function ensureManagerMcpStarted(): Promise<SpawnOptions | null> {
   registerTools();
 
   if (!managerMcpServer.isRunning()) {
@@ -66,7 +72,19 @@ export async function ensureManagerMcpStarted(): Promise<string | null> {
   const token = managerMcpServer.getToken();
   if (!endpoint || !token) return null;
 
-  return writeMcpConfig({ endpoint, token });
+  const mcpConfigPath = writeMcpConfig({ endpoint, token });
+  if (!mcpConfigPath) return null;
+
+  return { mcpConfigPath, allowedTools: managerToolNames() };
+}
+
+// Fully-qualified names, as the CLI addresses them: `mcp__<server>__<tool>`.
+// Derived from what is actually registered rather than a hardcoded list, so a tool
+// added in a later task can't be left un-allowed and silently prompt-blocked.
+export function managerToolNames(): string[] {
+  return managerMcpServer
+    .getInfo()
+    .toolNames.map((name) => `mcp__${MCP_SERVER_NAME}__${name}`);
 }
 
 export function getManagerMcpInfo(): McpServerInfo {

@@ -22,6 +22,7 @@ interface ContactListProps {
   unreadIds: Set<string>;
   onSelect: (id: string) => void;
   onNew: () => void;
+  onNewManager: () => void;
   onStart: (id: string) => void;
   onRestart: (id: string) => void;
   onRemove: (id: string) => void;
@@ -33,6 +34,7 @@ export function ContactList({
   unreadIds,
   onSelect,
   onNew,
+  onNewManager,
   onStart,
   onRestart,
   onRemove,
@@ -47,7 +49,15 @@ export function ContactList({
   // stored / appended). Status changes (start/stop) update fields in place and
   // never reorder, so a project going online won't jump to the top. Online vs
   // offline is conveyed by the avatar, not by position.
-  const ordered = instances;
+  //
+  // The one exception is the manager, pinned to the top. It is the contact the user
+  // talks to about all the others, so it shouldn't sit at whatever position it
+  // happened to be created in. Array.sort is stable, so everything else keeps its
+  // creation order.
+  const ordered = [...instances].sort(
+    (a, b) => Number(!!b.isManager) - Number(!!a.isManager)
+  );
+  const hasManager = instances.some((i) => i.isManager);
 
   const handleContextMenu = (e: React.MouseEvent, instanceId: string) => {
     e.preventDefault();
@@ -67,7 +77,7 @@ export function ContactList({
           ordered.map((inst) => (
             <div
               key={inst.id}
-              className={`contact-item ${selectedId === inst.id ? "selected" : ""} ${inst.status === "stopped" ? "stopped" : ""} ${unreadIds.has(inst.id) ? "unread" : ""}`}
+              className={`contact-item ${selectedId === inst.id ? "selected" : ""} ${inst.status === "stopped" ? "stopped" : ""} ${unreadIds.has(inst.id) ? "unread" : ""} ${inst.isManager ? "manager" : ""}`}
               onClick={() => onSelect(inst.id)}
               onContextMenu={(e) => handleContextMenu(e, inst.id)}
             >
@@ -76,6 +86,7 @@ export function ContactList({
                 online={inst.status === "running"}
                 blink={unreadIds.has(inst.id)}
                 backend={inst.backend}
+                isManager={inst.isManager}
               />
               <span className="contact-name">{inst.name}</span>
               {inst.contextUsage && (
@@ -103,9 +114,22 @@ export function ContactList({
           ))
         )}
       </div>
-      <button className="new-instance-btn-bottom" onClick={onNew}>
-        + New
-      </button>
+      <div className="sidebar-actions">
+        <button className="new-instance-btn-bottom" onClick={onNew}>
+          + New
+        </button>
+        {/* Only offered while there isn't one: the manager is a singleton, and a
+            button that always fails is worse than one that goes away. */}
+        {!hasManager && (
+          <button
+            className="new-manager-btn"
+            onClick={onNewManager}
+            title="Create the manager — one agent you talk to that can see and drive all the others"
+          >
+            + Manager
+          </button>
+        )}
+      </div>
 
       {contextMenu && contextInstance && (
         <ContextMenu

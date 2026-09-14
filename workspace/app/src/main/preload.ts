@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Instance management
   createInstance: (cwd: string, alias?: string, backend?: string) =>
     ipcRenderer.invoke("create-instance", cwd, alias, backend),
+  createManager: () => ipcRenderer.invoke("create-manager"),
+  hasManager: () => ipcRenderer.invoke("has-manager"),
   isBackendAvailable: (backend: string) =>
     ipcRenderer.invoke("is-backend-available", backend),
   startInstance: (id: string) => ipcRenderer.invoke("start-instance", id),

@@ -2,7 +2,7 @@
 
 **Generated:** 2026-09-02
 **PRD Version:** 1.0
-**Total Tasks:** 12
+**Total Tasks:** 13
 **Milestones:** M1 (See who's full), M2 (Manager can look), M3 (Manager can dispatch), M4 (Handoff + safety regression)
 
 ## Task Overview
@@ -14,6 +14,7 @@ graph TD
     T201 --> T205[T-205: Read-only MCP tools]
     T204[T-204: MCP server skeleton] --> T205
     T204 --> T209[T-209: Manager instance kind + spawn injection]
+    T209 --> T213[T-213: First-launch trust dialog]
     T204 --> T206[T-206: send_task behind the state gate]
     T204 --> T207[T-207: run_command allowlist]
     T204 --> T208[T-208: wait_for_idle]
@@ -274,7 +275,7 @@ this milestone writes to another session's terminal.
 
 ### T-209: Manager instance kind + spawn injection
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done (2026-09-15 — 13 tests, verified end-to-end; first-launch trust dialog split out to T-213)
 - **Requirement:** `prd.md#r6--the-manager-instance`
 - **Code:** `workspace/app/src/main/store.ts`, `workspace/app/src/main/process-manager.ts`, `workspace/app/src/main/backends/claude.ts`, `workspace/app/src/renderer/components/ContactList.tsx`
 - **Description:** Make the manager a real contact with the extra spawn wiring.
@@ -303,6 +304,64 @@ this milestone writes to another session's terminal.
 - **Blocks:** T-211 · **Blocked by:** T-204 · **Parallel with:** T-205
 - **Notes:** Role guidance goes in `CLAUDE.md`, deliberately not
   `--append-system-prompt`: user-editable, survives releases, loaded automatically.
+- **Outcome (2026-09-15):** `manager-workspace.ts` (dir + seeded guidance),
+  `SpawnOptions` on the `Backend` interface, `create-manager` / `has-manager` IPC,
+  `isManager` through SavedContact → ManagedInstance → InstanceInfo → Instance, and a
+  "+ Manager" button that hides once one exists. 13 tests.
+  Two departures from this task, both deliberate:
+  - **cwd is `userData/manager/`, not `~/.config/Multi-Code/manager/`** — the latter
+    came from the storage-path assumption T-205 disproved.
+  - **`--add-dir` is not passed.** It grants *tool access*, not read access, so it
+    would let the coordinator edit every one of the user's repos. It isn't needed
+    either: progress comes from `read_session`, and anything needing real code can be
+    dispatched to the session that owns it. This also dissolves **Q4** — with no
+    `--add-dir` the CLI's own directory boundary confines the manager to its own
+    workspace, so it can write its notes and nothing else, with no permission-mode
+    juggling.
+  Also fixed `restartInstance`, which didn't forward `isManager` — restarting the
+  manager would have produced one with no tools: alive, addressable, useless.
+  Verified end-to-end: `claudeBackend.spawn` produced the right command line, the CLI
+  connected with **no permission prompt** (so the allowlist works), read its seeded
+  guidance, called `list_sessions` unprompted and answered correctly ("18 sessions,
+  11 running, 7 stopped, most context is multi-code at 531,012 tokens").
+
+---
+
+### T-213: First-launch trust dialog for the manager
+- **Type:** feature
+- **Status:** backlog
+- **Requirement:** `prd.md#r6--the-manager-instance`
+- **Code:** `workspace/app/src/renderer/`
+- **Description:** A freshly created manager stops on the CLI's workspace-trust
+  dialog, and **its default is the wrong answer**. Reproduced 2026-09-15:
+
+  ```
+  Quick safety check: Is this a project you created or one you trust?
+  ❯ No, exit
+    Yes, I trust this folder
+  ```
+
+  The highlight sits on **No, exit**, so a user who presses Enter — the obvious thing
+  to do at a prompt — kills the manager they just created and watches it go stopped
+  with no explanation. Everything after the dialog works.
+
+  Show a one-time hint when the manager is created: it will ask whether the folder is
+  trusted, the answer is yes, and Enter alone will exit. `ensureManagerWorkspace`
+  already returns `seeded`, which is true exactly on the run that will show the
+  dialog, so the hint can be shown precisely once.
+- **Acceptance:**
+  - Creating a manager shows the hint; restarting an existing one does not
+  - The hint names the option to pick and warns that the default exits
+  - No new failure mode when the dialog doesn't appear (already-trusted directory)
+- **Blocks:** none · **Blocked by:** T-209 (done) · **Parallel with:** everything
+- **Notes:** Two alternatives were rejected and shouldn't be re-litigated without new
+  information. **Writing `hasTrustDialogAccepted` into `~/.claude.json`**: that is
+  where the CLI keeps it (verified at `projects["<cwd>"].hasTrustDialogAccepted`), but
+  the file is the CLI's live state — `lastSessionId`, `lastCost` and others are
+  rewritten constantly — so we would contend with the CLI for it, and corrupting it
+  breaks `claude` everywhere. **Auto-answering the dialog over the PTY**: exactly the
+  class of action T-203 exists to prevent; see the PRD verification log for what a
+  write landing on a dialog we guessed wrong about actually did.
 
 ---
 

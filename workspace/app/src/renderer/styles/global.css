@@ -186,6 +186,55 @@ body,
   flex-direction: column;
 }
 
+/* Holds the New button and, until one exists, the Manager button. Row rather than
+   stacked so the sidebar footer keeps its height. */
+.sidebar-actions {
+  display: flex;
+  flex-shrink: 0;
+}
+
+/* Same chrome as New, narrower and quieter — it is a one-time action, and once the
+   manager exists this button is gone for good. */
+.new-manager-btn {
+  padding: 14px 10px;
+  background: linear-gradient(180deg, #5b93c6 0%, #3a7ab4 50%, #2d5a8a 100%);
+  color: #fff;
+  border: none;
+  border-top: 1px solid #2d5a8a;
+  border-left: 1px solid #2d5a8a;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: bold;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(30, 74, 122, 0.6);
+  flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.new-manager-btn:hover {
+  background: linear-gradient(180deg, #6ba3d6 0%, #4a8ac4 50%, #3a78b8 100%);
+}
+
+.new-manager-btn:active {
+  background: linear-gradient(180deg, #3a7ab4 0%, #2d5a8a 50%, #24486e 100%);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* The manager row: a left accent so it reads as pinned rather than just first.
+   Deliberately subtle — the avatar's fixed colour is the main signal. */
+.contact-item.manager {
+  background: rgba(45, 90, 138, 0.08);
+  box-shadow: inset 2px 0 0 #2d5a8a;
+}
+
+.contact-item.manager.selected {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.avatar-manager {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7), 0 0 0 3px #2d5a8a;
+}
+
 .new-instance-btn-bottom {
   width: 100%;
   padding: 14px 8px;
