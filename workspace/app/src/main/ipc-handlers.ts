@@ -82,6 +82,18 @@ export function registerIpcHandlers() {
     return processManager.loadSavedContacts();
   });
 
+  // Drag-to-reorder. Takes the move rather than the resulting order — see
+  // moveInstance for why a stale renderer must not be able to rewrite the whole list.
+  ipcMain.handle(
+    "move-contact",
+    (_event, dragId: string, targetId: string, placeBefore: boolean) => {
+      if (typeof dragId !== "string" || typeof targetId !== "string") {
+        return processManager.listInstances();
+      }
+      return processManager.moveInstance(dragId, targetId, !!placeBefore);
+    }
+  );
+
   ipcMain.handle("start-instance", async (_event, id: string) => {
     if (isManagerInstance(id)) await prepareManagerSpawn();
     return processManager.startInstance(id);

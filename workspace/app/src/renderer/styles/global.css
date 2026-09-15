@@ -356,6 +356,20 @@ body,
    `font-weight: normal` because `.contact-item.unread` bolds the whole row, and
    a number that thickens on every notification reads as if it changed.
    `tabular-nums` keeps it from shifting width as the digits change. */
+/* Drag to reorder. The row being carried fades; the row you are over grows a line on
+   the edge the drop will land against, so the result is visible before letting go. */
+.contact-item[data-dragging="true"] {
+  opacity: 0.4;
+}
+
+.contact-item[data-drop="before"] {
+  box-shadow: inset 0 2px 0 0 #4a8ac4;
+}
+
+.contact-item[data-drop="after"] {
+  box-shadow: inset 0 -2px 0 0 #4a8ac4;
+}
+
 .contact-context {
   margin-left: auto;
   font-size: 10px;

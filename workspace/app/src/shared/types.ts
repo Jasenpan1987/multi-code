@@ -153,6 +153,13 @@ export interface ElectronAPI {
   restartInstance: (id: string) => Promise<Instance | null>;
   listInstances: () => Promise<Instance[]>;
   loadContacts: () => Promise<Instance[]>;
+  // Drag-to-reorder: one move, applied against the stored order. Returns the list as
+  // stored afterwards.
+  moveContact: (
+    dragId: string,
+    targetId: string,
+    placeBefore: boolean
+  ) => Promise<Instance[]>;
   hasRunningInstanceAt: (cwd: string, backend?: BackendName) => Promise<boolean>;
   setAlias: (id: string, alias: string) => Promise<void>;
   selectDirectory: () => Promise<string | null>;

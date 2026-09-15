@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   restartInstance: (id: string) => ipcRenderer.invoke("restart-instance", id),
   listInstances: () => ipcRenderer.invoke("list-instances"),
   loadContacts: () => ipcRenderer.invoke("load-contacts"),
+  moveContact: (dragId: string, targetId: string, placeBefore: boolean) =>
+    ipcRenderer.invoke("move-contact", dragId, targetId, placeBefore),
   hasRunningInstanceAt: (cwd: string, backend?: string) =>
     ipcRenderer.invoke("has-running-instance-at", cwd, backend),
   setAlias: (id: string, alias: string) =>

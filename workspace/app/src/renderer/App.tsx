@@ -300,6 +300,18 @@ export function App() {
   }, []
   );
 
+  // Drag-to-reorder. Only the intent is sent; the main process owns the order (it is
+  // the contacts.json layout) and applies the move to what it has stored. Rendering
+  // what comes back rather than updating optimistically keeps the two in step.
+  const handleMove = useCallback(
+    async (dragId: string, targetId: string, placeBefore: boolean) => {
+      setInstances(
+        await window.electronAPI.moveContact(dragId, targetId, placeBefore)
+      );
+    },
+    []
+  );
+
   const handleStart = useCallback(async (id: string) => {
     const instance = await window.electronAPI.startInstance(id);
     if (instance) {
@@ -426,6 +438,7 @@ export function App() {
         onSelect={handleSelect}
         onNew={() => setDialogOpen(true)}
         onNewManager={handleNewManager}
+        onMove={handleMove}
         onStart={handleStart}
         onRestart={handleRestart}
         onRemove={handleRemove}

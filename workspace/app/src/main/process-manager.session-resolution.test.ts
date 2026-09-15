@@ -221,3 +221,69 @@ describe("the lookup is cached", () => {
     expect(disk.lookups).toBe(0);
   });
 });
+
+// Drag-to-reorder. The design point under test: the main process applies a *move* to
+// the order it has stored, so a renderer whose list is stale can misplace one row but
+// can never rewrite the whole order.
+describe("moveInstance", () => {
+  function four() {
+    disk.latestByCwd.set(CWD, "ses-disk");
+    return ["a", "b", "c", "d"].map(
+      (name) => manager.createInstance(`/Users/x/code/${name}`, name).id
+    );
+  }
+  const order = () => manager.listInstances().map((i) => i.name);
+
+  it("moves a row before another", () => {
+    const [a] = four();
+    manager.moveInstance(a, manager.listInstances()[2].id, true);
+    expect(order()).toEqual(["b", "a", "c", "d"]);
+  });
+
+  it("moves a row after another", () => {
+    const [a] = four();
+    manager.moveInstance(a, manager.listInstances()[2].id, false);
+    expect(order()).toEqual(["b", "c", "a", "d"]);
+  });
+
+  it("moves upward", () => {
+    const ids = four();
+    manager.moveInstance(ids[3], ids[0], true);
+    expect(order()).toEqual(["d", "a", "b", "c"]);
+  });
+
+  it("keeps every instance and its state", () => {
+    const ids = four();
+    manager.moveInstance(ids[0], ids[3], false);
+    expect(manager.listInstances()).toHaveLength(4);
+    // The same live objects, not rebuilt copies — a reorder must not restart anything
+    // or drop a session id.
+    expect(manager.listInstances().every((i) => i.status === "running")).toBe(true);
+  });
+
+  it("is a no-op when the move changes nothing", () => {
+    const ids = four();
+    const before = order();
+    manager.moveInstance(ids[1], ids[0], false);
+    expect(order()).toEqual(before);
+  });
+
+  it("ignores an unknown id rather than dropping rows", () => {
+    four();
+    const before = order();
+    manager.moveInstance("nope", manager.listInstances()[0].id, true);
+    expect(order()).toEqual(before);
+    expect(manager.listInstances()).toHaveLength(4);
+  });
+
+  // The reason this takes a move and not a list. A renderer that hasn't seen a
+  // just-created instance would, if it sent its own full order, silently drop that
+  // instance from contacts.json.
+  it("keeps an instance the caller never mentioned", () => {
+    const ids = four();
+    const extra = manager.createInstance("/Users/x/code/late", "late").id;
+    manager.moveInstance(ids[0], ids[2], false);
+    expect(order()).toContain("late");
+    expect(manager.listInstances().map((i) => i.id)).toContain(extra);
+  });
+});

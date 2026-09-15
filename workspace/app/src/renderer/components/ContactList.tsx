@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ContextMenu } from "./ContextMenu";
 import { Avatar } from "./Avatar";
 import { formatContextPercent, formatTokens } from "./formatTokens";
+import { dropsBefore } from "./contactOrder";
 import type { ContextUsage, Instance } from "../../shared/types";
 
 // The row shows an abbreviated count, plus a percentage **only when the window size
@@ -52,6 +53,8 @@ interface ContactListProps {
   onStart: (id: string) => void;
   onRestart: (id: string) => void;
   onRemove: (id: string) => void;
+  // One drag, as an intent: put `dragId` before or after `targetId`.
+  onMove: (dragId: string, targetId: string, placeBefore: boolean) => void;
 }
 
 export function ContactList({
@@ -64,25 +67,32 @@ export function ContactList({
   onStart,
   onRestart,
   onRemove,
+  onMove,
 }: ContactListProps) {
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
     instanceId: string;
   } | null>(null);
+  // Which row is being dragged, and where it would land. `drop` drives the insertion
+  // line, so the user can see the result before letting go.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [drop, setDrop] = useState<{ id: string; before: boolean } | null>(null);
 
-  // Keep positions fixed: render in creation order (the order contacts are
-  // stored / appended). Status changes (start/stop) update fields in place and
-  // never reorder, so a project going online won't jump to the top. Online vs
-  // offline is conveyed by the avatar, not by position.
+  const endDrag = () => {
+    setDragId(null);
+    setDrop(null);
+  };
+
+  // Rendered in stored order, full stop. Status changes update fields in place and
+  // never reorder, so a project going online won't jump — online vs offline is the
+  // avatar's job, not position's.
   //
-  // The one exception is the manager, pinned to the top. It is the contact the user
-  // talks to about all the others, so it shouldn't sit at whatever position it
-  // happened to be created in. Array.sort is stable, so everything else keeps its
-  // creation order.
-  const ordered = [...instances].sort(
-    (a, b) => Number(!!b.isManager) - Number(!!a.isManager)
-  );
+  // **No render-time sort, deliberately.** The manager used to be pinned to the top
+  // here; now the user drags rows where they want them, and a pinned row would be the
+  // one they couldn't move. `migrateManagerToTop` in process-manager puts it first in
+  // storage once, so this reads the same as before until they change it.
+  const ordered = instances;
   const hasManager = instances.some((i) => i.isManager);
 
   const handleContextMenu = (e: React.MouseEvent, instanceId: string) => {
@@ -106,6 +116,42 @@ export function ContactList({
               className={`contact-item ${selectedId === inst.id ? "selected" : ""} ${inst.status === "stopped" ? "stopped" : ""} ${unreadIds.has(inst.id) ? "unread" : ""} ${inst.isManager ? "manager" : ""}`}
               onClick={() => onSelect(inst.id)}
               onContextMenu={(e) => handleContextMenu(e, inst.id)}
+              draggable
+              data-dragging={dragId === inst.id ? "true" : undefined}
+              data-drop={
+                drop?.id === inst.id ? (drop.before ? "before" : "after") : undefined
+              }
+              onDragStart={(e) => {
+                setDragId(inst.id);
+                e.dataTransfer.effectAllowed = "move";
+                // Some data is required or Firefox-style browsers cancel the drag;
+                // harmless in Electron and it makes the payload self-describing.
+                e.dataTransfer.setData("text/plain", inst.id);
+              }}
+              onDragOver={(e) => {
+                if (!dragId || dragId === inst.id) return;
+                // Without preventDefault the drop event never fires at all.
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                const before = dropsBefore(
+                  e.clientY,
+                  e.currentTarget.getBoundingClientRect()
+                );
+                setDrop((prev) =>
+                  prev?.id === inst.id && prev.before === before
+                    ? prev
+                    : { id: inst.id, before }
+                );
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (!dragId || !drop) return endDrag();
+                // Only the intent goes across. The main process applies it to the
+                // order it actually has stored — see moveInstance.
+                onMove(dragId, drop.id, drop.before);
+                endDrag();
+              }}
+              onDragEnd={endDrag}
             >
               <Avatar
                 name={inst.name}

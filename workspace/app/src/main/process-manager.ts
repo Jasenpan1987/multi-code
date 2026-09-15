@@ -16,6 +16,7 @@ import type {
 import { remoteServer } from "./remote/ws-server";
 import type { TranscriptEntry } from "../shared/remote-protocol";
 import type { ContextUsage } from "../shared/types";
+import { moveInOrder } from "../shared/reorder";
 import { debugTrace } from "./debug-trace";
 import { RunStateTracker, type RunState, type WriteVerdict } from "./run-state";
 
@@ -153,8 +154,26 @@ export class ProcessManager {
     return false;
   }
 
+  // Put the manager first in storage, once.
+  //
+  // The contact list used to pin it to the top at render time, so its stored position
+  // was wherever it happened to be created — last, for anyone who added it after their
+  // projects. Now that the list is drag-reorderable, the stored order *is* the display
+  // order, and leaving that render-time sort in place would mean the one row the user
+  // can't move. Without this migration the manager would appear to jump to the bottom
+  // the first time they open the new build.
+  //
+  // Runs at most once: after it writes, the manager is already first.
+  private migrateManagerToTop(saved: SavedContact[]): SavedContact[] {
+    const at = saved.findIndex((c) => c.isManager);
+    if (at <= 0) return saved;
+    const reordered = [saved[at], ...saved.filter((_, i) => i !== at)];
+    saveContacts(reordered);
+    return reordered;
+  }
+
   loadSavedContacts(): InstanceInfo[] {
-    const saved = loadContacts();
+    const saved = this.migrateManagerToTop(loadContacts());
     for (const contact of saved) {
       if (!this.instances.has(contact.id)) {
         this.instances.set(contact.id, {
@@ -173,6 +192,39 @@ export class ProcessManager {
         });
       }
     }
+    return this.listInstances();
+  }
+
+  // Apply one drag: put `dragId` immediately before or after `targetId`.
+  //
+  // **Takes the move, not the resulting order, on purpose.** An earlier version
+  // accepted the renderer's complete list, reasoning that it should match what the
+  // user saw. It has the opposite effect: a renderer whose list is stale — it missed
+  // an instance, or holds an older order — would overwrite the stored order wholesale
+  // with its own, silently reshuffling rows nobody dragged. A move is applied against
+  // the order that is actually stored, so the worst a stale renderer can do is land
+  // one row next to the wrong neighbour.
+  //
+  // The Map's insertion order is what listInstances and persist both walk, so applying
+  // the move means rebuilding it.
+  moveInstance(
+    dragId: string,
+    targetId: string,
+    placeBefore: boolean
+  ): InstanceInfo[] {
+    const current = [...this.instances.keys()];
+    const next = moveInOrder(current, dragId, targetId, placeBefore);
+    // Same array back means nothing moved — no write, no broadcast.
+    if (next === current) return this.listInstances();
+
+    const rebuilt = new Map<string, ManagedInstance>();
+    for (const id of next) {
+      const instance = this.instances.get(id);
+      if (instance) rebuilt.set(id, instance);
+    }
+    this.instances = rebuilt;
+    this.persist();
+    remoteServer.broadcastInstances();
     return this.listInstances();
   }
 
