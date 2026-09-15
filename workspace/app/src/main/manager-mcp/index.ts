@@ -51,6 +51,9 @@ function registerTools() {
     // and it is the capability whose absence made the manager tell the user to go
     // and start sessions by hand.
     startSession: (id) => processManager.startInstance(id),
+    runStateOf: (id) => processManager.runStateOf(id),
+    onActivity: (listener) => processManager.onActivity(listener),
+    msSincePtyByte: (id) => processManager.msSincePtyByte(id),
   })) {
     managerMcpServer.registerTool(tool);
   }
@@ -59,6 +62,7 @@ function registerTools() {
     listInstances: () => processManager.listInstances(),
     runStateOf: (id) => processManager.runStateOf(id),
     onActivity: (listener) => processManager.onActivity(listener),
+    msSincePtyByte: (id) => processManager.msSincePtyByte(id),
   })) {
     managerMcpServer.registerTool(tool);
   }

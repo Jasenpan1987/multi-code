@@ -9,8 +9,9 @@
 // back with something the manager can tell the user.
 
 import { resolveSession } from "./read-tools";
+import { READY_TIMEOUT_MS, waitForReady } from "./wait-tools";
 import type { InstanceInfo } from "../process-manager";
-import type { WriteVerdict } from "../run-state";
+import type { RunState, WriteVerdict } from "../run-state";
 import type { ToolDefinition } from "./server";
 
 // Slash commands the manager may run. A plain constant, not a config surface:
@@ -36,6 +37,11 @@ export interface ManagerWriteHost {
   sendTask(instanceId: string, text: string): WriteVerdict;
   runCommand(instanceId: string, command: string): WriteVerdict;
   startSession(instanceId: string): InstanceInfo | null;
+  // The last three exist so `start_session` can wait for the CLI to be ready rather
+  // than handing the model a session it will immediately write into and lose.
+  runStateOf(instanceId: string): RunState | undefined;
+  onActivity(listener: (instanceId: string, type: string) => void): () => void;
+  msSincePtyByte(instanceId: string): number | undefined;
 }
 
 export function buildWriteTools(host: ManagerWriteHost): ToolDefinition[] {
@@ -63,7 +69,7 @@ export function buildWriteTools(host: ManagerWriteHost): ToolDefinition[] {
         required: ["name", "text"],
         additionalProperties: false,
       },
-      handler: (args) => {
+      handler: async (args) => {
         const target = requireTarget(host, args.name);
 
         const text = typeof args.text === "string" ? args.text.trim() : "";
@@ -71,6 +77,7 @@ export function buildWriteTools(host: ManagerWriteHost): ToolDefinition[] {
           throw new Error("`text` is required — there is nothing to send.");
         }
 
+        await settleIfStarting(host, target);
         const verdict = host.sendTask(target.id, text);
         if (!verdict.ok) {
           // Reads as a sentence: "<name> is waiting on a decision from you…"
@@ -107,7 +114,7 @@ export function buildWriteTools(host: ManagerWriteHost): ToolDefinition[] {
         required: ["name", "command"],
         additionalProperties: false,
       },
-      handler: (args) => {
+      handler: async (args) => {
         const target = requireTarget(host, args.name);
 
         const raw = typeof args.command === "string" ? args.command.trim() : "";
@@ -122,6 +129,7 @@ export function buildWriteTools(host: ManagerWriteHost): ToolDefinition[] {
           );
         }
 
+        await settleIfStarting(host, target);
         const verdict = host.runCommand(target.id, raw);
         if (!verdict.ok) {
           throw new Error(`${target.name} is ${verdict.reason}`);
@@ -140,7 +148,8 @@ export function buildWriteTools(host: ManagerWriteHost): ToolDefinition[] {
       name: "start_session",
       description:
         "Start a stopped session so it can be read from and given work. Use this instead of asking the user to start it — starting a session is your job, not theirs. " +
-        "Costs nothing and consumes no tokens on its own: it launches the CLI, which then sits waiting. Safe to call on a session that is already running.",
+        "Costs nothing and consumes no tokens on its own: it launches the CLI, which then sits waiting. Safe to call on a session that is already running. " +
+        "This waits until the session is ready, so you can send_task straight afterwards.",
       inputSchema: {
         type: "object",
         properties: {
@@ -152,7 +161,7 @@ export function buildWriteTools(host: ManagerWriteHost): ToolDefinition[] {
         required: ["name"],
         additionalProperties: false,
       },
-      handler: (args) => {
+      handler: async (args) => {
         const target = requireTarget(host, args.name);
 
         if (target.status === "running") {
@@ -166,15 +175,74 @@ export function buildWriteTools(host: ManagerWriteHost): ToolDefinition[] {
           );
         }
 
+        // Hold until the CLI has finished painting and can accept input.
+        //
+        // **Returning immediately was measurably worse than waiting.** Observed
+        // 2026-09-15: the manager started a session and dispatched to it one second
+        // later, the still-booting CLI dropped the input, and the write-safety gate
+        // then correctly refused the retry ("silent for 1s") — leaving the manager
+        // to work out what had happened over the next two minutes. The tool
+        // description said to give it a few seconds; the model did not, and telling
+        // a model to wait is never as reliable as waiting.
+        const outcome = await waitForReady(host, started.id, READY_TIMEOUT_MS);
+
+        const head = `Started ${started.name} (${started.backend}) in ${started.cwd}.`;
+        if (outcome === "exit") {
+          throw new Error(
+            `${started.name} started and then exited immediately. Tell the user — ` +
+              `its CLI is failing on launch, which is not something you can fix from here.`
+          );
+        }
+        if (outcome === "blocked") {
+          return (
+            `${head}\n\n` +
+            `It came up on a question it needs the user to answer — a fresh session in an ` +
+            `untrusted directory does this. Tell them to answer it in Multi-Code; you cannot ` +
+            `send it work until they do.`
+          );
+        }
+        if (outcome === "timeout") {
+          return (
+            `${head}\n\n` +
+            `It has not finished starting after ${READY_TIMEOUT_MS / 1000}s, which is unusual. ` +
+            `The process is up, so you can try send_task, but check with read_session first ` +
+            `rather than assuming your message arrived.`
+          );
+        }
+
         return (
-          `Started ${started.name} (${started.backend}) in ${started.cwd}.\n\n` +
-          `It needs a few seconds to come up and register its session before read_session ` +
-          `works. A brand-new session also has no history to read — if you wanted its past ` +
-          `work, that is in its transcript, not in the fresh process.`
+          `${head} Ready — you can send_task now.\n\n` +
+          `Note it has no fresh history to read: a session that just started has done ` +
+          `nothing yet, so read_session shows its past work, not anything new.`
         );
       },
     },
   ];
+}
+
+// Hold off writing to a session that is still booting.
+//
+// **The model issues start_session and send_task in the same turn, in parallel.**
+// Observed 2026-09-15: the dispatch arrived two seconds into the CLI's startup, the
+// booting CLI swallowed it, and the write gate then refused the retry — the manager
+// spent the next two minutes working out why. Waiting inside the write tool fixes
+// that for every ordering the model might choose, which telling it to sequence the
+// calls does not.
+//
+// Only `starting` waits. An idle or busy target is written to immediately, and a
+// blocked one is the gate's business, not this function's.
+async function settleIfStarting(host: ManagerWriteHost, target: InstanceInfo) {
+  if (host.runStateOf(target.id) !== "starting") return;
+
+  const outcome = await waitForReady(host, target.id, READY_TIMEOUT_MS);
+  if (outcome === "exit") {
+    throw new Error(
+      `${target.name} exited while starting up, so there was nothing to send to. ` +
+        `Tell the user its CLI is failing to launch.`
+    );
+  }
+  // `blocked` and `timeout` both fall through to the gate, which produces a better
+  // sentence about the current state than anything guessed here would.
 }
 
 // Every tool here addresses a session by name and refuses to touch the manager

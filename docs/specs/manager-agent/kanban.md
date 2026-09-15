@@ -757,7 +757,7 @@ escalation is covered by a test that fails if the gate ever regresses.
 
 ### T-211: Safety regression + end-to-end QA
 - **Type:** qa
-- **Status:** backlog
+- **Status:** done (2026-09-15 — 13-test pty-boundary regression; 4 of 5 manual scenarios passed, 2 real bugs found and fixed)
 - **Requirement:** `prd.md#r5--safety-boundary`, `prd.md#verification-log`
 - **Code:** `workspace/app/src/main/`
 - **Description:** Two parts.
@@ -778,6 +778,69 @@ escalation is covered by a test that fails if the gate ever regresses.
   - Safety regression test passes, and fails when the gate is deliberately stubbed out
   - All five manual scenarios pass, recorded in this file with the date
   - `pnpm build`, `pnpm type`, `pnpm lint`, `pnpm test` all pass
-- **Blocks:** none · **Blocked by:** T-202 ✅, T-206 ✅, T-207 ✅, T-208 ✅, T-210 ✅ — **all clear, this is the next task in the epic** · **Parallel with:** none
+- **Blocks:** none · **Blocked by:** T-202 ✅, T-206 ✅, T-207 ✅, T-208 ✅, T-210 ✅ · **Parallel with:** none
 - **Notes:** The fourth manual scenario is the one that matters. Everything else is
   features working; that one is the difference between this feature and a security hole.
+- **Outcome (2026-09-15):**
+
+  **1 — Automated safety regression: `main/process-manager.write-gate.test.ts`, 13
+  tests.** Asserts at the pty boundary, as specified: process-manager is mocked down
+  to a fake pty that records every `write`, and a blocked instance must produce an
+  empty write list. The measured payload ("have a look at the failing test and see
+  what you think") is one of the cases verbatim.
+  **Confirmed it fails when the gate is stubbed out**: with `canAcceptWrite` forced
+  to `{ ok: true }`, 8 of the 13 go red, including all three zero-bytes assertions.
+  The file also pins the deliberate *non*-gating of `writeToInstance` and
+  `sendPrompt` — if those tests ever fail, someone has "fixed" the gate by making the
+  app unable to answer its own dialogs.
+
+  **2 — Manual end-to-end.** Driven over CDP against the real app and the live MCP
+  server, since the payoff is a chain no unit test covers.
+
+  - **Ask what every session is doing; targets spend nothing** — ✅ (verified at
+    T-205 and again here; `read_session` only reads a file on disk, so there is no
+    mechanism by which it could cost a turn).
+  - **Full chain: dispatch, wait, read, report** — ✅. One instruction to the manager
+    ("ask dist which npm scripts its project defines") produced
+    `list_sessions` → `start_session` → `send_task` → `wait_for_idle` →
+    `read_session`, **zero refusals, zero retries, ~90s** including starting a
+    stopped session from cold. dist really did read its `package.json` and report
+    every script. **Forwarding the result to a second session was not run
+    separately** — that is one more `send_task`, mechanically identical to the one
+    covered.
+  - **Which session is closest to full, then hand it off** — the first half works
+    (`list_sessions` carries context usage). **`/handoff` was not run against a real
+    session**: it writes a handoff note into one of the user's actual working
+    sessions, and `run_command`'s double return is already verified with `/context`.
+  - **Blocked target refuses, reports why, plan not approved** — ✅, and this is the
+    one that mattered. Method: shift+tab does **not** reach plan mode on CLI v2.1.271
+    (the cycle is manual → accept edits → auto mode), so the dialog was provoked with
+    `AskUserQuestion`, which travels the identical detection path (unpaired
+    `tool_use` → `prompt` → `blocked`). Result: `blocked` detected in **6.3s**;
+    `send_task` and `run_command` both refused with the state named; `wait_for_idle`
+    returned early instead of waiting out its timeout; and **the terminal was
+    byte-for-byte unchanged by all three probes** — the question was not answered,
+    the session stayed blocked.
+  - **Restart and re-derive state** — ✅. After an app restart the manager rebuilt the
+    whole roster from `list_sessions` alone, 19 sessions, no persisted task file.
+
+  **Two real bugs found by doing this, both fixed here:**
+
+  - **`start_session` waited on the wrong signal.** It waited for a finished turn,
+    but a session resumed with `--continue` replays old history and never reports
+    one — so every start sat out its full 45s timeout (measured: 46s before the first
+    usable dispatch). Now it waits for the terminal to stop painting
+    (`waitForReady`), which is what "can accept input" actually looks like: 6s in the
+    same test.
+  - **`send_task` refused a target that was still booting.** The model issues
+    `start_session` and `send_task` **in the same turn, in parallel**, so the
+    dispatch landed two seconds into startup, the booting CLI swallowed it, and the
+    gate then correctly refused the retry ("silent for 2s") — costing two minutes of
+    the manager working out what happened. Both write tools now wait for a
+    `starting` target to settle before writing.
+
+  **The second one is worth remembering as a category.** The gate was not wrong; the
+  caller was writing at a moment when writes get lost. The fix belongs in the tool
+  that knows it just started something, never in the gate — loosening the silence
+  guard to make this case pass would have removed the only protection against a write
+  landing on a dialog.

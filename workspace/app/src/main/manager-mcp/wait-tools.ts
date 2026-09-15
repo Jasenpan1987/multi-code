@@ -25,7 +25,23 @@ export interface ManagerWaitHost {
   listInstances(): InstanceInfo[];
   runStateOf(instanceId: string): RunState | undefined;
   onActivity(listener: (instanceId: string, type: string) => void): () => void;
+  // Milliseconds since the last byte arrived from this instance's terminal, or
+  // undefined when it isn't running. `start_session` needs this; nothing else does.
+  msSincePtyByte(instanceId: string): number | undefined;
 }
+
+// Ceiling on how long `start_session` waits for a freshly spawned CLI.
+export const READY_TIMEOUT_MS = 20_000;
+
+// A booting CLI paints continuously — banner, restored history, input box — and then
+// stops. Once it has been this quiet, it has finished drawing and will accept input.
+const READY_QUIET_MS = 1_000;
+
+// Don't judge quiet before this, so the gap between spawn and the CLI's first byte
+// isn't mistaken for a finished screen.
+const READY_MIN_WAIT_MS = 1_500;
+
+const READY_POLL_MS = 200;
 
 export function buildWaitTools(host: ManagerWaitHost): ToolDefinition[] {
   return [
@@ -106,12 +122,17 @@ export function buildWaitTools(host: ManagerWaitHost): ToolDefinition[] {
   ];
 }
 
-type WaitOutcome = "idle" | "blocked" | "exit" | "timeout";
+export type WaitOutcome = "idle" | "blocked" | "exit" | "timeout";
 
 // Resolves on the first event that ends the turn. Every path clears both the
 // listener and the timer: a leaked listener would fire against a resolved promise
 // forever, and this runs once per dispatch for the life of the app.
-function waitForTurnEnd(
+//
+// Exported because `start_session` needs the same wait: a CLI that has just been
+// spawned drops anything written before it finishes drawing, so the tool has to
+// hold until the session is actually ready rather than returning a promise the
+// model will immediately act on.
+export function waitForTurnEnd(
   host: ManagerWaitHost,
   instanceId: string,
   timeoutMs: number
@@ -147,6 +168,68 @@ function waitForTurnEnd(
     // Registered after the listener on purpose — nothing to race, but a zero
     // timeout must not resolve before the listener is even attached.
     if (done) unsubscribe();
+  });
+}
+
+export type ReadyOutcome = "ready" | "blocked" | "exit" | "timeout";
+
+// Waits for a just-spawned CLI to be able to accept input.
+//
+// **Not the same question as "has it finished a turn", which is what wait_for_idle
+// asks.** A session resumed with `--continue` replays old history and produces no
+// new assistant turn, so it never reports `waiting` — an earlier version of
+// `start_session` waited for that event and sat out its entire 45s timeout every
+// time (measured 2026-09-15: 46s from start to first usable dispatch). The signal
+// that actually means "ready" is the terminal going quiet: both CLIs paint without
+// pause while booting, then stop.
+export function waitForReady(
+  host: ManagerWaitHost,
+  instanceId: string,
+  timeoutMs: number
+): Promise<ReadyOutcome> {
+  return new Promise((resolve) => {
+    const startedAt = Date.now();
+    let done = false;
+    let unsubscribe = () => {};
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const finish = (outcome: ReadyOutcome) => {
+      if (done) return;
+      done = true;
+      if (timer) clearTimeout(timer);
+      unsubscribe();
+      resolve(outcome);
+    };
+
+    // A dialog or an exit during startup answers the question early — the trust
+    // prompt on a directory the CLI hasn't seen before arrives exactly here.
+    unsubscribe = host.onActivity((id, type) => {
+      if (id !== instanceId) return;
+      if (type === "prompt") finish("blocked");
+      else if (type === "exit") finish("exit");
+      // `waiting` also means ready, for the fresh-session case where it does fire.
+      else if (type === "waiting") finish("ready");
+    });
+
+    const poll = () => {
+      if (done) return;
+      const elapsed = Date.now() - startedAt;
+      const quiet = host.msSincePtyByte(instanceId);
+      if (quiet === undefined) {
+        finish("exit");
+        return;
+      }
+      if (elapsed >= READY_MIN_WAIT_MS && quiet >= READY_QUIET_MS) {
+        finish("ready");
+        return;
+      }
+      if (elapsed >= timeoutMs) {
+        finish("timeout");
+        return;
+      }
+      timer = setTimeout(poll, READY_POLL_MS);
+    };
+    timer = setTimeout(poll, READY_POLL_MS);
   });
 }
 

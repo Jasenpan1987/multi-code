@@ -4,7 +4,12 @@
 // silent behaviour this tool exists to remove.
 
 import { describe, expect, it, vi } from "vitest";
-import { buildWaitTools, clampTimeout, type ManagerWaitHost } from "./wait-tools";
+import {
+  buildWaitTools,
+  clampTimeout,
+  waitForReady,
+  type ManagerWaitHost,
+} from "./wait-tools";
 import type { InstanceInfo } from "../process-manager";
 import type { RunState } from "../run-state";
 
@@ -30,7 +35,8 @@ interface Harness {
 
 function harness(
   instances: InstanceInfo[] = [instance()],
-  state: RunState | undefined = "busy"
+  state: RunState | undefined = "busy",
+  quietMs: number | undefined = 0
 ): Harness {
   const listeners = new Set<(id: string, type: string) => void>();
   const host: ManagerWaitHost = {
@@ -40,6 +46,7 @@ function harness(
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    msSincePtyByte: () => quietMs,
   };
   return {
     tool: buildWaitTools(host)[0],
@@ -180,5 +187,71 @@ describe("wait_for_idle — the description steers the model", () => {
     const { tool } = harness();
     expect(tool.description).toMatch(/instead of reading the session over and over/);
     expect(tool.description).toMatch(/each one costs you a whole turn/);
+  });
+});
+
+// `waitForReady` asks a different question from wait_for_idle: not "has the turn
+// finished" but "can this thing accept input yet". Getting them confused cost 46
+// seconds per start_session — a session resumed with `--continue` replays old
+// history and never reports a finished turn, so waiting for one always timed out.
+describe("waitForReady", () => {
+  function readyHost(
+    quiet: number | undefined,
+    onSub?: (fire: (id: string, type: string) => void) => void
+  ): ManagerWaitHost {
+    const listeners = new Set<(id: string, type: string) => void>();
+    onSub?.((id, type) => {
+      for (const l of listeners) l(id, type);
+    });
+    return {
+      listInstances: () => [instance()],
+      runStateOf: () => "starting",
+      onActivity: (listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      msSincePtyByte: () => quiet,
+    };
+  }
+
+  it("reports ready once the terminal has stopped painting", async () => {
+    // Quiet from the start, but it still holds for the minimum wait rather than
+    // trusting silence measured before the CLI has said anything at all.
+    const started = Date.now();
+    const outcome = await waitForReady(readyHost(5000), "id-1", 10_000);
+    expect(outcome).toBe("ready");
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1400);
+  });
+
+  it("does not report ready while the terminal is still painting", async () => {
+    const outcome = await waitForReady(readyHost(0), "id-1", 2_000);
+    expect(outcome).toBe("timeout");
+  });
+
+  it("reports exit when the instance is no longer running", async () => {
+    const outcome = await waitForReady(readyHost(undefined), "id-1", 5_000);
+    expect(outcome).toBe("exit");
+  });
+
+  it("reports blocked when it comes up on a dialog", async () => {
+    let fire: (id: string, type: string) => void = () => {};
+    const host = readyHost(0, (f) => {
+      fire = f;
+    });
+    const pending = waitForReady(host, "id-1", 5_000);
+    await new Promise((r) => setTimeout(r, 50));
+    fire("id-1", "prompt");
+    await expect(pending).resolves.toBe("blocked");
+  });
+
+  it("ignores events from other instances", async () => {
+    let fire: (id: string, type: string) => void = () => {};
+    const host = readyHost(0, (f) => {
+      fire = f;
+    });
+    const pending = waitForReady(host, "id-1", 1_500);
+    await new Promise((r) => setTimeout(r, 50));
+    fire("id-2", "exit");
+    await expect(pending).resolves.toBe("timeout");
   });
 });

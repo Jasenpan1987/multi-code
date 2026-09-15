@@ -387,6 +387,16 @@ export class ProcessManager {
     return instance.runState.state();
   }
 
+  // How long this instance's terminal has been quiet. Undefined when it isn't
+  // running. Used by `start_session` to tell a CLI that has finished painting from
+  // one still booting — a session resumed with `--continue` never reports a finished
+  // turn, so silence is the only signal available there.
+  msSincePtyByte(id: string): number | undefined {
+    const instance = this.instances.get(id);
+    if (!instance?.ptyProcess) return undefined;
+    return Date.now() - instance.lastPtyByteAt;
+  }
+
   writeToInstance(id: string, data: string) {
     const instance = this.instances.get(id);
     if (instance?.ptyProcess) {
