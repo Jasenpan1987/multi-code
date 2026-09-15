@@ -92,13 +92,15 @@ function openDb(dbPath: string = OPENCODE_DB): Database.Database {
 // `/tmp/x` writes `/private/tmp/x` and a plain string compare never matches —
 // session discovery then silently times out and the instance gets no prompt
 // detection at all.
-function findLatestSessionForCwd(
+// `dbPath` is overridable for tests, like everywhere else in this file.
+export function findLatestSessionForCwd(
   cwd: string,
-  isClaimed?: (sessionId: string) => boolean
+  isClaimed?: (sessionId: string) => boolean,
+  dbPath?: string
 ): string | null {
   let db: Database.Database | null = null;
   try {
-    db = openDb();
+    db = dbPath ? openDb(dbPath) : openDb();
     const target = resolvePath(cwd);
     // Query both spellings so the common case still hits the index: `cwd` as
     // given, and its resolved form (what OpenCode actually stored). Only when
@@ -779,6 +781,14 @@ export const opencodeBackend: Backend = {
 
   readContextUsage(sessionId): ContextUsage | null {
     return readOpencodeContextUsage(sessionId);
+  },
+
+  // The `session` table is a durable record, not a list of live processes, so the
+  // query discovery already uses answers this too — just without a claim filter,
+  // since here we want the directory's newest session whether or not another
+  // instance owns it.
+  findLatestSessionId(cwd: string): string | null {
+    return findLatestSessionForCwd(cwd);
   },
 
   keystrokeForChoice(tool, index, optionCount): string | null {

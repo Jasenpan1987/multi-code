@@ -33,6 +33,7 @@ function host(over: Partial<ManagerHost> = {}): ManagerHost {
   return {
     listInstances: () => [instance()],
     readTranscript: () => [],
+    hasReadableTranscript: () => true,
     ...over,
   };
 }
@@ -310,19 +311,35 @@ describe("read_session tool", () => {
     expect(gotId).toBe("internal-42");
   });
 
-  it("refuses a stopped session and says why", () => {
+  // Reversed at T-214. Refusing a stopped session cost a real capability for no
+  // safety gain — the transcript is a file on disk — and it fired on the very first
+  // question ever asked of the manager.
+  it("reads a stopped session, labelling it as history", () => {
     const tools = toolsOf(
-      host({ listInstances: () => [instance({ status: "stopped" })] })
+      host({
+        listInstances: () => [
+          instance({ status: "stopped", sessionId: undefined }),
+        ],
+        readTranscript: () => [{ kind: "assistant", text: "did the thing" }],
+      })
     );
-    expect(() => tools.read.handler({ name: "msk" })).toThrow(/stopped/);
+    const out = tools.read.handler({ name: "msk" }) as string;
+    expect(out).toContain("did the thing");
+    expect(out).toMatch(/is STOPPED/);
+    expect(out).toMatch(/history, not work in progress/);
   });
 
-  it("refuses a session that hasn't registered one yet", () => {
+  it("does not label a running session as stopped", () => {
     const tools = toolsOf(
-      host({ listInstances: () => [instance({ sessionId: undefined })] })
+      host({ readTranscript: () => [{ kind: "assistant", text: "working" }] })
     );
+    expect(tools.read.handler({ name: "msk" })).not.toMatch(/STOPPED/);
+  });
+
+  it("refuses when there is no transcript anywhere, and says which case it is", () => {
+    const tools = toolsOf(host({ hasReadableTranscript: () => false }));
     expect(() => tools.read.handler({ name: "msk" })).toThrow(
-      /has not registered a session/
+      /no transcript on disk/
     );
   });
 
@@ -332,12 +349,10 @@ describe("read_session tool", () => {
   });
 
   it("never reads the transcript of a session it refused", () => {
-    // A refusal that still touched the target would defeat the point of the
-    // stopped/unregistered guards.
     let called = false;
     const tools = toolsOf(
       host({
-        listInstances: () => [instance({ status: "stopped" })],
+        hasReadableTranscript: () => false,
         readTranscript: () => {
           called = true;
           return [];

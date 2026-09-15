@@ -19,6 +19,9 @@ import type { ToolDefinition } from "./server";
 export interface ManagerHost {
   listInstances(): InstanceInfo[];
   readTranscript(instanceId: string, limit: number): TranscriptEntry[];
+  // Whether anything can be read at all, live or from disk. Separate from
+  // readTranscript so an empty result can be explained rather than just returned.
+  hasReadableTranscript(instanceId: string): boolean;
 }
 
 const DEFAULT_TRANSCRIPT_LIMIT = 50;
@@ -39,7 +42,8 @@ export function buildReadTools(host: ManagerHost): ToolDefinition[] {
     {
       name: "read_session",
       description:
-        "Read the tail of a session's conversation to find out what it has been doing. This is the way to check on progress: it costs the target session nothing and does not interrupt it, unlike sending it a message, which would consume one of its turns. Prefer this over asking a session for a status update.",
+        "Read the tail of a session's conversation to find out what it has been doing. This is the way to check on progress: it costs the target session nothing and does not interrupt it, unlike sending it a message, which would consume one of its turns. Prefer this over asking a session for a status update. " +
+        "Works on stopped sessions too — their history is on disk — and says so in the output when what you are reading is history rather than live work.",
       inputSchema: {
         type: "object",
         properties: {
@@ -59,23 +63,28 @@ export function buildReadTools(host: ManagerHost): ToolDefinition[] {
         const instances = host.listInstances();
         const target = resolveSession(instances, args.name);
         if ("error" in target) throw new Error(target.error);
+        const instance = target.instance;
 
-        if (target.instance.status === "stopped") {
+        // A stopped session used to be refused here. It was the wrong call: the
+        // transcript is a file on disk and reading it is harmless, while the refusal
+        // cost a real capability. It fired on the very first question ever asked of
+        // the manager — "has portals-backend pulled the latest dev branch?" — and the
+        // manager had to shell out to git instead. The state goes in the output
+        // instead, so stale work isn't presented as current.
+        if (!host.hasReadableTranscript(instance.id)) {
           throw new Error(
-            `${target.instance.name} is stopped, so there is no live session to read. ` +
-              `Start the instance first if you need its history.`
-          );
-        }
-        if (!target.instance.sessionId) {
-          throw new Error(
-            `${target.instance.name} is running but has not registered a session yet, ` +
-              `which happens before its first message. Nothing to read.`
+            `${instance.name} has no transcript on disk. Either nothing has ever run in ` +
+              `${instance.cwd}, or it has only just started and hasn't written its first ` +
+              `message yet.`
           );
         }
 
         const limit = clampLimit(args.limit);
-        const entries = host.readTranscript(target.instance.id, limit);
-        return formatTranscript(target.instance.name, entries, limit);
+        const entries = host.readTranscript(instance.id, limit);
+        return formatTranscript(instance.name, entries, limit, {
+          stopped: instance.status === "stopped",
+          lastActivityAt: instance.lastActivityAt ?? instance.contextUsage?.updatedAt,
+        });
       },
     },
   ];
@@ -164,10 +173,17 @@ export function formatSessionList(instances: InstanceInfo[], now = Date.now()): 
   ].join("\n");
 }
 
+export interface TranscriptState {
+  stopped: boolean;
+  lastActivityAt?: number;
+}
+
 export function formatTranscript(
   name: string,
   entries: TranscriptEntry[],
-  limit: number
+  limit: number,
+  state?: TranscriptState,
+  now = Date.now()
 ): string {
   if (entries.length === 0) {
     return `${name} has no readable transcript yet.`;
@@ -186,7 +202,22 @@ export function formatTranscript(
       ? `${name} — entire transcript (${entries.length} entries), oldest first:`
       : `${name} — last ${entries.length} transcript entries, oldest first:`;
 
-  return [header, "", ...body].join("\n");
+  const lines = [header, "", ...body];
+
+  // Spelled out for a stopped session, because everything above it reads exactly
+  // like a session that is still working on this. Without the warning the manager
+  // reports days-old work as the current state.
+  if (state?.stopped) {
+    lines.push(
+      "",
+      `NOTE: ${name} is STOPPED — this is history, not work in progress. ` +
+        `Its last activity was ${formatAge(state.lastActivityAt, now)}. ` +
+        `Nothing here is still running, and nobody is going to answer a question in it. ` +
+        `Use start_session if it needs to do something.`
+    );
+  }
+
+  return lines.join("\n");
 }
 
 // Ages rather than timestamps: the manager is deciding whether something is

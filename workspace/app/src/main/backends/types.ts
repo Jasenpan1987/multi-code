@@ -168,5 +168,24 @@ export interface Backend {
    */
   readContextUsage(sessionId: string): ContextUsage | null;
 
+  /**
+   * The most recent session this CLI has recorded for `cwd`, from what is on
+   * disk. Null when the directory has no history, or the store can't be read.
+   *
+   * Distinct from `discoverSessionId`, which finds the session of a *live*
+   * process and is the only thing allowed to decide what an instance owns. This
+   * one answers a different question — "what did this directory last work on" —
+   * and is for read paths only: a stopped instance has no sessionId at all after
+   * an app restart, because contacts.json doesn't store one, which left the
+   * manager unable to read the history of any session it hadn't watched run.
+   *
+   * **Callers must not write the result into an instance's `sessionId`.**
+   * `spawnProcess` treats an instance holding a session id as that session's
+   * owner, so a stopped contact pre-filled from disk would veto discovery for a
+   * *running* instance in the same directory — a shape this user already has, with
+   * two contacts on the same repo.
+   */
+  findLatestSessionId(cwd: string): string | null;
+
   buildResumeCommand(sessionId: string): string;
 }

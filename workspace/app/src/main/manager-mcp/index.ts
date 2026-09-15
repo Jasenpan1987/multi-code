@@ -36,6 +36,7 @@ function registerTools() {
   for (const tool of buildReadTools({
     listInstances: () => processManager.listInstances(),
     readTranscript: (id, limit) => processManager.readTranscript(id, limit),
+    hasReadableTranscript: (id) => processManager.hasReadableTranscript(id),
   })) {
     managerMcpServer.registerTool(tool);
   }

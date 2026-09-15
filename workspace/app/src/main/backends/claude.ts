@@ -91,6 +91,44 @@ function findJsonlByCwd(
   }
 }
 
+// The newest session this directory has on disk, by transcript mtime.
+//
+// Deliberately *not* the `~/.claude/sessions/` registry that `findJsonlByCwd`
+// above reads: that only lists live processes, so it answers nothing for a stopped
+// instance — which is the whole case this exists for. The project directory keeps
+// one JSONL per session and outlives the process.
+//
+// mtime rather than the id or the name: a session's file is touched on every turn,
+// so the most recently written one is the most recently worked in, which is the
+// history a user asking "what was this repo doing" means.
+// `projectsRoot` is overridable so tests can point at a scratch tree; production
+// always uses the real one.
+export function findLatestJsonlSessionId(
+  cwd: string,
+  projectsRoot: string = PROJECTS_DIR
+): string | null {
+  const projectDir = path.join(projectsRoot, encodeProjectDir(cwd));
+  let best: { sessionId: string; mtimeMs: number } | null = null;
+  try {
+    for (const file of fs.readdirSync(projectDir)) {
+      if (!file.endsWith(".jsonl")) continue;
+      try {
+        const { mtimeMs } = fs.statSync(path.join(projectDir, file));
+        if (mtimeMs > (best?.mtimeMs ?? -1)) {
+          best = { sessionId: file.slice(0, -".jsonl".length), mtimeMs };
+        }
+      } catch {
+        // A file that vanished between readdir and stat. Skip it.
+        continue;
+      }
+    }
+  } catch {
+    // No project directory: this cwd has never been used with claude.
+    return null;
+  }
+  return best?.sessionId ?? null;
+}
+
 // Markers the CLI sets on its own child processes. Multi-Code may itself have been
 // launched from inside a Claude Code session — `pnpm start` typed at an agent's
 // prompt is enough — and then every agent it spawns inherits them, with real
@@ -428,6 +466,10 @@ export const claudeBackend: Backend = {
     const jsonlPath = findJsonlBySessionId(sessionId);
     if (!jsonlPath) return null;
     return readClaudeContextUsage(jsonlPath);
+  },
+
+  findLatestSessionId(cwd: string): string | null {
+    return findLatestJsonlSessionId(cwd);
   },
 
   buildResumeCommand(sessionId: string): string {

@@ -336,7 +336,7 @@ this milestone writes to another session's terminal.
 
 ### T-214: Read a stopped session's transcript
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done (2026-09-15 — 22 tests; all 19 real contacts went from `context=unknown` to real figures)
 - **Requirement:** `prd.md#requirements` (R1)
 - **Code:** `workspace/app/src/main/backends/`, `workspace/app/src/main/process-manager.ts`, `workspace/app/src/main/manager-mcp/read-tools.ts`
 - **Description:** `read_session` refuses a stopped session, per T-205's acceptance.
@@ -376,6 +376,38 @@ this milestone writes to another session's terminal.
 - **Blocks:** none · **Blocked by:** T-201 (done), T-205 (done) · **Parallel with:** everything
 - **Notes:** Fixes the "nothing shows until you start something" gap left by T-202 at
   the same time, since both want the same disk-resolved session id.
+- **Outcome (2026-09-15):** `Backend.findLatestSessionId(cwd)` on both backends,
+  `ManagedInstance.resolvedSessionId` behind a private `readableSessionId()` in
+  process-manager, and the `stopped` guard gone from `read_session`. 22 tests across
+  two new files.
+  - **claude: scan `PROJECTS_DIR/<encoded-cwd>/*.jsonl` by mtime.** Not the
+    `~/.claude/sessions/` registry that `findJsonlByCwd` uses for live discovery —
+    that only lists *running* processes, so it answers nothing for the exact case
+    this task exists for. mtime rather than filename or creation order, because a
+    transcript is touched on every turn, so newest-written is most-recently-worked-in.
+  - **opencode: reuse `findLatestSessionForCwd` without a claim filter.** Its
+    `session` table is a durable record rather than a list of live processes, so the
+    query discovery already ran answers this too.
+  - **The separate field is load-bearing, and there is now a regression test for
+    why.** `spawnProcess`'s `isSessionClaimed` only looks at `sessionId`, so a
+    disk-resolved id kept anywhere else cannot veto discovery. Verified on the real
+    app, not just in a test: with stopped `dist` resolved from disk, a second
+    contact created in the same directory on the same backend discovered that very
+    session and got it — `dist` kept `sessionId=NONE` while `dist-twin` came up with
+    `sessionId=fe089bf9…`.
+  - **`refreshStaleContextUsage` no longer skips instances without a live session.**
+    That one line is what makes the contact list useful the moment the app opens.
+  - `read_session` on a stopped instance appends an explicit
+    `NOTE: <name> is STOPPED — this is history, not work in progress` with the age of
+    its last activity. Everything above that line reads exactly like live work, and
+    without it the manager reports 27-day-old work as the current state.
+  **Verified end-to-end 2026-09-15.** Before: every stopped contact reported
+  `context=unknown | last-activity=never`. After, on the user's real 19 contacts:
+  real figures and ages for all of them (`237k / 2d ago`, `364k / 27d ago`,
+  `289k / 14d ago`), across **both** backends, with the model name resolved. Read a
+  stopped claude session and a stopped opencode session, both returning their real
+  transcript with the STOPPED note. The contact list shows a token count per row on
+  one line, which it previously showed only for running instances.
 
 ---
 

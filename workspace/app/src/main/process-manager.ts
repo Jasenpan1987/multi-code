@@ -61,6 +61,19 @@ interface ManagedInstance {
   // The coordinator instance. Spawned with the manager MCP tools attached; at most
   // one exists.
   isManager?: boolean;
+  // A session id found on disk for this cwd, for instances that don't have a live
+  // one. Read paths only.
+  //
+  // **Deliberately not merged into `sessionId`.** `spawnProcess`'s
+  // `isSessionClaimed` treats any instance holding a session id as that session's
+  // owner, so a stopped contact pre-filled from disk would veto discovery for a
+  // *running* instance in the same directory — and this user has exactly that shape,
+  // two contacts on the same repo. Keeping it separate means discovery cannot see
+  // it at all.
+  resolvedSessionId?: string;
+  // When the lookup ran, so a directory with no history isn't rescanned on every
+  // list call. Set even when nothing was found.
+  resolvedSessionIdAt?: number;
   // Whether it is safe to write to this instance right now. See run-state.ts for
   // the hazard this exists to prevent.
   runState: RunStateTracker;
@@ -79,6 +92,11 @@ const DEFAULT_BACKEND: BackendName = "claude";
 // this; the cost of being generous is a fifth of a second on a command the manager
 // then waits seconds for anyway.
 const MENU_SETTLE_MS = 120;
+
+// How long a disk-resolved session id is trusted before looking again. Long,
+// because it only changes when a session is created or resumed in that directory,
+// and the lookup reads a directory listing or queries sqlite.
+const RESOLVED_SESSION_TTL_MS = 60_000;
 
 export class ProcessManager {
   private instances = new Map<string, ManagedInstance>();
@@ -497,19 +515,54 @@ export class ProcessManager {
     );
   }
 
-  // Reflowable conversation tail for the phone. Empty until the session has been
-  // discovered, or when the backend can't read it.
+  // Reflowable conversation tail for the phone and for the manager's read tools.
+  // Empty when neither a live nor a disk-resolved session exists, or when the
+  // backend can't read it.
   readTranscript(id: string, limit: number): TranscriptEntry[] {
     const instance = this.instances.get(id);
-    if (!instance?.sessionId) return [];
+    if (!instance) return [];
+    const sessionId = this.readableSessionId(instance);
+    if (!sessionId) return [];
     try {
-      return getBackend(instance.backend).readTranscript(
-        instance.sessionId,
-        limit
-      );
+      return getBackend(instance.backend).readTranscript(sessionId, limit);
     } catch {
       return [];
     }
+  }
+
+  // Whether this instance has any transcript to read, live or from disk. Lets a
+  // caller give a specific reason rather than an empty list.
+  hasReadableTranscript(id: string): boolean {
+    const instance = this.instances.get(id);
+    return !!instance && this.readableSessionId(instance) !== undefined;
+  }
+
+  // The session id read paths should use: the live one when there is one, otherwise
+  // whatever this directory last worked on.
+  //
+  // A stopped contact has no live id at all after an app restart — contacts.json
+  // doesn't store one — which is why every stopped session reported
+  // `context=unknown` and could not be read. The lookup touches the filesystem or
+  // sqlite, so it is cached, including the negative result.
+  private readableSessionId(instance: ManagedInstance): string | undefined {
+    if (instance.sessionId) return instance.sessionId;
+
+    const now = Date.now();
+    if (
+      instance.resolvedSessionIdAt !== undefined &&
+      now - instance.resolvedSessionIdAt < RESOLVED_SESSION_TTL_MS
+    ) {
+      return instance.resolvedSessionId;
+    }
+    instance.resolvedSessionIdAt = now;
+    try {
+      instance.resolvedSessionId =
+        getBackend(instance.backend).findLatestSessionId(instance.cwd) ??
+        undefined;
+    } catch {
+      instance.resolvedSessionId = undefined;
+    }
+    return instance.resolvedSessionId;
   }
 
   resizeInstance(id: string, cols: number, rows: number) {
@@ -567,22 +620,23 @@ export class ProcessManager {
   // Re-read context usage for any instance whose cached figure has aged out.
   // Only sessions that have been discovered are worth reading — before that
   // there is no transcript to look at.
+  // Stopped instances are included, not skipped: their transcript is a real file and
+  // its usage figure is what makes the contact list useful the moment the app opens,
+  // rather than only after the user has started something.
   private refreshStaleContextUsage() {
     const now = Date.now();
     for (const instance of this.instances.values()) {
-      if (!instance.sessionId) continue;
       if (now - (instance.contextUsageAt ?? 0) < CONTEXT_USAGE_TTL_MS) continue;
       this.refreshContextUsage(instance);
     }
   }
 
   private refreshContextUsage(instance: ManagedInstance) {
-    if (!instance.sessionId) return;
+    const sessionId = this.readableSessionId(instance);
+    if (!sessionId) return;
     instance.contextUsageAt = Date.now();
     try {
-      const usage = getBackend(instance.backend).readContextUsage(
-        instance.sessionId
-      );
+      const usage = getBackend(instance.backend).readContextUsage(sessionId);
       // Keep the last known figure when a read comes back empty. A stopped
       // instance still has a real transcript, and a transient failure (sqlite
       // locked mid-write) shouldn't blank a number the user was reading.
