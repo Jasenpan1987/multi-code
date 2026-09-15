@@ -16,3 +16,23 @@ export function formatTokens(tokens: number): string {
 function trimZero(value: string): string {
   return value.replace(/\.?0+$/, "");
 }
+
+// How full the window is, as a percentage — the question the user actually has.
+//
+// Returns "" when the window size isn't known, and callers must render nothing
+// rather than substitute a default. Neither CLI records the window in its transcript,
+// so it comes from config that can be missing or stale, and 45% shown for a session
+// actually at 226% is worse than no percentage at all.
+//
+// Rounded to whole percent: this sits beside a project name in a narrow column, and
+// nobody acts differently on 62% versus 62.4%.
+export function formatContextPercent(
+  inputTokens: number,
+  contextWindow: number | undefined
+): string {
+  if (!contextWindow || !Number.isFinite(contextWindow) || contextWindow <= 0) {
+    return "";
+  }
+  if (!Number.isFinite(inputTokens) || inputTokens < 0) return "";
+  return `${Math.round((inputTokens / contextWindow) * 100)}%`;
+}

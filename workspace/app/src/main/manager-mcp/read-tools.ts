@@ -11,6 +11,7 @@
 
 import type { InstanceInfo } from "../process-manager";
 import type { TranscriptEntry } from "../../shared/remote-protocol";
+import type { ContextUsage } from "../../shared/types";
 import type { ToolDefinition } from "./server";
 
 // What these tools need from the rest of the app. Injected from index.ts, which
@@ -144,7 +145,7 @@ export function formatSessionList(instances: InstanceInfo[], now = Date.now()): 
       // and "running but idle" is not one the manager needs to reason about
       // separately.
       `status=${i.runState ?? i.status}`,
-      `context=${i.contextUsage ? `${i.contextUsage.inputTokens} tokens` : "unknown"}`,
+      `context=${formatContext(i.contextUsage)}`,
     ];
     if (i.contextUsage?.model) fields.push(`model=${i.contextUsage.model}`);
     // `lastActivityAt` only exists for turns this app run observed, so a session
@@ -218,6 +219,20 @@ export function formatTranscript(
   }
 
   return lines.join("\n");
+}
+
+// "how full is it", when that can be answered, because that is the question behind
+// "which session should I hand off". A raw token count doesn't answer it: 271k is
+// nearly full on a 200k window and comfortable on a 1M one.
+//
+// The window size is in neither transcript and comes from the user's config, so it
+// is often unavailable — those sessions get the bare count, never a guessed
+// percentage.
+export function formatContext(usage: ContextUsage | undefined): string {
+  if (!usage) return "unknown";
+  if (!usage.contextWindow) return `${usage.inputTokens} tokens`;
+  const percent = Math.round((usage.inputTokens / usage.contextWindow) * 100);
+  return `${usage.inputTokens}/${usage.contextWindow} tokens (${percent}% full)`;
 }
 
 // Ages rather than timestamps: the manager is deciding whether something is

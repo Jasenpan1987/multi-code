@@ -8,6 +8,7 @@ import {
   buildReadTools,
   clampLimit,
   formatAge,
+  formatContext,
   formatSessionList,
   formatTranscript,
   resolveSession,
@@ -383,5 +384,57 @@ describe("tool definitions", () => {
   it("takes no arguments for list_sessions", () => {
     const { list } = toolsOf(host());
     expect(list.inputSchema.properties).toEqual({});
+  });
+});
+
+// "Which session should I hand off?" is a question about fullness, and a raw token
+// count doesn't answer it: 271k is nearly full on a 200k window and comfortable on
+// a 1M one. So the percentage goes in the tool output whenever it can be computed.
+describe("formatContext", () => {
+  it("reports a percentage when the window is known", () => {
+    expect(
+      formatContext({ inputTokens: 500_000, updatedAt: 1, contextWindow: 1_000_000 })
+    ).toBe("500000/1000000 tokens (50% full)");
+  });
+
+  it("falls back to the bare count when the window is unknown", () => {
+    expect(formatContext({ inputTokens: 271_243, updatedAt: 1 })).toBe(
+      "271243 tokens"
+    );
+  });
+
+  it("says unknown when there is no usage at all", () => {
+    expect(formatContext(undefined)).toBe("unknown");
+  });
+
+  it("does not hide an over-full session", () => {
+    expect(
+      formatContext({ inputTokens: 226_000, updatedAt: 1, contextWindow: 100_000 })
+    ).toBe("226000/100000 tokens (226% full)");
+  });
+});
+
+describe("formatSessionList — context", () => {
+  it("carries the percentage through into the tool output", () => {
+    const out = formatSessionList([
+      instance({
+        contextUsage: {
+          inputTokens: 900_000,
+          updatedAt: 1,
+          contextWindow: 1_000_000,
+          model: "claude-opus-5",
+        },
+      }),
+    ]);
+    expect(out).toContain("90% full");
+    expect(out).toContain("model=claude-opus-5");
+  });
+
+  it("shows a bare count for a session whose window is unknown", () => {
+    const out = formatSessionList([
+      instance({ contextUsage: { inputTokens: 90_090, updatedAt: 1 } }),
+    ]);
+    expect(out).toContain("context=90090 tokens");
+    expect(out).not.toContain("% full");
   });
 });

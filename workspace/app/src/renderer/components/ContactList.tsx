@@ -1,19 +1,45 @@
 import { useState } from "react";
 import { ContextMenu } from "./ContextMenu";
 import { Avatar } from "./Avatar";
-import { formatTokens } from "./formatTokens";
+import { formatContextPercent, formatTokens } from "./formatTokens";
 import type { ContextUsage, Instance } from "../../shared/types";
 
-// The row shows an abbreviated count; the exact figure, its age and the model go
-// in the tooltip. No percentage: the context window size isn't recorded in either
-// CLI's transcript, and a wrong denominator would be worse than none.
+// The row shows an abbreviated count, plus a percentage **only when the window size
+// is actually known**; the exact figures, the model and the age go in the tooltip.
+// Neither CLI records the window in its transcript, so it is resolved from the user's
+// own config and is often unavailable — a session with no denominator shows the bare
+// count rather than a guessed percentage.
 function contextTitle(usage: ContextUsage): string {
   const parts = [`${usage.inputTokens.toLocaleString()} tokens in context`];
+  if (usage.contextWindow) {
+    parts.push(`of ${usage.contextWindow.toLocaleString()}`);
+  }
   if (usage.model) parts.push(usage.model);
   if (usage.updatedAt > 0) {
     parts.push(`as of ${new Date(usage.updatedAt).toLocaleTimeString()}`);
   }
   return parts.join(" · ");
+}
+
+// The percentage *replaces* the count rather than joining it, and only because of
+// space: showing both ("275k · 27%") pushed the project name down to two characters
+// at the current sidebar width, which defeats the point of a contact list. The exact
+// count and the window are in the tooltip either way.
+//
+// Sessions whose window can't be resolved keep the bare count — that is the whole
+// distinction this feature rests on.
+function contextLabel(usage: ContextUsage): string {
+  const percent = formatContextPercent(usage.inputTokens, usage.contextWindow);
+  return percent || formatTokens(usage.inputTokens);
+}
+
+// Absent when the window isn't known, so nothing is tinted on a guess.
+function fillBand(usage: ContextUsage): string | undefined {
+  if (!usage.contextWindow) return undefined;
+  const ratio = usage.inputTokens / usage.contextWindow;
+  if (ratio >= 0.9) return "high";
+  if (ratio >= 0.7) return "medium";
+  return "low";
 }
 
 interface ContactListProps {
@@ -93,8 +119,11 @@ export function ContactList({
                 <span
                   className="contact-context"
                   title={contextTitle(inst.contextUsage)}
+                  // Only present when the window size is known, so the row can be
+                  // tinted by fullness without pretending to know it otherwise.
+                  data-fill={fillBand(inst.contextUsage)}
                 >
-                  {formatTokens(inst.contextUsage.inputTokens)}
+                  {contextLabel(inst.contextUsage)}
                 </span>
               )}
               {unreadIds.has(inst.id) && <span className="unread-badge" />}

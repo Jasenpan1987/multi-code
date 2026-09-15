@@ -365,6 +365,17 @@ body,
   flex-shrink: 0;
 }
 
+/* Tinted only when the window size is known — `data-fill` is absent otherwise, so
+   an unknown denominator can never look like a comfortable one. */
+.contact-context[data-fill="medium"] {
+  color: #b06f1a;
+}
+
+.contact-context[data-fill="high"] {
+  color: #c62828;
+  font-weight: bold;
+}
+
 .start-btn {
   margin-left: auto;
   background: linear-gradient(180deg, #6ba3d6 0%, #4a8ac4 100%);

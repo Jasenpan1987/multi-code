@@ -74,6 +74,13 @@ vi.mock("better-sqlite3", () => {
 });
 
 const { readClaudeContextUsage } = await import("./claude");
+
+// A settings path that cannot exist, so the window lookup always answers "unknown".
+// Without this the reader picks up the developer's real ~/.claude/settings.json and
+// these assertions pass or fail depending on whose machine they run on. Window
+// resolution has its own tests in contextWindow.test.ts.
+const NO_SETTINGS = "/nonexistent/multicode-test/settings.json";
+const NO_CONFIG = "/nonexistent/multicode-test/opencode.json";
 const { readOpencodeContextUsage } = await import("./opencode");
 
 // ---------------------------------------------------------------- claude
@@ -131,7 +138,7 @@ describe("readClaudeContextUsage", () => {
         { model: "claude-opus-5" }
       )
     );
-    expect(readClaudeContextUsage(file)).toEqual({
+    expect(readClaudeContextUsage(file, NO_SETTINGS)).toEqual({
       inputTokens: 330,
       updatedAt: Date.parse("2026-09-01T00:00:01.000Z"),
       model: "claude-opus-5",
@@ -144,7 +151,7 @@ describe("readClaudeContextUsage", () => {
       userTurn,
       assistant({ input_tokens: 2, cache_read_input_tokens: 4000 })
     );
-    expect(readClaudeContextUsage(file)?.inputTokens).toBe(4002);
+    expect(readClaudeContextUsage(file, NO_SETTINGS)?.inputTokens).toBe(4002);
   });
 
   it("walks back past an assistant turn with no usage", () => {
@@ -152,7 +159,7 @@ describe("readClaudeContextUsage", () => {
       assistant({ input_tokens: 5, cache_read_input_tokens: 500 }),
       { type: "assistant", message: { model: "x" }, timestamp: "2026-09-01T01:00:00.000Z" }
     );
-    expect(readClaudeContextUsage(file)?.inputTokens).toBe(505);
+    expect(readClaudeContextUsage(file, NO_SETTINGS)?.inputTokens).toBe(505);
   });
 
   it("walks back past an all-zero turn, which says nothing about fullness", () => {
@@ -165,24 +172,24 @@ describe("readClaudeContextUsage", () => {
         output_tokens: 0,
       })
     );
-    expect(readClaudeContextUsage(file)?.inputTokens).toBe(707);
+    expect(readClaudeContextUsage(file, NO_SETTINGS)?.inputTokens).toBe(707);
   });
 
   it("returns null when the session has no assistant turn yet", () => {
     // Distinct from zero on purpose: a fresh session's usage is unknown, and
     // rendering 0 would read as "plenty of room".
-    expect(readClaudeContextUsage(writeJsonl(userTurn))).toBeNull();
+    expect(readClaudeContextUsage(writeJsonl(userTurn), NO_SETTINGS)).toBeNull();
   });
 
   it("returns null for a missing file", () => {
-    expect(readClaudeContextUsage(path.join(tmpDir, "nope.jsonl"))).toBeNull();
+    expect(readClaudeContextUsage(path.join(tmpDir, "nope.jsonl"), NO_SETTINGS)).toBeNull();
   });
 
   it("returns null for an empty file", () => {
     const file = path.join(tmpDir, "empty.jsonl");
     fs.writeFileSync(file, "");
     written.push(file);
-    expect(readClaudeContextUsage(file)).toBeNull();
+    expect(readClaudeContextUsage(file, NO_SETTINGS)).toBeNull();
   });
 
   it("skips malformed lines", () => {
@@ -193,12 +200,12 @@ describe("readClaudeContextUsage", () => {
         "\n{not json\n"
     );
     written.push(file);
-    expect(readClaudeContextUsage(file)?.inputTokens).toBe(33);
+    expect(readClaudeContextUsage(file, NO_SETTINGS)?.inputTokens).toBe(33);
   });
 
   it("omits model when the record didn't name one", () => {
     const file = writeJsonl(assistant({ input_tokens: 100 }));
-    expect(readClaudeContextUsage(file)?.model).toBeUndefined();
+    expect(readClaudeContextUsage(file, NO_SETTINGS)?.model).toBeUndefined();
   });
 
   it("reports updatedAt 0 rather than now when the timestamp is unusable", () => {
@@ -207,7 +214,7 @@ describe("readClaudeContextUsage", () => {
       message: { usage: { input_tokens: 50 } },
       timestamp: "not-a-date",
     });
-    expect(readClaudeContextUsage(file)?.updatedAt).toBe(0);
+    expect(readClaudeContextUsage(file, NO_SETTINGS)?.updatedAt).toBe(0);
   });
 
   it("tolerates non-numeric usage values", () => {
@@ -216,7 +223,7 @@ describe("readClaudeContextUsage", () => {
       message: { usage: { input_tokens: "12", cache_read_input_tokens: 88 } },
       timestamp: "2026-09-01T00:00:01.000Z",
     });
-    expect(readClaudeContextUsage(file)?.inputTokens).toBe(88);
+    expect(readClaudeContextUsage(file, NO_SETTINGS)?.inputTokens).toBe(88);
   });
 });
 
@@ -268,7 +275,7 @@ describe("readOpencodeContextUsage", () => {
         ),
       },
     ]);
-    expect(readOpencodeContextUsage("s1", dbPath)).toEqual({
+    expect(readOpencodeContextUsage("s1", dbPath, NO_CONFIG)).toEqual({
       inputTokens: 330,
       updatedAt: 5000,
       model: "gpt-5.6-sol",
@@ -285,7 +292,7 @@ describe("readOpencodeContextUsage", () => {
         data: ocAssistant({ input: 5, cache: { read: 1000, write: 0 } }),
       },
     ]);
-    expect(readOpencodeContextUsage("s1", dbPath)?.inputTokens).toBe(1005);
+    expect(readOpencodeContextUsage("s1", dbPath, NO_CONFIG)?.inputTokens).toBe(1005);
   });
 
   it("takes the newest assistant message", () => {
@@ -293,7 +300,7 @@ describe("readOpencodeContextUsage", () => {
       { time_updated: 100, data: ocAssistant({ input: 1, cache: { read: 1 } }) },
       { time_updated: 900, data: ocAssistant({ input: 2, cache: { read: 4000 } }) },
     ]);
-    expect(readOpencodeContextUsage("s1", dbPath)?.inputTokens).toBe(4002);
+    expect(readOpencodeContextUsage("s1", dbPath, NO_CONFIG)?.inputTokens).toBe(4002);
   });
 
   it("ignores messages from other sessions", () => {
@@ -309,23 +316,23 @@ describe("readOpencodeContextUsage", () => {
         data: ocAssistant({ input: 42, cache: { read: 0 } }),
       },
     ]);
-    expect(readOpencodeContextUsage("s1", dbPath)?.inputTokens).toBe(42);
+    expect(readOpencodeContextUsage("s1", dbPath, NO_CONFIG)?.inputTokens).toBe(42);
   });
 
   it("returns null for a session with no assistant message", () => {
     const dbPath = seedDb([{ data: { role: "user" } }]);
-    expect(readOpencodeContextUsage("s1", dbPath)).toBeNull();
+    expect(readOpencodeContextUsage("s1", dbPath, NO_CONFIG)).toBeNull();
   });
 
   it("returns null for an unknown session", () => {
     const dbPath = seedDb([
       { data: ocAssistant({ input: 10, cache: { read: 10 } }) },
     ]);
-    expect(readOpencodeContextUsage("no-such-session", dbPath)).toBeNull();
+    expect(readOpencodeContextUsage("no-such-session", dbPath, NO_CONFIG)).toBeNull();
   });
 
   it("returns null when the database can't be opened", () => {
-    expect(readOpencodeContextUsage("s1", "/fake/does-not-exist.db")).toBeNull();
+    expect(readOpencodeContextUsage("s1", "/fake/does-not-exist.db", NO_CONFIG)).toBeNull();
   });
 
   it("skips a message whose data isn't valid JSON", () => {
@@ -336,12 +343,12 @@ describe("readOpencodeContextUsage", () => {
         data: ocAssistant({ input: 3, cache: { read: 30 } }),
       },
     ]);
-    expect(readOpencodeContextUsage("s1", dbPath)?.inputTokens).toBe(33);
+    expect(readOpencodeContextUsage("s1", dbPath, NO_CONFIG)?.inputTokens).toBe(33);
   });
 
   it("tolerates a missing cache object", () => {
     const dbPath = seedDb([{ data: ocAssistant({ input: 77 }) }]);
-    expect(readOpencodeContextUsage("s1", dbPath)?.inputTokens).toBe(77);
+    expect(readOpencodeContextUsage("s1", dbPath, NO_CONFIG)?.inputTokens).toBe(77);
   });
 
   it("walks back past an all-zero turn", () => {
@@ -355,11 +362,11 @@ describe("readOpencodeContextUsage", () => {
         data: ocAssistant({ input: 0, output: 0, cache: { read: 0, write: 0 } }),
       },
     ]);
-    expect(readOpencodeContextUsage("s1", dbPath)?.inputTokens).toBe(99);
+    expect(readOpencodeContextUsage("s1", dbPath, NO_CONFIG)?.inputTokens).toBe(99);
   });
 
   it("omits model when the message didn't name one", () => {
     const dbPath = seedDb([{ data: ocAssistant({ input: 60 }) }]);
-    expect(readOpencodeContextUsage("s1", dbPath)?.model).toBeUndefined();
+    expect(readOpencodeContextUsage("s1", dbPath, NO_CONFIG)?.model).toBeUndefined();
   });
 });

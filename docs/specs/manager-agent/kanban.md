@@ -149,7 +149,7 @@ the UI. No manager involved, nothing writes to any terminal.
 
 ### T-212: Context window percentage
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done (2026-09-15 — 29 tests; verified against both real config files)
 - **Requirement:** `prd.md#r7--context-usage-in-the-ui`
 - **Code:** `workspace/app/src/main/`, `workspace/app/src/renderer/components/ContactList.tsx`
 - **Description:** Turn T-202's absolute count into "how full is it", which is the
@@ -178,6 +178,38 @@ the UI. No manager involved, nothing writes to any terminal.
 - **Blocks:** none · **Blocked by:** T-201 (done) · **Parallel with:** everything in M2/M3
 - **Notes:** Optional polish on M1, not a prerequisite for the manager. Do it when
   the absolute number proves not to be enough in daily use.
+- **Outcome (2026-09-15):** `contextWindow?: number` added to `ContextUsage`, filled
+  in by each backend's own `readContextUsage` — **not by a helper outside
+  `backends/`**, which would have meant an `if (backend === …)` branch the project
+  forbids. `formatContextPercent` in the renderer, `formatContext` in the manager's
+  `list_sessions`. 29 tests.
+  - **opencode is exact**: `provider.<providerID>.models.<modelID>.limit.context`.
+    Falls back to searching other providers when the transcript's providerID doesn't
+    match, since the same model id carries the same limit either way.
+  - **claude is inferred and returns null readily**: family from the transcript
+    (`claude-opus-5` → `OPUS`), then `env.ANTHROPIC_DEFAULT_OPUS_MODEL` in
+    `~/.claude/settings.json`. `[1m]` → 1M; no suffix but the id names the family →
+    200k; **anything else → null.** An override pointing at something that isn't that
+    family tells us nothing about the window and must not be read as 200k.
+  - **The row shows the percentage *instead of* the count, not alongside it.** Both
+    together ("275k · 27%") pushed the project name down to two characters at the
+    current sidebar width — verified by screenshot and then changed. The exact count
+    and the window are in the tooltip. `list_sessions` keeps both, since a model
+    comparing sessions wants the absolute number and has no width limit.
+  - Sessions with no resolvable window keep the bare count and get no `data-fill`
+    tint, so an unknown denominator can never *look* like a comfortable one.
+  **Verified 2026-09-15 against the real config files on this machine**, not just
+  fixtures: `au.anthropic.claude-opus-4-8` → 1000000 and
+  `au.anthropic.claude-haiku-4-5-20251001-v1:0` → 200000 from the user's
+  `opencode.json`; `claude-opus-5` → 1000000 from the `[1m]` suffix,
+  `claude-fable-5-1` → 200000, `claude-haiku-4-5` → null (no entry). In the running
+  app all 7 claude contacts showed a percentage against 1M (27%, 51%, 36%…) while the
+  3 opencode contacts on `gpt-5.6-sol` — a model the config doesn't mention — kept
+  their bare counts, which is acceptance criteria 1–3 in one screenshot.
+  **Fixed a latent test-environment bug found on the way:** `contextUsage.test.ts`
+  was reading the developer's own `~/.claude/settings.json` through the new default
+  parameter, so its assertions passed or failed depending on whose machine ran them.
+  Both readers are now pinned to nonexistent config paths there.
 
 ---
 

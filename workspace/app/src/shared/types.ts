@@ -35,6 +35,14 @@ export interface ContextUsage {
   // so a caller wanting a percentage has to map from this. Absent when the
   // transcript didn't name one, in which case there is no percentage to show.
   model?: string;
+  // Total window this model has, in tokens, when the backend could establish it
+  // from the user's own configuration.
+  //
+  // **Absent means "we don't know", and a caller must then show no percentage
+  // rather than assume a default.** Neither CLI records the window size in its
+  // transcript, so this is resolved from config that can be missing or stale —
+  // and 45% shown for a session actually at 226% is worse than no percentage.
+  contextWindow?: number;
 }
 
 export interface Instance {

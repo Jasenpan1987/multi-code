@@ -15,6 +15,9 @@ import { resolvePath } from "./resolvePath";
 
 const HOME = process.env.HOME || "";
 const SESSIONS_DIR = path.join(HOME, ".claude/sessions");
+// Where the CLI keeps the model overrides that reveal the context window size. Read
+// rather than written — it is the user's file.
+const CLAUDE_SETTINGS_PATH = path.join(HOME, ".claude/settings.json");
 const PROJECTS_DIR = path.join(HOME, ".claude/projects");
 
 function findClaudeBinary(): string {
@@ -573,7 +576,10 @@ export function readClaudeTranscript(
 // served from cache, `cache_creation_input_tokens` what was written into it this
 // turn. Their sum is what the model actually read. `output_tokens` is excluded —
 // it isn't occupying the window on the next turn.
-export function readClaudeContextUsage(jsonlPath: string): ContextUsage | null {
+export function readClaudeContextUsage(
+  jsonlPath: string,
+  settingsPath: string = CLAUDE_SETTINGS_PATH
+): ContextUsage | null {
   let raw: string;
   try {
     raw = fs.readFileSync(jsonlPath, "utf8");
@@ -609,14 +615,65 @@ export function readClaudeContextUsage(jsonlPath: string): ContextUsage | null {
     // nothing, so keep walking back to one that does.
     if (inputTokens <= 0) continue;
 
+    const model = typeof message?.model === "string" ? message.model : undefined;
     return {
       inputTokens,
       updatedAt: parseIsoMs(record.timestamp),
-      model: typeof message?.model === "string" ? message.model : undefined,
+      model,
+      contextWindow: readClaudeContextWindow(model, settingsPath) ?? undefined,
     };
   }
 
   return null;
+}
+
+// How large this model's context window is, inferred from the user's own settings.
+//
+// **Inferred, and fragile — which is why it returns null so readily.** The transcript
+// records only a family name (`claude-opus-5`), and the CLI keeps the real model id
+// in `env.ANTHROPIC_DEFAULT_<FAMILY>_MODEL` in `~/.claude/settings.json`, where a
+// `[1m]` suffix is what asks for the million-token window. Observed on this machine:
+// `ANTHROPIC_DEFAULT_OPUS_MODEL = au.anthropic.claude-opus-5[1m]`.
+//
+// Two ways this goes stale, both of which must produce null rather than a guess:
+// the user switching model mid-session with `/model`, and a family with no entry in
+// settings at all. Showing 45% for a session actually at 226% is worse than showing
+// no percentage.
+export function readClaudeContextWindow(
+  model: string | undefined,
+  settingsPath: string = CLAUDE_SETTINGS_PATH
+): number | null {
+  const family = claudeFamily(model);
+  if (!family) return null;
+
+  let env: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+    env = (parsed?.env ?? {}) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+
+  const configured = env[`ANTHROPIC_DEFAULT_${family}_MODEL`];
+  if (typeof configured !== "string" || configured === "") return null;
+
+  // The suffix is the only thing in reach that distinguishes the two windows.
+  if (/\[1m\]/i.test(configured)) return 1_000_000;
+
+  // No suffix on a model this family recognises means the standard window. Guarded
+  // on the id actually naming the family, so an unrelated override doesn't get a
+  // number attached to it.
+  if (configured.toLowerCase().includes(family.toLowerCase())) return 200_000;
+
+  return null;
+}
+
+// `claude-opus-5` → `OPUS`. The family is the segment after `claude-`, which is how
+// the settings keys are named.
+function claudeFamily(model: string | undefined): string | null {
+  if (!model) return null;
+  const match = /claude-([a-z]+)/i.exec(model);
+  return match ? match[1].toUpperCase() : null;
 }
 
 function finiteNumber(value: unknown): number {

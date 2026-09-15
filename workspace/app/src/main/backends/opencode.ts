@@ -40,6 +40,8 @@ const SEARCH_PATH = [
 ].join(":");
 
 const OPENCODE_DB = path.join(HOME, ".local/share/opencode/opencode.db");
+// The user's own config, where a model's context limit is stated exactly. Read only.
+const OPENCODE_CONFIG = path.join(HOME, ".config/opencode/opencode.json");
 
 function findOpencodeBinary(): string {
   // Try PATH-resolve first (handles nvm-installed binaries etc.)
@@ -689,9 +691,55 @@ export function readOpencodeTranscript(
 // 200k–1M window, which would read as "impossibly full" every time.
 //
 // `dbPath` is overridable for tests, matching the detector's convention.
+// This model's context window, from the user's opencode config.
+//
+// Exact rather than inferred, unlike the claude side: the config states
+// `provider.<providerID>.models.<modelID>.limit.context` outright (observed 1000000
+// for the Bedrock 1M models, 200000 for Haiku).
+//
+// Returns null for a model the config doesn't mention, which is the common case —
+// the config only carries models the user has overridden, while OpenCode itself
+// knows the rest from its bundled models.dev data, which we can't read. A bare token
+// count is the right answer there.
+export function readOpencodeContextWindow(
+  model: string | undefined,
+  providerId: string | undefined,
+  configPath: string = OPENCODE_CONFIG
+): number | null {
+  if (!model) return null;
+
+  let providers: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    providers = (parsed?.provider ?? {}) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+
+  // The transcript's providerID first, then any provider — the same model id under
+  // two providers would carry the same limit, and a session whose provider wasn't
+  // recorded still deserves an answer.
+  const order = providerId
+    ? [providerId, ...Object.keys(providers).filter((k) => k !== providerId)]
+    : Object.keys(providers);
+
+  for (const key of order) {
+    const provider = providers[key] as Record<string, unknown> | undefined;
+    const models = provider?.models as Record<string, unknown> | undefined;
+    const entry = models?.[model] as Record<string, unknown> | undefined;
+    const limit = entry?.limit as Record<string, unknown> | undefined;
+    const context = limit?.context;
+    if (typeof context === "number" && Number.isFinite(context) && context > 0) {
+      return context;
+    }
+  }
+  return null;
+}
+
 export function readOpencodeContextUsage(
   sessionId: string,
-  dbPath?: string
+  dbPath?: string,
+  configPath: string = OPENCODE_CONFIG
 ): ContextUsage | null {
   let db: Database.Database | null = null;
   try {
@@ -726,10 +774,20 @@ export function readOpencodeContextUsage(
       // All zeros says nothing; keep walking back to a turn that does.
       if (inputTokens <= 0) continue;
 
+      const model =
+        typeof message.modelID === "string" ? message.modelID : undefined;
       return {
         inputTokens,
         updatedAt: finiteNumber(row.time_updated),
-        model: typeof message.modelID === "string" ? message.modelID : undefined,
+        model,
+        contextWindow:
+          readOpencodeContextWindow(
+            model,
+            typeof message.providerID === "string"
+              ? message.providerID
+              : undefined,
+            configPath
+          ) ?? undefined,
       };
     }
 
