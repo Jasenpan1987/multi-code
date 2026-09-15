@@ -413,7 +413,7 @@ this milestone writes to another session's terminal.
 
 ### T-213: First-launch trust dialog for the manager
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done (2026-09-15 — 7 tests on the text; verified against the real dialog in an isolated instance)
 - **Requirement:** `prd.md#r6--the-manager-instance`
 - **Code:** `workspace/app/src/renderer/`
 - **Description:** A freshly created manager stops on the CLI's workspace-trust
@@ -446,6 +446,25 @@ this milestone writes to another session's terminal.
   breaks `claude` everywhere. **Auto-answering the dialog over the PTY**: exactly the
   class of action T-203 exists to prevent; see the PRD verification log for what a
   write landing on a dialog we guessed wrong about actually did.
+- **Outcome (2026-09-15):** `renderer/components/ManagerTrustHint.tsx`, a modal shown
+  once when the manager is created, gated on `create-manager` now returning
+  `{ instance, seededWorkspace }` — `seeded` is true only on the run that creates the
+  guidance file, which is exactly the run whose CLI will stop on the dialog.
+  **The text lives in its own module (`managerTrustText.ts`) with 7 tests**, because
+  the text *is* the feature: a version that stops naming the option to pick, or stops
+  saying that Enter alone is wrong, is decoration and the failure comes back silently.
+  It renders the dialog as the terminal paints it — question, both options, `❯` on the
+  wrong one in red — so the user matches a picture rather than a description.
+  Reuses the existing `.dialog*` classes rather than adding a second modal style.
+  **Verified 2026-09-15 in an isolated instance** (`--user-data-dir=/tmp/…`, so none
+  of the user's real contacts or manager notes were touched — an earlier attempt did
+  move their real guidance file aside and had to restore it, which is not worth
+  repeating). The screenshot caught the hint over the *actual* CLI dialog underneath,
+  confirming the reproduction word for word: same question text, `❯ No, exit` first
+  and highlighted, `Yes, I trust this folder` second, and the CLI's own
+  `Enter to confirm` line — which is the proof that pressing Enter picks the answer
+  that kills the manager. Creating a second manager with the guidance file already
+  present showed no hint, as specified.
 
 ---
 

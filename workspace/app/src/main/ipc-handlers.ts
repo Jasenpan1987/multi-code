@@ -10,7 +10,7 @@ import { isBackendAvailable, getBackend } from "./backends";
 import type { BackendName } from "./backends";
 import { loadSettings, saveSettings } from "./settings-store";
 import type { ThemeName } from "./settings-store";
-import type { ReadFileResult } from "../shared/types";
+import type { CreateManagerResult, ReadFileResult } from "../shared/types";
 import { remoteServer } from "./remote/ws-server";
 import { setRemoteEnabled } from "./remote";
 import { hasTailscaleEndpoint } from "./remote/endpoints";
@@ -92,15 +92,22 @@ export function registerIpcHandlers() {
   // the same call would mean a dialog whose fields are all inapplicable.
   ipcMain.handle("has-manager", () => processManager.hasManager());
 
-  ipcMain.handle("create-manager", async () => {
+  ipcMain.handle("create-manager", async (): Promise<CreateManagerResult> => {
     if (processManager.hasManager()) {
       throw new Error("A manager already exists; only one is supported.");
     }
     // Seed the guidance file before spawning, so the CLI picks up the role on its
-    // very first turn rather than the turn after.
-    const { dir } = ensureManagerWorkspace();
+    // very first turn rather than the turn after. `seeded` is true only on the run
+    // that created the directory, which is also the run whose CLI will stop on the
+    // workspace-trust dialog — so it is exactly the right signal for showing that
+    // warning once. Must be read here rather than from prepareManagerSpawn's own
+    // call, which runs second and by then sees an existing file.
+    const { dir, seeded } = ensureManagerWorkspace();
     await prepareManagerSpawn();
-    return processManager.createInstance(dir, "Manager", "claude", true);
+    return {
+      instance: processManager.createInstance(dir, "Manager", "claude", true),
+      seededWorkspace: seeded,
+    };
   });
 
   ipcMain.handle(

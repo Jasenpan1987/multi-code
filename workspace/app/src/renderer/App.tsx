@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { ContactList } from "./components/ContactList";
 import { NewInstanceDialog } from "./components/NewInstanceDialog";
+import { ManagerTrustHint } from "./components/ManagerTrustHint";
 import {
   TerminalView,
   cleanupTerminal,
@@ -23,6 +24,7 @@ export function App() {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [trustHintOpen, setTrustHintOpen] = useState(false);
   const [unreadIds, setUnreadIds] = useState<Set<string>>(new Set());
   const [expandedByInstance, setExpandedByInstance] = useState<
     Map<string, string>
@@ -278,10 +280,16 @@ export function App() {
   // Multi-Code and it only runs on claude, so the button does the whole job.
   const handleNewManager = useCallback(async () => {
     try {
-      const instance = await window.electronAPI.createManager();
+      const { instance, seededWorkspace } =
+        await window.electronAPI.createManager();
       setInstances((prev) => [...prev, instance]);
       setSelectedId(instance.id);
       playCoughSound();
+      // Only on the run that created the folder, which is the only run whose CLI
+      // stops on the trust dialog. Its default answer shuts the manager down, so
+      // this warning is the difference between a working manager and one that dies
+      // the moment the user presses Enter.
+      if (seededWorkspace) setTrustHintOpen(true);
     } catch (err) {
       // Main rejects when one already exists, which shouldn't be reachable since
       // the button hides then — but a silent no-op would be worse than a message.
@@ -567,6 +575,11 @@ export function App() {
           </>
         );
       })()}
+
+      <ManagerTrustHint
+        open={trustHintOpen}
+        onClose={() => setTrustHintOpen(false)}
+      />
 
       <NewInstanceDialog
         open={dialogOpen}

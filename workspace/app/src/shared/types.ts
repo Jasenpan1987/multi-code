@@ -84,6 +84,16 @@ export interface ManagerActivityEntry {
   durationMs?: number;
 }
 
+// Result of creating the manager.
+//
+// `seededWorkspace` is true only on the run that created its guidance file, which is
+// exactly the run whose CLI will stop on the workspace-trust dialog. The renderer
+// uses it to show that warning once and never again.
+export interface CreateManagerResult {
+  instance: Instance;
+  seededWorkspace: boolean;
+}
+
 export interface GitFileEntry {
   path: string;
   code: string;
@@ -127,7 +137,7 @@ export interface ElectronAPI {
   ) => Promise<Instance>;
   // Rejects when one already exists. Takes no arguments: the manager's directory
   // is Multi-Code's own, and it only runs on claude.
-  createManager: () => Promise<Instance>;
+  createManager: () => Promise<CreateManagerResult>;
   hasManager: () => Promise<boolean>;
   startInstance: (id: string) => Promise<Instance | null>;
   killInstance: (id: string) => Promise<void>;
