@@ -7,6 +7,11 @@ interface ComposeBoxProps {
   // Close the box and return keyboard focus to the terminal. Called after a
   // send, on Esc, and is also what App wires to the close button.
   onClose: () => void;
+  // Text to append to the draft, from outside the box — currently a
+  // `@path:start-end` reference from the diff window. `nonce` is what makes a
+  // second insertion of the same text land: the effect keys on it, so asking
+  // twice appends twice.
+  seed?: { text: string; nonce: number } | null;
 }
 
 function basename(p: string): string {
@@ -25,7 +30,7 @@ function basename(p: string): string {
  * remounts it — which discards the draft and (via the unmount cleanup) deletes
  * any attached temp images. See Story 5 / T-005.
  */
-export function ComposeBox({ instanceId, onClose }: ComposeBoxProps) {
+export function ComposeBox({ instanceId, onClose, seed }: ComposeBoxProps) {
   const [text, setText] = useState("");
   const [images, setImages] = useState<SavedClipboardImage[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -43,6 +48,28 @@ export function ComposeBox({ instanceId, onClose }: ComposeBoxProps) {
   useEffect(() => {
     textareaRef.current?.focus();
   }, []);
+
+  // Append a reference handed in from outside (the diff window's "Ask agent").
+  // Appending rather than replacing is what lets a draft in progress survive, and
+  // what makes asking about two places accumulate two references. Keyed on nonce
+  // so the same text can be inserted more than once.
+  useEffect(() => {
+    if (!seed) return;
+    setText((prev) => {
+      if (prev === "" || /\s$/.test(prev)) return prev + seed.text;
+      return `${prev} ${seed.text}`;
+    });
+    const el = textareaRef.current;
+    if (el) {
+      el.focus();
+      // Cursor after the inserted reference, ready for the question.
+      requestAnimationFrame(() => {
+        el.selectionStart = el.selectionEnd = el.value.length;
+      });
+    }
+    // Keyed on the nonce alone: `seed.text` deliberately does not re-trigger this,
+    // or editing the draft after an insertion could replay it.
+  }, [seed?.nonce]);
 
   // Auto-grow the textarea up to a max height, scrolling past that.
   useEffect(() => {

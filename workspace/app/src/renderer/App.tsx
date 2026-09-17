@@ -8,7 +8,7 @@ import {
   getTerminal,
 } from "./components/TerminalView";
 import { ComposeBox } from "./components/ComposeBox";
-import { DiffOverlay } from "./components/DiffOverlay";
+import { DiffWindow } from "./components/DiffWindow";
 import { cleanupShellTerminal } from "./components/TerminalSection";
 import { Toolbox } from "./components/Toolbox";
 import { ThemeToggle } from "./components/ThemeToggle";
@@ -42,12 +42,18 @@ export function App() {
   const [toolboxWidth, setToolboxWidth] = useState(480);
   const [theme, setThemeState] = useState<ThemeName>("light");
   const [composeOpen, setComposeOpen] = useState(false);
-  // The file whose diff the overlay is showing, or null when it's closed. Not
+  // The file the diff window is showing, or null when it's closed. Not
   // per-instance: a diff belongs to a moment, so switching instances closes it
   // rather than remembering one per contact.
   const [diffTarget, setDiffTarget] = useState<{
     relPath: string;
     side: DiffSide;
+  } | null>(null);
+  // Text pushed into the compose box from outside it — the diff window's
+  // "Ask agent". The nonce is what makes the same reference insertable twice.
+  const [composeSeed, setComposeSeed] = useState<{
+    text: string;
+    nonce: number;
   } | null>(null);
 
   const { notify, markRead } = useNotifications();
@@ -260,6 +266,8 @@ export function App() {
   useEffect(() => {
     setComposeOpen(false);
     setDiffTarget(null);
+    // A stale reference must not reappear in another instance's box.
+    setComposeSeed(null);
   }, [selectedId]);
 
   const closeCompose = useCallback(() => {
@@ -276,6 +284,14 @@ export function App() {
     setDiffTarget(null);
     if (selectedId) getTerminal(selectedId)?.focus();
   }, [selectedId]);
+
+  // "Ask agent" in the diff window: put the reference in the compose box and open
+  // it. The diff window stays open — it isn't modal, and the question is usually
+  // about what's still on screen.
+  const handleAskAgent = useCallback((ref: string) => {
+    setComposeSeed({ text: `${ref} `, nonce: Date.now() });
+    setComposeOpen(true);
+  }, []);
 
   const handleSelect = useCallback(
     (id: string) => {
@@ -543,6 +559,7 @@ export function App() {
                 key={selectedInstance.id}
                 instanceId={selectedInstance.id}
                 onClose={closeCompose}
+                seed={composeSeed}
               />
             );
           })()}
@@ -625,14 +642,17 @@ export function App() {
         onSubmit={handleNewInstance}
       />
 
+      {/* No key on purpose: pointing the window at another file re-fetches inside
+          the same window, keeping wherever the user moved and sized it. */}
       {diffTarget && selectedInstance && (
-        <DiffOverlay
-          key={`${selectedInstance.id}:${diffTarget.side}:${diffTarget.relPath}`}
+        <DiffWindow
           instanceId={selectedInstance.id}
           cwd={selectedInstance.cwd}
           relPath={diffTarget.relPath}
           side={diffTarget.side}
+          running={selectedInstance.status === "running"}
           onClose={closeDiff}
+          onAskAgent={handleAskAgent}
         />
       )}
     </div>

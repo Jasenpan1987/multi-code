@@ -2148,39 +2148,52 @@ body,
    section's View tag. Nearly full-window: reading a diff in a narrow box is the
    thing this feature exists to stop. */
 
-.diff-overlay-backdrop {
+/* A movable, resizable window rather than a modal: with no backdrop the Git
+   section stays clickable, so opening a second file refreshes this window instead
+   of stacking another one. */
+.diff-window {
   position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.35);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1100;
-}
-
-.diff-overlay {
   background: #f0f4fa;
   border: 2px solid #7b9cc7;
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  width: 94vw;
-  height: 92vh;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  z-index: 1100;
 }
 
-.diff-overlay-header {
+/* Bottom-right grip. */
+.diff-window-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  background: linear-gradient(
+    135deg,
+    transparent 0 45%,
+    #7b9cc7 45% 55%,
+    transparent 55% 70%,
+    #7b9cc7 70% 80%,
+    transparent 80%
+  );
+}
+
+.diff-window-header {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
+  cursor: move;
+  user-select: none;
   background: linear-gradient(180deg, #e4ecf7 0%, #d4e0ef 100%);
   border-bottom: 1px solid #7b9cc7;
   flex: none;
 }
 
-.diff-overlay-path {
+.diff-window-path {
   font-family: "Menlo", "Consolas", monospace;
   font-size: 12px;
   font-weight: bold;
@@ -2192,14 +2205,14 @@ body,
   text-align: left;
 }
 
-.diff-overlay-comparison {
+.diff-window-comparison {
   font-size: 10px;
   color: #667;
   white-space: nowrap;
   flex: 1;
 }
 
-.diff-overlay-close {
+.diff-window-close {
   font-size: 15px;
   line-height: 1;
   width: 20px;
@@ -2213,48 +2226,48 @@ body,
   flex: none;
 }
 
-.diff-overlay-close:hover {
+.diff-window-close:hover {
   background: #ffe0e0;
   border-color: #c66;
   color: #c33;
 }
 
-.diff-overlay-body {
+.diff-window-body {
   flex: 1;
   min-height: 0;
   overflow: auto;
   background: #fff;
 }
 
-[data-theme="dark"] .diff-overlay {
+[data-theme="dark"] .diff-window {
   background: #252526;
   border-color: #3c3c3c;
 }
 
-[data-theme="dark"] .diff-overlay-header {
+[data-theme="dark"] .diff-window-header {
   background: linear-gradient(180deg, #3c3c3c 0%, #2d2d2d 100%);
   border-bottom-color: #3c3c3c;
 }
 
-[data-theme="dark"] .diff-overlay-path {
+[data-theme="dark"] .diff-window-path {
   color: #6ba3d6;
 }
 
-[data-theme="dark"] .diff-overlay-comparison {
+[data-theme="dark"] .diff-window-comparison {
   color: #999;
 }
 
-[data-theme="dark"] .diff-overlay-close {
+[data-theme="dark"] .diff-window-close {
   background: #2d2d2d;
   border-color: #4a4a4a;
   color: #d4d4d4;
 }
 
-[data-theme="dark"] .diff-overlay-body {
+[data-theme="dark"] .diff-window-body {
   background: #1e1e1e;
 }
 
-.diff-overlay-note {
+.diff-window-note {
   flex: 1;
   padding: 12px;
   display: flex;
@@ -2265,7 +2278,7 @@ body,
   color: #667;
 }
 
-.diff-overlay-note-action {
+.diff-window-note-action {
   font-family: inherit;
   font-size: 11px;
   padding: 1px 6px;
@@ -2276,17 +2289,17 @@ body,
   cursor: pointer;
 }
 
-.diff-overlay-note-action:hover {
+.diff-window-note-action:hover {
   background: #e4ecf7;
 }
 
-[data-theme="dark"] .diff-overlay-note-action {
+[data-theme="dark"] .diff-window-note-action {
   background: #2d2d2d;
   border-color: #4a4a4a;
   color: #6ba3d6;
 }
 
-.diff-overlay-footer {
+.diff-window-footer {
   flex: none;
   padding: 4px 8px;
   border-top: 1px solid #b8c8de;
@@ -2301,10 +2314,13 @@ body,
    indentation stays readable. */
 .diff-grid {
   display: grid;
-  /* max-content, not 1fr: a 1fr column is capped at half the panel, which left a
-     short old side padded with dead space while the new side was clipped. Now each
-     half is as wide as its own longest line and the grid scrolls sideways. */
-  grid-template-columns: auto max-content auto max-content;
+  /* 1fr keeps the two halves even whatever the window's width, and `min-width:
+     min-content` is what stops that from clipping: when the longest line needs
+     more room than the window has, the grid grows past it and scrolls sideways
+     instead of truncating. A fixed vw minimum was tried and broke as soon as the
+     window was resized smaller than the viewport. */
+  grid-template-columns: auto 1fr auto 1fr;
+  min-width: min-content;
   font-family: "Menlo", "Consolas", monospace;
   font-size: 12px;
   line-height: 1.45;
@@ -2335,9 +2351,6 @@ body,
   white-space: pre;
   padding: 0 6px;
   color: var(--diff-text-fg);
-  /* Keeps the two halves symmetric, and the seam centred, when the file's lines
-     are all short. Wider content grows past it. */
-  min-width: 45vw;
 }
 
 .diff-text[data-kind="add"],
@@ -2373,7 +2386,7 @@ body,
 }
 
 /* The reference the current selection would insert. */
-.diff-overlay-refbar {
+.diff-window-refbar {
   flex: none;
   display: flex;
   align-items: baseline;
@@ -2383,36 +2396,65 @@ body,
   background: #eaf1fb;
 }
 
-.diff-overlay-ref {
+.diff-window-ref {
   font-family: "Menlo", "Consolas", monospace;
   font-size: 11px;
   color: #2d5a8a;
 }
 
-.diff-overlay-ref-note {
+.diff-window-ref-note {
   font-size: 10px;
   color: #8a7a55;
 }
 
-[data-theme="dark"] .diff-overlay-refbar {
+[data-theme="dark"] .diff-window-refbar {
   background: #2a2a2c;
   border-bottom-color: #3c3c3c;
 }
 
-[data-theme="dark"] .diff-overlay-ref {
+[data-theme="dark"] .diff-window-ref {
   color: #6ba3d6;
 }
 
-[data-theme="dark"] .diff-overlay-ref-note {
+[data-theme="dark"] .diff-window-ref-note {
   color: #c8a86a;
 }
 
-[data-theme="dark"] .diff-overlay-note,
-[data-theme="dark"] .diff-overlay-footer {
+[data-theme="dark"] .diff-window-note,
+[data-theme="dark"] .diff-window-footer {
   color: #999;
 }
 
-[data-theme="dark"] .diff-overlay-footer {
+[data-theme="dark"] .diff-window-footer {
   background: #2d2d2d;
   border-top-color: #3c3c3c;
+}
+
+/* "Ask agent" sits at the end of the reference bar. */
+.diff-window-ask {
+  margin-left: auto;
+  font-family: inherit;
+  font-size: 11px;
+  padding: 1px 8px;
+  border: 1px solid #7b9cc7;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #f6f9fd 0%, #e4ecf7 100%);
+  color: #2d5a8a;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.diff-window-ask:hover:not(:disabled) {
+  background: linear-gradient(180deg, #fff 0%, #eaf1fb 100%);
+}
+
+.diff-window-ask:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+[data-theme="dark"] .diff-window-ask {
+  background: linear-gradient(180deg, #3c3c3c 0%, #2d2d2d 100%);
+  border-color: #4a4a4a;
+  color: #6ba3d6;
 }
