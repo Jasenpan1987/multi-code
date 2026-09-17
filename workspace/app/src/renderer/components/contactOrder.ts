@@ -13,3 +13,19 @@ export function dropsBefore(
 ): boolean {
   return clientY < rect.top + rect.height / 2;
 }
+
+/**
+ * Stored order, with the manager pinned to the top.
+ *
+ * The manager isn't a project — it is the thing that drives them — so it holds
+ * first place regardless of where a drag-reordered list put it. Projects keep
+ * their relative order, and the input array is returned unchanged when there is
+ * nothing to move, so callers can compare by identity.
+ */
+export function pinManagerFirst<T extends { isManager?: boolean }>(
+  instances: T[]
+): T[] {
+  const at = instances.findIndex((i) => i.isManager);
+  if (at <= 0) return instances;
+  return [instances[at], ...instances.filter((_, i) => i !== at)];
+}

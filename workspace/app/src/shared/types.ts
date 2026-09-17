@@ -232,6 +232,9 @@ export interface ElectronAPI {
 
   // App
   getAppVersion: () => Promise<string>;
+  // True for a dev run (`electron .`), false for a packaged build. Drives the DEV
+  // marker, since both can run side by side.
+  isDevBuild: () => Promise<boolean>;
 
   // Settings
   getSettings: () => Promise<AppSettings>;

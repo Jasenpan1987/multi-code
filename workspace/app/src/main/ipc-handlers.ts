@@ -386,6 +386,11 @@ export function registerIpcHandlers() {
     return app.getVersion();
   });
 
+  // Whether this is a dev run (`electron .`) rather than a packaged build. The two
+  // use different userData directories and can run side by side, which is exactly
+  // when it matters to know which window is which before closing one.
+  ipcMain.handle("is-dev-build", () => !app.isPackaged);
+
   ipcMain.handle("settings-get", () => {
     return loadSettings();
   });

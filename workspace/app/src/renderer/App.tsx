@@ -41,6 +41,9 @@ export function App() {
   const [hasOutput, setHasOutput] = useState<Set<string>>(new Set());
   const [toolboxWidth, setToolboxWidth] = useState(480);
   const [theme, setThemeState] = useState<ThemeName>("light");
+  // A dev run and the installed app can be open at once, on separate data
+  // directories. This is what marks which is which.
+  const [isDev, setIsDev] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   // The file the diff window is showing, or null when it's closed. Not
   // per-instance: a diff belongs to a moment, so switching instances closes it
@@ -229,6 +232,10 @@ export function App() {
       );
     });
     return cleanup;
+  }, []);
+
+  useEffect(() => {
+    window.electronAPI.isDevBuild().then(setIsDev);
   }, []);
 
   // Listen for session-id matched (used by Resume Elsewhere button)
@@ -468,8 +475,12 @@ export function App() {
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme }}>
-    <div className="app-container" data-backend={activeBackend}>
-      <VersionBadge />
+    <div
+      className="app-container"
+      data-backend={activeBackend}
+      data-dev={isDev ? "true" : undefined}
+    >
+      <VersionBadge dev={isDev} />
       <ThemeToggle />
       <ContactList
         instances={instances}

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ContextMenu } from "./ContextMenu";
 import { Avatar } from "./Avatar";
 import { formatContextPercent, formatTokens } from "./formatTokens";
-import { dropsBefore } from "./contactOrder";
+import { dropsBefore, pinManagerFirst } from "./contactOrder";
 import type { ContextUsage, Instance } from "../../shared/types";
 
 // The row shows an abbreviated count, plus a percentage **only when the window size
@@ -84,16 +84,12 @@ export function ContactList({
     setDrop(null);
   };
 
-  // Rendered in stored order, full stop. Status changes update fields in place and
-  // never reorder, so a project going online won't jump — online vs offline is the
-  // avatar's job, not position's.
-  //
-  // **No render-time sort, deliberately.** The manager used to be pinned to the top
-  // here; now the user drags rows where they want them, and a pinned row would be the
-  // one they couldn't move. `migrateManagerToTop` in process-manager puts it first in
-  // storage once, so this reads the same as before until they change it.
-  const ordered = instances;
   const hasManager = instances.some((i) => i.isManager);
+
+  // Stored order, except the manager is pinned to the top — see pinManagerFirst.
+  // Status changes still never reorder anything: online vs offline is the avatar's
+  // job, not position's.
+  const ordered = pinManagerFirst(instances);
 
   const handleContextMenu = (e: React.MouseEvent, instanceId: string) => {
     e.preventDefault();
@@ -116,7 +112,8 @@ export function ContactList({
               className={`contact-item ${selectedId === inst.id ? "selected" : ""} ${inst.status === "stopped" ? "stopped" : ""} ${unreadIds.has(inst.id) ? "unread" : ""} ${inst.isManager ? "manager" : ""}`}
               onClick={() => onSelect(inst.id)}
               onContextMenu={(e) => handleContextMenu(e, inst.id)}
-              draggable
+              // The manager is pinned, so it can't be dragged out of first place.
+              draggable={!inst.isManager}
               data-dragging={dragId === inst.id ? "true" : undefined}
               data-drop={
                 drop?.id === inst.id ? (drop.before ? "before" : "after") : undefined
@@ -133,10 +130,14 @@ export function ContactList({
                 // Without preventDefault the drop event never fires at all.
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
-                const before = dropsBefore(
-                  e.clientY,
-                  e.currentTarget.getBoundingClientRect()
-                );
+                // Nothing lands above the manager: dropping on its top half means
+                // "first among the projects", i.e. straight after it.
+                const before = inst.isManager
+                  ? false
+                  : dropsBefore(
+                      e.clientY,
+                      e.currentTarget.getBoundingClientRect()
+                    );
                 setDrop((prev) =>
                   prev?.id === inst.id && prev.before === before
                     ? prev
@@ -160,7 +161,22 @@ export function ContactList({
                 backend={inst.backend}
                 isManager={inst.isManager}
               />
-              <span className="contact-name">{inst.name}</span>
+              <span
+                className="contact-name"
+                // A name too long for the sidebar is an ellipsis at rest. On hover
+                // it scrolls to its end once — the distance has to be measured
+                // here, because CSS can't know how much is hidden.
+                onMouseEnter={(e) => {
+                  const el = e.currentTarget;
+                  const hidden = el.scrollWidth - el.clientWidth;
+                  el.style.setProperty(
+                    "--name-scroll",
+                    hidden > 2 ? `${-hidden}px` : "0px"
+                  );
+                }}
+              >
+                {inst.name}
+              </span>
               {inst.contextUsage && (
                 <span
                   className="contact-context"
