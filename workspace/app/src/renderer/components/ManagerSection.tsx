@@ -59,9 +59,9 @@ export function ManagerSection({ active }: ManagerSectionProps) {
     return (
       <div className="manager-section">
         <div className="manager-hint">
-          Nothing yet. Every time the Manager looks at a session or sends one
-          work, the call shows up here — including the ones it was refused, and
-          why.
+          Nothing yet. Every time the Manager looks at a session, sends one work,
+          or runs something itself, the call shows up here — including the ones it
+          was refused, and why.
         </div>
       </div>
     );
@@ -81,7 +81,12 @@ export function ManagerSection({ active }: ManagerSectionProps) {
           entry.status === "error" ? entry.result : entry.payload || entry.result
         );
         return (
-          <div key={entry.id} className="manager-entry" data-status={entry.status}>
+          <div
+            key={entry.id}
+            className="manager-entry"
+            data-status={entry.status}
+            data-origin={entry.origin}
+          >
             <button
               type="button"
               className="manager-entry-head"
@@ -90,6 +95,15 @@ export function ManagerSection({ active }: ManagerSectionProps) {
               disabled={detail === ""}
             >
               <span className="manager-entry-dot" />
+              {/* A call the manager made with its own shell or editor rather than
+                  through a session. Marked because the two carry different
+                  consequences: a dispatch shows up in the target's own terminal,
+                  where this happened nowhere else the user can see it. */}
+              {entry.origin === "self" ? (
+                <span className="manager-entry-origin" title="The Manager ran this itself">
+                  own
+                </span>
+              ) : null}
               <span className="manager-entry-tool">{entry.tool}</span>
               {entry.target ? (
                 <span className="manager-entry-target">{entry.target}</span>

@@ -1960,6 +1960,26 @@ body,
   flex: none;
 }
 
+/* A tool the manager ran itself. Purple rather than the blue of a dispatch,
+   because these are the calls with no second place to see them: a send_task also
+   shows up in the target session's own terminal, while this happened only here. */
+.manager-entry-origin {
+  flex: none;
+  align-self: center;
+  padding: 0 3px;
+  border: 1px solid #b39ddb;
+  border-radius: 2px;
+  background: #f3edfb;
+  color: #6a4a9c;
+  font-size: 9px;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+}
+
+.manager-entry[data-origin="self"] .manager-entry-tool {
+  color: #6a4a9c;
+}
+
 .manager-entry-target {
   color: #444;
   overflow: hidden;
@@ -2045,6 +2065,19 @@ body,
 
 [data-theme="dark"] .toolbox-section-body .manager-entry-target {
   color: #d4d4d4;
+}
+
+[data-theme="dark"] .toolbox-section-body .manager-entry-origin {
+  border-color: #5c4a7a;
+  background: rgba(154, 122, 214, 0.16);
+  color: #c3aae8;
+}
+
+[data-theme="dark"]
+  .toolbox-section-body
+  .manager-entry[data-origin="self"]
+  .manager-entry-tool {
+  color: #c3aae8;
 }
 
 [data-theme="dark"] .toolbox-section-body .manager-entry-preview {

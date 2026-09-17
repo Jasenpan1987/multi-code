@@ -135,8 +135,46 @@ Otherwise existing installs stop being recognised and stop being upgraded — wh
 bug this replaced: the file was seeded once at T-209 listing only the two read tools, and
 weeks later, with the write tools shipped, the manager was still reading it and telling
 the user to go and run things themselves. The v1 bytes are checked in at
-`main/__fixtures__/manager-guidance-v1.md` so the upgrade path is tested against a real
-previous version.
+`main/__fixtures__/manager-guidance-v1.md`, v2's at `manager-guidance-v2.md`, so the
+upgrade path is tested against real previous versions rather than against a hash that only
+equals itself.
+
+To get the outgoing hash out of a template literal, extract it and hash the bytes:
+
+```bash
+python3 - <<'PY'
+import hashlib, pathlib
+src = pathlib.Path("workspace/app/src/main/manager-workspace.ts").read_text()
+start = src.index("export const GUIDANCE = `") + len("export const GUIDANCE = `")
+body = src[start:src.index("\n`;\n", start)] + "\n"
+print(hashlib.sha256(body.replace("\\`", "`").encode()).hexdigest())
+PY
+```
+
+Then check that text in as the next `manager-guidance-vN.md` and assert its hash in
+`manager-workspace.test.ts`, which is what catches an extraction that went wrong.
+
+## A hook is how the manager's own tool calls become visible (added 2026-09-16)
+
+The Manager feed records everything passing through our MCP server, which is every
+dispatch — but the manager's own `Bash`/`Edit`/`Write` go from its CLI straight to the
+machine and touch nothing of ours. The CLI's `PreToolUse`/`PostToolUse` hooks are the only
+seam that reports them, so the manager spawns with a generated `--settings` file whose
+hooks POST to a `/hook` path on the same server (see `manager-mcp/hook-activity.ts`).
+
+This is not the "hooks middleware" the architecture rules out: nothing here decides
+anything, the hook never blocks or rewrites a call, and its failure changes nothing about
+what the manager can do. Three things measured against CLI 2.1.273 that a future change
+must preserve:
+
+- **Both deliveries for one call share a `tool_use_id`.** That is what makes a two-phase
+  entry (running → finished) possible at all.
+- **A hook command's argv is `ps`-visible**, so a bearer token can never go on it — and an
+  environment variable is no better, because the shell expands it into that argv before
+  exec. Use a `curl -K <file>` config at 0600.
+- **End the hook command with `|| true`.** A `PreToolUse` hook exiting 2 blocks the call it
+  is reporting on. Exit 7 (connection refused) was measured not to block, but a reporting
+  path that can disarm the manager is worse than no reporting.
 
 ## The write-safety gate is not the place to fix a timing bug (added 2026-09-15)
 

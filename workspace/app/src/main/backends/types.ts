@@ -29,6 +29,10 @@ export interface SpawnOptions {
   // Enumerated rather than wildcarded: the write tools should each need a
   // deliberate line of code before the manager can use them unattended.
   allowedTools?: string[];
+  // Path to a JSON settings file in `--settings` form, carrying the hooks that
+  // report the manager's own Bash/Edit/Write into the activity feed. Additive to
+  // the user's own settings, and holds no permission rules — see config.ts.
+  settingsPath?: string;
 }
 
 /**

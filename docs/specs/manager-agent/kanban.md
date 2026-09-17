@@ -2,7 +2,7 @@
 
 **Generated:** 2026-09-02
 **PRD Version:** 1.0
-**Total Tasks:** 15 (T-215 added 2026-09-15 from real use)
+**Total Tasks:** 16 (T-215 added 2026-09-15 and T-216 added 2026-09-16, both from real use)
 **Milestones:** M1 (See who's full), M2 (Manager can look), M3 (Manager can dispatch), M4 (Handoff + safety regression)
 
 ## Task Overview
@@ -835,6 +835,90 @@ escalation is covered by a test that fails if the gate ever regresses.
   the session did eventually run it.
   Verified 2026-09-15 in a real claude session: `/context` rendered its usage grid,
   twice across two runs, with nothing typed by hand.
+
+---
+
+### T-216: The manager's own hands, and making them visible
+- **Type:** feature
+- **Status:** done (2026-09-16 — 37 new tests; verified against the real CLI and the running app)
+- **Requirement:** `prd.md#r5--safety-boundary`, `prd.md#r6--the-manager-instance`
+- **Code:** `workspace/app/src/main/manager-mcp/`, `workspace/app/src/main/manager-workspace.ts`, `workspace/app/src/main/backends/`, `workspace/app/src/renderer/components/ManagerSection.tsx`
+- **Description:** Added in response to the user's correction of a proposal to fence
+  the manager in with a permission deny list: *"a dev manager on a team, when
+  there's an urgent task or when they don't believe what a team member says and need
+  to verify it themselves, also gets their hands dirty."*
+
+  That reframed Q4. The manager already had the user's full `Bash(*)` privileges,
+  and two things were actually wrong:
+
+  1. **The guidance never mentioned them.** It listed the six MCP tools and nothing
+     else, so whether the manager checked something itself or told the user to go
+     and check was left to chance. The same shape of bug as T-215: a capability the
+     text doesn't name is a capability the model doesn't reliably use.
+  2. **Those calls were invisible.** T-210 records everything passing through our
+     MCP server, which is every dispatch — but the manager's own `Bash`, `Edit` and
+     `Write` go from its CLI straight to the machine and touch nothing of ours. The
+     most privileged thing it did was the one thing the feed never showed, against a
+     requirement whose whole basis is that nothing is invisible.
+- **What changed**
+  - **Guidance: a "Use your own hands" section.** Verify a session's claims yourself
+    (`git log`, `pnpm test` — costs nobody a turn and beats being told); fix small
+    things yourself; act when it's urgent; **still** dispatch work that needs a
+    session's accumulated context; and one hard rule — never edit files in a project
+    whose session is `busy`, which is about two writers in one working tree, not
+    permission.
+  - **Self-reporting via the CLI's hooks.** The manager spawns with `--settings`
+    pointing at a generated file whose `PreToolUse`/`PostToolUse` hooks POST the
+    delivery to a new `/hook` path on the manager MCP server. Entries render with an
+    `own` badge, distinct from a dispatch.
+  - **No permission rules in that settings file**, asserted by a test so the absence
+    stays deliberate. The bound is the feed, not a sandbox.
+- **Acceptance:**
+  - The manager's own `Bash`/`Edit`/`Write` appear in the Manager panel ✅
+  - A dispatch and a hands-on call are distinguishable at a glance ✅
+  - Hook failure cannot block the manager's tools ✅
+  - The bearer token stays out of every process command line ✅
+  - The guidance tells it when to act and when to dispatch ✅
+- **Blocks:** none · **Blocked by:** T-210 (done), T-215 (done) · **Parallel with:** none
+- **Outcome (2026-09-16):** `manager-mcp/hook-activity.ts` (delivery → feed entry),
+  `writeManagerSettings` in `manager-mcp/config.ts`, a `/hook` route on the existing
+  server, `ManagerActivityEntry.origin: "mcp" | "self"`, and `SpawnOptions.settingsPath`.
+  37 new tests, 565 total.
+  - **One server, one token, one path to secure.** The hook posts to the same
+    loopback listener as the tools, on `/hook`, behind the same bearer check —
+    a second listener would be a second thing to get right.
+  - **The token cannot go in the hook command.** A hook runs as a child process, so
+    its argv is readable by every process on the machine via `ps`, and an
+    environment variable is no better because the shell expands it into that argv.
+    It lives in a `curl -K` config at 0600 instead, so the command line is
+    `curl -K '<path>' || true`. **Verified on the running app: the token appears in
+    0 process command lines.**
+  - **`|| true` is not decoration.** A `PreToolUse` hook exiting 2 blocks the call it
+    is reporting on. Measured that curl's exit 7 does not block, so this is belt and
+    braces — but a reporting path that can disarm the manager is worse than no
+    reporting.
+  - **Reads are deliberately not reported.** The matcher is
+    `^(Bash|Edit|Write|MultiEdit|NotebookEdit|KillShell)$`. The feed holds 200
+    entries for a human to scan, and a single turn's `Read`/`Grep` calls would push
+    the dispatches off the end. Reads also change nothing.
+  - **Two phases pair on `tool_use_id`**, which the CLI puts in both deliveries. A
+    `PostToolUse` with no matching `PreToolUse` — possible when the app starts
+    listening mid-call — is recorded as a complete entry rather than dropped.
+  - **A non-zero exit is not an error in the feed.** `git diff --quiet` exits 1 as
+    its answer; only `interrupted` is red, or the colour stops meaning anything.
+  - **Fixed while testing: `path.relative` made every path unreadable.** The
+    manager's cwd is its own workspace under userData, so a file it edits in a repo
+    rendered as `../../../../code/portals/README.md`. Absolute unless the file is
+    genuinely under the cwd.
+  **Verified end-to-end 2026-09-16, in two halves.** Against the real CLI (2.1.273):
+  settings generated by the shipped code, given to a real `claude -p`, produced 4
+  deliveries at `/hook` — `Bash` and `Write`, pre and post, correct token, pre/post
+  sharing a `tool_use_id`. Against the running app over CDP: creating a manager wrote
+  all three spawn files (both token-bearing ones 0600), the spawned CLI's command
+  line carried `--settings`, a paired delivery to the live server produced **one**
+  feed entry with `origin: "self"`, and the Manager panel rendered it as
+  `own Bash · 21:22:58 · 11.3s` with the full command on one line. The entry survived
+  a `location.reload()`, confirming the feed still lives in main.
 
 ---
 

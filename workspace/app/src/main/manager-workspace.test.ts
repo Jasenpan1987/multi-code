@@ -32,6 +32,15 @@ const V1_GUIDANCE = fs.readFileSync(
   "utf8"
 );
 
+// T-215's version: every dispatch tool, but silent about the manager's own shell
+// and editor, so it dispatched a session to check things it could have checked
+// itself in seconds.
+const V2_HASH = "130da528a2e4ef58d8e400c9a1a56ece47af150be49c1b6287009710d613f5b4";
+const V2_GUIDANCE = fs.readFileSync(
+  path.join(__dirname, "__fixtures__", "manager-guidance-v2.md"),
+  "utf8"
+);
+
 function sha256(text: string): string {
   return crypto.createHash("sha256").update(text, "utf8").digest("hex");
 }
@@ -108,10 +117,23 @@ describe("ensureManagerWorkspace", () => {
     expect(fs.readFileSync(file, "utf8")).toBe(GUIDANCE);
   });
 
-  it("recognises the previous version by the hash shipped in the code", () => {
-    // If this fails, the constant in manager-workspace.ts no longer matches the
+  it("upgrades an untouched file from the version before this one", () => {
+    const dir = managerDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, "CLAUDE.md");
+    fs.writeFileSync(file, V2_GUIDANCE);
+
+    const result = ensureManagerWorkspace();
+    expect(result.upgraded).toBe(true);
+    expect(result.userEdited).toBe(false);
+    expect(fs.readFileSync(file, "utf8")).toBe(GUIDANCE);
+  });
+
+  it("recognises every previous version by the hash shipped in the code", () => {
+    // If this fails, a constant in manager-workspace.ts no longer matches the
     // bytes that were actually on disk, and real users stop being upgraded.
     expect(sha256(V1_GUIDANCE)).toBe(V1_HASH);
+    expect(sha256(V2_GUIDANCE)).toBe(V2_HASH);
   });
 
   it("is safe to call when the directory already exists but the file was deleted", () => {
@@ -151,6 +173,47 @@ describe("ensureManagerWorkspace", () => {
     const text = seededText();
     expect(text).toMatch(/Never hand the work back/);
     expect(text).toMatch(/Do not tell the user to go and run something/);
+  });
+
+  // The user's correction, 2026-09-16: a manager that can only read and forward is
+  // not a manager. "When there is an urgent task, or he doesn't believe what a team
+  // member says and needs to verify it himself, he also gets his hands dirty." These
+  // assertions exist because the text *is* the feature — a version that stops saying
+  // this produces the meek assistant of T-215 again, silently.
+  it("tells the manager it has its own shell and editor", () => {
+    const text = seededText();
+    for (const tool of ["Bash", "Edit", "Write"]) {
+      expect(text).toContain(tool);
+    }
+  });
+
+  it("tells the manager to verify a session's claims itself", () => {
+    const text = seededText();
+    expect(text).toMatch(/Verify for yourself/);
+    expect(text).toMatch(/do not have to take a session's word/);
+  });
+
+  it("tells the manager to fix small things itself rather than dispatch them", () => {
+    expect(seededText()).toMatch(/Do the small thing yourself/);
+  });
+
+  it("still tells the manager to dispatch work that needs project context", () => {
+    // The other half of the judgement. Without this it grabs everything, throwing
+    // away what the session that owns the work already knows.
+    expect(seededText()).toMatch(/Still dispatch the real work/);
+  });
+
+  it("forbids editing files in a project whose session is busy", () => {
+    // The one hard rule, and it is about collisions rather than permission: two
+    // writers in one working tree corrupts work nobody asked it to touch.
+    const text = seededText();
+    expect(text).toMatch(/never edit files in a project whose session is .busy./);
+  });
+
+  it("tells the manager its own calls are visible, and not to be timid about it", () => {
+    const text = seededText();
+    expect(text).toMatch(/appears in Multi-Code's Manager panel/);
+    expect(text).toMatch(/not as a reason for you to be timid/);
   });
 
   it("tells the manager not to poll in a loop", () => {

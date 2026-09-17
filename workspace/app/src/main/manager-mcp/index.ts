@@ -13,7 +13,12 @@
 
 import { BrowserWindow } from "electron";
 import { managerMcpServer } from "./server";
-import { MCP_SERVER_NAME, removeMcpConfig, writeMcpConfig } from "./config";
+import {
+  MCP_SERVER_NAME,
+  removeManagerSpawnFiles,
+  writeManagerSettings,
+  writeMcpConfig,
+} from "./config";
 import { buildReadTools } from "./read-tools";
 import { buildWriteTools } from "./write-tools";
 import { buildWaitTools } from "./wait-tools";
@@ -108,7 +113,13 @@ export async function ensureManagerMcpStarted(): Promise<SpawnOptions | null> {
   const mcpConfigPath = writeMcpConfig({ endpoint, token });
   if (!mcpConfigPath) return null;
 
-  return { mcpConfigPath, allowedTools: managerToolNames() };
+  // Not null-checked into an early return: a manager with tools but no
+  // self-reporting is worse than one with both and better than one with neither,
+  // so a failure here degrades the feed rather than the manager. The UI shows the
+  // server state either way.
+  const settingsPath = writeManagerSettings({ endpoint, token }) ?? undefined;
+
+  return { mcpConfigPath, settingsPath, allowedTools: managerToolNames() };
 }
 
 // Fully-qualified names, as the CLI addresses them: `mcp__<server>__<tool>`.
@@ -146,7 +157,7 @@ export function getManagerActivity(): ManagerActivityEntry[] {
 
 export async function shutdownManagerMcp(): Promise<void> {
   await managerMcpServer.stop();
-  // The config file carries a bearer token that is now dead. Remove it rather
+  // Two of these files carry a bearer token that is now dead. Remove them rather
   // than leave a stale credential on disk between runs.
-  removeMcpConfig();
+  removeManagerSpawnFiles();
 }

@@ -20,12 +20,21 @@ const MAX_ENTRIES = 200;
 // memory for the life of the app.
 const MAX_TEXT = 4000;
 
+// Cap on the tool_use_id → entry id map for the manager's own tool calls. A
+// PostToolUse hook that never arrives (the call was interrupted, or the app
+// stopped listening mid-call) would otherwise leave its key behind forever.
+const MAX_PENDING_KEYS = 200;
+
 export class ManagerActivityLog {
   // Newest first, which is the order the feed renders and the order that makes
   // the cap a plain truncation.
   private entries: ManagerActivityEntry[] = [];
   private nextId = 1;
   private listener: ((entry: ManagerActivityEntry) => void) | null = null;
+  // The manager's own calls are reported by two separate hook invocations that
+  // share a `tool_use_id`, so pairing them needs a map from that id to our entry.
+  // Insertion-ordered, and the oldest is dropped at the cap.
+  private pendingSelfKeys = new Map<string, number>();
 
   // One listener, set by the wiring layer — same shape as the remote server's
   // status listener. Nothing else needs to observe this.
@@ -39,12 +48,67 @@ export class ManagerActivityLog {
   // to — and a feed that only showed calls once they returned would show nothing
   // during precisely the period the user wants to watch.
   start(tool: string, args: Record<string, unknown>): number {
-    const entry: ManagerActivityEntry = {
-      id: this.nextId++,
-      at: Date.now(),
+    return this.add({
       tool,
       target: targetOf(args),
-      payload: truncate(formatArgs(args)),
+      payload: formatArgs(args),
+      origin: "mcp",
+    });
+  }
+
+  finish(id: number, outcome: { ok: boolean; text: string }) {
+    const entry = this.entries.find((e) => e.id === id);
+    // Gone already, having fallen off the end of a very busy feed. Nothing to
+    // update and nothing worth reporting — the call itself was recorded.
+    if (!entry) return;
+    this.settle(entry, outcome);
+  }
+
+  // A tool the manager ran itself, keyed by the CLI's `tool_use_id` so the
+  // PostToolUse hook can find the entry its PreToolUse counterpart opened.
+  //
+  // A repeated key replaces nothing and opens a second entry: ids come from the
+  // CLI and are unique per call, so a duplicate means something is replaying
+  // hook deliveries, and losing the first entry would hide a real call.
+  startSelf(
+    key: string,
+    tool: string,
+    detail: { target?: string; payload: string }
+  ): number {
+    const id = this.add({
+      tool,
+      target: detail.target,
+      payload: detail.payload,
+      origin: "self",
+    });
+    this.pendingSelfKeys.set(key, id);
+    if (this.pendingSelfKeys.size > MAX_PENDING_KEYS) {
+      const oldest = this.pendingSelfKeys.keys().next();
+      if (!oldest.done) this.pendingSelfKeys.delete(oldest.value);
+    }
+    return id;
+  }
+
+  // Closes the entry `startSelf` opened for this key. Returns false when there
+  // is nothing to close, which is normal rather than an error: the app can start
+  // listening between a call's two hooks, and a PostToolUse for a call we never
+  // saw begin is better recorded than dropped — see `hook-activity.ts`.
+  finishSelf(key: string, outcome: { ok: boolean; text: string }): boolean {
+    const id = this.pendingSelfKeys.get(key);
+    if (id === undefined) return false;
+    this.pendingSelfKeys.delete(key);
+    const entry = this.entries.find((e) => e.id === id);
+    if (!entry) return false;
+    this.settle(entry, outcome);
+    return true;
+  }
+
+  private add(fields: Omit<ManagerActivityEntry, "id" | "at" | "status">): number {
+    const entry: ManagerActivityEntry = {
+      ...fields,
+      id: this.nextId++,
+      at: Date.now(),
+      payload: truncate(fields.payload),
       status: "running",
     };
     this.entries.unshift(entry);
@@ -53,11 +117,10 @@ export class ManagerActivityLog {
     return entry.id;
   }
 
-  finish(id: number, outcome: { ok: boolean; text: string }) {
-    const entry = this.entries.find((e) => e.id === id);
-    // Gone already, having fallen off the end of a very busy feed. Nothing to
-    // update and nothing worth reporting — the call itself was recorded.
-    if (!entry) return;
+  private settle(
+    entry: ManagerActivityEntry,
+    outcome: { ok: boolean; text: string }
+  ) {
     entry.status = outcome.ok ? "ok" : "error";
     entry.result = truncate(outcome.text);
     entry.durationMs = Date.now() - entry.at;
@@ -75,6 +138,7 @@ export class ManagerActivityLog {
   reset() {
     this.entries = [];
     this.nextId = 1;
+    this.pendingSelfKeys.clear();
   }
 
   private emit(entry: ManagerActivityEntry) {

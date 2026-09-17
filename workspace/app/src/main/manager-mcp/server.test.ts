@@ -3,7 +3,7 @@
 // that answers from off-box, would hand every managed session to anything on the
 // network, and neither is visible from a unit test of the dispatch switch.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import net from "net";
 import os from "os";
 import {
@@ -11,6 +11,8 @@ import {
   MCP_PROTOCOL_VERSION,
   type ToolDefinition,
 } from "./server";
+import { managerActivityLog } from "./activity-log";
+import { hookEndpointFor } from "./hook-activity";
 
 let running: ManagerMcpServer | null = null;
 
@@ -468,5 +470,100 @@ describe("registration seam", () => {
     const { server, endpoint } = await startWith(HEALTH);
     await server.start();
     expect(server.getEndpoint()).toBe(endpoint);
+  });
+});
+
+// The hook endpoint. Shares this server's bind and token on purpose: the manager's
+// own Bash/Edit/Write are reported through it, and a second listener would be a
+// second thing to secure for no gain.
+describe("hook endpoint", () => {
+  beforeEach(() => {
+    managerActivityLog.reset();
+  });
+
+  function hookUrl(endpoint: string): string {
+    const url = hookEndpointFor(endpoint);
+    if (!url) throw new Error("no hook endpoint");
+    return url;
+  }
+
+  async function postHook(endpoint: string, token: string | null, body: string) {
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+    };
+    if (token !== null) headers.authorization = `Bearer ${token}`;
+    return fetch(hookUrl(endpoint), { method: "POST", headers, body });
+  }
+
+  async function getHook(endpoint: string, token: string) {
+    return fetch(hookUrl(endpoint), {
+      method: "GET",
+      headers: { authorization: `Bearer ${token}` },
+    });
+  }
+
+  const delivery = JSON.stringify({
+    hook_event_name: "PreToolUse",
+    tool_name: "Bash",
+    tool_use_id: "toolu_hook_1",
+    cwd: "/tmp",
+    tool_input: { command: "git status" },
+  });
+
+  it("records the call and answers 204", async () => {
+    const { endpoint, token } = await startWith(HEALTH);
+    const res = await postHook(endpoint, token, delivery);
+    expect(res.status).toBe(204);
+
+    const [entry] = managerActivityLog.list();
+    expect(entry.origin).toBe("self");
+    expect(entry.payload).toBe("git status");
+  });
+
+  it("needs the same token as the tools, and records nothing without it", async () => {
+    // The token is what stops any local process from writing fictional entries
+    // into the feed the user trusts to tell them what the manager did.
+    const { endpoint, token } = await startWith(HEALTH);
+    expect((await postHook(endpoint, null, delivery)).status).toBe(401);
+    expect((await postHook(endpoint, "wrong-token", delivery)).status).toBe(401);
+    expect(managerActivityLog.list()).toHaveLength(0);
+    expect(token).toBeTruthy();
+  });
+
+  it("rejects a GET", async () => {
+    const { endpoint, token } = await startWith(HEALTH);
+    expect((await getHook(endpoint, token)).status).toBe(405);
+  });
+
+  it("answers 400 on malformed JSON without recording anything", async () => {
+    const { endpoint, token } = await startWith(HEALTH);
+    expect((await postHook(endpoint, token, "{not json")).status).toBe(400);
+    expect(managerActivityLog.list()).toHaveLength(0);
+  });
+
+  it("still records that something happened when the delivery is too large", async () => {
+    // A manager writing a megabyte into someone's repo is exactly the event this
+    // feed exists for. Silence would be the worst of the available outcomes.
+    const { endpoint, token } = await startWith(HEALTH);
+    const huge = JSON.stringify({
+      hook_event_name: "PreToolUse",
+      tool_name: "Write",
+      tool_use_id: "toolu_big",
+      tool_input: { file_path: "/tmp/x", content: "x".repeat(1_200_000) },
+    });
+    const res = await postHook(endpoint, token, huge);
+    expect(res.status).toBe(413);
+
+    const [entry] = managerActivityLog.list();
+    expect(entry.origin).toBe("self");
+    expect(entry.payload).toContain("too large to record");
+  });
+
+  it("does not answer the hook path once the server is stopped", async () => {
+    const { server, endpoint } = await startWith(HEALTH);
+    const url = hookUrl(endpoint);
+    await server.stop();
+    running = null;
+    await expect(fetch(url, { method: "POST", body: delivery })).rejects.toThrow();
   });
 });

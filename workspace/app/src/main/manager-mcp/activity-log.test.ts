@@ -299,3 +299,73 @@ describe("recording through the server", () => {
     expect(managerActivityLog.list()[0].status).toBe("ok");
   });
 });
+
+// The manager's own tool calls, which arrive as two separate hook deliveries
+// sharing a tool_use_id rather than as one call we control from start to finish.
+describe("ManagerActivityLog — the manager's own calls", () => {
+  it("marks a dispatch and a hands-on call differently", () => {
+    const log = new ManagerActivityLog();
+    log.start("send_task", { name: "portals", text: "run the tests" });
+    log.startSelf("toolu_1", "Bash", { payload: "git log" });
+
+    const byTool = new Map(log.list().map((e) => [e.tool, e.origin]));
+    // A dispatch also shows up in the target session's own terminal. A hands-on
+    // call happened nowhere else the user can see, which is the distinction.
+    expect(byTool.get("send_task")).toBe("mcp");
+    expect(byTool.get("Bash")).toBe("self");
+  });
+
+  it("closes the entry belonging to the key", () => {
+    const log = new ManagerActivityLog();
+    log.startSelf("toolu_a", "Bash", { payload: "pnpm test" });
+    log.startSelf("toolu_b", "Bash", { payload: "git status" });
+
+    expect(log.finishSelf("toolu_a", { ok: true, text: "528 passed" })).toBe(true);
+    const byPayload = new Map(log.list().map((e) => [e.payload, e]));
+    expect(byPayload.get("pnpm test")?.status).toBe("ok");
+    expect(byPayload.get("git status")?.status).toBe("running");
+  });
+
+  it("reports a key it never opened rather than closing something else", () => {
+    const log = new ManagerActivityLog();
+    log.startSelf("toolu_a", "Bash", { payload: "pnpm test" });
+    expect(log.finishSelf("toolu_unknown", { ok: true, text: "" })).toBe(false);
+    expect(log.list()[0].status).toBe("running");
+  });
+
+  it("keeps both entries when a key arrives twice", () => {
+    // Ids come from the CLI and are unique per call, so a duplicate means
+    // something is replaying deliveries — and losing the first entry would hide a
+    // call that really happened.
+    const log = new ManagerActivityLog();
+    log.startSelf("toolu_dup", "Bash", { payload: "first" });
+    log.startSelf("toolu_dup", "Bash", { payload: "second" });
+    expect(log.list()).toHaveLength(2);
+  });
+
+  it("does not accumulate keys for calls that never report finishing", () => {
+    // A PostToolUse that never arrives — the call was interrupted, or the app
+    // stopped listening mid-call — must not leave its key behind forever.
+    const log = new ManagerActivityLog();
+    for (let i = 0; i < 400; i++) {
+      log.startSelf(`toolu_${i}`, "Bash", { payload: `command ${i}` });
+    }
+    // The oldest keys have been dropped, the recent ones still pair.
+    expect(log.finishSelf("toolu_0", { ok: true, text: "" })).toBe(false);
+    expect(log.finishSelf("toolu_399", { ok: true, text: "" })).toBe(true);
+  });
+
+  it("pushes a hands-on call to the listener like any other", () => {
+    // The feed is live because of this; an entry the renderer only sees on the
+    // next mount is an entry the user misses while watching.
+    const log = new ManagerActivityLog();
+    const seen: ManagerActivityEntry[] = [];
+    log.setListener((entry) => seen.push(entry));
+
+    log.startSelf("toolu_live", "Edit", { payload: "src/main/index.ts" });
+    log.finishSelf("toolu_live", { ok: true, text: "applied" });
+
+    expect(seen.map((e) => e.status)).toEqual(["running", "ok"]);
+    expect(seen[0].origin).toBe("self");
+  });
+});

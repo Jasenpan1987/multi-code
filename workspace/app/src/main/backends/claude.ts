@@ -428,6 +428,12 @@ export const claudeBackend: Backend = {
     if (opts?.allowedTools?.length) {
       args.push("--allowedTools", opts.allowedTools.join(","));
     }
+    // Additive, like --mcp-config above: the CLI merges this on top of the user's
+    // own settings files rather than replacing them, so their hooks and rules for
+    // this directory still apply.
+    if (opts?.settingsPath) {
+      args.push("--settings", opts.settingsPath);
+    }
 
     return {
       command: claudePath,

@@ -18,6 +18,8 @@
 import http from "http";
 import crypto from "crypto";
 import { managerActivityLog } from "./activity-log";
+import { recordHookDelivery } from "./hook-activity";
+import type { HookDelivery } from "./hook-activity";
 
 // Advertised in the initialize result. A client that asked for a different
 // revision still gets this one and decides for itself whether it can proceed —
@@ -195,6 +197,16 @@ export class ManagerMcpServer {
       res.writeHead(400).end();
       return;
     }
+    // Not an MCP endpoint: the manager's CLI reporting a tool it ran itself. Kept
+    // on this server because it needs exactly the same protection as the tools —
+    // loopback bind and the same bearer token — and standing up a second listener
+    // would mean a second thing to secure. Handled before the MCP-Protocol-Version
+    // check below, which has nothing to say about it.
+    if (pathname === "/hook") {
+      await this.handleHook(req, res);
+      return;
+    }
+
     if (pathname !== "/mcp") {
       res.writeHead(404).end();
       return;
@@ -255,6 +267,55 @@ export class ManagerMcpServer {
 
     const response = await this.dispatch(message);
     sendJson(res, 200, response);
+  }
+
+  // The manager's own Bash/Edit/Write, reported by a hook in its CLI. See
+  // hook-activity.ts for what is recorded and why reads are left out.
+  //
+  // Always answers 204 once it has a body, whatever the content turns out to be.
+  // The hook is fire-and-forget on the CLI's side and a non-2xx would only make
+  // curl noisy; nothing the manager does should depend on this succeeding.
+  private async handleHook(
+    req: http.IncomingMessage,
+    res: http.ServerResponse
+  ) {
+    if (req.method !== "POST") {
+      res.writeHead(405).end();
+      return;
+    }
+
+    let raw: string;
+    try {
+      raw = await readBody(req);
+    } catch (err) {
+      // A delivery too large to accept is still a call worth showing: a manager
+      // writing a megabyte into someone's repo is precisely the event this feed
+      // exists for, and silence would be the worst of the three outcomes.
+      if ((err as Error).message === "too-large") {
+        managerActivityLog.startSelf(
+          `oversize-${Date.now()}`,
+          "(unreported tool)",
+          {
+            payload:
+              "The manager ran a tool whose hook report was too large to record. The call itself was not affected.",
+          }
+        );
+        res.writeHead(413).end();
+        return;
+      }
+      res.writeHead(400).end();
+      return;
+    }
+
+    try {
+      recordHookDelivery(JSON.parse(raw) as HookDelivery);
+    } catch {
+      // Malformed JSON from our own hook command means the command is wrong, not
+      // that the manager did anything unusual. Nothing to record.
+      res.writeHead(400).end();
+      return;
+    }
+    res.writeHead(204).end();
   }
 
   private isAuthorized(req: http.IncomingMessage): boolean {

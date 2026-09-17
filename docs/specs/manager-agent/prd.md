@@ -276,19 +276,34 @@ Kept here because each answer constrains the design.
   fleet changes what that task has to cover. Note the API's `GET
   /api/session/{id}/context` is **not** token usage (returns `{"data": []}`), and
   session-level `tokens`/`cost` are lifetime totals, so T-201 stands as specified.
-- **Q4 — reopened 2026-09-15. What actually bounds the manager?**
-  T-209 left out `--add-dir` on the reasoning that the CLI's directory boundary would
-  then confine the manager to its own workspace. **That reasoning is wrong.** In real
-  use the manager ran `cd <a user repo> && git …` and read that repo's state without
-  trouble: the boundary governs the file tools (Read/Edit/Write), not `Bash`, and this
-  user's settings allow `Bash(*)`.
+- **Q4 (privilege) — resolved 2026-09-16: visibility, not a sandbox.** Reopened
+  2026-09-15 when it turned out that omitting `--add-dir` bounds nothing: the CLI's
+  directory boundary governs the file tools, not `Bash`, and this user's settings
+  allow `Bash(*)`, so the manager really did `cd <a user repo> && git …` and read
+  that repo's state.
 
-  So the manager is currently as privileged as the user's own Bash rules allow, and
-  omitting `--add-dir` narrows the surface without bounding it. Options, none chosen
-  yet: pass `--settings` with a manager-specific deny list (`Edit`, `Write`, plus
-  `Bash` patterns that write); accept the privilege and rely on T-210's visibility;
-  or give the manager its own permission mode. Worth settling before T-206 and T-207
-  add tools that make the manager act on other sessions rather than just read them.
+  Of the three options listed then, the deny-list one is rejected on the user's own
+  reasoning (2026-09-16): *"a dev manager on a team, when there's an urgent task or
+  when they don't believe what a team member says and need to verify it themselves,
+  also gets their hands dirty."* A manager that can only read and forward is a
+  switchboard, and T-215 already showed what happens when it lacks a capability —
+  it hands work back and reads as useless. Verification in particular is the case a
+  deny list would break, and it is the cheapest thing the manager does: `git log`
+  and `pnpm test` cost nobody a turn.
+
+  So the manager keeps the user's own privileges, and the bound is that **nothing
+  it does is invisible**. T-210 covered its dispatches; T-216 covers the other half,
+  its own `Bash`/`Edit`/`Write`, which until then went from its CLI to the machine
+  with nothing recording them. The guidance carries the judgement a deny list would
+  have hard-coded: verify yourself, fix small things yourself, dispatch work that
+  needs a session's context, and never edit files in a project whose session is
+  `busy` — that last one being about collisions in a working tree, not permission.
+
+  What this does not cover, stated plainly: the manager can do anything the user's
+  own permission rules allow, so a mistake is possible and the feed reports it
+  rather than preventing it. The user is a single operator watching their own
+  machine, which is the condition that makes this trade the right one; it would not
+  be for a shared or unattended deployment.
 - **Q7 — Detector coverage for the blocked check.** R5's state check is only as
   good as the `prompt` event. Claude's detection of a blocked state is threshold-
   based, so there is a window where a session is on a dialog but not yet reported
@@ -315,6 +330,20 @@ Gathered on this machine rather than from docs.
 - 2026-09-02: a slash command sent over bracketed paste needs **two** carriage
   returns — the autocomplete menu that `/` opens consumes the first. Confirmed by
   `/context` rendering its usage grid only after the second `\r`.
+- 2026-09-16: **the CLI's hooks can report the manager's own tool calls, and a
+  failing hook does not disarm it.** Against CLI 2.1.273: `PreToolUse` and
+  `PostToolUse` deliveries for the same call carry the same `tool_use_id`, which is
+  what makes a two-phase feed entry possible; `PostToolUse` adds `tool_response`
+  (`stdout`, `stderr`, `interrupted`) and `duration_ms`. A `matcher` of
+  `"Bash|Write|Edit"` fires for each. A hook whose curl exited 7 (connection
+  refused) did **not** block the tool — only exit 2 is a documented block signal —
+  but the shipped command still ends in `|| true`, because a reporting path must
+  never be able to stop the manager working.
+- 2026-09-16: **a hook command's argv is `ps`-visible, so the token goes in a curl
+  `-K` config instead.** Verified that `curl -K <file>` reads the delivery from
+  stdin and sends the `Authorization` header from the file, leaving one path on the
+  command line. Confirmed against the running app: with the manager spawned, its
+  bearer token appeared in **0** of the machine's process command lines.
 - 2026-09-02: transcript tail cost measured across three real sessions —
   20 entries ~600 tokens, 50 ~3–5k, 100 ~4–9.5k.
 - 2026-09-02: OpenCode stores per-message token usage in `message.data.tokens`

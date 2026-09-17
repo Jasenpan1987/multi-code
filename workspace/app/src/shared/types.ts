@@ -90,6 +90,14 @@ export interface ManagerActivityEntry {
   // What the tool returned, or the refusal reason when `status` is `error`.
   result?: string;
   durationMs?: number;
+  // Which hand the manager used.
+  //
+  // `mcp` — one of our tools, so the work happened in another session and that
+  // session's own terminal shows it too.
+  // `self` — the manager's own Bash/Edit/Write, reported by a hook in its CLI.
+  // Nothing else in the app records these, so without them the most privileged
+  // thing the manager does is also the only invisible thing it does.
+  origin: "mcp" | "self";
 }
 
 // Result of creating the manager.

@@ -18,6 +18,7 @@ const freshCwd = fs.mkdtempSync(path.join(os.tmpdir(), "multicode-spawn-"));
 
 const managerOpts = {
   mcpConfigPath: "/tmp/manager-mcp.json",
+  settingsPath: "/tmp/manager-settings.json",
   allowedTools: [
     "mcp__multi-code__list_sessions",
     "mcp__multi-code__read_session",
@@ -44,6 +45,24 @@ describe("claude spawn with manager options", () => {
     );
   });
 
+  it("passes the settings file that makes the manager's own tools visible", () => {
+    // Without this, the manager's Bash/Edit/Write go from its CLI to the machine
+    // with nothing recording them — the most privileged thing it does would be the
+    // only invisible thing it does.
+    const { args } = claudeBackend.spawn(freshCwd, managerOpts);
+    const i = args.indexOf("--settings");
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(args[i + 1]).toBe("/tmp/manager-settings.json");
+  });
+
+  it("passes settings as a path, keeping the token out of argv", () => {
+    // Same reason as --mcp-config above. The hook's own credential lives in the
+    // curl config that this file points at, never on a command line.
+    const { args } = claudeBackend.spawn(freshCwd, managerOpts);
+    expect(args.join(" ")).not.toContain("Authorization");
+    expect(args.join(" ")).not.toContain("hooks");
+  });
+
   it("does not pass --strict-mcp-config, so the user's own servers stay available", () => {
     const { args } = claudeBackend.spawn(freshCwd, managerOpts);
     expect(args).not.toContain("--strict-mcp-config");
@@ -53,12 +72,27 @@ describe("claude spawn with manager options", () => {
     const { args } = claudeBackend.spawn(freshCwd);
     expect(args).not.toContain("--mcp-config");
     expect(args).not.toContain("--allowedTools");
+    // A project session's tool calls are the user's own work, not the manager's,
+    // and reporting them into the Manager feed would be surveillance of the user.
+    expect(args).not.toContain("--settings");
   });
 
   it("adds nothing for an empty options object", () => {
     const { args } = claudeBackend.spawn(freshCwd, {});
     expect(args).not.toContain("--mcp-config");
     expect(args).not.toContain("--allowedTools");
+    expect(args).not.toContain("--settings");
+  });
+
+  it("still passes the mcp config when settings could not be written", () => {
+    // A manager with tools but no self-reporting beats a manager with neither, so
+    // a failure to write the settings file degrades the feed, not the manager.
+    const { args } = claudeBackend.spawn(freshCwd, {
+      mcpConfigPath: "/tmp/x.json",
+      allowedTools: ["mcp__multi-code__list_sessions"],
+    });
+    expect(args).toContain("--mcp-config");
+    expect(args).not.toContain("--settings");
   });
 
   it("omits the allowlist flag for an empty tool array rather than passing nothing", () => {
