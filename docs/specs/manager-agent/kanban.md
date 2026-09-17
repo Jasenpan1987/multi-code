@@ -2,7 +2,7 @@
 
 **Generated:** 2026-09-02
 **PRD Version:** 1.0
-**Total Tasks:** 16 (T-215 added 2026-09-15 and T-216 added 2026-09-16, both from real use)
+**Total Tasks:** 17 (T-215, T-216 and T-217 added 2026-09-15 to 09-17, all from real use)
 **Milestones:** M1 (See who's full), M2 (Manager can look), M3 (Manager can dispatch), M4 (Handoff + safety regression)
 
 ## Task Overview
@@ -835,6 +835,74 @@ escalation is covered by a test that fails if the gate ever regresses.
   the session did eventually run it.
   Verified 2026-09-15 in a real claude session: `/context` rendered its usage grid,
   twice across two runs, with nothing typed by hand.
+
+---
+
+### T-217: Follow a session that moves under a running instance
+- **Type:** bug
+- **Status:** done (2026-09-17 — 17 tests; verified end-to-end in the running app)
+- **Requirement:** `prd.md#r7--context-usage-in-the-ui`, `prd.md#r5--safety-boundary`
+- **Code:** `workspace/app/src/main/process-manager.ts`, `workspace/app/src/main/backends/`
+- **Description:** Reported as a small thing: *"the percentage on the far left doesn't
+  refresh when I `/new`, and it doesn't go up with the new session either, it just
+  sits there."* The cause is not cosmetic.
+
+  An instance's `sessionId` was set once, by discovery at spawn, and never revisited.
+  `/new` and `/clear` move the CLI to a fresh transcript under a new id and stop
+  writing to the old one — measured 2026-09-17: the previous jsonl did not gain a
+  single byte afterwards, while the CLI's own readout went from `19.9k` to `0`.
+
+  **Everything that reads a session goes through that id**, so the frozen percentage
+  was the only visible symptom of three failures:
+  1. context usage, stuck on the previous session's figure;
+  2. `readTranscript`, so the manager's `read_session` returned abandoned history;
+  3. **the completion detector** — and therefore notifications, the prompt detection
+     a paired phone renders, and the write-safety gate's view of run state.
+
+  The third is the one worth the fix. A session that had been `/new`-ed was, from the
+  app's point of view, permanently mid-turn and permanently silent.
+- **What changed**
+  - `Backend.findLiveSessionId(cwd, pid)`. **claude reads the CLI's own registry**,
+    `~/.claude/sessions/<pid>.json`, which carries a `sessionId` the CLI rewrites on
+    the change — verified moving from `89f7d163…` to `75e23772…` for one unchanged
+    pid. **opencode has no per-pid registry**, so it answers with the newest session
+    for the directory and the caller's claim check does the rest.
+  - `ProcessManager.attachSession(instance, sessionId)`, extracted from discovery's
+    callback so both paths bind a session the same way, and a 4s poll over running
+    instances that adopts a moved session.
+  - Switching stops the old detector, starts one on the new transcript, and clears the
+    cached context figure so the previous session's number is dropped rather than
+    shown for up to the TTL.
+- **Acceptance:**
+  - `/new` on a running instance moves its session id within one poll ✅
+  - The old session's context figure is not shown afterwards ✅
+  - The new session's figure appears and grows ✅
+  - No rebuild while the session is unchanged, so the detector keeps its watermark ✅
+  - A session another instance already holds is never adopted ✅
+- **Blocks:** none · **Blocked by:** none · **Parallel with:** everything
+- **Outcome (2026-09-17):** 17 tests across `backends/liveSession.test.ts` (9) and
+  `process-manager.live-session.test.ts` (8), 582 total.
+  - **Registry over mtime.** Picking the newest transcript by mtime is a guess that
+    can land on another instance's file; the registry states it. The pid lookup also
+    checks the cwd, because pids are recycled and a stale entry from a dead process
+    would point every read at an unrelated session. With two processes in one
+    directory and no pid match, it returns null rather than choosing — this user has
+    two contacts on one repo.
+  - **Attaching relies on the detector starting at the transcript's current end**
+    (`claude.ts:279` takes `stat.size`). Without that, attaching to a session with
+    existing content would replay its whole history as fresh activity, one
+    notification per past turn. Noted at the call site, since the coupling is not
+    local.
+  - **Not rebuilding on an unchanged session is a correctness property, not an
+    optimisation**: a detector rebuilt every 4s would reset its watermark and
+    re-report turns. There is a test for it.
+  **Verified end-to-end 2026-09-17** in the running app over CDP: an instance on
+  `75e23772…` showing 20,040 tokens was sent `/new`; within one poll it reported
+  `ad55ae2b…` with no usage figure at all (rather than the stale 20,040), and after
+  one turn on the new session it read 20,119 — which is `2 + 77 + 20,040` from the
+  *new* transcript, confirming the figure now follows the live session.
+  Incidental finding: `/new` is an alias for `/clear`, which is what the transcript
+  records.
 
 ---
 

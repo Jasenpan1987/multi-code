@@ -99,6 +99,15 @@ const MENU_SETTLE_MS = 120;
 // and the lookup reads a directory listing or queries sqlite.
 const RESOLVED_SESSION_TTL_MS = 60_000;
 
+// How often a running instance is re-checked against the CLI's own idea of which
+// session it is on. `/new` and `/clear` move a process to a fresh transcript, and
+// until we follow it the instance is reading a file nobody writes to any more.
+//
+// Four seconds because the cost is one small file read per running instance and
+// the consequence of lagging is a missed completion notification. Not tied to the
+// context-usage TTL (20s), which only affects a number on screen.
+const LIVE_SESSION_POLL_MS = 4000;
+
 export class ProcessManager {
   private instances = new Map<string, ManagedInstance>();
   private mainWindow: BrowserWindow | null = null;
@@ -110,8 +119,68 @@ export class ProcessManager {
   // then spawn.
   private managerSpawnOptions: SpawnOptions | null = null;
 
+  private liveSessionTimer: ReturnType<typeof setInterval> | null = null;
+
   setMainWindow(win: BrowserWindow) {
     this.mainWindow = win;
+    this.startLiveSessionPolling();
+  }
+
+  // Follows each running instance's current session. Started here rather than in a
+  // constructor so tests that import this module don't get a timer they never asked
+  // for, and so it exists for exactly as long as there is a window to report to.
+  private startLiveSessionPolling() {
+    if (this.liveSessionTimer) return;
+    this.liveSessionTimer = setInterval(() => {
+      for (const instance of this.instances.values()) {
+        this.syncLiveSessionId(instance);
+      }
+    }, LIVE_SESSION_POLL_MS);
+    // Nothing here should hold the process open at shutdown.
+    this.liveSessionTimer.unref?.();
+  }
+
+  // Adopt the session the running process actually has, if it has moved.
+  //
+  // The visible symptom of not doing this is a context percentage frozen at the
+  // previous session's figure, which is how it was reported. The unseen half is
+  // worse: the completion detector, and therefore notifications, prompt detection
+  // for a paired phone, and the write-safety gate, all keep watching the old
+  // transcript.
+  private syncLiveSessionId(instance: ManagedInstance) {
+    const ptyProcess = instance.ptyProcess;
+    // A stopped instance has no live session to follow; its read paths already
+    // fall back to whatever this directory last worked on.
+    if (!ptyProcess) return;
+
+    let live: string | null;
+    try {
+      live = getBackend(instance.backend).findLiveSessionId(
+        instance.cwd,
+        ptyProcess.pid
+      );
+    } catch {
+      // Registry unreadable or mid-write. Nothing to do but try again next tick.
+      return;
+    }
+
+    if (!live || live === instance.sessionId) return;
+    // Another instance already owns this id. Both reading one transcript would
+    // have them both report its turns, and at least one of them would be lying.
+    if (this.isSessionClaimedBy(live, instance.id)) return;
+
+    debugTrace(
+      `[session-moved] ${instance.id.slice(0, 8)} ${instance.sessionId ?? "none"} -> ${live} at ${new Date().toISOString()}`
+    );
+    this.attachSession(instance, live);
+  }
+
+  // Whether any *other* instance is already reading this session.
+  private isSessionClaimedBy(sessionId: string, exceptId: string): boolean {
+    for (const other of this.instances.values()) {
+      if (other.id !== exceptId && other.sessionId === sessionId) return true;
+    }
+    return false;
   }
 
   setManagerSpawnOptions(opts: SpawnOptions | null) {
@@ -335,12 +404,8 @@ export class ProcessManager {
       runState: new RunStateTracker(),
     };
 
-    const isSessionClaimed = (candidate: string): boolean => {
-      for (const other of this.instances.values()) {
-        if (other.id !== id && other.sessionId === candidate) return true;
-      }
-      return false;
-    };
+    const isSessionClaimed = (candidate: string): boolean =>
+      this.isSessionClaimedBy(candidate, id);
 
     instance.discovery = backend.discoverSessionId(
       cwd,
@@ -351,47 +416,10 @@ export class ProcessManager {
         // discovery's check and now, drop this assignment so the next
         // poll picks a different jsonl.
         if (isSessionClaimed(sessionId)) return;
-        tracked.sessionId = sessionId;
         debugTrace(
           `[discovery] ${id.slice(0, 8)} backend=${tracked.backend} session=${sessionId} at ${new Date().toISOString()}`
         );
-        tracked.detector = backend.createCompletionDetector(
-          sessionId,
-          (type, detail) => {
-            debugTrace(
-              `[activity] ${id.slice(0, 8)} ${type} at ${new Date().toISOString()}`
-            );
-            tracked.runState.onActivity(type);
-            // Recorded for every activity except the bookkeeping one, so the
-            // manager can tell a session that just finished from one that has
-            // been idle for hours.
-            if (type !== "prompt-cleared") tracked.lastActivityAt = Date.now();
-            // A finished turn is exactly when context usage moved, so refresh
-            // now instead of waiting for the TTL. Cheap: once per turn, not per
-            // list call.
-            if (type === "waiting") this.refreshContextUsage(tracked);
-            // "prompt-cleared" exists for paired phones (drop the stale option
-            // buttons); the desktop UI has nothing to do with it, so it isn't
-            // forwarded to the renderer.
-            if (
-              type !== "prompt-cleared" &&
-              this.mainWindow &&
-              !this.mainWindow.isDestroyed()
-            ) {
-              this.mainWindow.webContents.send("instance-activity", id, type);
-            }
-            remoteServer.broadcastActivity(id, type, detail);
-            this.emitActivity(id, type);
-          },
-          (ms) => Date.now() - tracked.lastPtyByteAt >= ms
-        );
-        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-          this.mainWindow.webContents.send(
-            "instance-session-id",
-            id,
-            sessionId
-          );
-        }
+        this.attachSession(tracked, sessionId);
       },
       isSessionClaimed
     );
@@ -425,6 +453,79 @@ export class ProcessManager {
     });
 
     return instance;
+  }
+
+  // Point every read path at `sessionId` and start watching it.
+  //
+  // Called from discovery at spawn, and again whenever a running process moves to
+  // a different session. A session id is not stable for the life of a process:
+  // `/new` and `/clear` start a fresh transcript under a new id and never write to
+  // the old file again (measured 2026-09-17). Rebuilding the detector is the part
+  // that matters most, and the part with no visible symptom — it feeds completion
+  // notifications, the prompt detection a paired phone renders, and the
+  // write-safety gate, all of which go quiet on a transcript nobody is writing.
+  private attachSession(instance: ManagedInstance, sessionId: string) {
+    const id = instance.id;
+    const backend = getBackend(instance.backend);
+
+    // Stopped, not merely replaced: two detectors on one instance would report
+    // every turn twice, and the outgoing one is polling a file that will never
+    // change again.
+    if (instance.detector) {
+      instance.detector.stop();
+      instance.detector = null;
+    }
+
+    // Relies on a detector starting from the transcript's *current* end rather
+    // than its beginning (claude.ts:279 takes stat.size in its constructor). If
+    // that ever changes, attaching to a session that already has content would
+    // replay its whole history as fresh activity — every past turn firing a
+    // notification at once.
+
+    instance.sessionId = sessionId;
+    // The cached usage belongs to the session we just left, and `/new` resets it
+    // to zero. Dropping the timestamp too forces the next read instead of showing
+    // the old session's figure for up to the TTL.
+    instance.contextUsage = undefined;
+    instance.contextUsageAt = undefined;
+    // Disk-resolved fallbacks are stale for the same reason.
+    instance.resolvedSessionId = undefined;
+    instance.resolvedSessionIdAt = undefined;
+
+    instance.detector = backend.createCompletionDetector(
+      sessionId,
+      (type, detail) => {
+        debugTrace(
+          `[activity] ${id.slice(0, 8)} ${type} at ${new Date().toISOString()}`
+        );
+        instance.runState.onActivity(type);
+        // Recorded for every activity except the bookkeeping one, so the
+        // manager can tell a session that just finished from one that has
+        // been idle for hours.
+        if (type !== "prompt-cleared") instance.lastActivityAt = Date.now();
+        // A finished turn is exactly when context usage moved, so refresh
+        // now instead of waiting for the TTL. Cheap: once per turn, not per
+        // list call.
+        if (type === "waiting") this.refreshContextUsage(instance);
+        // "prompt-cleared" exists for paired phones (drop the stale option
+        // buttons); the desktop UI has nothing to do with it, so it isn't
+        // forwarded to the renderer.
+        if (
+          type !== "prompt-cleared" &&
+          this.mainWindow &&
+          !this.mainWindow.isDestroyed()
+        ) {
+          this.mainWindow.webContents.send("instance-activity", id, type);
+        }
+        remoteServer.broadcastActivity(id, type, detail);
+        this.emitActivity(id, type);
+      },
+      (ms) => Date.now() - instance.lastPtyByteAt >= ms
+    );
+
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send("instance-session-id", id, sessionId);
+    }
   }
 
   private teardownObservers(instance: ManagedInstance) {

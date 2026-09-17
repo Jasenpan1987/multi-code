@@ -849,6 +849,14 @@ export const opencodeBackend: Backend = {
     return findLatestSessionForCwd(cwd);
   },
 
+  // OpenCode keeps no per-pid registry, so `pid` is unused and the newest session
+  // for the directory is the best available answer. Weaker than claude's, and the
+  // caller's claim check is what stops one instance adopting another's session in
+  // a directory with two of them.
+  findLiveSessionId(cwd: string): string | null {
+    return findLatestSessionForCwd(cwd);
+  },
+
   keystrokeForChoice(tool, index, optionCount): string | null {
     // The dialogs navigate on different axes, verified on a live TUI: permission
     // is a horizontal row (left/right), a single-select question is a vertical

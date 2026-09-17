@@ -154,6 +154,35 @@ PY
 Then check that text in as the next `manager-guidance-vN.md` and assert its hash in
 `manager-workspace.test.ts`, which is what catches an extraction that went wrong.
 
+## A session id is not stable for the life of a process (added 2026-09-17)
+
+`/new` and `/clear` move a running CLI to a fresh transcript under a new id and never
+write to the old file again. Measured 2026-09-17 against 2.1.274: after `/new`, a new
+jsonl appeared and the previous one did not gain a single byte, while the CLI's own
+context readout went from `19.9k` to `0`. `/new` is an alias for `/clear`; the
+transcript records the latter.
+
+So a session id captured once at spawn goes stale, and **everything that reads a
+session goes through it**: context usage, `readTranscript`, and the completion
+detector behind notifications, phone prompt detection and the write-safety gate. The
+symptom that gets reported is only the frozen context percentage; the rest fails
+silently.
+
+`~/.claude/sessions/<pid>.json` is the authoritative answer. It is maintained by the
+CLI, keyed on the pty child's pid, and its `sessionId` is rewritten on the change —
+verified moving from `89f7d163…` to `75e23772…` for one unchanged pid.
+`Backend.findLiveSessionId(cwd, pid)` wraps it, and process-manager re-checks every
+running instance every 4s.
+
+Two things a change here must preserve:
+
+- **Check the cwd as well as the pid.** Pids are recycled, and a stale entry from a
+  dead process would point every read at an unrelated session.
+- **A detector must attach at the transcript's current end, not its beginning.**
+  `ClaudeCompletionDetector` takes `stat.size` in its constructor (`claude.ts:279`).
+  Rebuilding a detector against a session that already has content would otherwise
+  replay its entire history as fresh activity, firing a notification per past turn.
+
 ## A hook is how the manager's own tool calls become visible (added 2026-09-16)
 
 The Manager feed records everything passing through our MCP server, which is every

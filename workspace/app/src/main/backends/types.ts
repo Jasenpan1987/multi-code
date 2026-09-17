@@ -191,5 +191,24 @@ export interface Backend {
    */
   findLatestSessionId(cwd: string): string | null;
 
+  /**
+   * The session a *running* process is working in right now, or null when it
+   * can't be established.
+   *
+   * Distinct from `discoverSessionId`, which answers once at spawn and stops. A
+   * session id is not stable for the life of a process: `/new` and `/clear` start
+   * a fresh transcript under a new id, leaving the old file on disk and never
+   * writing to it again (measured 2026-09-17). Everything that reads a session
+   * goes through this id — context usage, `readTranscript`, and the completion
+   * detector behind notifications and the write-safety gate — so an instance
+   * holding a stale one goes quiet in three ways at once, and the visible symptom
+   * is only that its context percentage stops moving.
+   *
+   * `pid` is the pty child's pid, which is what the CLI keys its own registry on.
+   * Return null rather than guessing: a wrong id here points every read at
+   * another session's transcript.
+   */
+  findLiveSessionId(cwd: string, pid: number): string | null;
+
   buildResumeCommand(sessionId: string): string;
 }

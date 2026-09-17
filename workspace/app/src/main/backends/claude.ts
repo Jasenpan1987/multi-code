@@ -51,6 +51,66 @@ function hasExistingSession(cwd: string): boolean {
   }
 }
 
+// The session a running claude is working in *now*, from the CLI's own registry.
+//
+// `~/.claude/sessions/<pid>.json` is maintained by the CLI and carries a
+// `sessionId` that it rewrites when the session changes. Measured 2026-09-17
+// against 2.1.274: after `/new`, the same pid's entry moved from
+// `89f7d163…` to `75e23772…` while the old transcript stopped growing entirely.
+// That makes this authoritative, where picking the newest file by mtime is a
+// guess that can land on another instance's transcript.
+//
+// Keyed on the pty child's pid, verified to be the pid the registry uses. The
+// cwd is checked as well, because pids are recycled and a stale entry from a
+// dead process would otherwise point every read at an unrelated session.
+export function findClaudeLiveSessionId(
+  cwd: string,
+  pid: number
+): string | null {
+  const target = resolvePath(cwd);
+
+  try {
+    const data = JSON.parse(
+      fs.readFileSync(path.join(SESSIONS_DIR, `${pid}.json`), "utf8")
+    );
+    if (
+      typeof data.sessionId === "string" &&
+      typeof data.cwd === "string" &&
+      resolvePath(data.cwd) === target
+    ) {
+      return data.sessionId;
+    }
+  } catch {
+    // No entry for this pid. Falls through to the cwd scan below, which covers a
+    // CLI that ever keys the registry on something other than the process we
+    // spawned.
+  }
+
+  // Fallback: a single entry for this directory is unambiguous. Two or more and
+  // there is no way to tell which process is ours, so nothing is returned —
+  // guessing here would silently point one instance at another's transcript.
+  try {
+    const matches: string[] = [];
+    for (const file of fs.readdirSync(SESSIONS_DIR)) {
+      if (!file.endsWith(".json")) continue;
+      try {
+        const data = JSON.parse(
+          fs.readFileSync(path.join(SESSIONS_DIR, file), "utf8")
+        );
+        if (typeof data.cwd !== "string") continue;
+        if (typeof data.sessionId !== "string") continue;
+        if (resolvePath(data.cwd) !== target) continue;
+        matches.push(data.sessionId);
+      } catch {
+        continue;
+      }
+    }
+    return matches.length === 1 ? matches[0] : null;
+  } catch {
+    return null;
+  }
+}
+
 function findJsonlByCwd(
   cwd: string,
   isClaimed?: (sessionId: string) => boolean
@@ -479,6 +539,10 @@ export const claudeBackend: Backend = {
 
   findLatestSessionId(cwd: string): string | null {
     return findLatestJsonlSessionId(cwd);
+  },
+
+  findLiveSessionId(cwd: string, pid: number): string | null {
+    return findClaudeLiveSessionId(cwd, pid);
   },
 
   buildResumeCommand(sessionId: string): string {
