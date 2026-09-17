@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { diffErrorMessage, offersEditorFallback } from "./diffErrors";
 import type { DiffRow, DiffSide, FileDiff } from "../../shared/types";
 
 interface DiffOverlayProps {
@@ -113,19 +114,44 @@ export function DiffOverlay({
             ×
           </button>
         </div>
-        <DiffBody diff={diff} />
+        <DiffBody diff={diff} cwd={cwd} relPath={relPath} />
       </div>
     </div>
   );
 }
 
-function DiffBody({ diff }: { diff: FileDiff | null }) {
+function DiffBody({
+  diff,
+  cwd,
+  relPath,
+}: {
+  diff: FileDiff | null;
+  cwd: string;
+  relPath: string;
+}) {
   if (diff === null) {
     return <div className="diff-overlay-note">Loading…</div>;
   }
 
+  // No columns for a state that has no diff — and no stale rows either, since the
+  // overlay remounts per file.
   if (!diff.ok) {
-    return <div className="diff-overlay-note">Could not show this diff.</div>;
+    return (
+      <div className="diff-overlay-note">
+        <span>{diffErrorMessage(diff.reason, diff.detail)}</span>
+        {offersEditorFallback(diff.reason) && (
+          <button
+            type="button"
+            className="diff-overlay-note-action"
+            onClick={() =>
+              window.electronAPI.openInVSCode(`${cwd}/${relPath}`, cwd)
+            }
+          >
+            Go To
+          </button>
+        )}
+      </div>
+    );
   }
 
   // Body and footer are siblings so the footer stays put while the diff scrolls.

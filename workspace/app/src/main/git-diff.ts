@@ -332,7 +332,7 @@ export async function getFileDiff(
     stdout = await runGitDiff(cwd, args);
   } catch (err) {
     if (isMaxBufferError(err)) {
-      return { ok: false, reason: "too-large", detail: "diff output too large" };
+      return { ok: false, reason: "too-large", detail: "over 16 MB of output" };
     }
     return { ok: false, reason: "failed", detail: errorDetail(err) };
   }

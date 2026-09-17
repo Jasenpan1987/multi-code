@@ -2257,9 +2257,33 @@ body,
 .diff-overlay-note {
   flex: 1;
   padding: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   font-family: "Menlo", "Consolas", monospace;
   font-size: 12px;
   color: #667;
+}
+
+.diff-overlay-note-action {
+  font-family: inherit;
+  font-size: 11px;
+  padding: 1px 6px;
+  border: 1px solid #7b9cc7;
+  border-radius: 3px;
+  background: #f6f9fd;
+  color: #2d5a8a;
+  cursor: pointer;
+}
+
+.diff-overlay-note-action:hover {
+  background: #e4ecf7;
+}
+
+[data-theme="dark"] .diff-overlay-note-action {
+  background: #2d2d2d;
+  border-color: #4a4a4a;
+  color: #6ba3d6;
 }
 
 .diff-overlay-footer {
