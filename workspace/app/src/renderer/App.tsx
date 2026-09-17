@@ -51,6 +51,8 @@ export function App() {
   const [diffTarget, setDiffTarget] = useState<{
     relPath: string;
     side: DiffSide;
+    // Only for a rename; git needs both paths to detect one.
+    oldPath?: string;
   } | null>(null);
   // Text pushed into the compose box from outside it — the diff window's
   // "Ask agent". The nonce is what makes the same reference insertable twice.
@@ -283,9 +285,12 @@ export function App() {
   }, [selectedId]);
 
   // The Git section's "View" tag. One file at a time; opening another replaces it.
-  const handleViewDiff = useCallback((relPath: string, side: DiffSide) => {
-    setDiffTarget({ relPath, side });
-  }, []);
+  const handleViewDiff = useCallback(
+    (relPath: string, side: DiffSide, oldPath?: string) => {
+      setDiffTarget({ relPath, side, oldPath });
+    },
+    []
+  );
 
   const closeDiff = useCallback(() => {
     setDiffTarget(null);
@@ -661,6 +666,7 @@ export function App() {
           cwd={selectedInstance.cwd}
           relPath={diffTarget.relPath}
           side={diffTarget.side}
+          oldPath={diffTarget.oldPath}
           running={selectedInstance.status === "running"}
           onClose={closeDiff}
           onAskAgent={handleAskAgent}

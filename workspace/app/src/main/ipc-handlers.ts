@@ -168,7 +168,8 @@ export function registerIpcHandlers() {
       _event,
       id: string,
       relPath: string,
-      side: DiffSide
+      side: DiffSide,
+      oldPath?: string
     ): Promise<FileDiff> => {
       const instance = processManager.listInstances().find((i) => i.id === id);
       if (!instance) {
@@ -183,7 +184,11 @@ export function registerIpcHandlers() {
       if (!isInsideCwd(instance.cwd, relPath)) {
         return { ok: false, reason: "failed", detail: "path outside project" };
       }
-      return getFileDiff(instance.cwd, relPath, side);
+      // A rename's old path reaches git as a pathspec too, so it gets the same check.
+      if (oldPath !== undefined && !isInsideCwd(instance.cwd, oldPath)) {
+        return { ok: false, reason: "failed", detail: "path outside project" };
+      }
+      return getFileDiff(instance.cwd, relPath, side, oldPath);
     }
   );
 

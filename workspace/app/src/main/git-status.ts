@@ -12,6 +12,10 @@ export interface GitStatusUnavailable {
 export interface GitFileEntry {
   path: string;
   code: string;
+  // Set only for a rename: where the file came from. Porcelain reports these as
+  // `old -> new`, and both sides are needed — the display wants the new path, and
+  // git's rename detection wants both in the pathspec.
+  oldPath?: string;
 }
 
 export interface GitStatusAvailable {
@@ -39,6 +43,22 @@ async function run(cwd: string, args: string[]): Promise<string> {
   return stdout;
 }
 
+/**
+ * Split porcelain's `old -> new` rename form. Exported for the tests and for the
+ * diff reader, which needs both sides.
+ */
+export function splitRename(entry: string): {
+  path: string;
+  oldPath?: string;
+} {
+  const arrow = entry.lastIndexOf(" -> ");
+  if (arrow < 0) return { path: entry };
+  return {
+    path: entry.slice(arrow + 4),
+    oldPath: entry.slice(0, arrow),
+  };
+}
+
 function parsePorcelain(porcelain: string): {
   untracked: number;
   unstaged: number;
@@ -57,7 +77,11 @@ function parsePorcelain(porcelain: string): {
   for (const rawLine of porcelain.split("\n")) {
     if (rawLine.length < 3) continue;
     const xy = rawLine.slice(0, 2);
-    const filePath = rawLine.slice(3);
+    // A rename or copy arrives as `old -> new`. Splitting it here is what keeps the
+    // rest of the app from carrying that string around as if it were a path: the
+    // row would render a nonsense directory, and a diff pathspec built from it
+    // would match nothing.
+    const { path: filePath, oldPath } = splitRename(rawLine.slice(3));
 
     if (xy === "??") {
       untracked++;
@@ -69,11 +93,15 @@ function parsePorcelain(porcelain: string): {
     const y = xy[1];
     if (x !== " " && x !== "?") {
       staged++;
-      stagedFiles.push({ path: filePath, code: x });
+      stagedFiles.push({ path: filePath, code: x, ...(oldPath && { oldPath }) });
     }
     if (y !== " " && y !== "?") {
       unstaged++;
-      modifiedFiles.push({ path: filePath, code: y });
+      modifiedFiles.push({
+        path: filePath,
+        code: y,
+        ...(oldPath && { oldPath }),
+      });
     }
   }
 

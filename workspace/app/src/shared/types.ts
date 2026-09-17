@@ -113,6 +113,8 @@ export interface CreateManagerResult {
 export interface GitFileEntry {
   path: string;
   code: string;
+  // Set only for a rename: where the file came from.
+  oldPath?: string;
 }
 
 export type GitStatus =
@@ -221,7 +223,10 @@ export interface ElectronAPI {
   getFileDiff: (
     instanceId: string,
     relPath: string,
-    side: DiffSide
+    side: DiffSide,
+    // Only for a renamed file: git needs both sides in the pathspec to detect
+    // the rename at all.
+    oldPath?: string
   ) => Promise<FileDiff>;
   openInVSCode: (
     target: string,

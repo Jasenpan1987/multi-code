@@ -28,8 +28,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("read-file", instanceId, path),
   // `side` is a DiffSide; typed loose here like `backend` above, and validated
   // in the handler.
-  getFileDiff: (instanceId: string, relPath: string, side: string) =>
-    ipcRenderer.invoke("get-file-diff", instanceId, relPath, side),
+  getFileDiff: (
+    instanceId: string,
+    relPath: string,
+    side: string,
+    oldPath?: string
+  ) => ipcRenderer.invoke("get-file-diff", instanceId, relPath, side, oldPath),
   openInVSCode: (target: string, projectRoot?: string) =>
     ipcRenderer.invoke("open-in-vscode", target, projectRoot),
   openExternal: (url: string) => ipcRenderer.invoke("open-external", url),

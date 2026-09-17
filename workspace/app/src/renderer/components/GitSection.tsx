@@ -13,9 +13,10 @@ interface GitSectionProps {
   cwd: string;
   active: boolean;
   onPreviewInView: (path: string) => void;
-  // Open the diff overlay for one file. `relPath` stays repo-relative — the main
-  // process refuses anything that isn't.
-  onViewDiff: (relPath: string, side: DiffSide) => void;
+  // Open the diff window for one file. `relPath` stays repo-relative — the main
+  // process refuses anything that isn't. `oldPath` is only set for a rename, where
+  // git needs both sides to detect it.
+  onViewDiff: (relPath: string, side: DiffSide, oldPath?: string) => void;
 }
 
 // A file is previewable in the Markdown View if it's a markdown document.
@@ -150,7 +151,7 @@ interface FileGroupProps {
   cwd: string;
   kind: FileGroupKind;
   onPreviewInView: (path: string) => void;
-  onViewDiff: (relPath: string, side: DiffSide) => void;
+  onViewDiff: (relPath: string, side: DiffSide, oldPath?: string) => void;
 }
 
 function FileGroup({
@@ -196,7 +197,7 @@ function FileRow({
   cwd: string;
   side: DiffSide;
   onPreviewInView: (path: string) => void;
-  onViewDiff: (relPath: string, side: DiffSide) => void;
+  onViewDiff: (relPath: string, side: DiffSide, oldPath?: string) => void;
 }) {
   const slashIdx = file.path.lastIndexOf("/");
   const dir = slashIdx >= 0 ? file.path.slice(0, slashIdx) : "";
@@ -224,7 +225,7 @@ function FileRow({
           type="button"
           className="git-file-tag git-file-tag-view"
           title="Show the diff"
-          onClick={() => onViewDiff(file.path, side)}
+          onClick={() => onViewDiff(file.path, side, file.oldPath)}
         >
           View
         </button>

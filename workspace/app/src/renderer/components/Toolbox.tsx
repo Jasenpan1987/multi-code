@@ -14,7 +14,7 @@ interface ToolboxProps {
   openPath: string;
   onOpenPath: (path: string) => void;
   onPreviewInView: (path: string) => void;
-  onViewDiff: (relPath: string, side: DiffSide) => void;
+  onViewDiff: (relPath: string, side: DiffSide, oldPath?: string) => void;
   width: number;
 }
 

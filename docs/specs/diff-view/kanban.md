@@ -2,7 +2,7 @@
 
 **Generated:** 2026-09-18
 **Source:** `docs/specs/diff-view/prd.md` v1.0 · `docs/specs/diff-view/gaps.md`
-**Total Tasks:** 9 (T-301..T-309)
+**Total Tasks:** 10 (T-301..T-309, plus T-310 from QA) — **all done**
 **Milestones:** M1 (read a diff) · M2 (reference it to the agent) · M3 (QA)
 
 Task ids start at T-301 so they never collide with the manager-agent epic's T-2xx.
@@ -248,7 +248,8 @@ read-only property is proven rather than assumed.
 
 ### T-309: QA pass — real repo, real agent, read-only proof
 - **Type:** qa
-- **Status:** backlog
+- **Status:** done
+- **Outcome:** Driven over CDP against this repo with all four file states staged deliberately (modified, staged, deleted, `git mv` + edit). Found one defect — T-310, fixed in the same pass. Everything else confirmed: three comparisons and their headers, whole-file context with the new side numbered 1..N, synced scroll, matching row tops, code-only copy, click / shift-click / drag / click-to-clear selection, a deletion-only selection reporting the nearest line, MD still opening the Markdown View, binary / too-large / no-changes / not-found / truncated states, drag + resize + reuse of the window, and Ask agent sending `@qa-3000.txt:1-42` plus a question to a live claude instance which answered it. Ask agent disables the moment its instance is stopped, with the window left open. A 3000-line diff opened in 165ms; dragging a 40-row selection across it cost ~2ms. Read-only proven: `git stash list` unchanged at 0, the only git subcommand in `git-diff.ts` is `diff`, its only fs calls are `statSync`/`readFileSync`, and no write-capable verb is reachable from the handler. `pnpm lint`, `pnpm type` and 633 tests all green.
 - **Requirement:** `docs/specs/diff-view/prd.md`
 - **Code:** `workspace/app/src/`
 - **Description:** Drive the built app over CDP (`docs/knowledge/tech-conventions.md#verifying-ui-changes-without-a-human`) against this repo, which will have real modified / new / staged files. Walk every story: both tags on every row kind, `MD` still working on a `.md` row, each of the three comparisons, a deleted file, a renamed file, a binary file (add a small PNG), an unchanged file, whole-file context, synced scroll, a long line, text copy, line selection by click / shift-click / drag, a deletion-only selection, "Ask agent" against a live claude instance with an existing draft, and every close path. Then prove read-only: `git status --porcelain` and `git stash list` before and after the whole pass must be identical, and `grep -rn "git add\|checkout\|restore\|stash\|apply" workspace/app/src/main/git-diff.ts workspace/app/src/main/ipc-handlers.ts` must show no write command reachable from the diff path. Run `pnpm lint`, `pnpm type`, `pnpm test`. File anything broken as a `bug` task in this file rather than fixing it inline.
@@ -260,3 +261,25 @@ read-only property is proven rather than assumed.
   - Findings recorded as `bug` tasks with reproduction steps
 - **Blocks:** none · **Blocked by:** T-307, T-308 · **Parallel with:** none
 - **Notes:** Read terminal contents via `.xterm-rows`' `innerText`, and check `exceptionDetails` on every CDP evaluate — both are recorded failure modes in tech-conventions. Kill the dev app with `pkill -f "node_modules/electron"`.
+
+---
+
+## Bugs found in QA
+
+### T-310: A renamed file's diff is shown as a whole new file
+- **Type:** bug
+- **Status:** done
+- **Outcome:** `splitRename` in `git-status.ts` now splits porcelain's `old -> new` into `path` + `oldPath` (4 unit tests, including an arrow inside a filename), `oldPath` is threaded through `onViewDiff` and the IPC with the same cwd check as `relPath`, and both paths go in the diff's pathspec. Re-measured against the same `git mv` + edit: 221 context rows and 2 additions, header reading `prd.md → prd-renamed.md` from the diff's own rename header, and the Git row showing the new filename with its real directory. A pure rename with no content change reports "No changes".
+- **Requirement:** `docs/specs/diff-view/prd.md#story-4-the-right-diff-for-each-file-state`
+- **Code:** `workspace/app/src/main/git-diff.ts`, `workspace/app/src/main/git-status.ts`, `workspace/app/src/renderer/components/GitSection.tsx`
+- **Description:** Found by T-309 against a real `git mv` plus a one-line edit. The Staged row for the renamed file opened a diff of 223 rows, every one an addition, instead of a rename with one added line. Two causes, both in the path:
+  1. `git status --porcelain` reports a rename as `R  old -> new`, and `parsePorcelain` in `git-status.ts` does `rawLine.slice(3)`, so `GitFileEntry.path` is the literal string `"old -> new"`. The Git section therefore also renders a nonsense directory label for such a row, and the window header showed the raw string.
+  2. `getFileDiff` normalises that to the new path and passes only it as the pathspec. Rename detection needs **both** sides in the pathspec — given only the new path, git can see an added file and nothing else.
+  Fix: split the rename in `parsePorcelain` into `path` (new) plus `oldPath`, thread `oldPath` through `onViewDiff` and the IPC, and pass both paths as the pathspec when one is present.
+- **Acceptance:**
+  - A `git mv` with an edit shows a rename: mostly context rows, plus the edit
+  - The window header shows `old → new`, sourced from the diff's own rename header
+  - The Git section row for a renamed file shows the new filename and its real directory
+  - A pure rename with no content change still reports "No changes"
+  - `oldPath` is validated against the cwd exactly like `relPath`
+- **Blocks:** none · **Blocked by:** none

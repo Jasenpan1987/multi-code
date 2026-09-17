@@ -314,7 +314,8 @@ function errorDetail(err: unknown): string {
 export async function getFileDiff(
   cwd: string,
   rawRelPath: string,
-  side: DiffSide
+  side: DiffSide,
+  oldPath?: string
 ): Promise<FileDiff> {
   const relPath = normalizeRelPath(rawRelPath);
   const comparison = COMPARISON[side];
@@ -325,7 +326,11 @@ export async function getFileDiff(
 
   const args = ["diff", `--unified=${CONTEXT_LINES}`, "--no-color", "-M"];
   if (side === "staged") args.push("--cached");
+  // Both sides of a rename go in the pathspec. Given only the new path, git has
+  // nothing to pair it with and reports the whole file as added — measured against
+  // a real `git mv` plus an edit, which came back as 223 additions.
   args.push("--", relPath);
+  if (oldPath && oldPath !== relPath) args.push(oldPath);
 
   let stdout: string;
   try {

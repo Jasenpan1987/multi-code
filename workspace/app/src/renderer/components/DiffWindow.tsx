@@ -8,6 +8,9 @@ interface DiffWindowProps {
   cwd: string;
   relPath: string;
   side: DiffSide;
+  // Only for a renamed file: git needs both sides in the pathspec to detect the
+  // rename at all.
+  oldPath?: string;
   // Whether the instance is running. The compose box only targets a running
   // instance, so "Ask agent" is disabled otherwise.
   running: boolean;
@@ -67,6 +70,7 @@ export function DiffWindow({
   cwd,
   relPath,
   side,
+  oldPath,
   running,
   onClose,
   onAskAgent,
@@ -91,7 +95,7 @@ export function DiffWindow({
     setDiff(null);
     setSelection(null);
     window.electronAPI
-      .getFileDiff(instanceId, relPath, side)
+      .getFileDiff(instanceId, relPath, side, oldPath)
       .then((result) => {
         if (!cancelled) setDiff(result);
       })
@@ -103,7 +107,7 @@ export function DiffWindow({
     return () => {
       cancelled = true;
     };
-  }, [instanceId, relPath, side]);
+  }, [instanceId, relPath, side, oldPath]);
 
   // Esc closes, unless a text field has focus — Esc in the compose box is that
   // box's own cancel, and closing both at once would be a surprise.
