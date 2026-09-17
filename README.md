@@ -97,7 +97,7 @@ multi-code/
 
 > Apple Silicon Macs only (M1/M2/M3/M4). Intel Macs are not supported.
 
-You will receive a `Multi-Code-0.1.0-arm64.dmg` file directly (e.g. via Slack/Drive/AirDrop). Follow the steps below.
+You will receive a `Multi-Code-0.1.0-arm64.dmg` file directly (e.g. via Slack/Drive/AirDrop). Follow the steps below. The `0.1.0` in the filename here is just an example; your file carries whatever version you were sent.
 
 ### Prerequisite: a backend CLI
 
