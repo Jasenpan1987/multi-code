@@ -5,7 +5,7 @@ import { TerminalSection } from "./TerminalSection";
 import { MarkdownSection } from "./MarkdownSection";
 import { PhoneSection } from "./PhoneSection";
 import { ManagerSection } from "./ManagerSection";
-import type { Instance } from "../../shared/types";
+import type { DiffSide, Instance } from "../../shared/types";
 
 interface ToolboxProps {
   instance: Instance;
@@ -14,6 +14,7 @@ interface ToolboxProps {
   openPath: string;
   onOpenPath: (path: string) => void;
   onPreviewInView: (path: string) => void;
+  onViewDiff: (relPath: string, side: DiffSide) => void;
   width: number;
 }
 
@@ -24,6 +25,7 @@ export function Toolbox({
   openPath,
   onOpenPath,
   onPreviewInView,
+  onViewDiff,
   width,
 }: ToolboxProps) {
   const isExpanded = (id: string) => expandedSection === id;
@@ -41,6 +43,7 @@ export function Toolbox({
           cwd={instance.cwd}
           active={isExpanded("git")}
           onPreviewInView={onPreviewInView}
+          onViewDiff={onViewDiff}
         />
       </ToolboxSection>
 

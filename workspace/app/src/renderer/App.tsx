@@ -8,6 +8,7 @@ import {
   getTerminal,
 } from "./components/TerminalView";
 import { ComposeBox } from "./components/ComposeBox";
+import { DiffOverlay } from "./components/DiffOverlay";
 import { cleanupShellTerminal } from "./components/TerminalSection";
 import { Toolbox } from "./components/Toolbox";
 import { ThemeToggle } from "./components/ThemeToggle";
@@ -16,7 +17,12 @@ import { useNotifications } from "./hooks/useNotifications";
 import { ThemeContext } from "./hooks/useTheme";
 import { playMessageSound, playCoughSound } from "./audio/sounds";
 import { shouldPlayAttentionSound } from "./audio/attentionPolicy";
-import type { Instance, BackendName, ThemeName } from "../shared/types";
+import type {
+  Instance,
+  BackendName,
+  DiffSide,
+  ThemeName,
+} from "../shared/types";
 
 const DEFAULT_EXPANDED_SECTION = "git";
 
@@ -36,6 +42,13 @@ export function App() {
   const [toolboxWidth, setToolboxWidth] = useState(480);
   const [theme, setThemeState] = useState<ThemeName>("light");
   const [composeOpen, setComposeOpen] = useState(false);
+  // The file whose diff the overlay is showing, or null when it's closed. Not
+  // per-instance: a diff belongs to a moment, so switching instances closes it
+  // rather than remembering one per contact.
+  const [diffTarget, setDiffTarget] = useState<{
+    relPath: string;
+    side: DiffSide;
+  } | null>(null);
 
   const { notify, markRead } = useNotifications();
   // Per-instance timestamp of the last audible alert, for the QQ-style
@@ -246,10 +259,21 @@ export function App() {
   // ensures returning to the original instance shows an empty box (Story 5).
   useEffect(() => {
     setComposeOpen(false);
+    setDiffTarget(null);
   }, [selectedId]);
 
   const closeCompose = useCallback(() => {
     setComposeOpen(false);
+    if (selectedId) getTerminal(selectedId)?.focus();
+  }, [selectedId]);
+
+  // The Git section's "View" tag. One file at a time; opening another replaces it.
+  const handleViewDiff = useCallback((relPath: string, side: DiffSide) => {
+    setDiffTarget({ relPath, side });
+  }, []);
+
+  const closeDiff = useCallback(() => {
+    setDiffTarget(null);
     if (selectedId) getTerminal(selectedId)?.focus();
   }, [selectedId]);
 
@@ -583,6 +607,7 @@ export function App() {
               openPath={openPathByInstance.get(selectedInstance.id) ?? ""}
               onOpenPath={isOffline ? () => {} : handleOpenPath}
               onPreviewInView={isOffline ? () => {} : handlePreviewInView}
+              onViewDiff={handleViewDiff}
               width={toolboxWidth}
             />
           </>
@@ -599,6 +624,17 @@ export function App() {
         onClose={() => setDialogOpen(false)}
         onSubmit={handleNewInstance}
       />
+
+      {diffTarget && selectedInstance && (
+        <DiffOverlay
+          key={`${selectedInstance.id}:${diffTarget.side}:${diffTarget.relPath}`}
+          instanceId={selectedInstance.id}
+          cwd={selectedInstance.cwd}
+          relPath={diffTarget.relPath}
+          side={diffTarget.side}
+          onClose={closeDiff}
+        />
+      )}
     </div>
     </ThemeContext.Provider>
   );

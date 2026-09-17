@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
-import type { SyntheticEvent } from "react";
-import type { GitStatus, GitFileEntry } from "../../shared/types";
+import type {
+  DiffSide,
+  GitStatus,
+  GitFileEntry,
+} from "../../shared/types";
 
 const POLL_INTERVAL_MS = 5000;
 const MAX_FILES = 50;
@@ -10,6 +13,9 @@ interface GitSectionProps {
   cwd: string;
   active: boolean;
   onPreviewInView: (path: string) => void;
+  // Open the diff overlay for one file. `relPath` stays repo-relative — the main
+  // process refuses anything that isn't.
+  onViewDiff: (relPath: string, side: DiffSide) => void;
 }
 
 // A file is previewable in the Markdown View if it's a markdown document.
@@ -19,11 +25,22 @@ function isMarkdown(path: string): boolean {
   return lower.endsWith(".md") || lower.endsWith(".markdown");
 }
 
+// Which comparison a group's rows are about: a New row has nothing to compare
+// against, Modified is the unstaged change, Staged is what's in the index.
+const SIDE_FOR_KIND: Record<FileGroupKind, DiffSide> = {
+  new: "untracked",
+  modified: "unstaged",
+  staged: "staged",
+};
+
+type FileGroupKind = "new" | "modified" | "staged";
+
 export function GitSection({
   instanceId,
   cwd,
   active,
   onPreviewInView,
+  onViewDiff,
 }: GitSectionProps) {
   const [status, setStatus] = useState<GitStatus | null>(null);
 
@@ -101,6 +118,7 @@ export function GitSection({
                 cwd={cwd}
                 kind="new"
                 onPreviewInView={onPreviewInView}
+                onViewDiff={onViewDiff}
               />
               <FileGroup
                 title="Modified"
@@ -108,6 +126,7 @@ export function GitSection({
                 cwd={cwd}
                 kind="modified"
                 onPreviewInView={onPreviewInView}
+                onViewDiff={onViewDiff}
               />
               <FileGroup
                 title="Staged"
@@ -115,6 +134,7 @@ export function GitSection({
                 cwd={cwd}
                 kind="staged"
                 onPreviewInView={onPreviewInView}
+                onViewDiff={onViewDiff}
               />
             </>
           )}
@@ -128,11 +148,19 @@ interface FileGroupProps {
   title: string;
   files: GitFileEntry[];
   cwd: string;
-  kind: "new" | "modified" | "staged";
+  kind: FileGroupKind;
   onPreviewInView: (path: string) => void;
+  onViewDiff: (relPath: string, side: DiffSide) => void;
 }
 
-function FileGroup({ title, files, cwd, kind, onPreviewInView }: FileGroupProps) {
+function FileGroup({
+  title,
+  files,
+  cwd,
+  kind,
+  onPreviewInView,
+  onViewDiff,
+}: FileGroupProps) {
   if (files.length === 0) return null;
 
   return (
@@ -143,21 +171,32 @@ function FileGroup({ title, files, cwd, kind, onPreviewInView }: FileGroupProps)
           key={`${kind}:${file.path}`}
           file={file}
           cwd={cwd}
+          side={SIDE_FOR_KIND[kind]}
           onPreviewInView={onPreviewInView}
+          onViewDiff={onViewDiff}
         />
       ))}
     </div>
   );
 }
 
+/**
+ * One changed file, with its two destinations as explicit tags rather than a
+ * whole-row click: `View` shows the diff without leaving the app, `Go To` hands
+ * the file to VS Code. Markdown files keep their renderer preview as `MD`.
+ */
 function FileRow({
   file,
   cwd,
+  side,
   onPreviewInView,
+  onViewDiff,
 }: {
   file: GitFileEntry;
   cwd: string;
+  side: DiffSide;
   onPreviewInView: (path: string) => void;
+  onViewDiff: (relPath: string, side: DiffSide) => void;
 }) {
   const slashIdx = file.path.lastIndexOf("/");
   const dir = slashIdx >= 0 ? file.path.slice(0, slashIdx) : "";
@@ -166,49 +205,45 @@ function FileRow({
   const absPath = `${cwd}/${file.path}`;
   const previewable = isMarkdown(file.path);
 
-  const handleClick = () => {
-    // Pass the instance cwd as the project root so VS Code opens/focuses the
-    // project window and reveals the file inside it, rather than dropping the
-    // file into whatever window is frontmost.
-    window.electronAPI.openInVSCode(absPath, cwd);
-  };
-
-  // Open the file in the Markdown View. stopPropagation so it doesn't also
-  // fire the row's open-in-VS-Code click. keydown mirror keeps it keyboard-
-  // reachable despite living inside the row button (a nested <button> would be
-  // invalid HTML, so this is a role="button" span).
-  const handlePreview = (e: SyntheticEvent) => {
-    e.stopPropagation();
-    onPreviewInView(absPath);
-  };
-
   return (
-    <button
-      type="button"
-      className="git-file-row"
-      onClick={handleClick}
-      title={file.path}
-    >
+    <div className="git-file-row" title={file.path}>
       <span className="git-file-name">{name}</span>
       {dir && <span className="git-file-dir">{dir}</span>}
-      {previewable && (
-        <span
-          className="git-file-view"
-          role="button"
-          tabIndex={0}
-          title="Preview in View"
-          onClick={handlePreview}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") handlePreview(e);
-          }}
+      <span className="git-file-tags">
+        {previewable && (
+          <button
+            type="button"
+            className="git-file-tag git-file-tag-md"
+            title="Render in the View section"
+            onClick={() => onPreviewInView(absPath)}
+          >
+            MD
+          </button>
+        )}
+        <button
+          type="button"
+          className="git-file-tag git-file-tag-view"
+          title="Show the diff"
+          onClick={() => onViewDiff(file.path, side)}
         >
           View
-        </span>
-      )}
+        </button>
+        <button
+          type="button"
+          className="git-file-tag git-file-tag-goto"
+          // The instance cwd as project root so VS Code opens/focuses the project
+          // window and reveals the file inside it, rather than dropping the file
+          // into whatever window is frontmost.
+          title="Open in VS Code"
+          onClick={() => window.electronAPI.openInVSCode(absPath, cwd)}
+        >
+          Go To
+        </button>
+      </span>
       <span className={`git-file-code git-file-code-${codeLetter}`}>
         {codeLetter}
       </span>
-    </button>
+    </div>
   );
 }
 

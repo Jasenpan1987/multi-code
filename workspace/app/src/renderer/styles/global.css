@@ -26,6 +26,16 @@
   --compose-chip-bg: #e3edfa;
   --compose-chip-fg: #2d5a8a;
   --compose-chip-border: #b8cde8;
+  --diff-text-fg: #1a1a1a;
+  --diff-gutter-fg: #999;
+  --diff-sep: #dde4ec;
+  --diff-add-bg: #e2f7e6;
+  --diff-del-bg: #fdeaec;
+  /* The side of a row that has no counterpart — greyed rather than blank, so an
+     addition reads as "nothing was here" rather than as an empty line. */
+  --diff-empty-bg: #f6f7f9;
+  --diff-selected-bg: rgba(45, 90, 138, 0.14);
+  --diff-selected-edge: #2d5a8a;
 }
 
 [data-theme="dark"] {
@@ -53,6 +63,14 @@
   --compose-chip-bg: #333a44;
   --compose-chip-fg: #9cc4e8;
   --compose-chip-border: #44505e;
+  --diff-text-fg: #d4d4d4;
+  --diff-gutter-fg: #6e7681;
+  --diff-sep: #333;
+  --diff-add-bg: rgba(63, 185, 80, 0.16);
+  --diff-del-bg: rgba(248, 81, 73, 0.16);
+  --diff-empty-bg: #191919;
+  --diff-selected-bg: rgba(107, 163, 214, 0.2);
+  --diff-selected-edge: #6ba3d6;
 }
 
 /* In dark mode, retint inner-panel text/icon colors so they remain
@@ -81,10 +99,10 @@
 [data-theme="dark"] .toolbox-section-body .git-file-dir {
   color: #888;
 }
-[data-theme="dark"] .toolbox-section-body .git-file-view {
+[data-theme="dark"] .toolbox-section-body .git-file-tag {
   color: #6ba3d6;
 }
-[data-theme="dark"] .toolbox-section-body .git-file-view:hover {
+[data-theme="dark"] .toolbox-section-body .git-file-tag:hover {
   background: rgba(107, 163, 214, 0.18);
 }
 [data-theme="dark"] .toolbox-section-body .git-files {
@@ -127,6 +145,14 @@
   --compose-chip-bg: #ece0c4;
   --compose-chip-fg: #5a4a30;
   --compose-chip-border: #d6c8a4;
+  --diff-text-fg: #3a2f1d;
+  --diff-gutter-fg: #a09070;
+  --diff-sep: #ded0b0;
+  --diff-add-bg: #e0ecc8;
+  --diff-del-bg: #f4dcd4;
+  --diff-empty-bg: #f0e8d4;
+  --diff-selected-bg: rgba(90, 74, 48, 0.14);
+  --diff-selected-edge: #5a4a30;
 }
 
 * {
@@ -758,7 +784,6 @@ body,
   padding: 2px 4px;
   background: transparent;
   border: none;
-  cursor: pointer;
   font-size: 11px;
   font-family: "Menlo", "Consolas", monospace;
   color: #1a1a1a;
@@ -776,7 +801,10 @@ body,
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex-shrink: 0;
+  /* Shrinkable, so a long name gives way to the tags instead of pushing them
+     out of the row. */
+  flex-shrink: 1;
+  min-width: 0;
   max-width: 60%;
 }
 
@@ -790,25 +818,41 @@ body,
   min-width: 0;
 }
 
-.git-file-view {
+/* The row's destinations — MD (markdown preview), View (diff), Go To (VS Code).
+   They take the margin-left:auto push, so the status letter sits snug against
+   them rather than also pushing right. */
+.git-file-tags {
   margin-left: auto;
-  font-size: 10px;
-  color: #2d5a8a;
-  padding: 0 4px;
-  border-radius: 2px;
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
   flex-shrink: 0;
-  cursor: pointer;
 }
 
-.git-file-view:hover {
+.git-file-tags + .git-file-code {
+  margin-left: 6px;
+}
+
+.git-file-tag {
+  font-size: 10px;
+  font-family: inherit;
+  color: #2d5a8a;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  border-radius: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.git-file-tag:hover {
   background: rgba(45, 90, 138, 0.16);
   text-decoration: underline;
 }
 
-/* When a View affordance is present it takes the margin-left:auto push, so the
-   status letter sits snug against it rather than also pushing right. */
-.git-file-view + .git-file-code {
-  margin-left: 6px;
+.git-file-tag:focus-visible {
+  outline: 1px solid #2d5a8a;
+  outline-offset: -1px;
 }
 
 .git-file-code {
@@ -2097,4 +2141,202 @@ body,
 [data-theme="dark"] .toolbox-section-body .manager-entry-result {
   color: #c8c8c8;
   background: rgba(255, 255, 255, 0.04);
+}
+
+/* ============ Diff overlay ============
+   A read-only side-by-side view of one file's diff, opened from the Git
+   section's View tag. Nearly full-window: reading a diff in a narrow box is the
+   thing this feature exists to stop. */
+
+.diff-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+}
+
+.diff-overlay {
+  background: #f0f4fa;
+  border: 2px solid #7b9cc7;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  width: 94vw;
+  height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.diff-overlay-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: linear-gradient(180deg, #e4ecf7 0%, #d4e0ef 100%);
+  border-bottom: 1px solid #7b9cc7;
+  flex: none;
+}
+
+.diff-overlay-path {
+  font-family: "Menlo", "Consolas", monospace;
+  font-size: 12px;
+  font-weight: bold;
+  color: #2d5a8a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+
+.diff-overlay-comparison {
+  font-size: 10px;
+  color: #667;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.diff-overlay-close {
+  font-size: 15px;
+  line-height: 1;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid #7b9cc7;
+  border-radius: 3px;
+  background: #f6f9fd;
+  color: #2d5a8a;
+  cursor: pointer;
+  flex: none;
+}
+
+.diff-overlay-close:hover {
+  background: #ffe0e0;
+  border-color: #c66;
+  color: #c33;
+}
+
+.diff-overlay-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #fff;
+}
+
+[data-theme="dark"] .diff-overlay {
+  background: #252526;
+  border-color: #3c3c3c;
+}
+
+[data-theme="dark"] .diff-overlay-header {
+  background: linear-gradient(180deg, #3c3c3c 0%, #2d2d2d 100%);
+  border-bottom-color: #3c3c3c;
+}
+
+[data-theme="dark"] .diff-overlay-path {
+  color: #6ba3d6;
+}
+
+[data-theme="dark"] .diff-overlay-comparison {
+  color: #999;
+}
+
+[data-theme="dark"] .diff-overlay-close {
+  background: #2d2d2d;
+  border-color: #4a4a4a;
+  color: #d4d4d4;
+}
+
+[data-theme="dark"] .diff-overlay-body {
+  background: #1e1e1e;
+}
+
+.diff-overlay-note {
+  flex: 1;
+  padding: 12px;
+  font-family: "Menlo", "Consolas", monospace;
+  font-size: 12px;
+  color: #667;
+}
+
+.diff-overlay-footer {
+  flex: none;
+  padding: 4px 8px;
+  border-top: 1px solid #b8c8de;
+  font-size: 10px;
+  color: #667;
+  background: #f6f9fd;
+}
+
+/* One grid for both sides: a row is four cells, so alignment is structural and
+   cannot drift the way two scroll containers kept in sync by script can. Long
+   lines are not wrapped — the whole grid scrolls sideways instead, so a line's
+   indentation stays readable. */
+.diff-grid {
+  display: grid;
+  /* max-content, not 1fr: a 1fr column is capped at half the panel, which left a
+     short old side padded with dead space while the new side was clipped. Now each
+     half is as wide as its own longest line and the grid scrolls sideways. */
+  grid-template-columns: auto max-content auto max-content;
+  font-family: "Menlo", "Consolas", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.diff-gutter {
+  text-align: right;
+  padding: 0 6px;
+  min-width: 34px;
+  color: var(--diff-gutter-fg);
+  border-right: 1px solid var(--diff-sep);
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* The line number is generated content, so it can never land in a selection —
+   copying a block of the diff yields the code and nothing else. */
+.diff-gutter::before {
+  content: attr(data-line);
+}
+
+/* The middle seam between the old and new halves. */
+.diff-grid > .diff-gutter:nth-child(4n + 3) {
+  border-left: 2px solid var(--diff-sep);
+}
+
+.diff-text {
+  white-space: pre;
+  padding: 0 6px;
+  color: var(--diff-text-fg);
+  /* Keeps the two halves symmetric, and the seam centred, when the file's lines
+     are all short. Wider content grows past it. */
+  min-width: 45vw;
+}
+
+.diff-text[data-kind="add"],
+.diff-gutter[data-kind="add"] {
+  background: var(--diff-add-bg);
+}
+
+.diff-text[data-kind="del"],
+.diff-gutter[data-kind="del"] {
+  background: var(--diff-del-bg);
+}
+
+.diff-text[data-kind="empty"],
+.diff-gutter[data-kind="empty"] {
+  background: var(--diff-empty-bg);
+}
+
+[data-theme="dark"] .diff-overlay-note,
+[data-theme="dark"] .diff-overlay-footer {
+  color: #999;
+}
+
+[data-theme="dark"] .diff-overlay-footer {
+  background: #2d2d2d;
+  border-top-color: #3c3c3c;
 }
