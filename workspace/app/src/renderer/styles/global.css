@@ -2355,6 +2355,58 @@ body,
   background: var(--diff-empty-bg);
 }
 
+/* Selection rides on top of the add/remove tint rather than replacing it — a
+   selected addition still reads as an addition. A background-image layer composites
+   over the background-color; a solid background would hide it. */
+.diff-text[data-selected="true"],
+.diff-gutter[data-selected="true"] {
+  background-image: linear-gradient(
+    var(--diff-selected-bg),
+    var(--diff-selected-bg)
+  );
+}
+
+/* Left edge marker on the selected run, drawn as an inset shadow so it costs no
+   layout width. */
+.diff-grid > .diff-gutter:nth-child(4n + 1)[data-selected="true"] {
+  box-shadow: inset 2px 0 0 var(--diff-selected-edge);
+}
+
+/* The reference the current selection would insert. */
+.diff-overlay-refbar {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 8px;
+  border-bottom: 1px solid #b8c8de;
+  background: #eaf1fb;
+}
+
+.diff-overlay-ref {
+  font-family: "Menlo", "Consolas", monospace;
+  font-size: 11px;
+  color: #2d5a8a;
+}
+
+.diff-overlay-ref-note {
+  font-size: 10px;
+  color: #8a7a55;
+}
+
+[data-theme="dark"] .diff-overlay-refbar {
+  background: #2a2a2c;
+  border-bottom-color: #3c3c3c;
+}
+
+[data-theme="dark"] .diff-overlay-ref {
+  color: #6ba3d6;
+}
+
+[data-theme="dark"] .diff-overlay-ref-note {
+  color: #c8a86a;
+}
+
 [data-theme="dark"] .diff-overlay-note,
 [data-theme="dark"] .diff-overlay-footer {
   color: #999;
