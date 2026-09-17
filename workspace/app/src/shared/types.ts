@@ -130,6 +130,47 @@ export type GitStatus =
       stagedFiles: GitFileEntry[];
     };
 
+// Diff view. Which comparison a Git-section row is asking about: a Modified row
+// means working tree vs index, Staged means index vs HEAD, New has nothing to
+// compare against and shows the whole file as added.
+export type DiffSide = "unstaged" | "staged" | "untracked";
+
+// `replace` is a deletion paired with the addition that took its place, so a
+// changed line occupies one visual row with old text left and new text right.
+// Unpaired lines stay `add` / `del`.
+export type DiffLineKind = "context" | "add" | "del" | "replace";
+
+export interface DiffRow {
+  kind: DiffLineKind;
+  // Line number in the old version; null for a pure addition.
+  oldLine: number | null;
+  // Line number in the new version; null for a pure deletion. This is the side
+  // an @path:start-end reference is built from.
+  newLine: number | null;
+  oldText: string | null;
+  newText: string | null;
+}
+
+export type FileDiffFailReason =
+  | "binary"
+  | "too-large"
+  | "no-changes"
+  | "not-found"
+  | "failed";
+
+export type FileDiff =
+  | {
+      ok: true;
+      rows: DiffRow[];
+      oldPath: string;
+      newPath: string;
+      // Human wording for the overlay header, e.g. "working tree vs index".
+      comparison: string;
+      // True when the row list was cut short at the display limit.
+      truncated: boolean;
+    }
+  | { ok: false; reason: FileDiffFailReason; detail?: string };
+
 // Compose box: a pasted clipboard image saved to a temp file. `path` is the
 // temp file (referenced as `@<path>` on send + cleaned up on cancel); `dataUrl`
 // is the same bytes as a data: URL for the chip thumbnail.
@@ -175,6 +216,13 @@ export interface ElectronAPI {
   getGitStatus: (id: string) => Promise<GitStatus>;
   getResumeCommand: (id: string) => Promise<string | null>;
   readFile: (instanceId: string, path: string) => Promise<ReadFileResult>;
+  // `relPath` is repo-relative, as it comes out of the Git section. Paths that
+  // escape the instance's cwd are refused in the main process.
+  getFileDiff: (
+    instanceId: string,
+    relPath: string,
+    side: DiffSide
+  ) => Promise<FileDiff>;
   openInVSCode: (
     target: string,
     projectRoot?: string

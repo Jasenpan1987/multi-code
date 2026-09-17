@@ -2,54 +2,22 @@ import { execFile } from "child_process";
 import fs from "fs";
 import path from "path";
 import { promisify } from "util";
+import type { DiffRow, DiffSide, FileDiff } from "../shared/types";
 
 const execFileAsync = promisify(execFile);
 
-/** Which comparison a file row in the Git section is asking about. */
-export type DiffSide = "unstaged" | "staged" | "untracked";
+// The shapes live in shared/types.ts because the renderer draws these rows and
+// cannot import a main-process module. Re-exported so callers in main don't need
+// to know which file they came from.
+export type {
+  DiffLineKind,
+  DiffRow,
+  DiffSide,
+  FileDiff,
+  FileDiffFailReason,
+} from "../shared/types";
 
-/**
- * `replace` is a deletion paired with the addition that took its place, so a
- * changed line occupies one visual row with old text on the left and new on the
- * right. Unpaired lines stay `add` / `del`.
- */
-export type DiffLineKind = "context" | "add" | "del" | "replace";
-
-export interface DiffRow {
-  kind: DiffLineKind;
-  /** Line number in the old version; null for a pure addition. */
-  oldLine: number | null;
-  /** Line number in the new version; null for a pure deletion. */
-  newLine: number | null;
-  oldText: string | null;
-  newText: string | null;
-}
-
-export interface FileDiffOk {
-  ok: true;
-  rows: DiffRow[];
-  oldPath: string;
-  newPath: string;
-  /** Human wording for the overlay header, e.g. "working tree vs index". */
-  comparison: string;
-  /** True when rows were cut at MAX_ROWS_SHOWN. */
-  truncated: boolean;
-}
-
-export type FileDiffFailReason =
-  | "binary"
-  | "too-large"
-  | "no-changes"
-  | "not-found"
-  | "failed";
-
-export interface FileDiffFail {
-  ok: false;
-  reason: FileDiffFailReason;
-  detail?: string;
-}
-
-export type FileDiff = FileDiffOk | FileDiffFail;
+type FileDiffFail = Extract<FileDiff, { ok: false }>;
 
 // Whole-file context: the right-hand line numbers are the file's real line
 // numbers, which is what an @path:start-end reference depends on. Bounded rather
@@ -287,6 +255,25 @@ export function applyRowLimits(
     return { rows: rows.slice(0, MAX_ROWS_SHOWN), truncated: true };
   }
   return { rows, truncated: false };
+}
+
+/**
+ * Whether a Git-section path really is inside the instance's project.
+ *
+ * The Git section only ever produces repo-relative paths, so anything absolute,
+ * `~`-prefixed, or climbing out through `..` did not come from there and is
+ * refused rather than resolved — diffs outside the cwd are out of scope.
+ */
+export function isInsideCwd(cwd: string, rawRelPath: string): boolean {
+  if (!cwd) return false;
+  const relPath = normalizeRelPath(rawRelPath);
+  if (relPath === "") return false;
+  if (relPath.startsWith("~")) return false;
+  if (path.isAbsolute(relPath)) return false;
+  if (/^[a-zA-Z]:[\\/]/.test(relPath)) return false;
+
+  const rel = path.relative(cwd, path.resolve(cwd, relPath));
+  return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
 }
 
 /**

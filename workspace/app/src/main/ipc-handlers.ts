@@ -6,11 +6,17 @@ import { join, resolve, dirname, basename, extname } from "path";
 import { processManager } from "./process-manager";
 import { shellManager } from "./shell-manager";
 import { getGitStatus } from "./git-status";
+import { getFileDiff, isInsideCwd } from "./git-diff";
 import { isBackendAvailable, getBackend } from "./backends";
 import type { BackendName } from "./backends";
 import { loadSettings, saveSettings } from "./settings-store";
 import type { ThemeName } from "./settings-store";
-import type { CreateManagerResult, ReadFileResult } from "../shared/types";
+import type {
+  CreateManagerResult,
+  DiffSide,
+  FileDiff,
+  ReadFileResult,
+} from "../shared/types";
 import { remoteServer } from "./remote/ws-server";
 import { setRemoteEnabled } from "./remote";
 import { hasTailscaleEndpoint } from "./remote/endpoints";
@@ -151,6 +157,35 @@ export function registerIpcHandlers() {
     if (!instance) return { available: false };
     return getGitStatus(instance.cwd);
   });
+
+  // The diff behind the Git section's "View" tag. Read-only: getFileDiff can only
+  // reach `git diff`. `relPath` arrives repo-relative from the Git section, and is
+  // refused if it points anywhere outside the instance's cwd — diffs for files
+  // outside the project are out of scope, so there is no reason to resolve one.
+  ipcMain.handle(
+    "get-file-diff",
+    async (
+      _event,
+      id: string,
+      relPath: string,
+      side: DiffSide
+    ): Promise<FileDiff> => {
+      const instance = processManager.listInstances().find((i) => i.id === id);
+      if (!instance) {
+        return { ok: false, reason: "failed", detail: "unknown instance" };
+      }
+      if (typeof relPath !== "string" || relPath === "") {
+        return { ok: false, reason: "failed", detail: "no path" };
+      }
+      if (side !== "unstaged" && side !== "staged" && side !== "untracked") {
+        return { ok: false, reason: "failed", detail: "bad side" };
+      }
+      if (!isInsideCwd(instance.cwd, relPath)) {
+        return { ok: false, reason: "failed", detail: "path outside project" };
+      }
+      return getFileDiff(instance.cwd, relPath, side);
+    }
+  );
 
   // Resume Elsewhere: the command that reattaches to this instance's session
   // from a standalone terminal. Backend-specific (claude --resume vs

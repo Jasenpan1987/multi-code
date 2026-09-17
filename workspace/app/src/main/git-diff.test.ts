@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyRowLimits,
+  isInsideCwd,
   looksBinary,
   normalizeRelPath,
   parseUnifiedDiff,
@@ -288,6 +289,28 @@ describe("normalizeRelPath", () => {
     expect(normalizeRelPath("src/main/git-diff.ts")).toBe(
       "src/main/git-diff.ts"
     );
+  });
+});
+
+describe("isInsideCwd", () => {
+  const cwd = "/Users/someone/project";
+
+  it("accepts the repo-relative paths the Git section produces", () => {
+    expect(isInsideCwd(cwd, "src/main/git-diff.ts")).toBe(true);
+    expect(isInsideCwd(cwd, "README.md")).toBe(true);
+    expect(isInsideCwd(cwd, "a/../b.txt")).toBe(true);
+    expect(isInsideCwd(cwd, "old/x.ts -> src/x.ts")).toBe(true);
+  });
+
+  it("refuses anything that leaves the project", () => {
+    expect(isInsideCwd(cwd, "../../../etc/passwd")).toBe(false);
+    expect(isInsideCwd(cwd, "/etc/passwd")).toBe(false);
+    expect(isInsideCwd(cwd, "~/.ssh/id_rsa")).toBe(false);
+    expect(isInsideCwd(cwd, "C:\\Windows\\system.ini")).toBe(false);
+    expect(isInsideCwd(cwd, "src/../..")).toBe(false);
+    expect(isInsideCwd(cwd, "")).toBe(false);
+    expect(isInsideCwd(cwd, ".")).toBe(false);
+    expect(isInsideCwd("", "src/x.ts")).toBe(false);
   });
 });
 

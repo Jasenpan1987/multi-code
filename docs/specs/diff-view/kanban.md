@@ -95,7 +95,8 @@ closes cleanly.
 
 ### T-302: `get-file-diff` IPC + preload + shared types
 - **Type:** integration
-- **Status:** ready
+- **Status:** done
+- **Outcome:** `get-file-diff` handler in `ipc-handlers.ts`, bridged in `preload.ts`, types in `shared/types.ts` (and re-exported from `git-diff.ts` rather than duplicated the way `GitStatus` is). Path escapes are refused by `isInsideCwd`, unit-tested against `..`, absolute, `~` and `C:\` inputs. Full suite green: 608 tests, type-check and both linters clean.
 - **Requirement:** `docs/specs/diff-view/prd.md#story-4-the-right-diff-for-each-file-state`
 - **Code:** `workspace/app/src/main/ipc-handlers.ts`, `workspace/app/src/main/preload.ts`, `workspace/app/src/shared/types.ts`
 - **Description:** Expose T-301 to the renderer. Add `ipcMain.handle("get-file-diff", async (_e, id: string, relPath: string, side: DiffSide) => …)` in `registerIpcHandlers()`, resolving the instance's `cwd` exactly the way `get-git-status` does (`processManager.listInstances().find(i => i.id === id)`; unknown instance → `{ ok: false, reason: "failed" }`). **Reject any `relPath` that escapes the cwd**: `path.resolve(cwd, relPath)` must stay inside `cwd` (compare with `path.relative` — not starting with `..` and not absolute), and reject absolute inputs outright; PRD puts files outside the cwd out of scope. Bridge in `preload.ts` as `getFileDiff: (id, relPath, side) => ipcRenderer.invoke("get-file-diff", id, relPath, side)`. Move `DiffRow` / `FileDiff` / `DiffSide` into `shared/types.ts` (or re-export them there) and add `getFileDiff` to the `ElectronAPI` interface, following how `readFile` / `ReadFileResult` are declared.
