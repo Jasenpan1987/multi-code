@@ -38,7 +38,7 @@ graph TD
 - **Blocks:** T-003
 - **Blocked by:** none
 - **Parallel with:** T-002
-- **Notes:** Mirror the existing `expandedByInstance` machinery in `App.tsx` exactly (a second `useState<Map<string,string>>` + a `useCallback` setter keyed on `selectedId`). Keep styling compact (QQ aesthetic); reuse existing toolbox/section CSS classes where possible, add a `markdown-section` block to `workspace/app/src/renderer/styles/`. Do NOT wire rendering here — this task is shell + state only.
+- **Notes:** Mirror the existing `expandedByInstance` machinery in `App.tsx` exactly (a second `useState<Map<string,string>>` + a `useCallback` setter keyed on `selectedId`). Keep styling compact; reuse existing toolbox/section CSS classes where possible, add a `markdown-section` block to `workspace/app/src/renderer/styles/`. Do NOT wire rendering here — this task is shell + state only.
 
 ---
 

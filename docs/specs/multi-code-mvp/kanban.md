@@ -19,7 +19,7 @@ graph TD
     T006 --> T007
     T007 --> T008[T-008: Instance lifecycle]
     T008 --> T009[T-009: Notifications]
-    T009 --> T010[T-010: QQ visual styling]
+    T009 --> T010[T-010: Visual styling]
 ```
 
 **Critical path:** T-001 → T-003 → T-004 → T-005 → T-007 → T-008 → T-009 → T-010
@@ -43,7 +43,7 @@ graph TD
 ### T-002: Electron shell with left-right layout
 - **Type:** feature
 - **Status:** done
-- **Story:** Story 3 (QQ-style contact list UI)
+- **Story:** Story 3 (Compact contact list UI)
 - **Description:** Create the basic Electron window with a two-panel layout: left sidebar (fixed width ~200px) and right content area. Left panel is empty for now (placeholder "No instances"). Right panel shows placeholder text. Basic window chrome: title bar, min/max/close. Set a reasonable default window size (1200x800).
 - **Acceptance:**
   - App launches with visible left/right split
@@ -52,7 +52,7 @@ graph TD
 - **Blocks:** T-004, T-005, T-006
 - **Blocked by:** T-001
 - **Parallel with:** T-003
-- **Notes:** Keep styling minimal for now — just structural CSS. QQ styling comes in T-010.
+- **Notes:** Keep styling minimal for now — just structural CSS. Visual styling comes in T-010.
 
 ### T-003: PTY process manager (main process)
 - **Type:** feature
@@ -90,7 +90,7 @@ graph TD
 ### T-005: Contact list component
 - **Type:** feature
 - **Status:** done
-- **Story:** Story 3 (Classic QQ-style contact list)
+- **Story:** Story 3 (Compact contact list)
 - **Description:** Create a `ContactList` React component in the left panel that: displays all instances as list items (icon + name + status indicator), highlights the currently selected instance, sorts by running first then by last activity, clicking an item switches the terminal view to that instance. Each item shows: a colored dot (green=running, grey=stopped), the instance name (alias or directory name), subtle last-activity timestamp.
 - **Acceptance:**
   - All managed instances appear in the left panel
@@ -100,7 +100,7 @@ graph TD
 - **Blocks:** T-007
 - **Blocked by:** T-004
 - **Parallel with:** T-006
-- **Notes:** Use simple HTML/CSS list for now. QQ styling comes in T-010.
+- **Notes:** Use simple HTML/CSS list for now. Visual styling comes in T-010.
 
 ### T-006: New Instance dialog
 - **Type:** feature
@@ -148,7 +148,7 @@ graph TD
 - **Parallel with:** none
 - **Notes:** On restart, create a fresh PTY + xterm instance. Old terminal buffer is discarded.
 
-## Milestone 3: Polish (Notifications + QQ aesthetics)
+## Milestone 3: Polish (Notifications + visual styling)
 
 ### T-009: Notifications (flash + sound + system)
 - **Type:** feature
@@ -165,20 +165,20 @@ graph TD
 - **Parallel with:** none
 - **Notes:** Debounce notifications — don't fire for every byte of output. Use a small delay (e.g., 500ms idle after output burst) before triggering notification.
 
-### T-010: Classic QQ visual styling
+### T-010: Visual styling
 - **Type:** feature
 - **Status:** done
-- **Story:** Story 3 (Classic QQ-style contact list)
-- **Description:** Apply classic QQ 2003-2005 visual styling to the entire app: compact contact list with small square avatars (can use colored initials or simple icons), QQ-style color scheme (blue header bar, white list background, subtle borders), small font sizes, information-dense layout, QQ-style window frame (optional — or use native). The terminal view on the right keeps its default dark theme.
+- **Story:** Story 3 (Compact contact list)
+- **Description:** Apply a compact, consistent visual style to the entire app: compact contact list with small square avatars (can use colored initials or simple icons), a simple color scheme (blue header bar, white list background, subtle borders), small font sizes, information-dense layout. The terminal view on the right keeps its default dark theme.
 - **Acceptance:**
-  - App visually resembles classic QQ layout
+  - App has a compact, consistent layout
   - Compact, no wasted space
-  - Contact list feels like a 2003-era QQ friend list
+  - Contact list is compact and scannable at a glance
   - Overall aesthetic is retro but functional
 - **Blocks:** none
 - **Blocked by:** T-009
 - **Parallel with:** none
-- **Notes:** Reference images of QQ 2003/2004/2005 for color palette and spacing. Don't over-engineer — CSS is enough, no need for a UI library for this aesthetic.
+- **Notes:** Don't over-engineer — CSS is enough, no need for a UI library for this aesthetic.
 
 ## Legend
 

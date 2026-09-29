@@ -2,7 +2,7 @@
 
 > [中文文档](./README.zh-CN.md)
 
-A desktop application for managing multiple terminal-based coding-agent sessions from a single interface. It supports two backends — **Claude Code** and **OpenCode** — and you can mix both. Think of it as a terminal multiplexer with a classic QQ (early-2000s chat app) aesthetic: each agent session appears as a "contact" in a sidebar, with full terminal fidelity and notification support.
+A desktop application for managing multiple terminal-based coding-agent sessions from a single interface. It supports two backends — **Claude Code** and **OpenCode** — and you can mix both. Each agent session appears as an entry in a sidebar, with full terminal fidelity and notification support.
 
 **Zero residue:** Multi-Code spawns the real `claude` / `opencode` CLI directly and never writes into their config or session directories. Uninstalling the app leaves no trace in `~/.claude/`, `~/.config/opencode/`, or your projects. It only keeps its own tiny contact list (see [Data persistence](#data-persistence)).
 
@@ -56,7 +56,7 @@ When working with multiple coding-agent sessions across different projects simul
 - **Revocable** — Each paired phone has its own token; revoking one disconnects it immediately
 
 ### Visual / UX
-- **QQ Aesthetic** — Aqua-blue gradients, compact avatars, familiar sidebar layout
+- **Compact layout** — Dense sidebar, small avatars, and blue gradient chrome, so many sessions fit on one screen
 - **Themes** — Light, dark, and sepia, switched from the top-right toggle
 - **Backend at a glance** — Claude Code instances have **circular** avatars and blue window chrome; OpenCode instances have **rounded-square** avatars and green chrome. The header also names the backend
 - **Pinned manager** — The manager row always sits at the top of the list, styled apart from the projects
@@ -107,7 +107,7 @@ multi-code/
 │       │   │   ├── hooks/            # useNotifications, useTheme
 │       │   │   ├── audio/            # Web Audio notification sounds
 │       │   │   ├── assets/           # Icons (gaming.png), sound files
-│       │   │   └── styles/           # Global CSS (QQ theme)
+│       │   │   └── styles/           # Global CSS
 │       │   ├── renderer-mobile/ # Phone Link web client (served to the phone)
 │       │   └── shared/         # Shared TypeScript types
 │       ├── package.json
@@ -420,4 +420,4 @@ Everything Multi-Code keeps lives in Electron's user-data folder. On macOS that 
 
 ## License
 
-Private / Internal use.
+[MIT](./LICENSE)

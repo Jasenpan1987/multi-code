@@ -31,7 +31,7 @@ import type { BackendName } from "../../shared/types";
 
 // The manager is always this colour rather than one hashed from its name: there is
 // only ever one, and it should be recognisable at a glance instead of blending in
-// with whatever colour its name happened to land on. Matches the QQ chrome blue.
+// with whatever colour its name happened to land on. Matches the chrome blue.
 const MANAGER_COLOR = "#2d5a8a";
 
 interface AvatarProps {

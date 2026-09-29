@@ -177,7 +177,7 @@ Architecturally, the original plan was to use each backend's official hook syste
   - Polling errors (file missing, sqlite locked) must not crash the instance or app — silent retry on next tick
   - Session storage schema changes in claude/opencode should degrade to "no notification" rather than crash
 - **Aesthetic:**
-  - Avatar shape change (circle → square for opencode) must match the existing QQ visual style — no harsh edges, retain the avatar size and interior layout
+  - Avatar shape change (circle → square for opencode) must match the existing visual style — no harsh edges, retain the avatar size and interior layout
 
 ## Technical Constraints
 

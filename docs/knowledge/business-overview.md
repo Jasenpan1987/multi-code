@@ -2,9 +2,9 @@
 
 ## Product Positioning
 
-Multi-Code is a desktop application that lets programmers manage multiple Claude Code CLI instances from a single window. UI is inspired by classic QQ (early 2000s) — a contact list where each "contact" is a running Claude Code terminal session.
+Multi-Code is a desktop application that lets programmers manage multiple Claude Code CLI instances from a single window. The UI is a compact list where each entry (a "contact") is a running Claude Code terminal session.
 
-It is essentially a **terminal multiplexer with a QQ skin**. The app spawns real `claude` CLI processes and renders their output in embedded terminal views (xterm.js). No abstraction layers, no custom protocols — just raw terminal I/O with a nice management UI on top.
+It is essentially a **terminal multiplexer**. The app spawns real `claude` CLI processes and renders their output in embedded terminal views (xterm.js). No abstraction layers, no custom protocols — just raw terminal I/O with a nice management UI on top.
 
 ## Core Pain Points
 
@@ -20,13 +20,13 @@ It is essentially a **terminal multiplexer with a QQ skin**. The app spawns real
 
 ## Core Concepts
 
-| Concept | QQ Analogy | Actual Meaning |
-|---------|-----------|----------------|
-| Contact | QQ friend | A Claude Code instance (spawned by the app) |
-| Avatar flash | Message alert | Instance has new terminal output |
-| Chat window | QQ chat box | Embedded terminal (xterm.js) showing real Claude Code |
-| Contact list | QQ friend list | All managed instances at a glance |
-| Online/Offline | Friend status | Process running vs exited |
+| Concept | Meaning |
+|---------|---------|
+| Contact | A Claude Code instance (spawned by the app) |
+| Avatar flash | Instance has new terminal output |
+| Chat window | Embedded terminal (xterm.js) showing real Claude Code |
+| Contact list | All managed instances at a glance |
+| Online/Offline | Process running vs exited |
 
 ## Key Mental Model
 

@@ -7,9 +7,9 @@
 
 ## Overview
 
-Multi-Code is a desktop application that manages multiple Claude Code CLI instances in one place. The UI is inspired by classic QQ (early 2000s era) — a contact list on the left, a terminal view on the right. Users create new Claude Code instances from within the app, switch between them freely, and get notified when any instance has new output.
+Multi-Code is a desktop application that manages multiple Claude Code CLI instances in one place. The UI has a contact list on the left and a terminal view on the right. Users create new Claude Code instances from within the app, switch between them freely, and get notified when any instance has new output.
 
-The app is essentially a **terminal multiplexer with a QQ skin**. Under the hood it spawns real `claude` CLI processes via `node-pty`, giving full terminal fidelity (ANSI colors, clickable elements, permission prompts, tabs — everything Claude Code supports).
+The app is essentially a **terminal multiplexer with a management UI**. Under the hood it spawns real `claude` CLI processes via `node-pty`, giving full terminal fidelity (ANSI colors, clickable elements, permission prompts, tabs — everything Claude Code supports).
 
 ## Background & Context
 
@@ -57,19 +57,19 @@ Programmers frequently work across multiple projects simultaneously, each needin
 
 **Notes:** Alias is optional for the first instance of a project, mandatory for duplicates.
 
-### Story 3: Classic QQ-style contact list UI
+### Story 3: Compact contact list UI
 **As a** programmer
-**I want to** see all my instances in a classic early-2000s QQ contact list layout
+**I want to** see all my instances in a compact contact list layout
 **So that** the interface is familiar, simple, and distraction-free
 
 **Acceptance Criteria:**
 - [ ] Left panel: contact list with avatar/icon, instance name (or alias), status (running/stopped)
 - [ ] Right panel: full terminal view for the selected instance
-- [ ] Visual style references classic QQ 2003-2005 (compact list, small avatars, simple color scheme, no modern bloat)
+- [ ] Visual style is compact (compact list, small avatars, simple color scheme, no modern bloat)
 - [ ] Running instances show active status; stopped ones are greyed out
 - [ ] List sorted by: running first, then by most recent activity
 
-**Notes:** Think QQ 2003-2005 aesthetic. Compact, information-dense, no unnecessary whitespace.
+**Notes:** Compact, information-dense, no unnecessary whitespace.
 
 ### Story 4: Terminal view with full fidelity
 **As a** programmer
@@ -91,7 +91,7 @@ Programmers frequently work across multiple projects simultaneously, each needin
 **So that** I never miss an AI response from any project
 
 **Acceptance Criteria:**
-- [ ] Contact avatar flashes/blinks when the instance produces output while not selected (like classic QQ message notification)
+- [ ] Contact avatar flashes/blinks when the instance produces output while not selected
 - [ ] Notification sound (configurable on/off)
 - [ ] macOS system notification
 - [ ] Unread indicator on the contact item (clears when selected)

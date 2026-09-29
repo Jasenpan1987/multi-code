@@ -2,12 +2,12 @@
 // agent blocked on user input) deserves the audible/dock attention signals.
 //
 // Two rules, both borrowed from Orca's notification dispatch
-// (src/main/ipc/notifications.ts) and matched to the QQ aesthetic:
+// (src/main/ipc/notifications.ts):
 //
 //  1. suppress-when-focused — for routine activity ("waiting") the user is
 //     already looking at this instance (it is the selected one AND the window
-//     has focus), so the beep and dock bounce are noise; QQ does not sound
-//     for the conversation that is open. Urgent activity ("prompt" — the
+//     has focus), so the beep and dock bounce are noise; nothing should sound
+//     for the session that is already open. Urgent activity ("prompt" — the
 //     agent is blocked until the user acts) overrides this: that sound must
 //     play even while the user is watching, or the "needs input" notification
 //     the whole feature exists for never fires in the common case of

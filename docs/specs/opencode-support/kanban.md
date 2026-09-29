@@ -115,7 +115,7 @@ By the end of M1: user can create an OpenCode instance, see it in the contact li
 - **Type:** feature
 - **Status:** done
 - **Story:** Story 3 (visible backend indicator)
-- **Description:** Update `workspace/app/src/renderer/components/Avatar.tsx` to accept a `backend: "claude" | "opencode"` prop. Render circular for claude (current `border-radius: 50%`) and square for opencode (small radius like 4-6px to match QQ aesthetic — not razor-sharp corners). Update all `<Avatar>` call sites (currently in `ContactList.tsx`) to pass the new prop, sourced from `instance.backend`.
+- **Description:** Update `workspace/app/src/renderer/components/Avatar.tsx` to accept a `backend: "claude" | "opencode"` prop. Render circular for claude (current `border-radius: 50%`) and square for opencode (small radius like 4-6px, not razor-sharp corners). Update all `<Avatar>` call sites (currently in `ContactList.tsx`) to pass the new prop, sourced from `instance.backend`.
 - **Acceptance:**
   - Claude instances render with circular avatars (no visual change from before)
   - OpenCode instances render with rounded-square avatars (~4-6px radius)

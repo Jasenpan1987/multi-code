@@ -18,7 +18,7 @@ Reference project: `apra-amcos-admin-msk`
 
 - Electron (confirmed)
 - Frontend: React + UI library (TBD, reference project uses MUI)
-- UI aesthetic: Classic QQ (early 2000s) — compact, information-dense, no modern bloat
+- UI aesthetic: compact, information-dense, no modern bloat
 
 ## Project Structure (Expected)
 

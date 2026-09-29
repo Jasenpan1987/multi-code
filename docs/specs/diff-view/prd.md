@@ -178,7 +178,7 @@ switching to VS Code, finding the change, and coming back to type a question abo
 - **Performance:** computing a diff must not block the UI thread; the git work happens in the main process. A typical file (<2000 lines) opens without a perceptible wait.
 - **Stability:** no diff failure may affect the terminal, the PTY, or git polling. All `git` invocations are guarded and time out.
 - **Read-only:** the feature issues only read-only git commands. No `git add`, `checkout`, `restore`, `stash`, or `apply`, in any code path.
-- **Aesthetic:** QQ-style, compact, information-dense. Monospace, same font as the terminal, tight line height. Diff colours must work in both themes (light and dark).
+- **Aesthetic:** Compact, information-dense. Monospace, same font as the terminal, tight line height. Diff colours must work in both themes (light and dark).
 
 ## Technical Constraints
 

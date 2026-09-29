@@ -118,7 +118,7 @@ the UI. No manager involved, nothing writes to any terminal.
   Poll rather than watch — the number changes only when a turn completes, so refreshing on
   the existing instance-activity event plus a slow interval (30s) is enough; do not add a
   file watcher.
-  Display is compact per the QQ aesthetic: the token count abbreviated (`452k`), and a
+  Display is compact: the token count abbreviated (`452k`), and a
   percentage only when the window size is known. **The window size is not in the
   transcript** — keep a small model→window map in the main process, and show the bare count
   with no percentage for an unrecognised model rather than guessing a denominator.

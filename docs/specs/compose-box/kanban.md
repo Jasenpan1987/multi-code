@@ -91,7 +91,7 @@ normal terminal behavior fully intact when the box is closed.
 - **Status:** done
 - **Story:** Story 1 + Story 2
 - **Description:** Build the `ComposeBox` React component: an overlay anchored to the bottom of the
-  active terminal area (inside/over `.content-terminal`, see `global.css:361`), QQ-input-bar feel,
+  active terminal area (inside/over `.content-terminal`, see `global.css:361`),
   compact and information-dense, themed via the existing CSS-variable theme system (light/dark/
   sepia). Contains a multi-line `<textarea>` (auto-grow within a max height, scroll past that)
   showing every character with no collapsing, and a small hint line:
@@ -250,7 +250,7 @@ picking these up. Each is independent of the others.
     chip in place of (or alongside) the filename.
   - Add thumbnail styles to `global.css` near the existing `.compose-chip*` block (`global.css:860`):
     a fixed small box (e.g. ~32–40px square), `object-fit: cover`, rounded corners, keep the remove
-    (×) button. Keep it compact / information-dense per the QQ aesthetic and themed via the existing
+    (×) button. Keep it compact / information-dense and themed via the existing
     `--compose-chip-*` CSS variables.
 - **Acceptance:**
   - Pasting an image into the box shows a real thumbnail of that image in the chip (not just a

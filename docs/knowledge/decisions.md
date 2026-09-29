@@ -8,7 +8,7 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 **Decision:** The "View" toolbox section shows one Markdown file at a time. Opening a new path replaces the current one — no tabs, no open-file list. Open-path state is per-instance and follows the selected instance.
 
-**Why:** The core use is glancing at an `.md` an agent just generated, not curating a multi-doc workspace. The right column is narrow; tabs would crowd it against the QQ compact aesthetic. Per-instance state is mandatory because relative paths must resolve against each instance's own cwd — a global "current file" would resolve the wrong directory.
+**Why:** The core use is glancing at an `.md` an agent just generated, not curating a multi-doc workspace. The right column is narrow; tabs would crowd it against the compact layout. Per-instance state is mandatory because relative paths must resolve against each instance's own cwd — a global "current file" would resolve the wrong directory.
 
 **Source:** 2026-07-09 markdown-view ideation.
 **Affects:** View section UI; Toolbox state (a per-instance open-path map alongside `expandedByInstance`).

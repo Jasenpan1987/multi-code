@@ -2,7 +2,7 @@
 
 > [English](./README.md)
 
-一个桌面应用,用单一界面管理多个终端型编码 agent 会话。支持两种后端:**Claude Code** 和 **OpenCode**,而且可以混着用。本质上是一个带 QQ 经典皮肤的终端多路复用器(QQ 是 2000 年代初的中文聊天软件),每个 agent 会话作为侧边栏里的"联系人"出现,保留完整的终端能力和通知。
+一个桌面应用,用单一界面管理多个终端型编码 agent 会话。支持两种后端:**Claude Code** 和 **OpenCode**,而且可以混着用。每个 agent 会话在侧边栏里占一行,保留完整的终端能力和通知。
 
 **零残留:** Multi-Code 直接 spawn 真实的 `claude` / `opencode` CLI,从不往它们的配置或 session 目录里写东西。卸载这个 app 不会在 `~/.claude/`、`~/.config/opencode/` 或你的项目里留下任何痕迹,它只保存自己那份很小的联系人列表(见[数据持久化](#数据持久化))。
 
@@ -56,7 +56,7 @@
 - **可吊销** — 每台配对的手机有自己的 token,吊销一台立刻断开,不影响别的
 
 ### 视觉 / 体验
-- **QQ 美学** — Aqua 蓝渐变,紧凑头像,熟悉的侧边栏布局
+- **紧凑布局** — 侧边栏排得密、头像小、蓝色渐变外框,一屏能放下很多会话
 - **主题** — 亮色、暗色、护眼(sepia)三种,右上角切换
 - **一眼区分后端** — Claude Code 实例是**圆形**头像、蓝色窗口外框;OpenCode 实例是**圆角方形**头像、绿色外框。标题栏也会写明是哪个后端
 - **Manager 置顶** — Manager 那一行永远在列表最上面,样式跟项目区分开
@@ -107,7 +107,7 @@ multi-code/
 │       │   │   ├── hooks/            # useNotifications、useTheme
 │       │   │   ├── audio/            # Web Audio 通知音
 │       │   │   ├── assets/           # 图标(gaming.png)、声音文件
-│       │   │   └── styles/           # 全局 CSS(QQ 主题)
+│       │   │   └── styles/           # 全局 CSS
 │       │   ├── renderer-mobile/ # 手机互联的网页客户端(发给手机用)
 │       │   └── shared/         # 共享 TypeScript 类型
 │       ├── package.json
@@ -407,4 +407,4 @@ Multi-Code 自己存的东西都在 Electron 的 userData 目录里。macOS 上�
 
 ## 许可
 
-私有 / 内部使用。
+[MIT](./LICENSE)

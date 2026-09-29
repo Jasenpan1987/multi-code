@@ -3,6 +3,7 @@
   "version": "0.6.0",
   "description": "Multi-Code — Claude Code instance manager",
   "author": "Jasen Pan",
+  "license": "MIT",
   "main": "dist/main/index.js",
   "scripts": {
     "start": "pnpm build && electron .",

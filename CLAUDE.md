@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Multi-Code is an Electron desktop app that manages multiple Claude Code CLI instances. It spawns real `claude` CLI processes via node-pty and renders their output in xterm.js terminals. The UI follows a classic QQ (early-2000s chat app) aesthetic.
+Multi-Code is an Electron desktop app that manages multiple Claude Code CLI instances. It spawns real `claude` CLI processes via node-pty and renders their output in xterm.js terminals. The UI is compact and information-dense: a sidebar of sessions, a terminal, and a toolbox.
 
 ## Architecture
 
@@ -59,7 +59,7 @@ a release context so the number isn't pushed on every build.
 - All project files (code, comments, commit messages) in English
 - No unnecessary abstractions — keep it simple and direct
 - Prefer editing existing files over creating new ones
-- UI should stay compact and information-dense (QQ aesthetic)
+- UI should stay compact and information-dense
 
 ## Data Storage
 

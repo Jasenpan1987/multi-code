@@ -41,7 +41,7 @@ graph TD
 - **Blocks:** T-002, T-004
 - **Blocked by:** none
 - **Parallel with:** none
-- **Notes:** Match QQ aesthetic — keep styling compact, no fancy animations. Add styles to existing CSS files in `workspace/app/src/renderer/styles/`. Don't introduce a new component library for the accordion; build it with plain React + CSS.
+- **Notes:** Keep styling compact, no fancy animations. Add styles to existing CSS files in `workspace/app/src/renderer/styles/`. Don't introduce a new component library for the accordion; build it with plain React + CSS.
 
 ---
 
@@ -67,7 +67,7 @@ graph TD
 - **Type:** feature
 - **Status:** done
 - **Story:** Story 3 (Git section display + polling)
-- **Description:** Implement the Git section's contents inside the accordion shell from T-001. Component: `GitSection` in `workspace/app/src/renderer/components/`. When the section is expanded AND an instance is selected, call `window.electronAPI.getGitStatus(instanceId)` immediately, then poll every 5 seconds. Stop polling when section is collapsed or instance changes. On instance change, immediately fetch (don't wait 5s). Render: branch name, file counts (`new: N · modified: N · staged: N`), remote status (`↑ahead ↓behind`). If `available: false`, render "Not a git repository". Style consistent with QQ aesthetic.
+- **Description:** Implement the Git section's contents inside the accordion shell from T-001. Component: `GitSection` in `workspace/app/src/renderer/components/`. When the section is expanded AND an instance is selected, call `window.electronAPI.getGitStatus(instanceId)` immediately, then poll every 5 seconds. Stop polling when section is collapsed or instance changes. On instance change, immediately fetch (don't wait 5s). Render: branch name, file counts (`new: N · modified: N · staged: N`), remote status (`↑ahead ↓behind`). If `available: false`, render "Not a git repository". Style consistent with the rest of the app.
 - **Acceptance:**
   - Selecting a git project's instance shows branch + counts within ~1s
   - Status updates within 5s when files change in the project
@@ -89,7 +89,7 @@ graph TD
 - **Acceptance:**
   - Quick Actions section renders when expanded
   - Empty state OK (no buttons yet) — visual stack ready to receive children
-  - Button styling matches QQ aesthetic: full-width, compact, hover state
+  - Button styling matches the rest of the app: full-width, compact, hover state
 - **Blocks:** T-005, T-006, T-007
 - **Blocked by:** T-001
 - **Parallel with:** T-002

@@ -32,7 +32,7 @@ The current input flow is: user types into xterm.js → `terminal.onData()` → 
 The builder wants a draft area that is fully visible and mouse-editable **before** sending. The
 pain is specifically pre-send visibility — folding after send is acceptable.
 
-An always-on bottom input bar (QQ-style) was considered and rejected: claude is a full-screen TUI
+An always-on bottom input bar was considered and rejected: claude is a full-screen TUI
 that owns arrow keys, Esc, Ctrl+C, the `/` command menu, `@` completion, Shift+Tab, and history
 navigation. Capturing all keyboard input into a textarea would break those. The resolution is an
 **optional, hotkey-summoned** box.
@@ -55,7 +55,7 @@ navigation. Capturing all keyboard input into a textarea would break those. The 
 
 **Acceptance Criteria:**
 - [ ] Pressing **Cmd+L** while an instance is selected opens the compose box for that instance
-- [ ] The compose box is an overlay anchored to the bottom of the active terminal area (QQ input-bar feel)
+- [ ] The compose box is an overlay anchored to the bottom of the active terminal area
 - [ ] On open, keyboard focus moves into the box's textarea automatically
 - [ ] Pressing **Esc** while the box is open discards its content and closes it
 - [ ] On close (whether by send or cancel), keyboard focus returns to the terminal
@@ -151,7 +151,7 @@ navigation. Capturing all keyboard input into a textarea would break those. The 
 
 - **Performance:** Opening/closing the box and sending must not introduce visible terminal I/O lag.
 - **Stability:** Failure to read/save a clipboard image must not crash the app or corrupt the textarea; the text portion should still send.
-- **Aesthetic:** Match the existing QQ-inspired style; the box should feel native to the app, anchored at the bottom of the terminal, compact and information-dense.
+- **Aesthetic:** Match the existing visual style; the box should feel native to the app, anchored at the bottom of the terminal, compact and information-dense.
 - **Non-intrusive:** When unused, zero behavioral change to existing terminal/TUI interaction.
 
 ## Technical Constraints

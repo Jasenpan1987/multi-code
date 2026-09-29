@@ -62,7 +62,7 @@ export function App() {
   } | null>(null);
 
   const { notify, markRead } = useNotifications();
-  // Per-instance timestamp of the last audible alert, for the QQ-style
+  // Per-instance timestamp of the last audible alert, for the
   // burst-collapse cooldown. Only real alerts record here, so a
   // suppressed-while-watching event doesn't eat cooldown. Lifted out of the
   // effect below because the effect re-subscribes on every instances change
@@ -159,7 +159,7 @@ export function App() {
   // ("waiting") and when the agent is waiting on a yes/no prompt ("prompt").
   // Both get the same beep + flash, so we don't branch on the type here.
   //
-  // The beep and dock bounce are gated by the QQ-style attention policy:
+  // The beep and dock bounce are gated by the attention policy:
   // silent while the user is already looking at this instance (window focused
   // and instance selected), and collapsed when "prompt" + "waiting" land in
   // one burst (5s per-instance cooldown). "prompt" is urgent — the agent is
@@ -184,14 +184,14 @@ export function App() {
         // Play sound when the agent needs attention (gated above).
         playMessageSound();
         // Bounce the Dock — macOS only bounces if app is not in front,
-        // which is exactly the QQ-style behavior we want.
+        // which is exactly the behavior we want.
         window.electronAPI.bounceDock();
       }
 
       const inst = instances.find((i) => i.id === id);
       if (!inst) return;
 
-      // Flash for every instance — including the selected one (QQ-style).
+      // Flash for every instance — including the selected one.
       notify(id, inst.name);
 
       // If it's the currently selected one, the user is already looking at it,

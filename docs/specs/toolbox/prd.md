@@ -189,7 +189,7 @@ The current UI is two columns: contact list | terminal. As the builder uses Mult
   - Failure of git command must not crash the toolbox or affect terminal operation
   - Failure of `code` command must not crash the app
 - **Aesthetic:**
-  - Match existing QQ-inspired visual style; toolbox should feel like part of the existing UI, not bolted on
+  - Match existing visual style; toolbox should feel like part of the existing UI, not bolted on
 
 ## Technical Constraints
 

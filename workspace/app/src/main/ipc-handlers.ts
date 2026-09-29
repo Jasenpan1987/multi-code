@@ -338,7 +338,7 @@ export function registerIpcHandlers() {
   ipcMain.on("bounce-dock", () => {
     if (process.platform === "darwin" && app.dock) {
       // "informational" bounces once briefly. Use "critical" for sustained
-      // bouncing until the user activates the app — matches QQ behavior.
+      // bouncing until the user activates the app.
       app.dock.bounce("critical");
     }
   });

@@ -1,6 +1,6 @@
 /* Mobile client styling. Dark by default (this gets used at night, one-handed)
    and sized for thumbs rather than for the desktop app's information density —
-   the QQ aesthetic doesn't transfer to a 390px-wide touch screen. */
+   the desktop layout doesn't transfer to a 390px-wide touch screen. */
 
 :root {
   --m-bg: #141518;

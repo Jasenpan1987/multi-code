@@ -1,5 +1,5 @@
 /* Theme variables — outer chrome (titlebar, sidebar, header) keeps the
-   classic QQ blue across all themes; only the inner panels (content area,
+   same blue across all themes; only the inner panels (content area,
    toolbox body, terminal section, overlays) re-skin per theme. */
 :root {
   --content-bg: #f0f4fa;
@@ -202,7 +202,7 @@ body,
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
-/* Sidebar — classic QQ blue panel */
+/* Sidebar — blue panel */
 .sidebar {
   width: 180px;
   min-width: 180px;
@@ -327,7 +327,7 @@ body,
   font-style: italic;
 }
 
-/* Contact items — classic QQ friend list */
+/* Contact items */
 .contact-item {
   display: flex;
   align-items: center;
@@ -416,7 +416,7 @@ body,
 }
 
 /* Context usage, right-aligned on the same line as the project name. No
-   per-theme override: the sidebar keeps the QQ blue in every theme (see the
+   per-theme override: the sidebar keeps the same blue in every theme (see the
    variables block at the top of this file).
 
    `font-weight: normal` because `.contact-item.unread` bolds the whole row, and
@@ -1568,11 +1568,11 @@ body,
 /* ============================================================================
    OpenCode backend skin — re-tints ONLY the outer chrome (titlebar, sidebar,
    header, toolbox section headers, sidebar/quick-action buttons) from the
-   classic QQ blue to a matching green. The inner panels (content area, toolbox
+   blue to a matching green. The inner panels (content area, toolbox
    body, terminal, compose box) stay on the shared per-theme variables and are
    deliberately left alone. Scoped to `.app-container[data-backend="opencode"]`,
    which App sets from the SELECTED instance's backend, so the chrome tracks
-   selection. Green shades mirror the blue palette's lightness so the QQ look
+   selection. Green shades mirror the blue palette's lightness so the overall look
    is preserved — only the hue shifts.
    Blue → green reference:
      #a8d4ff/#7eb8ee/#4f93d4/#3878b8 (gradients) → #a6e6b4/#7fd492/#4bb066/#2f9450

@@ -145,7 +145,7 @@ closes cleanly.
   - Typing while the overlay is open sends nothing to the PTY
   - The overlay contains no control that writes anything — verified by inspection
 - **Blocks:** T-305 · **Blocked by:** T-303 · **Parallel with:** T-301, T-302
-- **Notes:** Follow `NewInstanceDialog.tsx` for the modal conventions already in the app (backdrop class names, Esc handling, focus management) instead of introducing a second modal idiom. QQ aesthetic: thin border, flat title bar, no rounded-corner drop-shadow modern look.
+- **Notes:** Follow `NewInstanceDialog.tsx` for the modal conventions already in the app (backdrop class names, Esc handling, focus management) instead of introducing a second modal idiom. Visual style: thin border, flat title bar, no rounded-corner drop-shadow modern look.
 
 ---
 

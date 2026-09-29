@@ -22,7 +22,7 @@ Builder wants a "draft / compose" area where:
 **Scope — claude only for MVP.** OpenCode is explicitly out. Its paste/image behavior is not
 validated and not in scope this round.
 
-**Form factor — optional pop-up, not always-on.** An always-on QQ-style bottom bar was
+**Form factor — optional pop-up, not always-on.** An always-on bottom bar was
 considered and rejected: claude is a full-screen TUI that owns arrow keys, Esc, Ctrl+C, the `/`
 command menu, `@` completion, Shift+Tab, history nav. Capturing all keyboard input would break
 those. Resolution: **optional, hotkey-summoned** box. Normal TUI work is unchanged.

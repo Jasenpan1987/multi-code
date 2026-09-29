@@ -3,7 +3,7 @@ import type { ThemeName } from "../shared/types";
 
 // Two xterm palettes per theme: the main agent terminal (TerminalView) and
 // the toolbox shell terminal (TerminalSection). Outer chrome (titlebar,
-// sidebar, content header) keeps the QQ blue accent in every theme.
+// sidebar, content header) keeps the same blue accent in every theme.
 
 export interface ThemePalette {
   // Inner backgrounds used by CSS via [data-theme="..."] selectors.
@@ -47,7 +47,7 @@ const lightShell: ITheme = {
 };
 
 // Dark: VS Code-ish charcoal for inner panels, while outer titlebar/sidebar
-// keep the QQ blue. Both terminals share the same dark palette.
+// keep the same blue. Both terminals share the same dark palette.
 const darkMain: ITheme = {
   background: "#1e1e1e",
   foreground: "#d4d4d4",
