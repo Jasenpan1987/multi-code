@@ -36,6 +36,11 @@
   --diff-empty-bg: #f6f7f9;
   --diff-selected-bg: rgba(45, 90, 138, 0.14);
   --diff-selected-edge: #2d5a8a;
+  /* Overview ruler marks need full-strength colour to read at a few pixels. */
+  --diff-ruler-add: #2da44e;
+  --diff-ruler-del: #e5534b;
+  --diff-ruler-view: rgba(45, 90, 138, 0.16);
+  --diff-ruler-view-edge: rgba(45, 90, 138, 0.45);
 }
 
 [data-theme="dark"] {
@@ -71,6 +76,10 @@
   --diff-empty-bg: #191919;
   --diff-selected-bg: rgba(107, 163, 214, 0.2);
   --diff-selected-edge: #6ba3d6;
+  --diff-ruler-add: #3fb950;
+  --diff-ruler-del: #f85149;
+  --diff-ruler-view: rgba(255, 255, 255, 0.12);
+  --diff-ruler-view-edge: rgba(255, 255, 255, 0.35);
 }
 
 /* In dark mode, retint inner-panel text/icon colors so they remain
@@ -153,6 +162,10 @@
   --diff-empty-bg: #f0e8d4;
   --diff-selected-bg: rgba(90, 74, 48, 0.14);
   --diff-selected-edge: #5a4a30;
+  --diff-ruler-add: #5f8a2e;
+  --diff-ruler-del: #b5533c;
+  --diff-ruler-view: rgba(90, 74, 48, 0.16);
+  --diff-ruler-view-edge: rgba(90, 74, 48, 0.45);
 }
 
 * {
@@ -2258,6 +2271,15 @@ body,
   flex: none;
 }
 
+/* Maximized fills the app window edge to edge and can't be dragged. */
+.diff-window.maximized {
+  border-radius: 0;
+}
+
+.diff-window.maximized .diff-window-header {
+  cursor: default;
+}
+
 .diff-window-path {
   font-family: "Menlo", "Consolas", monospace;
   font-size: 12px;
@@ -2297,11 +2319,62 @@ body,
   color: #c33;
 }
 
+/* The scrolling body and the overview ruler side by side. */
+.diff-window-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
 .diff-window-body {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   overflow: auto;
   background: #fff;
+}
+
+/* Where the changes are in the whole file, one lane per side: old on the left,
+   new on the right. Stops short of the bottom so the resize grip never covers a
+   mark at the end of the file. */
+.diff-ruler {
+  position: relative;
+  flex: none;
+  width: 14px;
+  margin-bottom: 14px;
+  border-left: 1px solid var(--diff-sep);
+  border-bottom: 1px solid var(--diff-sep);
+  background: var(--diff-empty-bg);
+  cursor: pointer;
+}
+
+.diff-ruler-mark {
+  position: absolute;
+  width: 5px;
+  /* A one-line change in a long file would otherwise round to nothing. */
+  min-height: 3px;
+  pointer-events: none;
+}
+
+.diff-ruler-mark[data-side="old"] {
+  left: 1px;
+  background: var(--diff-ruler-del);
+}
+
+.diff-ruler-mark[data-side="new"] {
+  right: 1px;
+  background: var(--diff-ruler-add);
+}
+
+/* The part of the file currently on screen. */
+.diff-ruler-view {
+  position: absolute;
+  left: 0;
+  right: 0;
+  min-height: 6px;
+  background: var(--diff-ruler-view);
+  box-shadow: inset 0 0 0 1px var(--diff-ruler-view-edge);
+  pointer-events: none;
 }
 
 [data-theme="dark"] .diff-window {
@@ -2375,17 +2448,19 @@ body,
 
 /* One grid for both sides: a row is four cells, so alignment is structural and
    cannot drift the way two scroll containers kept in sync by script can. Long
-   lines are not wrapped — the whole grid scrolls sideways instead, so a line's
-   indentation stays readable. */
+   lines wrap inside their own half rather than widening the grid, so the old and
+   new versions are always both on screen; the row takes the height of its taller
+   side. */
 .diff-grid {
   display: grid;
-  /* 1fr keeps the two halves even whatever the window's width, and `min-width:
-     min-content` is what stops that from clipping: when the longest line needs
-     more room than the window has, the grid grows past it and scrolls sideways
-     instead of truncating. A fixed vw minimum was tried and broke as soon as the
-     window was resized smaller than the viewport. */
-  grid-template-columns: auto 1fr auto 1fr;
-  min-width: min-content;
+  /* minmax(0, 1fr) holds the halves at exactly half each: a plain 1fr can't go
+     below its longest line, and one long line on either side used to widen both
+     halves until the new version was pushed off screen. The gutters are
+     max-content so a 4-digit line number always fits. */
+  grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
+  /* The overview ruler measures rows by offsetTop, which needs the grid to be
+     their offset parent. */
+  position: relative;
   font-family: "Menlo", "Consolas", monospace;
   font-size: 12px;
   line-height: 1.45;
@@ -2412,8 +2487,12 @@ body,
   border-left: 2px solid var(--diff-sep);
 }
 
+/* pre-wrap keeps indentation and wraps only where the line runs out of room;
+   `anywhere` also breaks a token with no spaces in it, such as a long URL, which
+   would otherwise spill into the other half. */
 .diff-text {
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   padding: 0 6px;
   color: var(--diff-text-fg);
 }

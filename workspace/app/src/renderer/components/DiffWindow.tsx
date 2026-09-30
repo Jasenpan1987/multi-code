@@ -1,5 +1,6 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { diffErrorMessage, offersEditorFallback } from "./diffErrors";
+import { overviewMarks } from "./diffOverview";
 import { refForRange } from "./diffRef";
 import type { DiffRow, DiffSide, FileDiff } from "../../shared/types";
 
@@ -57,6 +58,26 @@ function initialRect(): Rect {
   };
 }
 
+/** Fills the app window below its titlebar. */
+function maximizedRect(): Rect {
+  return {
+    left: 0,
+    top: MIN_TOP,
+    width: window.innerWidth,
+    height: window.innerHeight - MIN_TOP,
+  };
+}
+
+/** Pulls a rect back so it can always be grabbed, and fits it in the app window. */
+function keepOnScreen(rect: Rect): Rect {
+  return {
+    left: clamp(rect.left, KEEP_VISIBLE - rect.width, window.innerWidth - KEEP_VISIBLE),
+    top: clamp(rect.top, MIN_TOP, window.innerHeight - MIN_TOP),
+    width: Math.min(rect.width, window.innerWidth),
+    height: Math.min(rect.height, window.innerHeight - MIN_TOP),
+  };
+}
+
 /**
  * A read-only view of one file's diff, in a window the user can move and resize.
  *
@@ -84,6 +105,9 @@ export function DiffWindow({
     head: number;
   } | null>(null);
   const [rect, setRect] = useState<Rect>(initialRect);
+  // Where to go back to while maximized; null when not maximized.
+  const [restoreRect, setRestoreRect] = useState<Rect | null>(null);
+  const maximized = restoreRect !== null;
   const draggingRef = useRef(false);
 
   // Refetched whenever the window is pointed at another file. Deliberately not
@@ -133,24 +157,29 @@ export function DiffWindow({
     return () => window.removeEventListener("mouseup", onUp);
   }, []);
 
-  // Keep the window reachable if the app window shrinks under it.
+  // Keep the window reachable if the app window shrinks under it, and keep a
+  // maximized one filling it.
   useEffect(() => {
     const onResize = () => {
-      setRect((prev) => ({
-        ...prev,
-        left: clamp(
-          prev.left,
-          KEEP_VISIBLE - prev.width,
-          window.innerWidth - KEEP_VISIBLE
-        ),
-        top: clamp(prev.top, MIN_TOP, window.innerHeight - MIN_TOP),
-        width: Math.min(prev.width, window.innerWidth),
-        height: Math.min(prev.height, window.innerHeight - MIN_TOP),
-      }));
+      setRect((prev) => (maximized ? maximizedRect() : keepOnScreen(prev)));
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, []);
+  }, [maximized]);
+
+  // Double-clicking the header toggles between filling the app window and the
+  // size and place it had before.
+  const toggleMaximize = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("button")) return;
+    if (restoreRect) {
+      // The app window may have shrunk while this one was maximized.
+      setRect(keepOnScreen(restoreRect));
+      setRestoreRect(null);
+    } else {
+      setRestoreRect(rect);
+      setRect(maximizedRect());
+    }
+  };
 
   // Shared by the title-bar drag and the corner resize: both track the pointer on
   // document, so the gesture survives the pointer leaving the window.
@@ -175,6 +204,9 @@ export function DiffWindow({
   const startMove = (e: React.MouseEvent) => {
     // The × and any other header control keep their own click.
     if ((e.target as HTMLElement).closest("button")) return;
+    // A maximized window stays put until restored. Letting a drag un-maximize it
+    // would also fire on the pixel of jitter in a double-click meant to restore.
+    if (maximized) return;
     const start = rect;
     trackPointer(e, (dx, dy) => {
       setRect({
@@ -261,7 +293,7 @@ export function DiffWindow({
 
   return (
     <div
-      className="diff-window"
+      className={`diff-window${maximized ? " maximized" : ""}`}
       style={{
         left: `${rect.left}px`,
         top: `${rect.top}px`,
@@ -269,7 +301,12 @@ export function DiffWindow({
         height: `${rect.height}px`,
       }}
     >
-      <div className="diff-window-header" onMouseDown={startMove}>
+      <div
+        className="diff-window-header"
+        onMouseDown={startMove}
+        onDoubleClick={toggleMaximize}
+        title={maximized ? "Double-click to restore" : "Double-click to maximize"}
+      >
         <span className="diff-window-path" title={`${cwd}/${relPath}`}>
           {renamed ?? relPath}
         </span>
@@ -322,11 +359,13 @@ export function DiffWindow({
         onGridMouseUp={onGridMouseUp}
       />
 
-      <div
-        className="diff-window-resize"
-        onMouseDown={startResize}
-        title="Resize"
-      />
+      {!maximized && (
+        <div
+          className="diff-window-resize"
+          onMouseDown={startResize}
+          title="Resize"
+        />
+      )}
     </div>
   );
 }
@@ -350,6 +389,9 @@ function DiffBody({
   onGridMouseMove: (e: React.MouseEvent) => void;
   onGridMouseUp: () => void;
 }) {
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+
   if (diff === null) {
     return <div className="diff-window-note">Loading…</div>;
   }
@@ -375,25 +417,30 @@ function DiffBody({
     );
   }
 
-  // Body and footer are siblings so the footer stays put while the diff scrolls.
+  // Body and footer are siblings so the footer stays put while the diff scrolls;
+  // the ruler sits beside the body rather than inside it for the same reason.
   return (
     <>
-      <div className="diff-window-body">
-        <div
-          className="diff-grid"
-          onMouseDown={onGridMouseDown}
-          onMouseMove={onGridMouseMove}
-          onMouseUp={onGridMouseUp}
-        >
-          {diff.rows.map((row, i) => (
-            <DiffGridRow
-              key={i}
-              index={i}
-              row={row}
-              selected={i >= selectedLo && i <= selectedHi}
-            />
-          ))}
+      <div className="diff-window-main">
+        <div className="diff-window-body" ref={bodyRef}>
+          <div
+            className="diff-grid"
+            ref={gridRef}
+            onMouseDown={onGridMouseDown}
+            onMouseMove={onGridMouseMove}
+            onMouseUp={onGridMouseUp}
+          >
+            {diff.rows.map((row, i) => (
+              <DiffGridRow
+                key={i}
+                index={i}
+                row={row}
+                selected={i >= selectedLo && i <= selectedHi}
+              />
+            ))}
+          </div>
         </div>
+        <OverviewRuler rows={diff.rows} bodyRef={bodyRef} gridRef={gridRef} />
       </div>
       {diff.truncated && (
         <div className="diff-window-footer">
@@ -401,6 +448,127 @@ function DiffBody({
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * A strip down the right edge showing where the changes are in the whole file,
+ * like VS Code's diff overview ruler: removed lines in the left lane, added lines
+ * in the right, and a box for the part currently on screen. Clicking or dragging
+ * on it scrolls there.
+ *
+ * Its own component so a scroll re-renders only the ruler, not every grid row.
+ * Everything here is in pixels of the grid, not row indices: long lines wrap, so
+ * rows differ in height and a row's index says nothing about where it sits.
+ */
+function OverviewRuler({
+  rows,
+  bodyRef,
+  gridRef,
+}: {
+  rows: DiffRow[];
+  bodyRef: React.RefObject<HTMLDivElement | null>;
+  gridRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const marks = useMemo(() => overviewMarks(rows), [rows]);
+  // Where each mark sits, as fractions of the grid's height. Empty until measured.
+  const [spans, setSpans] = useState<{ top: number; height: number }[]>([]);
+  // The visible part of the body, as fractions of its full scroll height.
+  const [view, setView] = useState({ top: 0, height: 1 });
+
+  useEffect(() => {
+    const body = bodyRef.current;
+    const grid = gridRef.current;
+    if (!body || !grid) return;
+    // Four cells per row, the same structure the grid's nth-child rules rely on;
+    // indexing children beats a selector lookup per mark across 20k cells.
+    const cellAt = (row: number) => grid.children[row * 4] as HTMLElement;
+    const measure = () => {
+      const total = grid.offsetHeight;
+      if (total <= 0) return;
+      setSpans(
+        marks.map((mark) => {
+          const top = cellAt(mark.start).offsetTop;
+          const last = cellAt(mark.end - 1);
+          return {
+            top: top / total,
+            height: (last.offsetTop + last.offsetHeight - top) / total,
+          };
+        })
+      );
+    };
+    const updateView = () => {
+      const { scrollTop, scrollHeight, clientHeight } = body;
+      if (scrollHeight <= 0) return;
+      setView({
+        top: scrollTop / scrollHeight,
+        height: Math.min(clientHeight / scrollHeight, 1),
+      });
+    };
+    measure();
+    updateView();
+    body.addEventListener("scroll", updateView, { passive: true });
+    // Resizing the window rewraps long lines, which moves every mark, and
+    // changes how much of the file fits on screen.
+    const observer = new ResizeObserver(() => {
+      measure();
+      updateView();
+    });
+    observer.observe(body);
+    observer.observe(grid);
+    return () => {
+      body.removeEventListener("scroll", updateView);
+      observer.disconnect();
+    };
+  }, [bodyRef, gridRef, marks]);
+
+  const onMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const ruler = e.currentTarget;
+    // Centres the clicked point on screen, the way VS Code's ruler does.
+    const scrollTo = (clientY: number) => {
+      const body = bodyRef.current;
+      if (!body) return;
+      const box = ruler.getBoundingClientRect();
+      const fraction = clamp((clientY - box.top) / box.height, 0, 1);
+      body.scrollTop = fraction * body.scrollHeight - body.clientHeight / 2;
+    };
+    scrollTo(e.clientY);
+    const onMove = (ev: MouseEvent) => scrollTo(ev.clientY);
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
+  return (
+    <div
+      className="diff-ruler"
+      onMouseDown={onMouseDown}
+      title="Changes in this file — click to jump"
+    >
+      {spans.length === marks.length &&
+        marks.map((mark, i) => (
+          <span
+            key={`${mark.side}-${mark.start}`}
+            className="diff-ruler-mark"
+            data-side={mark.side}
+            style={{
+              top: `${spans[i].top * 100}%`,
+              height: `${spans[i].height * 100}%`,
+            }}
+          />
+        ))}
+      <span
+        className="diff-ruler-view"
+        style={{
+          top: `${view.top * 100}%`,
+          height: `${view.height * 100}%`,
+        }}
+      />
+    </div>
   );
 }
 
