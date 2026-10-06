@@ -56,7 +56,7 @@ Multi-Code is a **general-purpose AI coding-agent orchestration hub** — not sp
 
 - **Backends supported:** Claude Code (since v1), OpenCode (added in opencode-support epic). Architecture is designed to add more (Cursor, aider, etc.) without significant rework.
 - **Per-instance backend lock-in:** each instance picks its backend at creation and is locked to it for life. Same cwd may simultaneously host instances from different backends (legitimate use case: collaborator uses opencode, builder uses claude on the same project).
-- **Behavioral parity is mandatory:** the user experience for managing a claude instance vs an opencode instance must be as identical as possible. Notifications, completion detection, session ID handling, Quick Actions etc. all use a unified abstraction (the hook channel) so neither backend feels like a second-class citizen.
+- **Behavioral parity is mandatory:** the user experience for managing a claude instance vs an opencode instance must be as identical as possible. Notifications, completion detection, session ID handling, Quick Actions etc. all go through one backend abstraction, so neither backend feels like a second-class citizen.
 
 Why this matters: the original positioning (Claude Code orchestration) tied Multi-Code's identity to one vendor. Builder explicitly wants the project to outlast vendor preferences — colleagues use opencode, builder uses claude, and Multi-Code should treat both as first-class.
 
@@ -77,10 +77,10 @@ Each instance has a `backend` field (`"claude"` or `"opencode"`) chosen at creat
 
 1. **Spawner**: which CLI binary, which flags. (Currently: `claude --continue` vs `opencode --continue`. Existing-contacts migration: defaults to `claude`.)
 2. **Session discoverer**: how to find the sessionId for a running instance. claude scans `~/.claude/sessions/*.json` matching cwd; opencode queries `~/.local/share/opencode/opencode.db` `session` table.
-3. **Completion detector**: how to detect "agent finished a turn" or "permission requested". claude polls the session jsonl; opencode polls the sqlite `message` table. Both emit identical higher-level events (`turn_complete`, `permission_request`).
+3. **Completion detector**: how to detect "agent finished a turn" or "permission requested". claude polls the session jsonl; opencode polls the sqlite `message` table. Both emit identical higher-level events (`turn_complete`, `permission_request`). Decided 2026-10-06: claude moves to report-only hooks injected with `--settings` (epic `attention-alerts`); until that ships, it polls the jsonl as described.
 4. **Resume command builder**: produces `claude --resume <id>` or `opencode --session <id>` for the Resume Elsewhere button.
 5. **Visual identity**: avatar shape (circle for claude, square for opencode).
 
-**Zero-residue principle:** Multi-Code is strictly a read-only observer of the agents' own state files. It does not modify user configuration (no hooks, no plugins, no settings injection). Uninstalling Multi-Code leaves no trace in claude/opencode behavior.
+**Zero-residue principle (revised 2026-10-06):** Multi-Code never writes a file the user owns: not `~/.claude/settings.json`, not a project's `.claude/` or `.opencode/`, not any CLI's global config. An agent run outside Multi-Code behaves exactly as if Multi-Code were not installed. Anything Multi-Code needs an agent to load (its MCP config, report-only hooks) lives in Multi-Code's own `userData` directory and reaches only the processes Multi-Code spawns, through their launch options (`--mcp-config`, `--settings`). Uninstalling Multi-Code leaves no trace in claude/opencode behavior.
 
-(source: 2026-05-18 opencode-support ideation; hook approach was considered and rejected — see timeline entry for rationale)
+(source: 2026-05-18 opencode-support ideation, which rejected hooks because they would have had to be written into the user's own config; revised by the builder on 2026-10-06, when passing them with `--settings` removed that reason — see docs/timeline/2026-10-06_attention-alerts-investigation.md)

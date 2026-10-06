@@ -7,9 +7,10 @@ Multi-Code is an Electron desktop app that manages multiple Claude Code CLI inst
 ## Architecture
 
 - **No abstraction layers** — The app spawns the `claude` CLI directly. No SDK, no bridge, no hooks middleware.
+- **Report-only hooks are allowed** — Passed with `--settings` from `userData` to the processes Multi-Code spawns, never written to the user's own config. They report state and never block or change a call, so plain `claude` outside Multi-Code is unaffected.
 - **Monorepo** — pnpm workspace with `workspace/app/` as the main package.
 - **Electron** — Main process manages PTY lifecycle; renderer shows terminals in React.
-- **Session monitoring** — Watches Claude's `.claude/sessions/` JSONL files to detect agent completion without any API integration.
+- **Session monitoring** — Today, completion is detected by tailing the session JSONL under `~/.claude/projects/`. Moving to report-only hooks (epic `attention-alerts`, `docs/specs/attention-alerts/prd.md`).
 
 ## Key Paths
 

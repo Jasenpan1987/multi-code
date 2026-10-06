@@ -215,3 +215,21 @@ had reacted. The gate was right; the caller was writing at a moment when writes 
 The fix belonged in the tool — wait for the target to settle — and loosening the silence
 guard to make that case pass would have removed the only protection against a write
 landing on a dialog.
+
+## Agent state comes from the agent, never from terminal timing (added 2026-10-06)
+
+Months of notification bugs came from inferring "finished" and "waiting on you" from
+the terminal and the transcript: an `end_turn` row plus a timer, an unpaired `tool_use`
+plus 800ms of PTY silence. Measured 2026-10-06 against CLI 2.1.290, neither holds. The
+TUI repaints exactly once a second while background work runs and goes 0.9s between
+frames during ordinary tool calls, so silence fires mid-work; a Bash permission dialog
+repaints every 0.6s, so the real dialog is never silent; `end_turn` is written when the
+agent hands work to a background subagent, long before it is done. Evidence and the
+probe method: `docs/timeline/2026-10-06_attention-alerts-investigation.md`.
+
+The CLIs report their own state: Claude Code through hooks (`Stop`, `PermissionRequest`,
+`StopFailure`) and the `status`/`waitingFor` fields of `~/.claude/sessions/<pid>.json`;
+OpenCode through plugin events (`session.status`, `permission.asked`, `question.asked`).
+Epic `attention-alerts` moves detection onto those. Until it has shipped for a backend,
+treat that backend's detector as known-unreliable, and fix it by moving to the reported
+state, not by tuning a timing constant or adding a text match.
