@@ -98,6 +98,117 @@ To check the registry by hand: `jq '{status,waitingFor}' ~/.claude/sessions/<pid
 - The CLI emitted no BEL/OSC 9/777. Terminal-title signals are unavailable here because
   the builder's settings set `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1`.
 
+### Hook spike (CLI 2.1.291)
+
+T-401. Same PTY harness as the Method section, rewritten to log each hook's **full stdin
+JSON** (one file per delivery), poll the registry every 50ms, and render the screen with
+`pyte`. A `--settings` file registered 29 of the 33 events 2.1.291 offers, matcher `""`
+(skipped: `WorktreeCreate`/`WorktreeRemove`, whose hooks replace behaviour; `Setup`;
+`FileChanged`). Every spawn had `MULTICODE_INSTANCE_ID=spike-<run>` in its env. Haiku
+unless noted; work dirs under `/tmp/mc-spike/`. The CLI auto-updated 2.1.290 → 2.1.291
+mid-spike; the default-mode group was run on both with the same results, and every saved
+fixture is from 2.1.291. Reproduce on the builder's machine:
+`cd .omt/probes/attention-alerts/spike && uv run --with pyte python3 group_main.py`
+(also `group_modes.py`, `group_misc.py`, `group_rerun.py`, `group_bgshell.py`,
+`group_cost.py`, `group_stopwait.py`, `group_permwait.py`; `show.py <fixture>` prints a
+timeline). Fixtures: `workspace/app/src/main/backends/__fixtures__/claude-hooks/*.json`,
+shape `{cli, scenario, description, deliveries: [{ms, payload}], registry: [{ms, status,
+waitingFor?}], inputs: [{ms, key}]}`, `ms` since the window's first delivery.
+
+Every delivery carries `session_id`, `transcript_path`, `cwd`, `hook_event_name`, and
+(once a prompt exists) `prompt_id`; most carry `permission_mode`. Deliveries from inside a
+subagent add `agent_id` and `agent_type`; the main agent's never do.
+
+1. **Background work at `Stop`: yes, `background_tasks`.** Every `Stop` (and
+   `SubagentStop`) carries `background_tasks: [{id, type, status, description, …}]` and
+   `session_crons: []`. A running subagent is `{type: "subagent", status: "running",
+   agent_type}`; a background Bash is `{type: "shell", status: "running", command}`. The
+   real end is a `Stop` with `background_tasks: []`. Registry at Stop +0/100/300/1000ms:
+   always still `busy` at +0 (`Stop` precedes the registry write by 15–60ms); final by
+   +300ms in every scenario: `idle` on a real finish, `busy` while a subagent runs,
+   `shell` while a background Bash runs, `waiting` when a subagent's dialog is up.
+   **In 2.1.291 every Agent call is launched async** (`tool_response.isAsync: true,
+   status: "async_launched"`), with or without `run_in_background`: the early `Stop` with
+   a running subagent is the normal case, not an edge. A finished background task wakes
+   the main agent with a `UserPromptSubmit` whose `prompt` starts `<task-notification>`,
+   followed by its own `Stop`. That includes a **background shell**: when it exits, the
+   agent runs a second turn and a second `Stop` arrives (`bg-shell`).
+2. **Plan approval.** `PreToolUse` (`ExitPlanMode`) then `PermissionRequest`
+   (`ExitPlanMode`) 25–100ms later, registry `waiting (permission prompt)`. Options: "Yes,
+   auto-accept edits" / "Yes, manually approve edits" / "Tell Claude what to change".
+   Approved: `PostToolUse` (`ExitPlanMode`) ~45ms after the key, plus `PostModelSwitch`
+   (`source: "auto"`) as the mode changes. Esc: no hook, registry `idle`, turn over.
+3. **Auto mode** (`--permission-mode auto`) needs a model that supports it: haiku and the
+   `sonnet` alias (Sonnet 4.5 on Bedrock) show "auto mode unavailable for this model" and
+   silently run in the default mode. On `opus` (the builder's Opus 5.5), `PermissionRequest`
+   fired for AskUserQuestion, ExitPlanMode and an ask-rule Bash call. Under
+   `--dangerously-skip-permissions` it also fired for AskUserQuestion and ExitPlanMode, so
+   cmux #6606 (no `PermissionRequest` in bypass mode) does not reproduce on 2.1.291.
+   **`PermissionRequest` fired for every dialog in every mode measured** (default, plan,
+   auto, bypass).
+4. **MCP input request.** A throwaway stdio MCP server sending `elicitation/create`:
+   `Elicitation` fires ~60ms after the tool's `PreToolUse` with `mcp_server_name`,
+   `message`, `mode: "form"`, `requested_schema`; registry `waiting (input needed)`; no
+   `PermissionRequest`. On submit: `ElicitationResult` (`action: "accept"`, `content`)
+   ~130ms later, a `Notification` (`elicitation_response`), then the tool's `PostToolUse`.
+5. **API error.** `--model claude-does-not-exist-9`: `StopFailure` with
+   `error: "model_not_found"` and `last_assistant_message` holding the API error text.
+   **No `Stop`.** Registry `idle` ~3ms before it. The binary's error enum:
+   `authentication_failed`, `oauth_org_not_allowed`, `account_on_hold`,
+   `verification_required`, `billing_error`, `rate_limit`, `overloaded`,
+   `invalid_request`, `model_not_found`, `server_error`, `unknown`, `max_output_tokens`,
+   `cloud_credential_error` (only `model_not_found` provoked).
+6. **After a dialog.** Approved (Yes; "Yes, and don't ask again"; AskUserQuestion
+   answered; plan approved): that tool's `PostToolUse` 35–70ms after the key (one outlier
+   2.1s while three CLIs ran at once), registry `busy` within ~50ms. **Denied (Esc; "No" in
+   the two-option ask-rule dialog; "No" in the three-option dialog; plan Esc): no hook at
+   all** (no `PermissionDenied`, no `PostToolUseFailure`, no `Stop`); registry `idle` in
+   40–145ms and the turn is over. A dialog forced by an `ask` rule offers only Yes / No;
+   a tool with no rule offers Yes / "Yes, and don't ask again for …" / No, and its
+   `PermissionRequest` carries `permission_suggestions`.
+7. **Ids.** `PreToolUse`/`PostToolUse` carry `tool_use_id`. **`PermissionRequest` carries
+   no `tool_use_id`**, only `tool_name` and a `tool_input` identical to the preceding
+   `PreToolUse`'s (plus `agent_id` from a subagent). `Elicitation` has no tool id either.
+   One dialog produced exactly one `PermissionRequest` in every run, and two dialogs in a
+   row produced two, so keying "needs you" on `PermissionRequest` and `Elicitation` alone
+   needs no dedupe; `PreToolUse` on AskUserQuestion/ExitPlanMode adds nothing on 2.1.291.
+8. **A user Stop hook that blocks** (in the work dir's `.claude/settings.json`, ours in
+   `--settings`: both sources' hooks ran). Our `Stop` (`stop_hook_active: false`), then
+   ~850ms later a second `Stop` (`stop_hook_active: true`) after the forced continuation;
+   registry `busy` the whole gap, `idle` after the second. Related: a **synchronous Stop
+   hook delays the registry's `idle` by its own runtime** (a `sleep 2` hook: `idle` 2045ms
+   after the hook started), so a user's slow-but-not-blocking Stop hook also shows `busy`
+   at +300ms with no second `Stop` to follow. With `"async": true` the registry went
+   `idle` before the hook even started.
+9. **Slash commands.** `/cost`, `/status`, `/model` (closed with Esc): no hooks; registry
+   `waiting` with **`waitingFor: "dialog open"`** while the panel is up, `idle` after.
+   `/compact`: `PreCompact` (`trigger: "manual"`), a `SubagentStop` (`agent_type: ""`,
+   the compaction), `SessionStart` (`source: "compact"`, same `session_id`), `PostCompact`
+   (`trigger: "manual"`, `compact_summary`), registry `idle`. **No `Stop`, no
+   `UserPromptSubmit`.** `/clear`: `SessionEnd` (`reason: "clear"`) on the old id, then
+   `SessionStart` (`source: "clear"`) with a new `session_id`; no `Stop`.
+10. **Subagent identity.** `PreToolUse`, `PostToolUse`, `PostToolBatch` and
+    `PermissionRequest` from inside a subagent carry `agent_id` + `agent_type`. A subagent
+    ends with `SubagentStop` (carrying `agent_id`), never `Stop`.
+11. **Hook environment.** Yes: every hook command saw `MULTICODE_INSTANCE_ID` from the
+    `claude` process's env.
+12. **Two `--settings` flags: the last one wins outright.** Only the second file's hooks
+    fired; the first file's `SessionStart`/`SessionEnd` hooks never ran.
+13. **Cost.** One `curl -K` delivery to a local 204 server: 11ms median outside the CLI.
+    Five Bash `true` calls per condition (transcript `tool_use` → `tool_result`, median):
+    no hooks 29ms; sync curl on `PreToolUse`+`PostToolUse` 67ms; the same with
+    `"async": true` 31ms; sync `sleep 1` on both 2067ms; async `sleep 1` 28ms. So the CLI
+    waits for sync tool hooks, accepts `"async": true`, and async removes the cost.
+    Async deliveries arrived complete and in order. A sync `PermissionRequest` hook running
+    2s did not delay the dialog (registry `waiting` ~25ms after the hook started).
+
+Also measured: `SessionStart` (`source: "startup"`, carries `model`) arrives within ±200ms
+of the registry entry appearing. `InstructionsLoaded` follows it per CLAUDE.md loaded.
+`MessageDisplay` streams the assistant's text (`delta`, `final`) and is noise for alerts.
+`PostToolBatch` follows each batch of tool results. Once, on 2.1.290, the registry went
+`idle` for ~30ms between a subagent's `SubagentStop` and the `<task-notification>` wake
+(not reproduced on 2.1.291): a registry-only reader would have seen a false finish.
+
 ### How comparable apps do it (survey; source read unless marked)
 
 - Orca, cmux, Superset, Agent Deck, Sculptor: Claude Code hooks — `Stop`/`StopFailure`

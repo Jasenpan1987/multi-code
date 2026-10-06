@@ -1,7 +1,7 @@
 # PRD: Attention Alerts
 
-**Version:** 1.4
-**Last Updated:** 2026-10-06
+**Version:** 1.6
+**Last Updated:** 2026-10-07
 **Status:** draft
 **Owner:** Jasen
 
@@ -123,13 +123,20 @@ OpenCode's events keep coming from its existing detector.
 - [ ] When the main agent finishes responding and no background subagent work is running, exactly one Finished event is raised for that instance, within 1s of the CLI's own turn end
 - [ ] When the agent replies while background subagents are still running ("running in the background, I'll report back"), no event is raised; one Finished event is raised after they complete and the agent's final reply ends
 - [ ] A background shell command still running (e.g. a dev server) does not hold back the Finished event
+- [ ] When a background shell command later exits and the CLI wakes the agent to report on it, that turn raises its own Finished event when it ends, with the same chime (G-003). A command that never exits never causes one
 - [ ] A subagent completing never raises an event on its own
 - [ ] A turn the builder interrupts (Esc) raises no event
+- [ ] A turn that ends because the builder denied a dialog (Esc or No) raises no event. ⚠️ Assumption: same as an Esc interrupt, since the builder is the one who just ended it; the CLI ends such a turn without a `Stop`
 - [ ] A turn the CLI ends on an API error (rate limit, overloaded, authentication) raises a Finished event with the same chime as a normal finish, so the builder notices it stopped (G-002)
 - [ ] If one of the builder's own Stop hooks makes the agent keep going, no event is raised until it actually stops
 - [ ] Slash commands that run no model turn (`/model`, `/status`, `/cost`) raise no event
-- [ ] A manual `/compact` raises one Finished event when it completes, if the CLI reports its end; otherwise none. ⚠️ Assumption: compaction takes long enough that the builder looks away
+- [ ] A manual `/compact` raises one Finished event when it completes. The CLI reports its end (`PostCompact`) and sends no `Stop` for it. ⚠️ Assumption: compaction takes long enough that the builder looks away
+- [ ] An automatic compaction in the middle of a turn raises no event of its own
 - [ ] Long-running tools and subagents never raise an event while they run, however long they run and however quiet the screen is
+
+**Notes:**
+- On CLI 2.1.291 every Agent call runs in the background, so a reply that ends while a subagent still runs is the common case, not an edge (source: docs/timeline/2026-10-06_attention-alerts-investigation.md, Hook spike item 1).
+- A turn the CLI starts on its own to report a finished background task counts as a request here: it ends with one Finished event.
 
 ---
 
@@ -144,9 +151,9 @@ OpenCode's events keep coming from its existing detector.
 - [ ] AskUserQuestion, plan approval (ExitPlanMode), and an MCP input request each raise one Needs-you event within 1s
 - [ ] One dialog raises one event, even when several hooks report it
 - [ ] Answering one dialog and getting another raises a second event
-- [ ] When the dialog is answered, at the desk or on a paired phone, the instance leaves the blocked state and a paired phone drops its option buttons
+- [ ] When the dialog is answered, at the desk or on a paired phone, the instance leaves the blocked state and a paired phone drops its option buttons. This includes a denial (Esc or No), for which the CLI sends no hook
 - [ ] A paired phone still shows the question and its options, as it does today
-- [ ] Works in the permission modes the builder uses: default mode with allow rules, and auto mode
+- [ ] Works in the permission modes the builder uses: default mode with allow rules, and auto mode. Also plan mode and bypass mode (`--dangerously-skip-permissions`), which report dialogs the same way (measured on 2.1.291)
 
 ---
 
@@ -187,20 +194,23 @@ OpenCode's events keep coming from its existing detector.
 
 ---
 
-### Story 6: A visible fallback when hooks can't run
+### Story 6: Say so when hooks can't run
 
 **As a** builder
-**I want** to know when an instance can't report through hooks, and still get alerts
+**I want** to be told plainly when an instance can't report through hooks
 **So that** a disabled hook setting doesn't silently bring back the old silence
 
 **Acceptance Criteria:**
-- [ ] If an instance has started but none of its hooks has ever reached Multi-Code, its contact shows a small indicator that alerts are degraded, with the reason on hover
-- [ ] While degraded, Finished and Needs-you events come from the CLI's session registry (`~/.claude/sessions/<pid>.json`): `busy` → `idle` is Finished, a move to `waiting` is Needs you
-- [ ] A registry-derived Finished event follows Story 2 (an Esc interrupt raises none)
-- [ ] An instance whose hooks are working never uses the registry as an event source. Reading it to confirm a reported `Stop` (is the agent really idle, or still busy with background work or a continuing turn) is allowed
+- [ ] If a Claude instance has started (the CLI's session registry lists it) but none of its hooks has reached Multi-Code within 10 seconds, a bar across the top of that instance's page says its hooks aren't running, so Multi-Code can't tell when it finishes or needs you, and to check on it yourself
+- [ ] The same bar shows from the start for an instance spawned while Multi-Code's alert endpoint wasn't running
+- [ ] The bar names the likely causes on hover: `disableAllHooks` in the user's Claude settings, or a managed policy that allows only managed hooks
+- [ ] The bar disappears as soon as a hook delivery from that instance arrives
+- [ ] An instance whose hooks are working never shows it
+- [ ] A degraded instance raises no alerts at all: no chime, red dot or Dock bounce from any other source
+- [ ] OpenCode instances never show it
 
 **Notes:**
-- Priority: Should. Cut-able without breaking Stories 1–5. Hooks stop running when the user sets `disableAllHooks` or an admin enforces managed-hooks-only.
+- Decided by the builder on 2026-10-07: a plain warning instead of a registry-driven fallback. The registry reads `waiting` while a slash-command panel is open and once blinked `idle` mid-handover (T-401), so alerts guessed from it would bring back the false chimes this epic removes. Hooks stop running when the user sets `disableAllHooks` or an admin enforces managed-hooks-only, both rare.
 
 ---
 
@@ -244,19 +254,24 @@ OpenCode's events keep coming from its existing detector.
 - Track 1 is Claude only. OpenCode keeps its current detection until Track 2.
 - Claude injection only through `--settings`, which the CLI merges over the user's own settings rather than replacing them (measured 2026-10-06).
 - OpenCode injection only through `OPENCODE_CONFIG_CONTENT` set in the spawned process's environment, which merges over the user's own config (measured 2026-10-06). `OPENCODE_CONFIG_DIR` also merges model, MCP and plugins but replaces the global config directory, so the user's global `AGENTS.md` is lost.
-- The manager already passes `--settings`; its activity hooks and the new alert hooks must coexist.
+- The manager already passes `--settings`; its activity hooks and the new alert hooks must coexist. The CLI applies only the last `--settings` flag, so they share one file (measured 2026-10-07).
 - No PTY text matching, terminal-title parsing, BEL/OSC parsing, or timing heuristics that infer a state the CLI did not report. A short debounce on a reported event is fine.
 
 ### To verify before building
 
 Measured on CLI 2.1.290 (see the investigation record): `Stop`, `PermissionRequest` for a
 Bash dialog and for AskUserQuestion, no hook on Esc, early `Stop` with background
-subagents, registry `busy`/`waiting`/`shell`/`idle`. Not yet measured:
+subagents, registry `busy`/`waiting`/`shell`/`idle`. The rest was measured on 2.1.291 in
+T-401 (same record, "Hook spike"):
 
-- Whether `Stop` tells us background subagents are still running (docs mention a `background_tasks` field), or whether that must come from elsewhere
-- ExitPlanMode and MCP input requests: which hook fires, if any
-- Auto mode: does `PermissionRequest` still fire for AskUserQuestion and plan approval
-- API-error stop: does `StopFailure` fire, and what the registry shows
+- `Stop` lists still-running background work in `background_tasks`, each with a `type`
+  (`subagent` or `shell`)
+- ExitPlanMode raises `PermissionRequest`; an MCP input request raises `Elicitation`
+- Auto mode (on a model that supports it) and bypass mode still raise `PermissionRequest`
+  for AskUserQuestion and plan approval
+- An API-error stop raises `StopFailure` (with an `error` such as `model_not_found`) and no
+  `Stop`; the registry shows `idle`
+- A denied dialog raises no hook at all; `/compact` ends with `PostCompact`, not `Stop`
 
 For Track 2, measured on OpenCode 1.18.34 (same record). Not yet measured:
 
@@ -266,7 +281,7 @@ For Track 2, measured on OpenCode 1.18.34 (same record). Not yet measured:
 
 ## Dependencies
 
-- Claude Code CLI with `--settings`, `PermissionRequest` and `StopFailure` hooks (present in 2.1.284–2.1.290 on this machine)
+- Claude Code CLI with `--settings`, `PermissionRequest` and `StopFailure` hooks (present in 2.1.284–2.1.291 on this machine), `Stop.background_tasks`, `Elicitation` and `PostCompact` (measured on 2.1.291)
 - The manager's local HTTP server and `/hook` path, or an equivalent listener that runs whenever any Claude instance runs (today the server starts only with the manager)
 - Track 2: OpenCode with `OPENCODE_CONFIG_CONTENT` and plugin events (present in 1.18.34 on this machine), reporting to the same listener
 
@@ -280,7 +295,7 @@ For Track 2, measured on OpenCode 1.18.34 (same record). Not yet measured:
 
 ## Open Questions
 
-See `docs/specs/attention-alerts/gaps.md`. G-001 and G-002 are resolved; none are open.
+See `docs/specs/attention-alerts/gaps.md`. G-001 to G-003 are resolved; none are open.
 
 ## Success Metrics
 
@@ -296,3 +311,5 @@ See `docs/specs/attention-alerts/gaps.md`. G-001 and G-002 are resolved; none ar
 - v1.2 (2026-10-06): OpenCode brought into scope as its own track, after Claude (builder decision). Added Delivery Tracks and Story 7 (OpenCode plugin, from the 1.18.34 probe); removed "changing OpenCode's detection" from Out of Scope.
 - v1.3 (2026-10-06): Story 7 corrected from the OpenCode source research: inject with `OPENCODE_CONFIG_CONTENT`, not `OPENCODE_CONFIG_DIR` (which drops the user's global `AGENTS.md`); subagent dialogs do raise Needs you; an abort clears an open dialog; Finished is the root session's busy→idle. Builder confirmed the two tracks run one after the other in a single line of work.
 - v1.4 (2026-10-06): Clarifications from a cold-read review before handoff: acknowledging by click means the session's own page, not the contact list; a manual `/compact` chimes if the CLI reports its end; a debounce on a reported `Stop` is allowed and is not a timing heuristic; reading the registry to confirm a `Stop` is allowed and is not an event source.
+- v1.5 (2026-10-07): Folded in the T-401 hook spike (CLI 2.1.291). Story 2: the turn after a background shell exits chimes (G-003, builder decision); a denied dialog raises no event (assumption, as Esc); `/compact` ends at `PostCompact`; automatic compaction mid-turn raises nothing; note that every subagent now runs in the background. Story 3: a denial sends no hook; plan and bypass modes report dialogs too. Story 6: registry `waiting (dialog open)` is a slash-command panel, not Needs you; a momentary `idle` on a background wake-up is not Finished. "To verify before building" replaced with the measured answers; Constraints note that only the last `--settings` applies.
+- v1.6 (2026-10-07): Story 6 replaced (builder decision): when an instance's hooks don't run, a bar on that instance's page says so and alerts stop for it; the registry-driven fallback is dropped.
