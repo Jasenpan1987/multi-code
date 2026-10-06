@@ -10,7 +10,7 @@ Multi-Code is an Electron desktop app that manages multiple Claude Code CLI inst
 - **Report-only hooks are allowed** — Passed with `--settings` from `userData` to the processes Multi-Code spawns, never written to the user's own config. They report state and never block or change a call, so plain `claude` outside Multi-Code is unaffected.
 - **Monorepo** — pnpm workspace with `workspace/app/` as the main package.
 - **Electron** — Main process manages PTY lifecycle; renderer shows terminals in React.
-- **Session monitoring** — Today, completion is detected by tailing the session JSONL under `~/.claude/projects/`. Moving to report-only hooks (epic `attention-alerts`, `docs/specs/attention-alerts/prd.md`).
+- **Session monitoring** — Claude instances report finished / needs-you through report-only hooks (`--settings <userData>/alert-settings.json`) posting to the local `/alert` endpoint; `backends/claudeHooks.ts` turns them into activity. OpenCode is still read from its database until Track 2 of epic `attention-alerts` (`docs/specs/attention-alerts/prd.md`). The session JSONL is still read for transcripts and context usage, never for state.
 
 ## Key Paths
 
@@ -65,9 +65,10 @@ a release context so the number isn't pushed on every build.
 ## Data Storage
 
 Everything persisted lives in Electron's `app.getPath("userData")`, which on macOS
-is `~/Library/Application Support/<name>/` — `multi-code` in dev, and whatever
-`productName` resolves to for a packaged build. Never hardcode these paths; call
-`app.getPath("userData")`.
+is `~/Library/Application Support/multi-code/` for a dev build, and `…/Multi-Code/`
+(the `productName`) for the installed app. macOS's default filesystem is
+case-insensitive, so those are the same folder (observed 2026-10-07): running both at
+once, they read the same contacts and overwrite each other's spawn files. Never hardcode these paths; call `app.getPath("userData")`.
 
 - `contacts.json` — the instance list. Each entry: id, cwd (project directory),
   alias (display name), backend
@@ -75,6 +76,12 @@ is `~/Library/Application Support/<name>/` — `multi-code` in dev, and whatever
 - `remote-identity.json`, `remote-devices.json` — phone-link keys and paired devices
 - `manager-mcp.json` — the manager's `--mcp-config`, written 0600 because it carries
   a bearer token; removed on shutdown
+- `manager-settings.json`, `manager-hook.curl` — the manager's `--settings` (its
+  activity hooks plus the alert hooks, one file because the CLI honours only the last
+  `--settings`) and the curl config holding the `/hook` token; 0600, removed on shutdown
+- `alert-settings.json`, `alert-hook.curl` — every other Claude instance's
+  `--settings` (alert hooks only) and the curl config holding the `/alert` token; 0600,
+  removed on shutdown
 
 ## IPC Pattern
 

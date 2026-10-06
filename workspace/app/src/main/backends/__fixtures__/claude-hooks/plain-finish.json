@@ -1,0 +1,69 @@
+{
+  "cli": "2.1.291",
+  "scenario": "plain-finish",
+  "description": "A reply with no tools.",
+  "deliveries": [
+    {
+      "ms": 0,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "b8726fa8-2730-46c4-83c9-61804a764343",
+        "permission_mode": "default",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Reply with just the word hi. Do not use any tools."
+      }
+    },
+    {
+      "ms": 831,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "b8726fa8-2730-46c4-83c9-61804a764343",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "9e4e9ed4-3e86-4b73-a755-b8595689bdf6",
+        "message_id": "0e7386bf-69a6-484e-b253-ed3604d31d5c",
+        "index": 0,
+        "final": true,
+        "delta": "hi"
+      }
+    },
+    {
+      "ms": 834,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "b8726fa8-2730-46c4-83c9-61804a764343",
+        "permission_mode": "default",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "last_assistant_message": "hi",
+        "background_tasks": [],
+        "session_crons": []
+      }
+    }
+  ],
+  "registry": [
+    {
+      "ms": -1848,
+      "status": "idle"
+    },
+    {
+      "ms": -230,
+      "status": "busy"
+    },
+    {
+      "ms": 882,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": -1150,
+      "key": "enter"
+    }
+  ]
+}

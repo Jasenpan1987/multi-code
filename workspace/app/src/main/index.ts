@@ -8,7 +8,11 @@ import {
   registerMdimgProtocol,
 } from "./mdimg-protocol";
 import { initRemote, shutdownRemote } from "./remote";
-import { initManagerActivityFeed, shutdownManagerMcp } from "./manager-mcp";
+import {
+  initManagerActivityFeed,
+  shutdownManagerMcp,
+  startManagerMcpServer,
+} from "./manager-mcp";
 
 // Must run before app 'ready' — privileged scheme registration is only honored
 // pre-ready. The handler itself is installed after ready (in whenReady).
@@ -47,7 +51,7 @@ function createWindow() {
   win.loadFile(path.join(__dirname, "../renderer/index.html"));
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (process.platform === "darwin" && app.dock) {
     try {
       app.dock.setIcon(iconPath);
@@ -59,6 +63,9 @@ app.whenReady().then(() => {
   registerIpcHandlers();
   initRemote();
   initManagerActivityFeed();
+  // Before the window, because the window is what spawns instances, and each
+  // Claude instance needs the server's port and alert token in its launch files.
+  await startManagerMcpServer();
   createWindow();
 });
 
@@ -79,8 +86,6 @@ app.on("before-quit", () => {
   shellManager.cleanup();
   void shutdownRemote();
   // Stops the listener and deletes the mcp-config file, which holds a bearer
-  // token that grants tool access to every managed session. No matching init
-  // call here on purpose: the manager MCP server starts lazily on the first
-  // manager spawn, since the spawn needs its port to write that config.
+  // token that grants tool access to every managed session.
   void shutdownManagerMcp();
 });

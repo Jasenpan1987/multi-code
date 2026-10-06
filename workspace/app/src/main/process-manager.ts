@@ -7,18 +7,22 @@ import type { SavedContact } from "./store";
 import { shellManager } from "./shell-manager";
 import { getBackend } from "./backends";
 import type {
+  AlertDelivery,
   Backend,
   BackendName,
   CompletionDetector,
+  HookAttention,
   SessionDiscovery,
   SpawnOptions,
 } from "./backends";
+import type { PromptDetail } from "./remote/promptExtract";
 import { remoteServer } from "./remote/ws-server";
 import type { TranscriptEntry } from "../shared/remote-protocol";
 import type { ContextUsage } from "../shared/types";
 import { moveInOrder } from "../shared/reorder";
 import { debugTrace } from "./debug-trace";
 import { RunStateTracker, type RunState, type WriteVerdict } from "./run-state";
+import { INSTANCE_ENV, SPAWN_ENV } from "./backends/instance-env";
 
 export interface InstanceInfo {
   id: string;
@@ -34,6 +38,9 @@ export interface InstanceInfo {
   isManager?: boolean;
   // Only meaningful while running; `status` already says stopped.
   runState?: RunState;
+  // This instance's hooks aren't reaching Multi-Code, so it raises no alerts (PRD
+  // Story 6). The renderer shows a bar on its page.
+  alertsDegraded?: boolean;
 }
 
 interface ManagedInstance {
@@ -46,10 +53,13 @@ interface ManagedInstance {
   sessionId?: string;
   backend: BackendName;
   discovery: SessionDiscovery | null;
+  // Exactly one of these reports the instance's activity, by backend: a detector
+  // watching the session (OpenCode), or the agent's own hooks (Claude).
   detector: CompletionDetector | null;
-  // Timestamp (Date.now()) of the last PTY byte received from this instance.
-  // Used by the backend's CompletionDetector to tell "screen static (waiting
-  // on user)" apart from "spinner ticking (running tool/subagent)".
+  hookAttention: HookAttention | null;
+  // Timestamp (Date.now()) of the last PTY byte received from this instance. Feeds
+  // the write-safety gate's "did that write land" check and `start_session`'s
+  // readiness wait, never activity detection.
   lastPtyByteAt: number;
   // Cached context usage plus when it was read. Optional so the two places that
   // build a ManagedInstance don't need to seed them; absent means "never read".
@@ -78,6 +88,13 @@ interface ManagedInstance {
   // Whether it is safe to write to this instance right now. See run-state.ts for
   // the hazard this exists to prevent.
   runState: RunStateTracker;
+  // Its hooks don't run, so nothing will alert for it. Per process: a restart
+  // builds a fresh instance and starts out trusting its hooks again.
+  alertsDegraded?: boolean;
+  // Minted per spawn and handed to the agent's hooks (SPAWN_ENV), so a late
+  // delivery from the process a restart replaced can be told apart. Absent on a
+  // contact that has never been spawned in this run.
+  spawnId?: string;
 }
 
 // Reading context usage parses a transcript that reaches 8MB+, and
@@ -118,6 +135,10 @@ export class ProcessManager {
   // create-manager IPC handler own the ordering — start the server, then set this,
   // then spawn.
   private managerSpawnOptions: SpawnOptions | null = null;
+  // What every other Claude instance spawns with: the alert hooks' settings file.
+  // Set once at startup, after the server that the hooks report to is listening.
+  // Null when it isn't, and sessions then spawn without alert hooks.
+  private sessionSpawnOptions: SpawnOptions | null = null;
 
   private liveSessionTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -185,6 +206,10 @@ export class ProcessManager {
 
   setManagerSpawnOptions(opts: SpawnOptions | null) {
     this.managerSpawnOptions = opts;
+  }
+
+  setSessionSpawnOptions(opts: SpawnOptions | null) {
+    this.sessionSpawnOptions = opts;
   }
 
   // Subscribe to activity from any instance, returning an unsubscribe function.
@@ -255,6 +280,7 @@ export class ProcessManager {
           backend: contact.backend ?? DEFAULT_BACKEND,
           discovery: null,
           detector: null,
+          hookAttention: null,
           lastPtyByteAt: 0,
           isManager: contact.isManager,
           runState: new RunStateTracker(),
@@ -375,18 +401,26 @@ export class ProcessManager {
     const backend: Backend = getBackend(backendName);
     // Manager options only for the manager. A project session must never get the
     // fleet-driving tools, which is why this is keyed off the instance rather than
-    // applied globally.
-    const { command, args, env } = backend.spawn(
-      cwd,
-      isManager ? (this.managerSpawnOptions ?? undefined) : undefined
-    );
+    // applied globally. Sessions get the alert hooks alone.
+    const opts = isManager ? this.managerSpawnOptions : this.sessionSpawnOptions;
+    const spawnedWithoutAlertHooks = backendName === "claude" && !opts?.settingsPath;
+    if (spawnedWithoutAlertHooks) {
+      debugTrace(
+        `[alert-hook] ${id.slice(0, 8)} spawned without alert hooks (server not listening or files unwritable)`
+      );
+    }
+    const { command, args, env } = backend.spawn(cwd, opts ?? undefined);
 
+    const spawnId = crypto.randomUUID();
     const ptyProcess = pty.spawn(command, args, {
       name: "xterm-256color",
       cols,
       rows,
       cwd,
-      env,
+      // Names this instance to its own hooks, which send it back as a header so a
+      // delivery lands on the right contact even when two share a cwd. Set here, on
+      // this one spawn: every env Multi-Code builds strips an inherited value first.
+      env: { ...env, [INSTANCE_ENV]: id, [SPAWN_ENV]: spawnId },
     });
 
     const instance: ManagedInstance = {
@@ -399,10 +433,22 @@ export class ProcessManager {
       backend: backendName,
       discovery: null,
       detector: null,
+      hookAttention: null,
       lastPtyByteAt: Date.now(),
       isManager,
       runState: new RunStateTracker(),
+      alertsDegraded: spawnedWithoutAlertHooks || undefined,
+      spawnId,
     };
+
+    // Created at spawn, before any session exists: the hooks report from the
+    // process's first moment, and keep reporting across /clear.
+    instance.hookAttention =
+      backend.createHookAttention?.(
+        ptyProcess.pid,
+        (type, detail) => this.reportActivity(instance, type, detail),
+        (ok) => this.setAlertsDegraded(instance, !ok)
+      ) ?? null;
 
     const isSessionClaimed = (candidate: string): boolean =>
       this.isSessionClaimedBy(candidate, id);
@@ -427,8 +473,7 @@ export class ProcessManager {
     ptyProcess.onData((data: string) => {
       instance.lastPtyByteAt = Date.now();
       // Backends whose blocking state is only visible on screen (OpenCode's
-      // permission dialog) read it from here. Claude's detector doesn't
-      // implement this, so the call is optional.
+      // permission dialog) read it from here. Optional, since others don't need it.
       instance.detector?.onPtyData?.(data);
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send("pty-output", id, data);
@@ -476,11 +521,10 @@ export class ProcessManager {
       instance.detector = null;
     }
 
-    // Relies on a detector starting from the transcript's *current* end rather
-    // than its beginning (claude.ts:279 takes stat.size in its constructor). If
-    // that ever changes, attaching to a session that already has content would
-    // replay its whole history as fresh activity — every past turn firing a
-    // notification at once.
+    // Relies on a detector starting from the session's *current* state rather than
+    // its beginning. If that ever changes, attaching to a session that already has
+    // content would replay its whole history as fresh activity — every past turn
+    // firing a notification at once.
 
     instance.sessionId = sessionId;
     // The cached usage belongs to the session we just left, and `/new` resets it
@@ -492,40 +536,75 @@ export class ProcessManager {
     instance.resolvedSessionId = undefined;
     instance.resolvedSessionIdAt = undefined;
 
-    instance.detector = backend.createCompletionDetector(
-      sessionId,
-      (type, detail) => {
-        debugTrace(
-          `[activity] ${id.slice(0, 8)} ${type} at ${new Date().toISOString()}`
-        );
-        instance.runState.onActivity(type);
-        // Recorded for every activity except the bookkeeping one, so the
-        // manager can tell a session that just finished from one that has
-        // been idle for hours.
-        if (type !== "prompt-cleared") instance.lastActivityAt = Date.now();
-        // A finished turn is exactly when context usage moved, so refresh
-        // now instead of waiting for the TTL. Cheap: once per turn, not per
-        // list call.
-        if (type === "waiting") this.refreshContextUsage(instance);
-        // "prompt-cleared" exists for paired phones (drop the stale option
-        // buttons); the desktop UI has nothing to do with it, so it isn't
-        // forwarded to the renderer.
-        if (
-          type !== "prompt-cleared" &&
-          this.mainWindow &&
-          !this.mainWindow.isDestroyed()
-        ) {
-          this.mainWindow.webContents.send("instance-activity", id, type);
-        }
-        remoteServer.broadcastActivity(id, type, detail);
-        this.emitActivity(id, type);
-      },
-      (ms) => Date.now() - instance.lastPtyByteAt >= ms
-    );
+    instance.detector =
+      backend.createCompletionDetector?.(sessionId, (type, detail) =>
+        this.reportActivity(instance, type, detail)
+      ) ?? null;
 
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send("instance-session-id", id, sessionId);
     }
+  }
+
+  // One activity event, from whichever seam the backend uses, to everything that
+  // listens: run state, the renderer's chime and red dot, a paired phone, and the
+  // manager's waiters.
+  private reportActivity(
+    instance: ManagedInstance,
+    type: string,
+    detail?: PromptDetail
+  ) {
+    const id = instance.id;
+    debugTrace(`[activity] ${id.slice(0, 8)} ${type} at ${new Date().toISOString()}`);
+    instance.runState.onActivity(type);
+    // Recorded for every activity except the bookkeeping one, so the manager can
+    // tell a session that just finished from one that has been idle for hours.
+    if (type !== "prompt-cleared") instance.lastActivityAt = Date.now();
+    // A finished turn is exactly when context usage moved, so refresh now instead
+    // of waiting for the TTL. Cheap: once per turn, not per list call.
+    if (type === "waiting") this.refreshContextUsage(instance);
+    // "prompt-cleared" exists for paired phones (drop the stale option buttons);
+    // the desktop UI has nothing to do with it, so it isn't forwarded to the
+    // renderer.
+    if (type !== "prompt-cleared" && this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send("instance-activity", id, type);
+    }
+    remoteServer.broadcastActivity(id, type, detail);
+    this.emitActivity(id, type);
+  }
+
+  private setAlertsDegraded(instance: ManagedInstance, degraded: boolean) {
+    if (!!instance.alertsDegraded === degraded) return;
+    instance.alertsDegraded = degraded || undefined;
+    debugTrace(
+      `[alert-hook] ${instance.id.slice(0, 8)} hooks ${degraded ? "not running: alerts off" : "running again"} at ${new Date().toISOString()}`
+    );
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send("instance-alerts-degraded", instance.id, degraded);
+    }
+  }
+
+  // A hook delivery from the `/alert` endpoint, routed to the instance that sent
+  // it. Wired in manager-mcp/index.ts, which owns the server; this module must not
+  // import it. An id no running instance has (a contact removed meanwhile, or a
+  // late delivery from a process that has exited) is dropped.
+  handleAlertDelivery(delivery: AlertDelivery) {
+    const instance = this.instances.get(delivery.instanceId);
+    if (!instance?.hookAttention) {
+      debugTrace(
+        `[alert-hook] ${delivery.instanceId.slice(0, 8)} ${delivery.event} dropped: no running instance with hooks`
+      );
+      return;
+    }
+    // Same contact, earlier process: a restart keeps the id, and that process's
+    // async hooks can land after the new one is up.
+    if (delivery.spawnId !== instance.spawnId) {
+      debugTrace(
+        `[alert-hook] ${delivery.instanceId.slice(0, 8)} ${delivery.event} dropped: from an earlier spawn`
+      );
+      return;
+    }
+    instance.hookAttention.handle(delivery);
   }
 
   private teardownObservers(instance: ManagedInstance) {
@@ -536,6 +615,10 @@ export class ProcessManager {
     if (instance.detector) {
       instance.detector.stop();
       instance.detector = null;
+    }
+    if (instance.hookAttention) {
+      instance.hookAttention.stop();
+      instance.hookAttention = null;
     }
   }
 
@@ -847,6 +930,7 @@ export class ProcessManager {
       lastActivityAt: instance.lastActivityAt,
       isManager: instance.isManager,
       runState: instance.ptyProcess ? instance.runState.state() : undefined,
+      alertsDegraded: instance.ptyProcess ? instance.alertsDegraded : undefined,
     };
   }
 }

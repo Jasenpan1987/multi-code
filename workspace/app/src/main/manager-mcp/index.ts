@@ -5,17 +5,23 @@
 // the tools added by later tasks will be wired from the side that already knows
 // about instances. Going both ways directly would be a cycle.
 //
-// The server is started lazily, on the first manager spawn, rather than at app
-// launch. Two reasons: a user with no manager instance shouldn't have a listening
-// socket at all, and the spawn needs the port — which only exists after listen —
-// to write the --mcp-config the manager is launched with. So the order is always
-// start server, read port, write config, spawn.
+// The server starts at app launch and lives as long as the app. It used to start
+// lazily on the first manager spawn, so that a user with no manager had no
+// listening socket, but every Claude session now reports its state to `/alert`
+// through hooks (epic attention-alerts), and a session can be spawned before any
+// manager exists. A manager's MCP tools stay closed without one all the same: their
+// token is written to disk only when a manager spawns.
+//
+// Order still matters: the spawn needs the port, which only exists after listen, to
+// write the files a CLI is launched with. So it is always start server, read port,
+// write config, spawn.
 
 import { BrowserWindow } from "electron";
 import { managerMcpServer } from "./server";
 import {
   MCP_SERVER_NAME,
-  removeManagerSpawnFiles,
+  removeSpawnFiles,
+  writeAlertSettings,
   writeManagerSettings,
   writeMcpConfig,
 } from "./config";
@@ -24,6 +30,7 @@ import { buildWriteTools } from "./write-tools";
 import { buildWaitTools } from "./wait-tools";
 import { managerActivityLog } from "./activity-log";
 import { processManager } from "../process-manager";
+import { debugTrace } from "../debug-trace";
 import type { McpServerInfo } from "./server";
 import type { SpawnOptions } from "../backends";
 import type { ManagerActivityEntry } from "../../shared/types";
@@ -90,6 +97,36 @@ function registerTools() {
   });
 }
 
+// Called once from app.whenReady, before the first window can spawn anything.
+// Never throws: a server that can't bind is traced, sessions then spawn without
+// alert hooks (getAlertTarget is null), and the manager's own path retries the
+// start when it spawns.
+//
+// Also writes the alert settings every Claude project session spawns with, and
+// hands them to process-manager: the port and token exist only once the server is
+// listening, and this runs before anything can spawn.
+export async function startManagerMcpServer(): Promise<void> {
+  registerTools();
+  managerMcpServer.onAlertDelivery((delivery) => processManager.handleAlertDelivery(delivery));
+  const info = await managerMcpServer.start();
+  if (!info.running) {
+    debugTrace(`[alert-hook] server failed to start: ${info.error ?? "unknown"}`);
+  }
+  const settingsPath = writeAlertSettings(getAlertTarget());
+  if (!settingsPath && info.running) {
+    debugTrace("[alert-hook] alert settings could not be written; sessions spawn without alert hooks");
+  }
+  processManager.setSessionSpawnOptions(settingsPath ? { settingsPath } : null);
+}
+
+// Where a Claude instance's alert hooks deliver to, and the token they carry.
+// Null when the server isn't listening; callers spawn without alert hooks then.
+export function getAlertTarget(): { endpoint: string; token: string } | null {
+  const endpoint = managerMcpServer.getAlertEndpoint();
+  const token = managerMcpServer.getAlertToken();
+  return endpoint && token ? { endpoint, token } : null;
+}
+
 // Starts the server if it isn't already up and returns everything the manager's
 // spawn needs, or null when the server couldn't bind or the config couldn't be
 // written. Null is not fatal: the caller spawns the manager without the flags, and
@@ -117,7 +154,9 @@ export async function ensureManagerMcpStarted(): Promise<SpawnOptions | null> {
   // self-reporting is worse than one with both and better than one with neither,
   // so a failure here degrades the feed rather than the manager. The UI shows the
   // server state either way.
-  const settingsPath = writeManagerSettings({ endpoint, token }) ?? undefined;
+  // Carries the alert hooks too: the CLI takes only one --settings file.
+  const settingsPath =
+    writeManagerSettings({ endpoint, token }, getAlertTarget()) ?? undefined;
 
   return { mcpConfigPath, settingsPath, allowedTools: managerToolNames() };
 }
@@ -157,7 +196,7 @@ export function getManagerActivity(): ManagerActivityEntry[] {
 
 export async function shutdownManagerMcp(): Promise<void> {
   await managerMcpServer.stop();
-  // Two of these files carry a bearer token that is now dead. Remove them rather
+  // Three of these files carry a bearer token that is now dead. Remove them rather
   // than leave a stale credential on disk between runs.
-  removeManagerSpawnFiles();
+  removeSpawnFiles();
 }

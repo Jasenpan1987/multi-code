@@ -1,0 +1,31 @@
+{
+  "cli": "2.1.291",
+  "scenario": "slash-cost",
+  "description": "/cost, which runs no model turn.",
+  "deliveries": [],
+  "registry": [
+    {
+      "ms": 0,
+      "status": "idle"
+    },
+    {
+      "ms": 1139,
+      "status": "waiting",
+      "waitingFor": "dialog open"
+    },
+    {
+      "ms": 5336,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": 1002,
+      "key": "enter /cost"
+    },
+    {
+      "ms": 5224,
+      "key": "esc"
+    }
+  ]
+}

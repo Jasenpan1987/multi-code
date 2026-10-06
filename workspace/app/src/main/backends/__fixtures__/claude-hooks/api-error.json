@@ -1,0 +1,51 @@
+{
+  "cli": "2.1.291",
+  "scenario": "api-error",
+  "description": "--model set to an id that does not exist on Bedrock; the first request fails.",
+  "deliveries": [
+    {
+      "ms": 0,
+      "payload": {
+        "session_id": "a2e6b716-52ca-457e-811a-553d795127cb",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-apierror/a2e6b716-52ca-457e-811a-553d795127cb.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-apierror",
+        "prompt_id": "42e2fb26-2e0f-4abe-bb4d-bf26a5ce753d",
+        "permission_mode": "auto",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Reply with just the word hi. Do not use any tools."
+      }
+    },
+    {
+      "ms": 184,
+      "payload": {
+        "session_id": "a2e6b716-52ca-457e-811a-553d795127cb",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-apierror/a2e6b716-52ca-457e-811a-553d795127cb.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-apierror",
+        "prompt_id": "42e2fb26-2e0f-4abe-bb4d-bf26a5ce753d",
+        "hook_event_name": "StopFailure",
+        "error": "model_not_found",
+        "last_assistant_message": "API Error (claude-does-not-exist-9): 400 The provided model identifier is invalid.. Run /model to pick a different model."
+      }
+    }
+  ],
+  "registry": [
+    {
+      "ms": -665,
+      "status": "idle"
+    },
+    {
+      "ms": 17,
+      "status": "busy"
+    },
+    {
+      "ms": 181,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": -60,
+      "key": "enter"
+    }
+  ]
+}

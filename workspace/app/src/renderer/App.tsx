@@ -15,8 +15,8 @@ import { ThemeToggle } from "./components/ThemeToggle";
 import { VersionBadge } from "./components/VersionBadge";
 import { useNotifications } from "./hooks/useNotifications";
 import { ThemeContext } from "./hooks/useTheme";
-import { playMessageSound, playCoughSound } from "./audio/sounds";
-import { shouldPlayAttentionSound } from "./audio/attentionPolicy";
+import { playMessageSound, playCoughSound, stopMessageSound } from "./audio/sounds";
+import { acknowledgesShownInstance } from "./audio/attentionPolicy";
 import type {
   Instance,
   BackendName,
@@ -67,7 +67,6 @@ export function App() {
   // suppressed-while-watching event doesn't eat cooldown. Lifted out of the
   // effect below because the effect re-subscribes on every instances change
   // and a ref inside it would reset the cooldown each time.
-  const lastSoundAtRef = useRef(new Map<string, number>());
 
   // Load saved contacts on startup
   useEffect(() => {
@@ -155,55 +154,44 @@ export function App() {
     return cleanup;
   }, []);
 
-  // Listen for structured activity events. Fires both when a turn finishes
-  // ("waiting") and when the agent is waiting on a yes/no prompt ("prompt").
-  // Both get the same beep + flash, so we don't branch on the type here.
+  // Every attention event, "waiting" (finished) or "prompt" (needs you), for any
+  // instance: chime, red dot, Dock bounce. Nothing is suppressed for the instance
+  // being watched, and nothing clears on a timer: the alert stays until the
+  // builder acknowledges it (below). See audio/attentionPolicy.ts.
   //
-  // The beep and dock bounce are gated by the attention policy:
-  // silent while the user is already looking at this instance (window focused
-  // and instance selected), and collapsed when "prompt" + "waiting" land in
-  // one burst (5s per-instance cooldown). "prompt" is urgent — the agent is
-  // blocked until the user acts — so it sounds even while the user is
-  // watching, and its badge is not auto-cleared. The badge flash still
-  // happens either way, and a paired phone keeps receiving every activity.
+  // bounceDock is app.dock.bounce("critical"), which macOS ignores while the app
+  // is frontmost and otherwise keeps up until the app is brought forward.
   useEffect(() => {
-    const cleanup = window.electronAPI.onInstanceActivity((id, type) => {
-      const urgent = type === "prompt";
-      const now = Date.now();
-      const lastSoundAt = lastSoundAtRef.current.get(id) ?? 0;
-      if (
-        shouldPlayAttentionSound({
-          isSelected: id === selectedId,
-          windowFocused: document.hasFocus(),
-          lastSoundAt,
-          now,
-          urgent,
-        })
-      ) {
-        lastSoundAtRef.current.set(id, now);
-        // Play sound when the agent needs attention (gated above).
-        playMessageSound();
-        // Bounce the Dock — macOS only bounces if app is not in front,
-        // which is exactly the behavior we want.
-        window.electronAPI.bounceDock();
-      }
-
+    const cleanup = window.electronAPI.onInstanceActivity((id) => {
+      playMessageSound(id);
+      window.electronAPI.bounceDock();
       const inst = instances.find((i) => i.id === id);
-      if (!inst) return;
-
-      // Flash for every instance — including the selected one.
-      notify(id, inst.name);
-
-      // If it's the currently selected one, the user is already looking at it,
-      // so auto-clear the unread state shortly after — unless the agent is
-      // blocked on a prompt, in which case the red dot stays until the user
-      // actually reads/answers it.
-      if (id === selectedId && !urgent) {
-        setTimeout(() => markRead(id), 1500);
-      }
+      if (inst) notify(id, inst.name);
     });
     return cleanup;
-  }, [selectedId, instances, notify, markRead]);
+  }, [instances, notify]);
+
+  // Acknowledging the shown instance: any key press, or a click in its page.
+  // Stops its chime and clears its red dot. Window focus alone clears nothing.
+  //
+  // Capture phase, because xterm handles keys on its own hidden textarea and some
+  // components stop propagation, so a bubble-phase listener would miss input.
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
+  useEffect(() => {
+    const acknowledge = (e: Event) => {
+      const id = selectedIdRef.current;
+      if (!id || !acknowledgesShownInstance(e.target)) return;
+      stopMessageSound(id);
+      markRead(id);
+    };
+    window.addEventListener("keydown", acknowledge, true);
+    window.addEventListener("pointerdown", acknowledge, true);
+    return () => {
+      window.removeEventListener("keydown", acknowledge, true);
+      window.removeEventListener("pointerdown", acknowledge, true);
+    };
+  }, [markRead]);
 
   // Listen for instance exit
   useEffect(() => {
@@ -238,6 +226,17 @@ export function App() {
 
   useEffect(() => {
     window.electronAPI.isDevBuild().then(setIsDev);
+  }, []);
+
+  // An instance whose hooks stopped (or started) reaching Multi-Code.
+  useEffect(() => {
+    return window.electronAPI.onInstanceAlertsDegraded((id, degraded) => {
+      setInstances((prev) =>
+        prev.map((inst) =>
+          inst.id === id ? { ...inst, alertsDegraded: degraded || undefined } : inst
+        )
+      );
+    });
   }, []);
 
   // Listen for session-id matched (used by Resume Elsewhere button)
@@ -305,9 +304,11 @@ export function App() {
     setComposeOpen(true);
   }, []);
 
+  // Selecting a contact acknowledges that contact, never the one being left.
   const handleSelect = useCallback(
     (id: string) => {
       setSelectedId(id);
+      stopMessageSound(id);
       markRead(id);
     },
     [markRead]
@@ -516,6 +517,22 @@ export function App() {
             <span className="content-header-status">
               {selectedInstance.status === "running" ? "Online" : "Offline"}
             </span>
+          </div>
+        )}
+        {selectedInstance?.status === "running" && selectedInstance.alertsDegraded && (
+          // PRD Story 6: say so rather than go quiet. No fallback guesses at the
+          // state instead; see docs/specs/attention-alerts/prd.md.
+          <div
+            className="alerts-degraded-bar"
+            title={
+              "Multi-Code hears when a session finishes or needs you through hooks it passes " +
+              "to claude at launch, and none have arrived from this one. Likely causes: " +
+              '"disableAllHooks": true in your Claude settings, or a managed policy that ' +
+              "allows only managed hooks."
+            }
+          >
+            Hooks aren&apos;t running in this session, so Multi-Code can&apos;t tell you when it
+            finishes or needs you. Check on it yourself.
           </div>
         )}
         <div className="content-terminal">

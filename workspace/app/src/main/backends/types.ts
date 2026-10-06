@@ -11,10 +11,10 @@ export interface SpawnConfig {
 }
 
 /**
- * Extra spawn wiring for an instance that isn't a plain project session. Only the
- * manager uses this today.
+ * Extra spawn wiring. The manager gets all three fields; every other Claude
+ * instance gets only `settingsPath`, carrying its alert hooks.
  *
- * Both fields are needed together or not at all: an MCP server the instance can
+ * The MCP fields are needed together or not at all: an MCP server the instance can
  * reach but whose tools it must ask permission for on every call is useless to an
  * agent that is supposed to coordinate unattended. Measured 2026-09-02 — without
  * the allowlist the CLI answers "Claude requested permissions to use
@@ -29,10 +29,40 @@ export interface SpawnOptions {
   // Enumerated rather than wildcarded: the write tools should each need a
   // deliberate line of code before the manager can use them unattended.
   allowedTools?: string[];
-  // Path to a JSON settings file in `--settings` form, carrying the hooks that
-  // report the manager's own Bash/Edit/Write into the activity feed. Additive to
-  // the user's own settings, and holds no permission rules — see config.ts.
+  // Path to a JSON settings file in `--settings` form, carrying hooks only: the
+  // attention-alert hooks for every Claude instance, plus, for the manager, the
+  // ones that report its own Bash/Edit/Write into the activity feed. Additive to
+  // the user's own settings, and holds no permission rules — see config.ts. One
+  // file, because the CLI applies only the last `--settings` it is given.
   settingsPath?: string;
+}
+
+/**
+ * One hook delivery from a Claude instance, as the `/alert` endpoint received it.
+ * The named fields are the ones attention logic keys on, lifted from the CLI's hook
+ * stdin (field names measured on CLI 2.1.291, see
+ * docs/timeline/2026-10-06_attention-alerts-investigation.md, "Hook spike");
+ * `payload` keeps the whole delivery for anything else, such as `Stop`'s
+ * `background_tasks`.
+ *
+ * `instanceId` comes from the hook command's `X-Multicode-Instance` header, not from
+ * the payload: the CLI knows nothing about Multi-Code's instances. A delivery for an
+ * id no instance has is the receiver's to drop.
+ */
+export interface AlertDelivery {
+  instanceId: string;
+  // The `X-Multicode-Spawn` header: which spawn of the instance sent it.
+  spawnId?: string;
+  // `hook_event_name`: "Stop", "PermissionRequest", "UserPromptSubmit", …
+  event: string;
+  sessionId?: string;
+  toolName?: string;
+  toolInput?: unknown;
+  // Present on PreToolUse/PostToolUse; PermissionRequest carries none.
+  toolUseId?: string;
+  // Set only on deliveries from inside a subagent.
+  agentId?: string;
+  payload: Record<string, unknown>;
 }
 
 /**
@@ -43,6 +73,11 @@ export interface SpawnOptions {
  */
 export type ActivityCallback = (type: string, detail?: PromptDetail) => void;
 
+export interface HookAttention {
+  handle(delivery: AlertDelivery): void;
+  stop(): void;
+}
+
 export interface CompletionDetector {
   stop(): void;
 
@@ -50,8 +85,7 @@ export interface CompletionDetector {
    * Feed a chunk of PTY output to the detector, for backends whose blocking
    * state is only visible on the painted terminal.
    *
-   * Claude doesn't need this — its prompts are in the session JSONL. OpenCode
-   * does: its permission requests ("Allow once / Allow always / Reject") are
+   * OpenCode needs this: its permission requests ("Allow once / Allow always / Reject") are
    * never persisted, so reading the terminal is the only way to see one without
    * changing how the process is launched. Optional so backends that have a
    * structured source don't implement a no-op.
@@ -67,9 +101,10 @@ export interface Backend {
   readonly name: BackendName;
 
   /**
-   * Build the command line for a new instance. `opts` is present only for the
-   * manager instance; a backend that can't honour it should ignore it rather than
-   * fail, and say so in its implementation.
+   * Build the command line for a new instance. `opts` carries the manager's MCP
+   * wiring for the manager, and the alert hooks' settings for every instance; a
+   * backend that can't honour it should ignore it rather than fail, and say so in
+   * its implementation.
    */
   spawn(cwd: string, opts?: SpawnOptions): SpawnConfig;
 
@@ -91,35 +126,36 @@ export interface Backend {
   ): SessionDiscovery;
 
   /**
-   * Begin watching for completion / activity events for the session.
-   * `onActivity` fires with a string event type whenever the agent
-   * reaches a state that warrants notifying the user:
-   *   - "waiting": the assistant turn ended (end_turn) and the user
-   *     should respond.
-   *   - "prompt": the assistant is mid-turn but blocked on an
-   *     interactive question (permission box, AskUserQuestion, plan
-   *     approval, etc.). Detected from a tool_use that hasn't been
-   *     paired with a tool_result while the PTY has fallen silent.
-   *     Carries a PromptDetail second argument when the question and
-   *     its options could be decoded.
-   *   - "prompt-cleared": a previously reported prompt was answered
-   *     (on either the desktop or a paired phone).
+   * The activity events, whichever of the two seams below produces them:
+   *   - "waiting": the agent finished and is waiting for a new message.
+   *   - "prompt": the agent is blocked on a human decision (permission box,
+   *     AskUserQuestion, plan approval, an MCP input request). Carries a
+   *     PromptDetail second argument when the question and its options could be
+   *     decoded.
+   *   - "prompt-cleared": a previously reported prompt was answered (on either
+   *     the desktop or a paired phone).
    *
-   * `isPtyIdle(ms)` returns true when no PTY bytes have been written
-   * for at least `ms` milliseconds. Used to disambiguate "Claude
-   * waiting on the user" (screen static) from "Claude running a
-   * subagent / long tool" (spinner is repainting).
+   * A backend implements exactly one of the two.
    *
-   * Note that PTY idleness is a Claude-specific signal, not a universal
-   * one. OpenCode keeps a spinner running the entire time a permission
-   * dialog is up — measured across a 31s dialog, the longest gap between
-   * writes was 295ms — so an idle threshold can never fire there. Backends
-   * are free to ignore this argument and detect blocking another way.
+   * `createHookAttention`: the agent reports its own state through hooks Multi-Code
+   * injects at spawn, delivered to the `/alert` endpoint and routed here by
+   * instance. Claude Code. Per process, not per session, so it survives `/clear`.
+   * `pid` is the pty child's, which the CLI keys its own registry on.
+   * `onHooksHealth(false)` says the hooks don't seem to run at all, `true` that one
+   * was heard after all (PRD Story 6).
+   *
+   * `createCompletionDetector`: Multi-Code watches the session from outside.
+   * OpenCode, until it moves to its plugin (epic attention-alerts, Track 2).
    */
-  createCompletionDetector(
-    sessionId: string,
+  createHookAttention?(
+    pid: number,
     onActivity: ActivityCallback,
-    isPtyIdle: (ms: number) => boolean
+    onHooksHealth: (ok: boolean) => void
+  ): HookAttention;
+
+  createCompletionDetector?(
+    sessionId: string,
+    onActivity: ActivityCallback
   ): CompletionDetector;
 
   /**

@@ -1,0 +1,217 @@
+{
+  "cli": "2.1.291",
+  "scenario": "plan-rejected",
+  "description": "--permission-mode plan; ExitPlanMode dialog answered with Esc (keep planning).",
+  "deliveries": [
+    {
+      "ms": 0,
+      "payload": {
+        "session_id": "1ed8ac5a-b4bf-4b36-bd3a-4a6d884a1ade",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-plan-reject/1ed8ac5a-b4bf-4b36-bd3a-4a6d884a1ade.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-plan-reject",
+        "prompt_id": "da7efcd4-8466-47ca-8495-e01d31417627",
+        "permission_mode": "plan",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Make a one-step plan to create a file named hello.txt containing hi. Do not explore or read anything; present the plan right away with the ExitPlanMode tool."
+      }
+    },
+    {
+      "ms": 7684,
+      "payload": {
+        "session_id": "1ed8ac5a-b4bf-4b36-bd3a-4a6d884a1ade",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-plan-reject/1ed8ac5a-b4bf-4b36-bd3a-4a6d884a1ade.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-plan-reject",
+        "prompt_id": "da7efcd4-8466-47ca-8495-e01d31417627",
+        "permission_mode": "plan",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "~/.claude/plans/make-a-one-step-plan-jolly-quilt.md",
+          "content": "# \u8ba1\u5212:\u521b\u5efa hello.txt \u6587\u4ef6\n\n## Context\n\u7528\u6237\u8981\u6c42\u521b\u5efa\u4e00\u4e2a\u7b80\u5355\u7684\u6587\u672c\u6587\u4ef6,\u5305\u542b \"hi\" \u5185\u5bb9\u3002\u8fd9\u662f\u4e00\u4e2a\u57fa\u7840\u7684\u6587\u4ef6\u521b\u5efa\u4efb\u52a1\u3002\n\n## \u5b9e\u65bd\u6b65\u9aa4\n\n1. \u4f7f\u7528 Write \u5de5\u5177\u5728 `/private/tmp/mc-spike/work-plan-reject/hello.txt` \u521b\u5efa\u6587\u4ef6\n2. \u6587\u4ef6\u5185\u5bb9\u5199\u5165 `hi`\n\n## \u5173\u952e\u6587\u4ef6\n- `/private/tmp/mc-spike/work-plan-reject/hello.txt` (\u65b0\u5efa)\n\n## \u9a8c\u8bc1\u65b9\u5f0f\n\u8fd0\u884c `cat /private/tmp/mc-spike/work-plan-reject/hello.txt` \u786e\u8ba4\u6587\u4ef6\u5b58\u5728\u4e14\u5185\u5bb9\u4e3a `hi`\n"
+        },
+        "tool_use_id": "toolu_bdrk_01SwDUcKQz8T8BifB9FZtDXp"
+      }
+    },
+    {
+      "ms": 7731,
+      "payload": {
+        "session_id": "1ed8ac5a-b4bf-4b36-bd3a-4a6d884a1ade",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-plan-reject/1ed8ac5a-b4bf-4b36-bd3a-4a6d884a1ade.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-plan-reject",
+        "prompt_id": "da7efcd4-8466-47ca-8495-e01d31417627",
+        "permission_mode": "plan",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "~/.claude/plans/make-a-one-step-plan-jolly-quilt.md",
+          "content": "# \u8ba1\u5212:\u521b\u5efa hello.txt \u6587\u4ef6\n\n## Context\n\u7528\u6237\u8981\u6c42\u521b\u5efa\u4e00\u4e2a\u7b80\u5355\u7684\u6587\u672c\u6587\u4ef6,\u5305\u542b \"hi\" \u5185\u5bb9\u3002\u8fd9\u662f\u4e00\u4e2a\u57fa\u7840\u7684\u6587\u4ef6\u521b\u5efa\u4efb\u52a1\u3002\n\n## \u5b9e\u65bd\u6b65\u9aa4\n\n1. \u4f7f\u7528 Write \u5de5\u5177\u5728 `/private/tmp/mc-spike/work-plan-reject/hello.txt` \u521b\u5efa\u6587\u4ef6\n2. \u6587\u4ef6\u5185\u5bb9\u5199\u5165 `hi`\n\n## \u5173\u952e\u6587\u4ef6\n- `/private/tmp/mc-spike/work-plan-reject/hello.txt` (\u65b0\u5efa)\n\n## \u9a8c\u8bc1\u65b9\u5f0f\n\u8fd0\u884c `cat /private/tmp/mc-spike/work-plan-reject/hello.txt` \u786e\u8ba4\u6587\u4ef6\u5b58\u5728\u4e14\u5185\u5bb9\u4e3a `hi`\n"
+        },
+        "tool_response": {
+          "type": "create",
+          "filePath": "~/.claude/plans/make-a-one-step-plan-jolly-quilt.md",
+          "content": "# \u8ba1\u5212:\u521b\u5efa hello.txt \u6587\u4ef6\n\n## Context\n\u7528\u6237\u8981\u6c42\u521b\u5efa\u4e00\u4e2a\u7b80\u5355\u7684\u6587\u672c\u6587\u4ef6,\u5305\u542b \"hi\" \u5185\u5bb9\u3002\u8fd9\u662f\u4e00\u4e2a\u57fa\u7840\u7684\u6587\u4ef6\u521b\u5efa\u4efb\u52a1\u3002\n\n## \u5b9e\u65bd\u6b65\u9aa4\n\n1. \u4f7f\u7528 Write \u5de5\u5177\u5728 `/private/tmp/mc-spike/work-plan-reject/hello.txt` \u521b\u5efa\u6587\u4ef6\n2. \u6587\u4ef6\u5185\u5bb9\u5199\u5165 `hi`\n\n## \u5173\u952e\u6587\u4ef6\n- `/private/tmp/mc-spike/work-plan-reject/hello.txt` (\u65b0\u5efa)\n\n## \u9a8c\u8bc1\u65b9\u5f0f\n\u8fd0\u884c `cat /private/tmp/mc-spike/work-plan-reject/hello.txt` \u786e\u8ba4\u6587\u4ef6\u5b58\u5728\u4e14\u5185\u5bb9\u4e3a `hi`\n",
+          "structuredPatch": [],
+          "originalFile": null,
+          "userModified": false
+        },
+        "tool_use_id": "toolu_bdrk_01SwDUcKQz8T8BifB9FZtDXp",
+        "duration_ms": 9
+      }
+    },
+    {
+      "ms": 8226,
+      "payload": {
+        "session_id": "1ed8ac5a-b4bf-4b36-bd3a-4a6d884a1ade",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-plan-reject/1ed8ac5a-b4bf-4b36-bd3a-4a6d884a1ade.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-plan-reject",
+        "prompt_id": "da7efcd4-8466-47ca-8495-e01d31417627",
+        "permission_mode": "plan",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "ToolSearch",
+        "tool_input": {
+          "query": "select:ExitPlanMode",
+          "max_results": 1
+        },
+        "tool_use_id": "toolu_bdrk_01BrbCcd6fsniP12rRKgEoEa"
+      }
+    },
+    {
+      "ms": 8232,
+      "payload": {
+        "session_id": "1ed8ac5a-b4bf-4b36-bd3a-4a6d884a1ade",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-plan-reject/1ed8ac5a-b4bf-4b36-bd3a-4a6d884a1ade.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-plan-reject",
+        "prompt_id": "da7efcd4-8466-47ca-8495-e01d31417627",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "abe3196e-41fc-426e-8cb1-1f92ff90eee4",
+        "message_id": "0b7ecd8c-61de-46a6-8547-63d99d30da89",
+        "index": 0,
+        "final": true,
+        "delta": "\u6211\u5199\u597d\u8ba1\u5212\u4e86,\u5185\u5bb9\u5c31\u662f\u521b\u5efa\u4e00\u4e2a\u6587\u4ef6 `hello.txt`,\u91cc\u9762\u5199\u4e0a `hi`\u3002"
+      }
+    },
+    {
+      "ms": 8303,
+      "payload": {
+        "session_id": "1ed8ac5a-b4bf-4b36-bd3a-4a6d884a1ade",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-plan-reject/1ed8ac5a-b4bf-4b36-bd3a-4a6d884a1ade.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-plan-reject",
+        "prompt_id": "da7efcd4-8466-47ca-8495-e01d31417627",
+        "permission_mode": "plan",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "ToolSearch",
+        "tool_input": {
+          "query": "select:ExitPlanMode",
+          "max_results": 1
+        },
+        "tool_response": {
+          "matches": [
+            "ExitPlanMode"
+          ],
+          "query": "select:ExitPlanMode",
+          "total_deferred_tools": 17
+        },
+        "tool_use_id": "toolu_bdrk_01BrbCcd6fsniP12rRKgEoEa",
+        "duration_ms": 5
+      }
+    },
+    {
+      "ms": 8352,
+      "payload": {
+        "session_id": "1ed8ac5a-b4bf-4b36-bd3a-4a6d884a1ade",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-plan-reject/1ed8ac5a-b4bf-4b36-bd3a-4a6d884a1ade.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-plan-reject",
+        "prompt_id": "da7efcd4-8466-47ca-8495-e01d31417627",
+        "permission_mode": "plan",
+        "hook_event_name": "PostToolBatch",
+        "tool_calls": [
+          {
+            "tool_name": "Write",
+            "tool_input": {
+              "file_path": "~/.claude/plans/make-a-one-step-plan-jolly-quilt.md",
+              "content": "# \u8ba1\u5212:\u521b\u5efa hello.txt \u6587\u4ef6\n\n## Context\n\u7528\u6237\u8981\u6c42\u521b\u5efa\u4e00\u4e2a\u7b80\u5355\u7684\u6587\u672c\u6587\u4ef6,\u5305\u542b \"hi\" \u5185\u5bb9\u3002\u8fd9\u662f\u4e00\u4e2a\u57fa\u7840\u7684\u6587\u4ef6\u521b\u5efa\u4efb\u52a1\u3002\n\n## \u5b9e\u65bd\u6b65\u9aa4\n\n1. \u4f7f\u7528 Write \u5de5\u5177\u5728 `/private/tmp/mc-spike/work-plan-reject/hello.txt` \u521b\u5efa\u6587\u4ef6\n2. \u6587\u4ef6\u5185\u5bb9\u5199\u5165 `hi`\n\n## \u5173\u952e\u6587\u4ef6\n- `/private/tmp/mc-spike/work-plan-reject/hello.txt` (\u65b0\u5efa)\n\n## \u9a8c\u8bc1\u65b9\u5f0f\n\u8fd0\u884c `cat /private/tmp/mc-spike/work-plan-reject/hello.txt` \u786e\u8ba4\u6587\u4ef6\u5b58\u5728\u4e14\u5185\u5bb9\u4e3a `hi`\n"
+            },
+            "tool_use_id": "toolu_bdrk_01SwDUcKQz8T8BifB9FZtDXp",
+            "tool_response": "File created successfully at: ~/.claude/plans/make-a-one-step-plan-jolly-quilt.md (file state is current in your context \u2014 no need to Read it back)"
+          },
+          {
+            "tool_name": "ToolSearch",
+            "tool_input": {
+              "query": "select:ExitPlanMode",
+              "max_results": 1
+            },
+            "tool_use_id": "toolu_bdrk_01BrbCcd6fsniP12rRKgEoEa",
+            "tool_response": [
+              {
+                "type": "tool_reference",
+                "tool_name": "ExitPlanMode"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "ms": 10188,
+      "payload": {
+        "session_id": "1ed8ac5a-b4bf-4b36-bd3a-4a6d884a1ade",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-plan-reject/1ed8ac5a-b4bf-4b36-bd3a-4a6d884a1ade.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-plan-reject",
+        "prompt_id": "da7efcd4-8466-47ca-8495-e01d31417627",
+        "permission_mode": "plan",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "ExitPlanMode",
+        "tool_input": {
+          "plan": "# \u8ba1\u5212:\u521b\u5efa hello.txt \u6587\u4ef6\n\n## Context\n\u7528\u6237\u8981\u6c42\u521b\u5efa\u4e00\u4e2a\u7b80\u5355\u7684\u6587\u672c\u6587\u4ef6,\u5305\u542b \"hi\" \u5185\u5bb9\u3002\u8fd9\u662f\u4e00\u4e2a\u57fa\u7840\u7684\u6587\u4ef6\u521b\u5efa\u4efb\u52a1\u3002\n\n## \u5b9e\u65bd\u6b65\u9aa4\n\n1. \u4f7f\u7528 Write \u5de5\u5177\u5728 `/private/tmp/mc-spike/work-plan-reject/hello.txt` \u521b\u5efa\u6587\u4ef6\n2. \u6587\u4ef6\u5185\u5bb9\u5199\u5165 `hi`\n\n## \u5173\u952e\u6587\u4ef6\n- `/private/tmp/mc-spike/work-plan-reject/hello.txt` (\u65b0\u5efa)\n\n## \u9a8c\u8bc1\u65b9\u5f0f\n\u8fd0\u884c `cat /private/tmp/mc-spike/work-plan-reject/hello.txt` \u786e\u8ba4\u6587\u4ef6\u5b58\u5728\u4e14\u5185\u5bb9\u4e3a `hi`\n",
+          "planFilePath": "~/.claude/plans/make-a-one-step-plan-jolly-quilt.md"
+        },
+        "tool_use_id": "toolu_bdrk_01UV1GFrUE3LCJtjpNnidH7i"
+      }
+    },
+    {
+      "ms": 10226,
+      "payload": {
+        "session_id": "1ed8ac5a-b4bf-4b36-bd3a-4a6d884a1ade",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-plan-reject/1ed8ac5a-b4bf-4b36-bd3a-4a6d884a1ade.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-plan-reject",
+        "prompt_id": "da7efcd4-8466-47ca-8495-e01d31417627",
+        "permission_mode": "plan",
+        "hook_event_name": "PermissionRequest",
+        "tool_name": "ExitPlanMode",
+        "tool_input": {
+          "plan": "# \u8ba1\u5212:\u521b\u5efa hello.txt \u6587\u4ef6\n\n## Context\n\u7528\u6237\u8981\u6c42\u521b\u5efa\u4e00\u4e2a\u7b80\u5355\u7684\u6587\u672c\u6587\u4ef6,\u5305\u542b \"hi\" \u5185\u5bb9\u3002\u8fd9\u662f\u4e00\u4e2a\u57fa\u7840\u7684\u6587\u4ef6\u521b\u5efa\u4efb\u52a1\u3002\n\n## \u5b9e\u65bd\u6b65\u9aa4\n\n1. \u4f7f\u7528 Write \u5de5\u5177\u5728 `/private/tmp/mc-spike/work-plan-reject/hello.txt` \u521b\u5efa\u6587\u4ef6\n2. \u6587\u4ef6\u5185\u5bb9\u5199\u5165 `hi`\n\n## \u5173\u952e\u6587\u4ef6\n- `/private/tmp/mc-spike/work-plan-reject/hello.txt` (\u65b0\u5efa)\n\n## \u9a8c\u8bc1\u65b9\u5f0f\n\u8fd0\u884c `cat /private/tmp/mc-spike/work-plan-reject/hello.txt` \u786e\u8ba4\u6587\u4ef6\u5b58\u5728\u4e14\u5185\u5bb9\u4e3a `hi`\n",
+          "planFilePath": "~/.claude/plans/make-a-one-step-plan-jolly-quilt.md"
+        }
+      }
+    }
+  ],
+  "registry": [
+    {
+      "ms": -676,
+      "status": "idle"
+    },
+    {
+      "ms": 12,
+      "status": "busy"
+    },
+    {
+      "ms": 10259,
+      "status": "waiting",
+      "waitingFor": "permission prompt"
+    },
+    {
+      "ms": 11451,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": -71,
+      "key": "enter"
+    },
+    {
+      "ms": 11306,
+      "key": "esc"
+    }
+  ]
+}

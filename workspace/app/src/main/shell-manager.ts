@@ -1,6 +1,7 @@
 import * as pty from "node-pty";
 import { BrowserWindow } from "electron";
 import path from "path";
+import { INSTANCE_ENV, SPAWN_ENV } from "./backends/instance-env";
 
 interface Shell {
   id: string;
@@ -33,6 +34,10 @@ export class ShellManager {
         process.env.PATH || "",
       ].join(":"),
     } as Record<string, string>;
+    // A `claude` started by hand in this terminal is not the instance's agent, and
+    // must not report as it.
+    delete env[INSTANCE_ENV];
+    delete env[SPAWN_ENV];
 
     const ptyProcess = pty.spawn(shellCmd, [], {
       name: "xterm-256color",

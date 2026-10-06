@@ -1,0 +1,333 @@
+{
+  "cli": "2.1.291",
+  "scenario": "subagent-permission",
+  "description": "A subagent whose Bash call needs permission, answered 1.",
+  "deliveries": [
+    {
+      "ms": 0,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "c6c3befe-ca9c-4cb8-85ac-6762dcc5aee6",
+        "permission_mode": "default",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Use the Agent tool to launch one general-purpose subagent whose only job is to run the Bash command `touch g.txt` and then reply ok. After it returns, reply with just done."
+      }
+    },
+    {
+      "ms": 1241,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "c6c3befe-ca9c-4cb8-85ac-6762dcc5aee6",
+        "permission_mode": "default",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Agent",
+        "tool_input": {
+          "description": "Create g.txt file",
+          "prompt": "Run the Bash command `touch g.txt` and then reply ok.",
+          "subagent_type": "general-purpose"
+        },
+        "tool_use_id": "toolu_bdrk_01AiTzrn9VLx7L1J1fq1v3nh"
+      }
+    },
+    {
+      "ms": 1290,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "c6c3befe-ca9c-4cb8-85ac-6762dcc5aee6",
+        "agent_id": "aeafd34fba4d7f36a",
+        "agent_type": "general-purpose",
+        "hook_event_name": "SubagentStart"
+      }
+    },
+    {
+      "ms": 1290,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "c6c3befe-ca9c-4cb8-85ac-6762dcc5aee6",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Agent",
+        "tool_input": {
+          "description": "Create g.txt file",
+          "prompt": "Run the Bash command `touch g.txt` and then reply ok.",
+          "subagent_type": "general-purpose"
+        },
+        "tool_response": {
+          "isAsync": true,
+          "status": "async_launched",
+          "agentId": "aeafd34fba4d7f36a",
+          "description": "Create g.txt file",
+          "resolvedModel": "au.anthropic.claude-haiku-4-5-20251001-v1:0",
+          "prompt": "Run the Bash command `touch g.txt` and then reply ok.",
+          "outputFile": "/private/tmp/claude-501/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068/tasks/aeafd34fba4d7f36a.output",
+          "canReadOutputFile": true
+        },
+        "tool_use_id": "toolu_bdrk_01AiTzrn9VLx7L1J1fq1v3nh",
+        "duration_ms": 3
+      }
+    },
+    {
+      "ms": 1364,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "c6c3befe-ca9c-4cb8-85ac-6762dcc5aee6",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolBatch",
+        "tool_calls": [
+          {
+            "tool_name": "Agent",
+            "tool_input": {
+              "subagent_type": "general-purpose",
+              "description": "Create g.txt file",
+              "prompt": "Run the Bash command `touch g.txt` and then reply ok."
+            },
+            "tool_use_id": "toolu_bdrk_01AiTzrn9VLx7L1J1fq1v3nh",
+            "tool_response": [
+              {
+                "type": "text",
+                "text": "Async agent launched successfully. (This tool result is internal metadata \u2014 never quote or paste any part of it, including the agentId below, into a user-facing reply.)\nagentId: aeafd34fba4d7f36a (internal ID - do not mention to user. Use SendMessage with to: 'aeafd34fba4d7f36a', summary: '<5-10 word recap>' to continue this agent.)\nThe agent is working in the background. You will be notified automatically when it completes. You know nothing about its results until that notification arrives \u2014 do not report, assume, or predict them; continue other work or respond to the user in the meantime.\nDo not duplicate this agent's work \u2014 avoid working with the same files or topics it is using.\noutput_file: /private/tmp/claude-501/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068/tasks/aeafd34fba4d7f36a.output\nDo NOT Read or tail this file via the shell tool \u2014 it is the full subagent JSONL transcript and reading it will overflow your context. If the user asks for progress, say the agent is still running; you'll get a completion notification."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "ms": 2133,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "c6c3befe-ca9c-4cb8-85ac-6762dcc5aee6",
+        "permission_mode": "default",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "last_assistant_message": "Waiting for the agent to complete.",
+        "background_tasks": [
+          {
+            "id": "aeafd34fba4d7f36a",
+            "type": "subagent",
+            "status": "running",
+            "description": "Create g.txt file",
+            "agent_type": "general-purpose"
+          }
+        ],
+        "session_crons": []
+      }
+    },
+    {
+      "ms": 2133,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "c6c3befe-ca9c-4cb8-85ac-6762dcc5aee6",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "1127f566-d91a-4d05-80a6-0cda4889cc77",
+        "message_id": "89663bfb-65ca-480b-8ec5-e1402f23ad3b",
+        "index": 0,
+        "final": true,
+        "delta": "Waiting for the agent to complete."
+      }
+    },
+    {
+      "ms": 2287,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "c6c3befe-ca9c-4cb8-85ac-6762dcc5aee6",
+        "permission_mode": "default",
+        "agent_id": "aeafd34fba4d7f36a",
+        "agent_type": "general-purpose",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "touch g.txt",
+          "description": "Create an empty file named g.txt"
+        },
+        "tool_use_id": "toolu_bdrk_01XcuLjby6EoPhGyecTbFgTL"
+      }
+    },
+    {
+      "ms": 2313,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "c6c3befe-ca9c-4cb8-85ac-6762dcc5aee6",
+        "permission_mode": "default",
+        "agent_id": "aeafd34fba4d7f36a",
+        "agent_type": "general-purpose",
+        "hook_event_name": "PermissionRequest",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "touch g.txt",
+          "description": "Create an empty file named g.txt"
+        }
+      }
+    },
+    {
+      "ms": 3416,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "c6c3befe-ca9c-4cb8-85ac-6762dcc5aee6",
+        "permission_mode": "default",
+        "agent_id": "aeafd34fba4d7f36a",
+        "agent_type": "general-purpose",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "touch g.txt",
+          "description": "Create an empty file named g.txt"
+        },
+        "tool_response": {
+          "stdout": "",
+          "stderr": "",
+          "interrupted": false,
+          "isImage": false,
+          "noOutputExpected": true
+        },
+        "tool_use_id": "toolu_bdrk_01XcuLjby6EoPhGyecTbFgTL",
+        "duration_ms": 38
+      }
+    },
+    {
+      "ms": 3442,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "c6c3befe-ca9c-4cb8-85ac-6762dcc5aee6",
+        "permission_mode": "default",
+        "agent_id": "aeafd34fba4d7f36a",
+        "agent_type": "general-purpose",
+        "hook_event_name": "PostToolBatch",
+        "tool_calls": [
+          {
+            "tool_name": "Bash",
+            "tool_input": {
+              "command": "touch g.txt",
+              "description": "Create an empty file named g.txt"
+            },
+            "tool_use_id": "toolu_bdrk_01XcuLjby6EoPhGyecTbFgTL",
+            "tool_response": "(Bash completed with no output)"
+          }
+        ]
+      }
+    },
+    {
+      "ms": 4175,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "c6c3befe-ca9c-4cb8-85ac-6762dcc5aee6",
+        "permission_mode": "default",
+        "agent_id": "aeafd34fba4d7f36a",
+        "agent_type": "general-purpose",
+        "hook_event_name": "SubagentStop",
+        "stop_hook_active": false,
+        "agent_transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068/subagents/agent-aeafd34fba4d7f36a.jsonl",
+        "last_assistant_message": "ok",
+        "background_tasks": [
+          {
+            "id": "aeafd34fba4d7f36a",
+            "type": "subagent",
+            "status": "running",
+            "description": "Create g.txt file",
+            "agent_type": "general-purpose"
+          }
+        ],
+        "session_crons": []
+      }
+    },
+    {
+      "ms": 4214,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "1ea094a0-44ad-47fa-b3cb-c354ed0cba53",
+        "permission_mode": "default",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "<task-notification>\n<task-id>aeafd34fba4d7f36a</task-id>\n<tool-use-id>toolu_bdrk_01AiTzrn9VLx7L1J1fq1v3nh</tool-use-id>\n<output-file>/private/tmp/claude-501/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068/tasks/aeafd34fba4d7f36a.output</output-file>\n<status>completed</status>\n<summary>Agent \"Create g.txt file\" finished</summary>\n<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>\n<result>ok</result>\n<usage><subagent_tokens>13645</subagent_tokens><tool_uses>1</tool_uses><duration_ms>2933</duration_ms></usage>\n</task-notification>"
+      }
+    },
+    {
+      "ms": 5061,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "1ea094a0-44ad-47fa-b3cb-c354ed0cba53",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "524b47ca-a15c-449e-aa42-a01377da344a",
+        "message_id": "03d817ed-55f0-4f16-b8e0-193fdd21b8d6",
+        "index": 0,
+        "final": true,
+        "delta": "done"
+      }
+    },
+    {
+      "ms": 5061,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "1ea094a0-44ad-47fa-b3cb-c354ed0cba53",
+        "permission_mode": "default",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "last_assistant_message": "done",
+        "background_tasks": [],
+        "session_crons": []
+      }
+    }
+  ],
+  "registry": [
+    {
+      "ms": -656,
+      "status": "idle"
+    },
+    {
+      "ms": -12,
+      "status": "busy"
+    },
+    {
+      "ms": 2327,
+      "status": "waiting",
+      "waitingFor": "permission prompt"
+    },
+    {
+      "ms": 3412,
+      "status": "busy"
+    },
+    {
+      "ms": 5089,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": -55,
+      "key": "enter"
+    },
+    {
+      "ms": 3353,
+      "key": "1 (Yes)"
+    }
+  ]
+}

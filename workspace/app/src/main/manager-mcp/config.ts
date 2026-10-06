@@ -44,6 +44,36 @@ function hookCurlConfigPath(): string {
   return path.join(app.getPath("userData"), "manager-hook.curl");
 }
 
+// The `--settings` file every Claude project session spawns with, carrying only the
+// alert hooks. The manager gets the same hooks inside manager-settings.json
+// instead: the CLI applies only the last `--settings` flag it is given (measured
+// 2026-10-07, CLI 2.1.291), so one process can't take both files.
+function alertSettingsPath(): string {
+  return path.join(app.getPath("userData"), "alert-settings.json");
+}
+
+// The alert hooks' curl config: the `/alert` endpoint and its token, behind 0600
+// for the same reason as manager-hook.curl.
+function alertCurlConfigPath(): string {
+  return path.join(app.getPath("userData"), "alert-hook.curl");
+}
+
+// The hook events a Claude instance reports for attention alerts: exactly the ones
+// backends/claudeHooks.ts acts on, plus SessionStart, which tells a session whose
+// hooks work from one whose hooks never run. Nothing on every tool call, so the
+// alert path costs a turn a handful of deliveries, not one per tool.
+export const ALERT_HOOK_EVENTS = [
+  "SessionStart",
+  "UserPromptSubmit",
+  "Stop",
+  "StopFailure",
+  "SubagentStop",
+  "PermissionRequest",
+  "Elicitation",
+  "ElicitationResult",
+  "PostCompact",
+] as const;
+
 export interface McpConfigTarget {
   endpoint: string;
   token: string;
@@ -96,10 +126,19 @@ export function writeMcpConfig(target: McpConfigTarget | null): string | null {
 // without handing the job back, and a deny list is how it became the meek
 // assistant that told the user to go and run things by hand (T-215). Its bound is
 // visibility plus the user's own permission rules, not a narrower sandbox.
-export function writeManagerSettings(target: McpConfigTarget | null): string | null {
+//
+// `alert` adds the attention-alert hooks every Claude instance carries (see
+// writeAlertSettings). They go in this same file because the CLI honours only the
+// last `--settings` flag. Without it, the manager spawns with activity hooks only.
+export function writeManagerSettings(
+  target: McpConfigTarget | null,
+  alert: McpConfigTarget | null = null
+): string | null {
   if (!target) return null;
 
-  const curlConfig = writeHookCurlConfig(target);
+  const endpoint = hookEndpointFor(target.endpoint);
+  if (!endpoint) return null;
+  const curlConfig = writeCurlConfig(hookCurlConfigPath(), endpoint, target.token);
   if (!curlConfig) return null;
 
   // `|| true` so the hook can never fail the tool it is reporting on. Measured
@@ -114,32 +153,65 @@ export function writeManagerSettings(target: McpConfigTarget | null): string | n
     hooks: [{ type: "command", command, timeout: 5 }],
   };
 
-  const file = settingsPath();
-  try {
-    fs.writeFileSync(
-      file,
-      JSON.stringify({ hooks: { PreToolUse: [hook], PostToolUse: [hook] } }, null, 2)
-    );
-    return file;
-  } catch {
-    return null;
-  }
+  const alertCurl = alert
+    ? writeCurlConfig(alertCurlConfigPath(), alert.endpoint, alert.token)
+    : null;
+  const hooks = {
+    PreToolUse: [hook],
+    PostToolUse: [hook],
+    ...(alertCurl ? alertHooks(alertCurl) : {}),
+  };
+
+  return writePrivateFile(settingsPath(), JSON.stringify({ hooks }, null, 2));
 }
 
-function writeHookCurlConfig(target: McpConfigTarget): string | null {
-  const endpoint = hookEndpointFor(target.endpoint);
-  if (!endpoint) return null;
+// The settings file every Claude project session spawns with. Returns the path for
+// `--settings`, or null when the server isn't up or a file couldn't be written; the
+// caller then spawns without alert hooks.
+//
+// Only hooks, never a `permissions` block: these must not change what an agent may
+// do, only report what it is doing.
+export function writeAlertSettings(alert: McpConfigTarget | null): string | null {
+  if (!alert) return null;
+  const curlConfig = writeCurlConfig(alertCurlConfigPath(), alert.endpoint, alert.token);
+  if (!curlConfig) return null;
+  return writePrivateFile(
+    alertSettingsPath(),
+    JSON.stringify({ hooks: alertHooks(curlConfig) }, null, 2)
+  );
+}
 
+// One entry per alert event, all running the same command.
+//
+// The instance travels in a header expanded from MULTICODE_INSTANCE_ID, and the
+// spawn it belongs to in one from MULTICODE_SPAWN_ID, both set by process-manager
+// in each agent's own environment. Not secrets, so the shell putting them in argv
+// is fine; the token stays in the -K file.
+//
+// `async: true`: measured on 2.1.291, the CLI waits for a synchronous hook (a sync
+// Stop hook delays the turn's end by its whole runtime), accepts `async`, and still
+// delivers async hooks complete and in order. A report must never make the agent
+// wait on Multi-Code. `|| true` and `timeout` as for the activity hook above.
+function alertHooks(curlConfig: string): Record<string, unknown[]> {
+  const command =
+    `curl -K ${shellQuote(curlConfig)} ` +
+    `-H "X-Multicode-Instance: $MULTICODE_INSTANCE_ID" ` +
+    `-H "X-Multicode-Spawn: $MULTICODE_SPAWN_ID" || true`;
+  const entry = { hooks: [{ type: "command", command, timeout: 5, async: true }] };
+  return Object.fromEntries(ALERT_HOOK_EVENTS.map((event) => [event, [entry]]));
+}
+
+function writeCurlConfig(file: string, url: string, token: string): string | null {
   // curl's config format: one long-option-without-dashes per line. Values are
   // double-quoted, and the token is base64url so it needs no escaping — but it is
   // rejected rather than written if that ever stops being true, since a broken
   // quote here would put the token somewhere unintended.
-  if (/["\\\r\n]/.test(target.token)) return null;
+  if (/["\\\r\n]/.test(token)) return null;
 
   const body = [
-    `url = "${endpoint}"`,
+    `url = "${url}"`,
     `request = "POST"`,
-    `header = "Authorization: Bearer ${target.token}"`,
+    `header = "Authorization: Bearer ${token}"`,
     `header = "Content-Type: application/json"`,
     // The hook delivery arrives on the hook command's stdin.
     `data-binary = "@-"`,
@@ -152,7 +224,12 @@ function writeHookCurlConfig(target: McpConfigTarget): string | null {
     ``,
   ].join("\n");
 
-  const file = hookCurlConfigPath();
+  return writePrivateFile(file, body);
+}
+
+// Unlink, write at 0600, then chmod: writeFileSync's mode applies only when it
+// creates the file, and is subject to the umask even then.
+function writePrivateFile(file: string, body: string): string | null {
   try {
     try {
       fs.unlinkSync(file);
@@ -174,10 +251,17 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-// Everything written for a manager spawn, all of it stale the moment the server
-// stops: the port is OS-assigned and the token is minted per run.
-export function removeManagerSpawnFiles(): void {
-  for (const file of [configPath(), settingsPath(), hookCurlConfigPath()]) {
+// Everything written for a spawn, the manager's and every session's alert hooks,
+// all of it stale the moment the server stops: the port is OS-assigned and the
+// tokens are minted per run.
+export function removeSpawnFiles(): void {
+  for (const file of [
+    configPath(),
+    settingsPath(),
+    hookCurlConfigPath(),
+    alertSettingsPath(),
+    alertCurlConfigPath(),
+  ]) {
     try {
       fs.unlinkSync(file);
     } catch {

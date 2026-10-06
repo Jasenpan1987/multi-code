@@ -116,3 +116,36 @@ describe("opencode spawn", () => {
     expect(args).toEqual(["--continue"]);
   });
 });
+
+describe("an inherited instance id", () => {
+  // A dev build launched from inside a Multi-Code session inherits that session's
+  // MULTICODE_INSTANCE_ID. Passed on, every agent it starts would report its
+  // alerts as the parent's instance.
+  it("is stripped from every env a backend builds", () => {
+    const before = {
+      instance: process.env.MULTICODE_INSTANCE_ID,
+      spawn: process.env.MULTICODE_SPAWN_ID,
+    };
+    process.env.MULTICODE_INSTANCE_ID = "parent-instance";
+    process.env.MULTICODE_SPAWN_ID = "parent-spawn";
+    try {
+      for (const backend of [claudeBackend, opencodeBackend]) {
+        const { env } = backend.spawn(freshCwd);
+        expect(env.MULTICODE_INSTANCE_ID).toBeUndefined();
+        expect(env.MULTICODE_SPAWN_ID).toBeUndefined();
+      }
+    } finally {
+      if (before.instance === undefined) delete process.env.MULTICODE_INSTANCE_ID;
+      else process.env.MULTICODE_INSTANCE_ID = before.instance;
+      if (before.spawn === undefined) delete process.env.MULTICODE_SPAWN_ID;
+      else process.env.MULTICODE_SPAWN_ID = before.spawn;
+    }
+  });
+});
+
+describe("claude spawn with session options", () => {
+  it("passes the alert settings file, and nothing of the manager's", () => {
+    const { args } = claudeBackend.spawn(freshCwd, { settingsPath: "/tmp/alert-settings.json" });
+    expect(args).toEqual(["--settings", "/tmp/alert-settings.json"]);
+  });
+});

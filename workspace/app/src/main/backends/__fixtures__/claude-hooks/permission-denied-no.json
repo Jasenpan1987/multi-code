@@ -1,0 +1,81 @@
+{
+  "cli": "2.1.291",
+  "scenario": "permission-denied-no",
+  "description": "Bash permission dialog (options Yes / No), answered 2 = No.",
+  "deliveries": [
+    {
+      "ms": 0,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "97b772f1-2be5-4ec2-93b4-40b710851c43",
+        "permission_mode": "default",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Use the Bash tool to run exactly: touch c.txt  -- then reply with just done."
+      }
+    },
+    {
+      "ms": 1872,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "97b772f1-2be5-4ec2-93b4-40b710851c43",
+        "permission_mode": "default",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "touch c.txt",
+          "description": "Create file c.txt"
+        },
+        "tool_use_id": "toolu_bdrk_012MkR3Xe56YxEpYZou6r5Ec"
+      }
+    },
+    {
+      "ms": 2793,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "97b772f1-2be5-4ec2-93b4-40b710851c43",
+        "permission_mode": "default",
+        "hook_event_name": "PermissionRequest",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "touch c.txt",
+          "description": "Create file c.txt"
+        }
+      }
+    }
+  ],
+  "registry": [
+    {
+      "ms": -1076,
+      "status": "idle"
+    },
+    {
+      "ms": -47,
+      "status": "busy"
+    },
+    {
+      "ms": 2559,
+      "status": "waiting",
+      "waitingFor": "permission prompt"
+    },
+    {
+      "ms": 3787,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": -468,
+      "key": "enter"
+    },
+    {
+      "ms": 3682,
+      "key": "2 (No)"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "cli": "2.1.291",
+  "scenario": "slash-status",
+  "description": "/status opens a panel; closed with Esc.",
+  "deliveries": [],
+  "registry": [
+    {
+      "ms": 0,
+      "status": "idle"
+    },
+    {
+      "ms": 1067,
+      "status": "waiting",
+      "waitingFor": "dialog open"
+    },
+    {
+      "ms": 6250,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": 1005,
+      "key": "enter /status"
+    },
+    {
+      "ms": 5538,
+      "key": "esc"
+    }
+  ]
+}

@@ -16,7 +16,7 @@ When working with multiple coding-agent sessions across different projects simul
 - **Multi-Backend** — Each instance runs either **Claude Code** or **OpenCode**. Pick the backend when creating an instance; mix both freely, even in the same project directory
 - **Instance Management** — Spawn, restart, and remove agent sessions per project directory
 - **Full Terminal Fidelity** — Real PTY via node-pty, rendered in xterm.js. No chat abstraction, no message parsing
-- **Session Notifications** — Detects when an agent finishes a turn (Claude via its session JSONL, OpenCode via its session database); plays audio, flashes the contact, and bounces the macOS Dock
+- **Session Notifications** — Knows when an agent has finished or is waiting on you (Claude reports it through hooks Multi-Code passes at launch, OpenCode via its session database); plays audio, flashes the contact, and bounces the macOS Dock
 - **Context usage at a glance** — Each contact row shows how full that session's context window is, as a percentage with a colour tint. Hover for the exact token count, the model, and when it was measured. Where the window size can't be established reliably, the row shows the raw token count instead of guessing a percentage. Stopped sessions show their last known usage too
 - **Follows `/clear` and `/new`** — When a running CLI moves to a fresh session, Multi-Code follows it, so context usage, notifications, and the manager's view keep tracking the live session
 - **Persistence** — Instance list (including each instance's backend) saved to disk, survives app restart
@@ -326,13 +326,13 @@ The manager's role guidance lives in a `CLAUDE.md` in its folder. You can edit i
 
 ### Notification behavior
 
-Notifications work identically for both backends — only the detection source differs (Claude Code's session JSONL vs OpenCode's session database).
+Notifications work identically for both backends — only the source differs. Claude Code reports its own state through hooks: every `claude` Multi-Code starts gets a `--settings` file from Multi-Code's data folder whose hooks post to the app's local `/alert` endpoint. Nothing is written to your own Claude settings, so `claude` run in an ordinary terminal is unaffected. OpenCode is read from its session database.
 
-- Agent completes a turn → plays the "ding" notification sound
+- Agent finishes, or stops to wait on you (a permission prompt, a question, a plan approval) → plays the "ding" once, for every instance, including the one you're looking at
 - Avatar blinks + red dot badge appears
-- macOS Dock icon bounces (`critical` mode — keeps bouncing until you bring the app to the front)
-- For the currently selected instance: the blink auto-clears after 1.5s (you're already looking at it)
-- For other instances: keeps blinking until you click into it
+- macOS Dock icon bounces when Multi-Code isn't in front (`critical` mode — keeps bouncing until you bring the app to the front)
+- Typing, or clicking anywhere in a session's page, stops its chime and clears its red dot. Clicking a contact in the list does the same for that contact. Nothing clears on a timer or on window focus alone
+- A turn you interrupt with Esc, or a dialog you deny, doesn't chime
 
 ### Offline state
 
@@ -409,13 +409,13 @@ Everything Multi-Code keeps lives in Electron's user-data folder. On macOS that 
 1. User creates an instance by selecting a project directory and a backend (Claude Code / OpenCode)
 2. App spawns the backend CLI (`claude` / `opencode`, resuming a prior session if one exists) via node-pty in that directory. Backends are pluggable behind a small `Backend` interface in `src/main/backends/`
 3. PTY stdout is piped in real-time to an xterm.js terminal in the renderer
-4. A per-backend completion detector watches for turn completion — Claude via its session JSONL, OpenCode via its session database — read-only, without writing anything back
-5. On completion: audio + flash + Dock bounce. The selected instance auto-clears unread state after 1.5s
+4. Each agent's state comes from the agent: Claude Code reports it through report-only hooks passed with `--settings` at launch (finished, waiting on a permission prompt or question), OpenCode is read from its session database. Neither writes anything into the user's own config
+5. On a finish or a needs-you: audio + flash + Dock bounce, for every instance. The red dot stays until you type or click in that session, or select it
 6. Toolbox sections each manage their own lifecycle:
    - Git: shells out to `git` every 5s while expanded
    - Terminal: lazy-spawns a shell PTY on first expand, persists across collapses
 7. Instances persist to `contacts.json` in Electron's user-data folder
-8. If a manager exists, the main process also runs a small MCP server on `127.0.0.1` (OS-assigned port, bearer-token auth). The manager's `claude` is spawned with `--mcp-config` pointing at it, plus hooks that report its own tool calls back to the activity feed
+8. The main process runs a small HTTP server on `127.0.0.1` for as long as the app is open (OS-assigned port, bearer-token auth). It serves the manager's MCP tools: a manager's `claude` is spawned with `--mcp-config` pointing at it, plus hooks that report its own tool calls back to the activity feed. It also has an `/alert` path, behind a separate token, for agents to report their own state
 9. When Phone Link is on, the main process also runs a WebSocket server on port 6768 that serves the mobile client and streams the same PTY bytes plus decoded prompts to paired phones. Frames are sealed with NaCl box; the phone reaches the desktop directly over LAN or Tailscale, with no relay involved
 
 ## License

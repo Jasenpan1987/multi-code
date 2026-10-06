@@ -25,6 +25,7 @@ import type { TranscriptEntry } from "../../shared/remote-protocol";
 import type { ContextUsage } from "../../shared/types";
 import { resolvePath } from "./resolvePath";
 import { debugTrace } from "../debug-trace";
+import { INSTANCE_ENV, SPAWN_ENV } from "./instance-env";
 
 const HOME = process.env.HOME || "";
 
@@ -70,10 +71,10 @@ function findOpencodeBinary(): string {
 const opencodePath = findOpencodeBinary();
 
 function buildEnv(): Record<string, string> {
-  return {
-    ...process.env,
-    PATH: SEARCH_PATH,
-  } as Record<string, string>;
+  const env = { ...process.env, PATH: SEARCH_PATH } as Record<string, string>;
+  delete env[INSTANCE_ENV];
+  delete env[SPAWN_ENV];
+  return env;
 }
 
 // Open a read-only sqlite handle. Throws on failure (caller decides how to handle).
@@ -809,8 +810,10 @@ export const opencodeBackend: Backend = {
   spawn(_cwd: string): SpawnConfig {
     // OpenCode handles "no prior session" gracefully — always pass --continue.
     //
-    // SpawnOptions is deliberately ignored: it exists for the manager instance, and
-    // the manager is claude-only for now. OpenCode does support MCP, but through a
+    // SpawnOptions is deliberately ignored. Its settings file is a Claude
+    // `--settings` file (OpenCode reports through its own plugin, epic
+    // attention-alerts Track 2), and the rest exists for the manager, which is
+    // claude-only for now. OpenCode does support MCP, but through a
     // different config shape, and `--allowedTools` has no equivalent — so a manager
     // running here would stop for a permission prompt on every tool call. The
     // create path refuses to make an OpenCode manager rather than silently
@@ -826,10 +829,11 @@ export const opencodeBackend: Backend = {
     return new OpencodeSessionDiscovery(cwd, onFound, isClaimed);
   },
 
-  // `isPtyIdle` is unused: OpenCode keeps a spinner running while it blocks, so
-  // idleness never happens. Blocking is detected from the db plus the painted
-  // dialog instead — see OpencodeCompletionDetector.checkForPrompt.
-  createCompletionDetector(sessionId, onActivity, _isPtyIdle): CompletionDetector {
+  // Blocking is detected from the db plus the painted dialog — see
+  // OpencodeCompletionDetector.checkForPrompt. Terminal silence can't be used:
+  // OpenCode keeps a spinner running while it blocks (the longest gap across a
+  // 31s dialog was 295ms).
+  createCompletionDetector(sessionId, onActivity): CompletionDetector {
     return new OpencodeCompletionDetector(sessionId, onActivity);
   },
 

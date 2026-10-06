@@ -68,6 +68,9 @@ export interface Instance {
   // Finer-grained than `status`, and only present while running: whether it is idle,
   // working, blocked on a decision, or still starting up.
   runState?: "starting" | "idle" | "busy" | "blocked";
+  // Its hooks aren't reaching Multi-Code, so it raises no alerts. Shown as a bar on
+  // its page. Only set while running.
+  alertsDegraded?: boolean;
 }
 
 // One tool call made by the manager agent, as shown in the toolbox's Manager
@@ -277,6 +280,9 @@ export interface ElectronAPI {
   onInstanceStarted: (callback: (instance: Instance) => void) => () => void;
   onInstanceActivity: (callback: (id: string, type: string) => void) => () => void;
   onInstanceSessionId: (callback: (id: string, sessionId: string) => void) => () => void;
+  onInstanceAlertsDegraded: (
+    callback: (id: string, degraded: boolean) => void
+  ) => () => void;
   onShellOutput: (callback: (id: string, data: string) => void) => () => void;
   onShellExit: (callback: (id: string) => void) => () => void;
   onRemoteStatus: (callback: (status: RemoteStatus) => void) => () => void;

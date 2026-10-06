@@ -22,10 +22,12 @@ export function isBackendAvailable(name: BackendName): boolean {
 }
 
 export type {
+  AlertDelivery,
   Backend,
   BackendName,
   SpawnConfig,
   SpawnOptions,
   CompletionDetector,
+  HookAttention,
   SessionDiscovery,
 } from "./types";

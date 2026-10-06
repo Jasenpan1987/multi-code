@@ -1,17 +1,17 @@
 import fs from "fs";
 import path from "path";
 import type {
-  ActivityCallback,
   Backend,
-  CompletionDetector,
   SessionDiscovery,
   SpawnConfig,
   SpawnOptions,
 } from "./types";
-import { extractPromptDetail, keystrokeForOption } from "../remote/promptExtract";
+import { keystrokeForOption } from "../remote/promptExtract";
+import { ClaudeHookAttention } from "./claudeHooks";
 import type { TranscriptEntry } from "../../shared/remote-protocol";
 import type { ContextUsage } from "../../shared/types";
 import { resolvePath } from "./resolvePath";
+import { INSTANCE_ENV, SPAWN_ENV } from "./instance-env";
 
 const HOME = process.env.HOME || "";
 const SESSIONS_DIR = path.join(HOME, ".claude/sessions");
@@ -221,6 +221,8 @@ const INHERITED_CLI_MARKERS = [
 function buildEnv(): Record<string, string> {
   const env = { ...process.env } as Record<string, string>;
   for (const key of INHERITED_CLI_MARKERS) delete env[key];
+  delete env[INSTANCE_ENV];
+  delete env[SPAWN_ENV];
   return {
     ...env,
     PATH: [
@@ -232,206 +234,17 @@ function buildEnv(): Record<string, string> {
   };
 }
 
-// A tool_use that is unpaired for this long is treated as "Claude is blocked
-// on an interactive prompt" (permission box, AskUserQuestion, plan approval).
-// Auto-approved tools pair within ~200ms; this threshold sits well above that.
-const PROMPT_PENDING_MS = 1500;
-
-// PTY must have been silent for at least this long before a pending tool_use
-// is treated as a real user-waiting prompt. The CLI's spinner repaints at
-// least once per second while a tool/subagent is running, so this cleanly
-// separates "screen static (waiting on user)" from "spinner ticking".
-const PTY_IDLE_MS = 800;
-
-interface PendingToolUse {
-  name: string;
-  writtenAt: number;
-  // Raw tool input, kept so a paired phone can be shown the actual question and
-  // its options rather than just "the agent is waiting".
-  input: unknown;
-}
-
-export class ClaudeCompletionDetector implements CompletionDetector {
-  private fileSize = 0;
-  private pollInterval: ReturnType<typeof setInterval> | null = null;
-  private pendingNotify: ReturnType<typeof setTimeout> | null = null;
-  private stopped = false;
-
-  // Tool uses written by the assistant that haven't yet been paired with a
-  // matching tool_result from the user. While anything sits here long enough
-  // and the PTY is silent, Claude is waiting on us.
-  private pendingToolUses = new Map<string, PendingToolUse>();
-  // Edge-trigger latch: once we fire "prompt" for the current waiting state,
-  // don't fire again until every pending tool_use clears (i.e. user answered
-  // and Claude resumed).
-  private promptArmed = true;
-  // True between firing "prompt" and the pending set draining. Used to emit
-  // exactly one "prompt-cleared" when the question is answered, so a paired
-  // phone can drop its option buttons instead of leaving a stale prompt up.
-  private promptOutstanding = false;
-
-  constructor(
-    private readonly jsonlPath: string,
-    private readonly onActivity: ActivityCallback,
-    private readonly isPtyIdle: (ms: number) => boolean
-  ) {
-    try {
-      const stat = fs.statSync(jsonlPath);
-      this.fileSize = stat.size;
-    } catch {
-      this.fileSize = 0;
-    }
-    this.pollInterval = setInterval(() => this.tick(), 500);
-  }
-
-  stop() {
-    if (this.stopped) return;
-    this.stopped = true;
-    if (this.pollInterval) clearInterval(this.pollInterval);
-    if (this.pendingNotify) clearTimeout(this.pendingNotify);
-    this.pollInterval = null;
-    this.pendingNotify = null;
-  }
-
-  private cancelPending() {
-    if (this.pendingNotify) {
-      clearTimeout(this.pendingNotify);
-      this.pendingNotify = null;
-    }
-  }
-
-  private tick() {
-    this.checkForChanges();
-    this.checkForPrompt();
-  }
-
-  private checkForChanges() {
-    try {
-      const stat = fs.statSync(this.jsonlPath);
-      if (stat.size <= this.fileSize) return;
-
-      const fd = fs.openSync(this.jsonlPath, "r");
-      const buf = Buffer.alloc(stat.size - this.fileSize);
-      fs.readSync(fd, buf, 0, buf.length, this.fileSize);
-      fs.closeSync(fd);
-
-      this.fileSize = stat.size;
-
-      const lines = buf
-        .toString("utf8")
-        .split("\n")
-        .filter((l) => l.trim());
-
-      let shouldScheduleNotify = false;
-
-      for (const line of lines) {
-        try {
-          const msg = JSON.parse(line);
-          if (msg.type === "assistant") {
-            // end_turn = Claude is truly done with this turn → schedule notify
-            // tool_use  = Claude is calling a tool, still working → ignore
-            const stopReason = msg.message?.stop_reason;
-            if (stopReason === "end_turn") {
-              shouldScheduleNotify = true;
-            }
-            // Track every tool_use the assistant emits. They sit in
-            // pendingToolUses until a matching tool_result arrives.
-            const content = msg.message?.content;
-            if (Array.isArray(content)) {
-              for (const item of content) {
-                if (
-                  item?.type === "tool_use" &&
-                  typeof item.id === "string"
-                ) {
-                  this.pendingToolUses.set(item.id, {
-                    name: typeof item.name === "string" ? item.name : "",
-                    writtenAt: Date.now(),
-                    input: item.input,
-                  });
-                }
-              }
-            }
-          } else if (msg.type === "user") {
-            const content = msg.message?.content ?? msg.content;
-            // String content = real user input → user already saw the turn.
-            if (typeof content === "string") {
-              shouldScheduleNotify = false;
-              this.cancelPending();
-            }
-            // Array content may carry tool_result entries; pair them off so
-            // their tool_use leaves the pending set.
-            if (Array.isArray(content)) {
-              for (const item of content) {
-                if (
-                  item?.type === "tool_result" &&
-                  typeof item.tool_use_id === "string"
-                ) {
-                  this.pendingToolUses.delete(item.tool_use_id);
-                }
-              }
-            }
-          }
-        } catch {
-          // skip invalid JSON
-        }
-      }
-
-      // Re-arm the prompt latch as soon as nothing is pending — the next
-      // genuinely new "stuck" tool_use should beep again. This is also the
-      // moment a reported prompt got answered, so tell listeners once.
-      if (this.pendingToolUses.size === 0) {
-        this.promptArmed = true;
-        if (this.promptOutstanding) {
-          this.promptOutstanding = false;
-          this.onActivity("prompt-cleared");
-        }
-      }
-
-      // Schedule notification: wait 2s to confirm Claude really stopped.
-      // If a pending one already exists, replace it so the timer restarts
-      // from the latest end_turn (handles bursts of end_turn in one chunk).
-      if (shouldScheduleNotify) {
-        this.cancelPending();
-        this.pendingNotify = setTimeout(() => {
-          this.pendingNotify = null;
-          if (!this.stopped) this.onActivity("waiting");
-        }, 2000);
-      }
-    } catch {
-      // ignore errors
-    }
-  }
-
-  // Fire "prompt" once when the JSONL says Claude is stuck on an unpaired
-  // tool_use AND the PTY has gone quiet (no spinner, no streaming). The two
-  // signals together cleanly separate "waiting on user" from "running a
-  // long subagent or tool" — the latter keeps the spinner repainting.
-  private checkForPrompt() {
-    if (!this.promptArmed) return;
-    if (this.pendingToolUses.size === 0) return;
-
-    const now = Date.now();
-    let oldestAge = 0;
-    // The oldest unpaired tool_use is the one the CLI is blocked on, so it's
-    // also the one whose question is on screen — decode that one for the phone.
-    let oldest: PendingToolUse | null = null;
-    for (const tu of this.pendingToolUses.values()) {
-      const age = now - tu.writtenAt;
-      if (age > oldestAge) {
-        oldestAge = age;
-        oldest = tu;
-      }
-    }
-    if (oldestAge < PROMPT_PENDING_MS) return;
-
-    if (!this.isPtyIdle(PTY_IDLE_MS)) return;
-
-    this.promptArmed = false;
-    this.promptOutstanding = true;
-    const detail = oldest
-      ? (extractPromptDetail(oldest.name, oldest.input) ?? undefined)
-      : undefined;
-    this.onActivity("prompt", detail);
+// The registry status of a running claude: `idle`, `busy`, `waiting`, `shell`, or
+// null when the entry can't be read. Read only to confirm a `Stop` the CLI
+// reported through a hook (see claudeHooks.ts), never as an event source.
+export function readClaudeRegistryStatus(pid: number): string | null {
+  try {
+    const data = JSON.parse(
+      fs.readFileSync(path.join(SESSIONS_DIR, `${pid}.json`), "utf8")
+    );
+    return typeof data.status === "string" ? data.status : null;
+  } catch {
+    return null;
   }
 }
 
@@ -490,7 +303,8 @@ export const claudeBackend: Backend = {
     }
     // Additive, like --mcp-config above: the CLI merges this on top of the user's
     // own settings files rather than replacing them, so their hooks and rules for
-    // this directory still apply.
+    // this directory still apply. Only one --settings ever: a second would replace
+    // this one outright (measured 2026-10-07).
     if (opts?.settingsPath) {
       args.push("--settings", opts.settingsPath);
     }
@@ -506,17 +320,15 @@ export const claudeBackend: Backend = {
     return new ClaudeSessionDiscovery(cwd, onFound, isClaimed);
   },
 
-  createCompletionDetector(sessionId, onActivity, isPtyIdle) {
-    // For claude, sessionId maps directly to a jsonl file under PROJECTS_DIR.
-    // We need the cwd to construct the full path, but we only have sessionId
-    // here. Solution: store a reverse map at discovery time. For now, find
-    // the jsonl by scanning known projects directories for `<sessionId>.jsonl`.
-    const jsonlPath = findJsonlBySessionId(sessionId);
-    if (!jsonlPath) {
-      // Return a no-op detector if we can't locate the file
-      return { stop() {} };
-    }
-    return new ClaudeCompletionDetector(jsonlPath, onActivity, isPtyIdle);
+  // The CLI reports its own state through the alert hooks every instance is
+  // spawned with. Nothing here reads the transcript or the terminal for it.
+  createHookAttention(pid, onActivity, onHooksHealth) {
+    return new ClaudeHookAttention(
+      onActivity,
+      () => readClaudeRegistryStatus(pid),
+      undefined,
+      onHooksHealth
+    );
   },
 
   // Claude's option boxes accept the option's number directly, for every kind of

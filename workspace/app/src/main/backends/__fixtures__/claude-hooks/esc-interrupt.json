@@ -1,0 +1,60 @@
+{
+  "cli": "2.1.291",
+  "scenario": "esc-interrupt",
+  "description": "A 40s Bash call interrupted with Esc after ~6s.",
+  "deliveries": [
+    {
+      "ms": 0,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "c1dd40e0-05a4-42c7-8e55-b7e1ebad3e5d",
+        "permission_mode": "default",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Use the Bash tool to run exactly: sleep 40  -- then reply with just ok."
+      }
+    },
+    {
+      "ms": 946,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "c1dd40e0-05a4-42c7-8e55-b7e1ebad3e5d",
+        "permission_mode": "default",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "sleep 40",
+          "description": "Sleep for 40 seconds"
+        },
+        "tool_use_id": "toolu_bdrk_01FEDbNUQpGTYvErNARr9ZbV"
+      }
+    }
+  ],
+  "registry": [
+    {
+      "ms": -627,
+      "status": "idle"
+    },
+    {
+      "ms": 18,
+      "status": "busy"
+    },
+    {
+      "ms": 7138,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": -26,
+      "key": "enter"
+    },
+    {
+      "ms": 7032,
+      "key": "esc"
+    }
+  ]
+}

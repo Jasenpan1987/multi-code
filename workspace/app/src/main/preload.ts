@@ -119,6 +119,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.removeListener("instance-session-id", listener);
     };
   },
+  onInstanceAlertsDegraded: (callback: (id: string, degraded: boolean) => void) => {
+    const listener = (_event: unknown, id: string, degraded: boolean) =>
+      callback(id, degraded);
+    ipcRenderer.on("instance-alerts-degraded", listener);
+    return () => {
+      ipcRenderer.removeListener("instance-alerts-degraded", listener);
+    };
+  },
   onShellOutput: (callback: (id: string, data: string) => void) => {
     const listener = (_event: unknown, id: string, data: string) =>
       callback(id, data);

@@ -16,7 +16,7 @@
 - **多后端** — 每个实例跑 **Claude Code** 或 **OpenCode**。创建实例时选后端,可以任意混用,甚至同一个项目目录里两个都开
 - **实例管理** — 按项目目录 spawn / restart / remove agent 会话
 - **完整终端能力** — 用 node-pty 接真 PTY,xterm.js 渲染。不做 chat 抽象,不解析消息
-- **会话通知** — 检测 agent 完成一轮回复(Claude 读它的 session JSONL,OpenCode 读它的 session 数据库),播放声音、闪烁联系人、macOS Dock 弹跳
+- **会话通知** — 知道 agent 什么时候做完、什么时候在等你(Claude 通过 Multi-Code 启动时传给它的 hooks 自己上报,OpenCode 读它的 session 数据库),播放声音、闪烁联系人、macOS Dock 弹跳
 - **Context 用量一眼可见** — 每一行联系人都显示这个会话的 context 窗口用了百分之多少,并按用量上色。鼠标悬停能看到精确 token 数、模型和统计时间。窗口大小确定不了的时候只显示 token 数,不瞎猜百分比。已停止的会话也显示最后一次的用量
 - **跟得上 `/clear` 和 `/new`** — 运行中的 CLI 切到新 session 时,Multi-Code 会跟过去,context 用量、通知和 Manager 看到的都是当前那个 session
 - **持久化** — 实例列表(含每个实例的后端)存盘,重启后恢复
@@ -326,13 +326,13 @@ Manager 的角色 guidance 放在它文件夹里的 `CLAUDE.md`。你可以改;�
 
 ### 通知行为
 
-两种后端的通知行为完全一致,只是检测来源不同(Claude Code 读 session JSONL,OpenCode 读 session 数据库)。
+两种后端的通知行为完全一致,只是来源不同。Claude Code 通过 hooks 上报自己的状态:Multi-Code 启动的每个 `claude` 都带一个来自 Multi-Code 数据目录的 `--settings` 文件,里面的 hooks 把状态发到 app 本地的 `/alert` 接口。不会写你自己的 Claude 配置,所以在普通终端里跑 `claude` 不受影响。OpenCode 读它的 session 数据库。
 
-- Agent 完成一轮回应 → 响一次"滴滴"提示音
+- Agent 做完了,或停下来等你(权限确认、提问、计划审批)→ 响一次"滴滴",每个实例都响,包括你正在看的那个
 - 头像闪烁 + 红点徽标
-- macOS Dock 图标弹跳(`critical` 模式,持续到你切回 app)
-- 当前选中的实例:闪烁 1.5 秒后自动消失(假定你已在看)
-- 其他实例:闪烁直到你点进去
+- Multi-Code 不在前台时 macOS Dock 图标弹跳(`critical` 模式,持续到你切回 app)
+- 在某个会话的页面里打字或点任意位置,停掉它的提示音、清掉它的红点。在列表里点某个联系人,对那个联系人也一样。不会因为计时或窗口获得焦点就自动清掉
+- 你按 Esc 打断的一轮,或你拒绝的弹窗,不会响
 
 ### 离线状态
 
@@ -396,13 +396,13 @@ Multi-Code 自己存的东西都在 Electron 的 userData 目录里。macOS 上�
 1. 用户选一个项目目录和后端(Claude Code / OpenCode)创建实例
 2. App 通过 node-pty 在该目录 spawn 对应后端 CLI(`claude` / `opencode`,有历史 session 就续上)。后端在 `src/main/backends/` 的一个小 `Backend` 接口后面可插拔
 3. PTY stdout 实时管道到 renderer 里的 xterm.js 终端
-4. 按后端各自的完成检测器监听一轮结束,Claude 读它的 session JSONL,OpenCode 读它的 session 数据库,都是只读,不回写任何东西
-5. 完成时:声音 + 闪烁 + Dock 弹跳。当前选中的实例 1.5 秒后自动 mark read
+4. 每个 agent 的状态来自 agent 自己:Claude Code 通过启动时用 `--settings` 传入的只上报 hooks 报告(做完了、在等权限确认或回答问题),OpenCode 读它的 session 数据库。两者都不往用户自己的配置里写任何东西
+5. 做完或等你时:声音 + 闪烁 + Dock 弹跳,每个实例都一样。红点一直留着,直到你在那个会话里打字、点击,或选中它
 6. 工具箱 sections 各自管理生命周期:
    - Git:展开期间每 5s 调用 `git`
    - Terminal:第一次展开时 lazy-spawn 一个 shell PTY,之后保活
 7. 实例信息持久化到 userData 目录里的 `contacts.json`
-8. 有 Manager 的时候,主进程还会在 `127.0.0.1` 上起一个小 MCP server(端口由系统分配,bearer token 鉴权)。Manager 的 `claude` 启动时带 `--mcp-config` 指向它,另外挂了 hooks,把它自己的工具调用报回活动记录
+8. 主进程在 app 打开期间一直在 `127.0.0.1` 上跑一个小 HTTP server(端口由系统分配,bearer token 鉴权)。它给 Manager 提供 MCP 工具:Manager 的 `claude` 启动时带 `--mcp-config` 指向它,另外挂了 hooks,把它自己的工具调用报回活动记录。它还有一个 `/alert` 路径,用单独的 token,给 agent 上报自己的状态
 9. 手机互联打开时,主进程还会在 6768 端口起一个 WebSocket server,既托管手机网页,又把同一份 PTY 字节流和解析出来的 prompt 推给已配对的手机。每一帧用 NaCl box 封装;手机通过局域网或 Tailscale 直连电脑,中间没有任何 relay
 
 ## 许可

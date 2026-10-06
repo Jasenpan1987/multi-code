@@ -14,12 +14,19 @@
 // binds 0.0.0.0 and is reachable over Tailscale for the phone, while these tools
 // drive work in every repository the user has open. An exposed port here would
 // let anything that can reach the machine dispatch tasks to every session.
+//
+// Also the endpoint every Claude session's alert hooks report to (`/alert`), which
+// is why it runs for the app's whole lifetime rather than only while a manager
+// exists. That path has its own token: every session's hook carries it, and it must
+// not open the manager's dispatch tools.
 
 import http from "http";
 import crypto from "crypto";
 import { managerActivityLog } from "./activity-log";
 import { recordHookDelivery } from "./hook-activity";
 import type { HookDelivery } from "./hook-activity";
+import type { AlertDelivery } from "../backends";
+import { debugTrace } from "../debug-trace";
 
 // Advertised in the initialize result. A client that asked for a different
 // revision still gets this one and decides for itself whether it can proceed —
@@ -71,6 +78,15 @@ export interface McpServerInfo {
   error?: string;
 }
 
+// Names the instance an alert delivery came from. Not a secret: the hook command
+// expands it from MULTICODE_INSTANCE_ID, so it is in the hook's argv, and it only
+// says which contact to light up. The token is what authenticates.
+const INSTANCE_HEADER = "x-multicode-instance";
+// Which spawn of that instance sent it; see SPAWN_ENV in backends/instance-env.ts.
+const SPAWN_HEADER = "x-multicode-spawn";
+
+export type AlertListener = (delivery: AlertDelivery) => void;
+
 interface JsonRpcMessage {
   jsonrpc?: string;
   id?: string | number | null;
@@ -82,6 +98,8 @@ export class ManagerMcpServer {
   private httpServer: http.Server | null = null;
   private port: number | null = null;
   private token: string | null = null;
+  private alertToken: string | null = null;
+  private alertListener: AlertListener | null = null;
   private startError: string | undefined;
   private tools = new Map<string, ToolDefinition>();
   private readonly startedAt = Date.now();
@@ -107,6 +125,21 @@ export class ManagerMcpServer {
     return this.port === null ? null : `http://127.0.0.1:${this.port}/mcp`;
   }
 
+  getAlertToken(): string | null {
+    return this.alertToken;
+  }
+
+  getAlertEndpoint(): string | null {
+    return this.port === null ? null : `http://127.0.0.1:${this.port}/alert`;
+  }
+
+  // One listener, set by whoever routes deliveries to instances. Kept as a seam
+  // for the same reason tools are registered from outside: this module must not
+  // import process-manager.
+  onAlertDelivery(listener: AlertListener | null) {
+    this.alertListener = listener;
+  }
+
   getInfo(): McpServerInfo {
     return {
       running: this.isRunning(),
@@ -125,6 +158,7 @@ export class ManagerMcpServer {
 
     this.startError = undefined;
     this.token = crypto.randomBytes(32).toString("base64url");
+    this.alertToken = crypto.randomBytes(32).toString("base64url");
 
     const server = http.createServer((req, res) => {
       void this.handleHttp(req, res);
@@ -149,6 +183,7 @@ export class ManagerMcpServer {
     } catch (err) {
       server.close();
       this.token = null;
+      this.alertToken = null;
       this.startError = (err as Error)?.message ?? "Failed to start";
       return this.getInfo();
     }
@@ -164,6 +199,7 @@ export class ManagerMcpServer {
     this.httpServer = null;
     this.port = null;
     this.token = null;
+    this.alertToken = null;
     if (server) {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
@@ -183,17 +219,28 @@ export class ManagerMcpServer {
       return;
     }
 
-    if (!this.isAuthorized(req)) {
+    let pathname: string | null;
+    try {
+      pathname = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
+    } catch {
+      pathname = null;
+    }
+
+    // Routed before the manager token is checked, and checked against its own
+    // token, so neither token opens the other's paths.
+    if (pathname === "/alert") {
+      await this.handleAlert(req, res);
+      return;
+    }
+
+    if (!this.isAuthorized(req, this.token)) {
       // No WWW-Authenticate challenge: this isn't a resource a user agent should
       // prompt for, and advertising the scheme only helps someone probing.
       res.writeHead(401).end();
       return;
     }
 
-    let pathname: string;
-    try {
-      pathname = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
-    } catch {
+    if (pathname === null) {
       res.writeHead(400).end();
       return;
     }
@@ -318,8 +365,69 @@ export class ManagerMcpServer {
     res.writeHead(204).end();
   }
 
-  private isAuthorized(req: http.IncomingMessage): boolean {
-    const expected = this.token;
+  // A Claude session reporting its own state through a hook (see
+  // docs/specs/attention-alerts/prd.md, Story 1). The body is the CLI's hook stdin
+  // JSON as is; the instance comes from a header the hook command sets.
+  //
+  // The 204 goes out before the listener runs: the hook is fire-and-forget on the
+  // CLI's side, and nothing the listener does should hold the agent up or decide
+  // what curl sees.
+  private async handleAlert(
+    req: http.IncomingMessage,
+    res: http.ServerResponse
+  ) {
+    if (!this.isAuthorized(req, this.alertToken)) {
+      res.writeHead(401).end();
+      return;
+    }
+    if (req.method !== "POST") {
+      res.writeHead(405).end();
+      return;
+    }
+
+    const header = req.headers[INSTANCE_HEADER];
+    const instanceId = typeof header === "string" ? header.trim() : "";
+
+    let raw: string;
+    try {
+      raw = await readBody(req);
+    } catch (err) {
+      const tooLarge = (err as Error).message === "too-large";
+      debugTrace(
+        `[alert-hook] ${instanceId.slice(0, 8) || "-"} ${tooLarge ? "oversized" : "unreadable"} delivery dropped at ${new Date().toISOString()}`
+      );
+      res.writeHead(tooLarge ? 413 : 400).end();
+      return;
+    }
+
+    const spawnHeader = req.headers[SPAWN_HEADER];
+    const spawnId = typeof spawnHeader === "string" ? spawnHeader.trim() : "";
+    const delivery = parseAlertDelivery(instanceId, raw, spawnId);
+    if (!delivery) {
+      debugTrace(
+        `[alert-hook] ${instanceId.slice(0, 8) || "-"} malformed delivery dropped at ${new Date().toISOString()}`
+      );
+      res.writeHead(400).end();
+      return;
+    }
+
+    res.writeHead(204).end();
+    debugTrace(
+      `[alert-hook] ${instanceId.slice(0, 8)} ${delivery.event} ${delivery.toolName ?? "-"} at ${new Date().toISOString()}`
+    );
+    try {
+      this.alertListener?.(delivery);
+    } catch (err) {
+      // A listener bug must not take the server down with it: every other session
+      // reports through this same socket.
+      debugTrace(`[alert-hook] listener threw: ${(err as Error)?.message ?? String(err)}`);
+    }
+  }
+
+  private isAuthorized(
+    req: http.IncomingMessage,
+    expected: string | null
+  ): boolean {
     if (!expected) return false;
     const header = req.headers.authorization;
     if (typeof header !== "string") return false;
@@ -436,6 +544,41 @@ export class ManagerMcpServer {
   toolCount(): number {
     return this.tools.size;
   }
+}
+
+// The hook's stdin JSON plus the instance it came from. Null for anything that
+// isn't a JSON object naming a hook event, or that names no instance: such a
+// delivery can't be attributed, so it is dropped rather than guessed at.
+export function parseAlertDelivery(
+  instanceId: string,
+  raw: string,
+  spawnId = ""
+): AlertDelivery | null {
+  if (!instanceId) return null;
+  let payload: unknown;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    return null;
+  }
+  const p = payload as Record<string, unknown>;
+  const event = p.hook_event_name;
+  if (typeof event !== "string" || event === "") return null;
+  const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+  return {
+    instanceId,
+    spawnId: spawnId || undefined,
+    event,
+    sessionId: str(p.session_id),
+    toolName: str(p.tool_name),
+    toolInput: p.tool_input,
+    toolUseId: str(p.tool_use_id),
+    agentId: str(p.agent_id),
+    payload: p,
+  };
 }
 
 function isLocalOrigin(origin: string): boolean {

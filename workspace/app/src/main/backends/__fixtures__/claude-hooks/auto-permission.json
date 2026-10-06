@@ -1,0 +1,177 @@
+{
+  "cli": "2.1.291",
+  "scenario": "auto-permission",
+  "description": "--permission-mode auto (opus) with an ask rule on Bash(touch:*); answered 1 if asked.",
+  "deliveries": [
+    {
+      "ms": 0,
+      "payload": {
+        "session_id": "b6e19a2e-8407-4a08-ae9a-45a30ed63868",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-auto-perm/b6e19a2e-8407-4a08-ae9a-45a30ed63868.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-auto-perm",
+        "prompt_id": "7069c948-5b6d-4de6-b8af-db837f663a03",
+        "permission_mode": "auto",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Use the Bash tool to run exactly: touch auto.txt  -- then reply with just done."
+      }
+    },
+    {
+      "ms": 2716,
+      "payload": {
+        "session_id": "b6e19a2e-8407-4a08-ae9a-45a30ed63868",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-auto-perm/b6e19a2e-8407-4a08-ae9a-45a30ed63868.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-auto-perm",
+        "prompt_id": "7069c948-5b6d-4de6-b8af-db837f663a03",
+        "permission_mode": "auto",
+        "effort": {
+          "level": "xhigh"
+        },
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "touch auto.txt",
+          "description": "Create empty file auto.txt"
+        },
+        "tool_use_id": "toolu_bdrk_01N4yQrkyHgn4Ha6UHpuzX7D"
+      }
+    },
+    {
+      "ms": 2757,
+      "payload": {
+        "session_id": "b6e19a2e-8407-4a08-ae9a-45a30ed63868",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-auto-perm/b6e19a2e-8407-4a08-ae9a-45a30ed63868.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-auto-perm",
+        "prompt_id": "7069c948-5b6d-4de6-b8af-db837f663a03",
+        "permission_mode": "auto",
+        "effort": {
+          "level": "xhigh"
+        },
+        "hook_event_name": "PermissionRequest",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "touch auto.txt",
+          "description": "Create empty file auto.txt"
+        }
+      }
+    },
+    {
+      "ms": 4799,
+      "payload": {
+        "session_id": "b6e19a2e-8407-4a08-ae9a-45a30ed63868",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-auto-perm/b6e19a2e-8407-4a08-ae9a-45a30ed63868.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-auto-perm",
+        "prompt_id": "7069c948-5b6d-4de6-b8af-db837f663a03",
+        "permission_mode": "auto",
+        "effort": {
+          "level": "xhigh"
+        },
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "touch auto.txt",
+          "description": "Create empty file auto.txt"
+        },
+        "tool_response": {
+          "stdout": "",
+          "stderr": "",
+          "interrupted": false,
+          "isImage": false,
+          "noOutputExpected": true
+        },
+        "tool_use_id": "toolu_bdrk_01N4yQrkyHgn4Ha6UHpuzX7D",
+        "duration_ms": 973
+      }
+    },
+    {
+      "ms": 4831,
+      "payload": {
+        "session_id": "b6e19a2e-8407-4a08-ae9a-45a30ed63868",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-auto-perm/b6e19a2e-8407-4a08-ae9a-45a30ed63868.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-auto-perm",
+        "prompt_id": "7069c948-5b6d-4de6-b8af-db837f663a03",
+        "permission_mode": "auto",
+        "effort": {
+          "level": "xhigh"
+        },
+        "hook_event_name": "PostToolBatch",
+        "tool_calls": [
+          {
+            "tool_name": "Bash",
+            "tool_input": {
+              "command": "touch auto.txt",
+              "description": "Create empty file auto.txt"
+            },
+            "tool_use_id": "toolu_bdrk_01N4yQrkyHgn4Ha6UHpuzX7D",
+            "tool_response": "(Bash completed with no output)"
+          }
+        ]
+      }
+    },
+    {
+      "ms": 6410,
+      "payload": {
+        "session_id": "b6e19a2e-8407-4a08-ae9a-45a30ed63868",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-auto-perm/b6e19a2e-8407-4a08-ae9a-45a30ed63868.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-auto-perm",
+        "prompt_id": "7069c948-5b6d-4de6-b8af-db837f663a03",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "f2abc75b-2acf-4fd2-8e0b-ea83a818581e",
+        "message_id": "5e7e4f3a-a19d-4b91-a003-1b0f6cdfaff5",
+        "index": 0,
+        "final": true,
+        "delta": "done"
+      }
+    },
+    {
+      "ms": 6410,
+      "payload": {
+        "session_id": "b6e19a2e-8407-4a08-ae9a-45a30ed63868",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-auto-perm/b6e19a2e-8407-4a08-ae9a-45a30ed63868.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-auto-perm",
+        "prompt_id": "7069c948-5b6d-4de6-b8af-db837f663a03",
+        "permission_mode": "auto",
+        "effort": {
+          "level": "xhigh"
+        },
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "last_assistant_message": "done",
+        "background_tasks": [],
+        "session_crons": []
+      }
+    }
+  ],
+  "registry": [
+    {
+      "ms": -647,
+      "status": "idle"
+    },
+    {
+      "ms": 4,
+      "status": "busy"
+    },
+    {
+      "ms": 2789,
+      "status": "waiting",
+      "waitingFor": "permission prompt"
+    },
+    {
+      "ms": 3853,
+      "status": "busy"
+    },
+    {
+      "ms": 6433,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": -42,
+      "key": "enter"
+    },
+    {
+      "ms": 3801,
+      "key": "1 (Yes)"
+    }
+  ]
+}

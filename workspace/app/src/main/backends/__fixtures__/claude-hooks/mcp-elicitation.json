@@ -1,0 +1,305 @@
+{
+  "cli": "2.1.291",
+  "scenario": "mcp-elicitation",
+  "description": "An MCP tool that sends elicitation/create; the form is answered (or declined).",
+  "deliveries": [
+    {
+      "ms": 0,
+      "payload": {
+        "session_id": "949c8322-bb9d-480a-be03-572d0e57e61e",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-elicit/949c8322-bb9d-480a-be03-572d0e57e61e.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-elicit",
+        "prompt_id": "f4dc72ee-c6f4-4390-90c4-3f2835b8276d",
+        "permission_mode": "default",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Call the mcp__spike__ask_name tool once, then reply with just the result."
+      }
+    },
+    {
+      "ms": 1422,
+      "payload": {
+        "session_id": "949c8322-bb9d-480a-be03-572d0e57e61e",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-elicit/949c8322-bb9d-480a-be03-572d0e57e61e.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-elicit",
+        "prompt_id": "f4dc72ee-c6f4-4390-90c4-3f2835b8276d",
+        "permission_mode": "default",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "ToolSearch",
+        "tool_input": {
+          "query": "select:mcp__spike__ask_name",
+          "max_results": 1
+        },
+        "tool_use_id": "toolu_bdrk_017aiCf17jvcHtmhMHDLYMtz"
+      }
+    },
+    {
+      "ms": 1422,
+      "payload": {
+        "session_id": "949c8322-bb9d-480a-be03-572d0e57e61e",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-elicit/949c8322-bb9d-480a-be03-572d0e57e61e.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-elicit",
+        "prompt_id": "f4dc72ee-c6f4-4390-90c4-3f2835b8276d",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "7ede8c0b-cfb9-4d7e-bba6-ed48f15baaf4",
+        "message_id": "08a63c2c-834c-4987-9a0f-3a741d2aa616",
+        "index": 0,
+        "final": true,
+        "delta": "I'll call that tool for you now."
+      }
+    },
+    {
+      "ms": 1453,
+      "payload": {
+        "session_id": "949c8322-bb9d-480a-be03-572d0e57e61e",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-elicit/949c8322-bb9d-480a-be03-572d0e57e61e.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-elicit",
+        "prompt_id": "f4dc72ee-c6f4-4390-90c4-3f2835b8276d",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "ToolSearch",
+        "tool_input": {
+          "query": "select:mcp__spike__ask_name",
+          "max_results": 1
+        },
+        "tool_response": {
+          "matches": [
+            "mcp__spike__ask_name"
+          ],
+          "query": "select:mcp__spike__ask_name",
+          "total_deferred_tools": 18
+        },
+        "tool_use_id": "toolu_bdrk_017aiCf17jvcHtmhMHDLYMtz",
+        "duration_ms": 0
+      }
+    },
+    {
+      "ms": 1481,
+      "payload": {
+        "session_id": "949c8322-bb9d-480a-be03-572d0e57e61e",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-elicit/949c8322-bb9d-480a-be03-572d0e57e61e.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-elicit",
+        "prompt_id": "f4dc72ee-c6f4-4390-90c4-3f2835b8276d",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolBatch",
+        "tool_calls": [
+          {
+            "tool_name": "ToolSearch",
+            "tool_input": {
+              "query": "select:mcp__spike__ask_name",
+              "max_results": 1
+            },
+            "tool_use_id": "toolu_bdrk_017aiCf17jvcHtmhMHDLYMtz",
+            "tool_response": [
+              {
+                "type": "tool_reference",
+                "tool_name": "mcp__spike__ask_name"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "ms": 2699,
+      "payload": {
+        "session_id": "949c8322-bb9d-480a-be03-572d0e57e61e",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-elicit/949c8322-bb9d-480a-be03-572d0e57e61e.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-elicit",
+        "prompt_id": "f4dc72ee-c6f4-4390-90c4-3f2835b8276d",
+        "permission_mode": "default",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__spike__ask_name",
+        "tool_input": {},
+        "tool_use_id": "toolu_bdrk_01AhLBmdwupgkGyLDS4ifnbt",
+        "mcp_server": {
+          "name": "spike",
+          "source": "dynamic"
+        }
+      }
+    },
+    {
+      "ms": 2699,
+      "payload": {
+        "session_id": "949c8322-bb9d-480a-be03-572d0e57e61e",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-elicit/949c8322-bb9d-480a-be03-572d0e57e61e.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-elicit",
+        "prompt_id": "f4dc72ee-c6f4-4390-90c4-3f2835b8276d",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "7ede8c0b-cfb9-4d7e-bba6-ed48f15baaf4",
+        "message_id": "d25ba6dc-9e2b-48ef-b87f-52d39efe0d4e",
+        "index": 0,
+        "final": true,
+        "delta": "\u73b0\u5728\u8c03\u7528\u5de5\u5177\u3002"
+      }
+    },
+    {
+      "ms": 2757,
+      "payload": {
+        "session_id": "949c8322-bb9d-480a-be03-572d0e57e61e",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-elicit/949c8322-bb9d-480a-be03-572d0e57e61e.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-elicit",
+        "prompt_id": "f4dc72ee-c6f4-4390-90c4-3f2835b8276d",
+        "hook_event_name": "Elicitation",
+        "mcp_server_name": "spike",
+        "message": "What is your name?",
+        "mode": "form",
+        "requested_schema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      }
+    },
+    {
+      "ms": 6109,
+      "payload": {
+        "session_id": "949c8322-bb9d-480a-be03-572d0e57e61e",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-elicit/949c8322-bb9d-480a-be03-572d0e57e61e.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-elicit",
+        "prompt_id": "f4dc72ee-c6f4-4390-90c4-3f2835b8276d",
+        "hook_event_name": "ElicitationResult",
+        "mcp_server_name": "spike",
+        "mode": "form",
+        "action": "accept",
+        "content": {
+          "name": "Bob"
+        }
+      }
+    },
+    {
+      "ms": 6181,
+      "payload": {
+        "session_id": "949c8322-bb9d-480a-be03-572d0e57e61e",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-elicit/949c8322-bb9d-480a-be03-572d0e57e61e.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-elicit",
+        "prompt_id": "f4dc72ee-c6f4-4390-90c4-3f2835b8276d",
+        "hook_event_name": "Notification",
+        "message": "Elicitation response for server \"spike\": accept",
+        "notification_type": "elicitation_response"
+      }
+    },
+    {
+      "ms": 6186,
+      "payload": {
+        "session_id": "949c8322-bb9d-480a-be03-572d0e57e61e",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-elicit/949c8322-bb9d-480a-be03-572d0e57e61e.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-elicit",
+        "prompt_id": "f4dc72ee-c6f4-4390-90c4-3f2835b8276d",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "mcp__spike__ask_name",
+        "tool_input": {},
+        "tool_response": [
+          {
+            "type": "text",
+            "text": "{\"action\": \"accept\", \"content\": {\"name\": \"Bob\"}}"
+          }
+        ],
+        "tool_use_id": "toolu_bdrk_01AhLBmdwupgkGyLDS4ifnbt",
+        "duration_ms": 3418,
+        "mcp_server": {
+          "name": "spike",
+          "source": "dynamic"
+        }
+      }
+    },
+    {
+      "ms": 6264,
+      "payload": {
+        "session_id": "949c8322-bb9d-480a-be03-572d0e57e61e",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-elicit/949c8322-bb9d-480a-be03-572d0e57e61e.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-elicit",
+        "prompt_id": "f4dc72ee-c6f4-4390-90c4-3f2835b8276d",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolBatch",
+        "tool_calls": [
+          {
+            "tool_name": "mcp__spike__ask_name",
+            "tool_input": {},
+            "tool_use_id": "toolu_bdrk_01AhLBmdwupgkGyLDS4ifnbt",
+            "tool_response": [
+              {
+                "type": "text",
+                "text": "{\"action\": \"accept\", \"content\": {\"name\": \"Bob\"}}"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "ms": 7190,
+      "payload": {
+        "session_id": "949c8322-bb9d-480a-be03-572d0e57e61e",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-elicit/949c8322-bb9d-480a-be03-572d0e57e61e.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-elicit",
+        "prompt_id": "f4dc72ee-c6f4-4390-90c4-3f2835b8276d",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "7ede8c0b-cfb9-4d7e-bba6-ed48f15baaf4",
+        "message_id": "36746c8a-4d3c-47a7-a066-0032e511e176",
+        "index": 0,
+        "final": true,
+        "delta": "Bob"
+      }
+    },
+    {
+      "ms": 7195,
+      "payload": {
+        "session_id": "949c8322-bb9d-480a-be03-572d0e57e61e",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-elicit/949c8322-bb9d-480a-be03-572d0e57e61e.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-elicit",
+        "prompt_id": "f4dc72ee-c6f4-4390-90c4-3f2835b8276d",
+        "permission_mode": "default",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "last_assistant_message": "Bob",
+        "background_tasks": [],
+        "session_crons": []
+      }
+    }
+  ],
+  "registry": [
+    {
+      "ms": -670,
+      "status": "idle"
+    },
+    {
+      "ms": 17,
+      "status": "busy"
+    },
+    {
+      "ms": 2833,
+      "status": "waiting",
+      "waitingFor": "input needed"
+    },
+    {
+      "ms": 6077,
+      "status": "busy"
+    },
+    {
+      "ms": 7210,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": -65,
+      "key": "enter"
+    },
+    {
+      "ms": 4460,
+      "key": "enter (Bob)"
+    },
+    {
+      "ms": 5979,
+      "key": "enter (submit)"
+    }
+  ]
+}
