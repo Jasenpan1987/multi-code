@@ -292,6 +292,21 @@ export class ProcessManager {
     return this.instances.get(id)?.secretaryEvent;
   }
 
+  // What the secretary's brief writer reads for an instance: the name the builder
+  // knows it by, and the session it is on now. The live session is re-checked
+  // first rather than waiting for the next poll, so a turn that ends within
+  // seconds of a `/clear` is read from the new transcript, not the abandoned one.
+  // Null for an id that isn't an instance.
+  secretarySource(id: string): { name: string; sessionId?: string } | null {
+    const instance = this.instances.get(id);
+    if (!instance) return null;
+    this.syncLiveSessionId(instance);
+    return {
+      name: instance.alias || path.basename(instance.cwd),
+      sessionId: this.readableSessionId(instance),
+    };
+  }
+
   // Every live secretary event, for a consumer starting up with events already
   // pending (Secretary Mode turned on while red dots show).
   liveSecretaryEvents(): { instanceId: string; event: SecretaryEvent }[] {

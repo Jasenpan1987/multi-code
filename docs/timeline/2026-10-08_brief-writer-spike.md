@@ -392,3 +392,35 @@ Probe scripts, all in `.omt/probes/voice-secretary/t501/`: `launch-via-launchd.s
 env), `build_inputs.cjs` and `extract_sample.cjs` (the samples), `gen_jobs.py` and
 `summarize.py` (the variants and the contract check), `residue_watch.cjs` and
 `kill_watch.cjs` (residue), `tts.py` (speech), `system-prompt-v1.txt`…`v7.txt`.
+
+## Addendum, T-504: an expired SSO login
+
+The question left open above, answered while building T-504 against the same CLI
+(2.1.292): **a logged-out brief writer does run `awsAuthRefresh`**, so without an override it
+would start `aws sso login` and open a browser on the builder's screen. T-504 passes
+`--settings '{"awsAuthRefresh":"false"}'` (`secretary/cli.ts`), and the call then fails in
+about 2 s with the CLI's credential error in `result`.
+
+Measured without going near the real login: `sso_probe.cjs` in
+`.omt/probes/voice-secretary/t504/` runs the brief writer's command under `env -i` with a fake
+HOME (`CLAUDE_CONFIG_DIR`, `AWS_CONFIG_FILE` and `AWS_SHARED_CREDENTIALS_FILE` pointed into it
+too). Its `~/.claude/settings.json` sets the Bedrock env for a fake SSO profile and an
+`awsAuthRefresh` that only appends to a marker file. Its `~/.aws` holds that profile and a
+cached SSO token that expired in 2020.
+
+| `--settings` | What ran | Result |
+|---|---|---|
+| none | the user's refresh command, once | exit 1, `is_error`, `Could not load AWS credentials · …`, 1.8 s |
+| `{"awsAuthRefresh": "<another command>"}` | that command, not the user's | the same, 2.0 s |
+| `{"awsAuthRefresh": ""}` | nothing | the same, 1.9 s |
+| `{"awsAuthRefresh": "false"}` | `false`; stderr `Error running awsAuthRefresh` | the same, 1.8 s |
+
+So a key in `--settings` replaces the user file's, as the settings docs say. `false` was
+chosen over `""`: the key is documented as "a shell command line" with the default "unset",
+and nothing says how an empty string is treated, so a later CLI that rejected it could drop
+the whole flag and bring the browser back. `awsCredentialExport` is not overridden: when set
+it is the credential source itself, and this builder doesn't use it.
+
+The real login happened to have expired during the work (token `expiresAt` 13:53 UTC, call at
+14:03). One real call with the override returned `Token is expired` and ran `false`; no browser
+opened. Fifteen minutes later the token had been renewed and the same calls succeeded.
