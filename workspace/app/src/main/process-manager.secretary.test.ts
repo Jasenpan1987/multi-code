@@ -299,6 +299,38 @@ describe("clearing once the builder has dealt with it", () => {
     expect(kinds()).toEqual([null]);
   });
 
+  it("mouse motion and wheel reports clear nothing; a click does", () => {
+    // CLI 2.1.292 turns on any-motion tracking in SGR form (?1003h, ?1006h), so the
+    // pointer crossing the terminal on its way to the secretary card sends these.
+    const manager = new ProcessManager();
+    const id = create(manager);
+    replay(manager, id, "plain-finish");
+    const { kinds } = listen(manager);
+
+    manager.writeToInstance(id, "\x1b[<35;40;12M"); // motion, no button
+    manager.writeToInstance(id, "\x1b[<35;41;12M\x1b[<35;42;13M");
+    manager.writeToInstance(id, "\x1b[<32;42;13M"); // drag with the left button
+    manager.writeToInstance(id, "\x1b[<64;42;13M\x1b[<65;42;13M"); // wheel up, down
+    manager.writeToInstance(id, "\x1b[I\x1b[<35;10;3M"); // focus, then a move
+    expect(kinds()).toEqual([]);
+    expect(manager.secretaryEventOf(id)?.kind).toBe("finished");
+    // Still delivered: the CLI asked for them.
+    expect(latestSpawn(id).written).toContain("\x1b[<35;40;12M");
+
+    // A press is the builder clicking in the TUI.
+    manager.writeToInstance(id, "\x1b[<0;42;13M");
+    expect(kinds()).toEqual([null]);
+  });
+
+  it("a key alongside a mouse move counts", () => {
+    const manager = new ProcessManager();
+    const id = create(manager);
+    replay(manager, id, "plain-finish");
+    const { kinds } = listen(manager);
+    manager.writeToInstance(id, "\x1b[<35;40;12My");
+    expect(kinds()).toEqual([null]);
+  });
+
   it("a resize is not a write", () => {
     const manager = new ProcessManager();
     const id = create(manager);
