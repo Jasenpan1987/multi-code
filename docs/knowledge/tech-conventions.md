@@ -256,3 +256,15 @@ bash tool inherits, so an `opencode` the agent runs would load it with the same 
 report its sessions as the instance's. Measured 2026-10-07 on 1.18.35: after the plugin
 deletes them, the bash tool sees none, and a nested `opencode run` stays silent.
 
+
+## Servers and model serving follow the vendor's documented method (added 2026-10-07)
+
+When something has to run outside the app, such as the secretary's speech server, every
+layer is installed and launched the way its vendor documents it, with the doc cited
+beside the command: the distribution's driver tool, Docker's and NVIDIA's install guides,
+the model's recommended server (vLLM-Omni for Qwen3-TTS, per Qwen's README) with its
+published image and launch command. Don't wrap a model library in a hand-written HTTP
+server to get it running sooner: the builder rejected exactly that on 2026-10-07 and asked
+for "最正确、最官方的方案". If a shortcut is ever worth it, say so before taking it. The
+reference setup is `deploy/tts-server/`. (source:
+docs/timeline/2026-10-07_voice-engine-hosting.md)

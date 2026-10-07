@@ -8,9 +8,10 @@
 **Milestones:** M1 (hear the brief) · M2 (answer in words) · M3 (originals when words aren't enough)
 
 Task ids start at T-501, after attention-alerts' T-4xx. Only M1 is committed; M2 and M3 are
-re-planned when M1 ships. The builder works **one task at a time**, so the order below is the
-order to take them in. Every task is Claude Code only: OpenCode instances and the manager get
-no secretary (PRD Story 2).
+re-planned when M1 ships. Work happens on the `voice-secretary` branch, merged into `master`
+when the epic is done. Tasks can be taken one at a time in the order below, or in parallel
+along the [lanes](#parallel-lanes). Every task is Claude Code only: OpenCode instances and the
+manager get no secretary (PRD Story 2).
 
 ## Task Overview
 
@@ -39,8 +40,26 @@ graph TD
 input and output; the orchestrator can only be written against that output; the card can
 only render what the orchestrator emits.
 
-**Could run in parallel, if anyone ever does:** T-502 and T-503 with T-501. They are sequenced
-only because the builder takes one task at a time.
+### Parallel lanes
+
+Added 2026-10-07 at the builder's request. Each round's tasks touch different files and can
+run in separate sessions at once; a round starts when everything it is blocked by has merged.
+
+| Round | In parallel | Why they don't collide |
+|---|---|---|
+| 1 | **T-501**, **T-503**, **T-502** | T-501 is a spike that writes only a `docs/timeline/` record. T-503 stays in `process-manager.ts`, `claudeHooks.ts`, `run-state.ts`. T-502 owns settings, the new `secretary/speech.ts`, and the IPC files |
+| 2 | **T-504**, **T-506** | T-504 is a new main-process module. T-506 is renderer only (`Toolbox.tsx`, new `SecretarySection.tsx`) on T-502's merged IPC |
+| 3 | T-505 | Needs T-502, T-503 and T-504 |
+| 4 | T-507 | Needs T-505 and T-506 |
+| 5 | T-508 | M1 QA |
+| 6 | **T-509**, **T-512** | Both main process. They meet in the brief writer: T-509 runs a second prompt through the same CLI, T-512 extends the brief's contract. Parallel only if T-504 puts the CLI spawn in its own module (`secretary/cli.ts`); otherwise take T-509 first |
+| 7 | T-510, then T-513 | Both edit `SecretaryCard.tsx`: sequence them |
+| 8 | T-511 and T-514 | QA; can be one pass when both milestones land together |
+
+To run a round in parallel, give each task its own worktree and branch off
+`voice-secretary`, e.g. `git worktree add ../multi-code-t503 -b vs/t-503 voice-secretary`,
+one session per worktree, and merge each back into `voice-secretary` when its task is done.
+Sessions sharing one working tree overwrite each other.
 
 **Shared files to watch:** T-502, T-505, T-506, T-509 all add to `workspace/app/src/main/ipc-handlers.ts`, `workspace/app/src/main/preload.ts` and `workspace/app/src/shared/types.ts`. T-506 and T-507 both edit `workspace/app/src/renderer/App.tsx`. T-503 and T-509 both read the per-instance event record in `workspace/app/src/main/process-manager.ts`.
 
@@ -75,7 +94,7 @@ read it instead.
 - **Description:** Settle how Multi-Code calls the brief writer before anything is built on it. From Electron's main process (not a shell), run `claude -p --bare --no-session-persistence --model global.anthropic.claude-sonnet-5-5 --output-format json` with the prompt on stdin, and answer: (1) Does it reach Bedrock when Multi-Code is launched from the Dock, where the shell's `AWS_PROFILE` is absent? It should pick it up from `~/.claude/settings.json` `env`; confirm `--bare` doesn't skip that. (2) Does it write anything under `~/.claude/projects/`? Diff the directory before and after. (3) How long does it take with a realistic input: a real turn from a session JSONL, 5–20k tokens? (4) Can it reliably return a strict JSON object `{ "language": "Chinese" | "English", "brief": string }`? Draft the system prompt that the PRD's Story 4 rules imply (opens with the session name; Finished vs Needs-you content; no mid-turn narration; language of the builder's latest message; written for the ear, acronyms spelled as spoken) and try it on three real turns: a finish, a Bash permission, an AskUserQuestion, one of them in English.
 - **Acceptance:** A spike record in `docs/timeline/` with the exact command, the env it needs, timings, the no-residue check, the prompt text, and the three sample inputs and outputs. The three briefs read correctly when spoken (check with `deploy/tts-server/smoke-test.sh`-style calls).
 - **Blocks:** T-504 · **Blocked by:** none · **Parallel with:** T-502, T-503
-- **Notes:** Measured from a terminal on 2026-10-07: 3.3 s for a one-line prompt. If (1) fails, pass the Bedrock env explicitly the way instance spawns already do in `instance-env.ts`, rather than adding an SDK.
+- **Notes:** Measured from a terminal on 2026-10-07: 3.3 s for a one-line prompt. If (1) fails, pass the Bedrock env explicitly the way instance spawns already do in `instance-env.ts`, rather than adding an SDK. `pnpm start` launches Electron from a shell and inherits its env, so it can't answer (1): test with the packaged app opened from Finder or with `open -a`.
 
 ### T-503: Keep each instance's latest event and its material in main
 
@@ -98,7 +117,7 @@ read it instead.
 - **Description:** `writeBrief(input): Promise<Brief>` where input is the session alias, the event from T-503, the builder's latest message in the session, and the turn's transcript entries since that message (from `readTranscript`). Spawns the CLI exactly as T-501 settled, with T-501's prompt, and parses `{ language, brief }`. Returns `{ ok: true, language: "Chinese" | "English", text: string }` or `{ ok: false, reason: string }` on timeout, non-zero exit or unparseable output. One CLI process per call, killed on timeout (60 s). Truncate the transcript to a fixed token budget from the end, keeping the builder's latest message.
 - **Acceptance:** Unit tests with the CLI faked: the JSON contract, bad JSON, timeout, non-zero exit, and truncation that keeps the latest user message. A live test (skipped in CI) on T-501's three samples.
 - **Blocks:** T-505 · **Blocked by:** T-501, T-503
-- **Notes:** The language rule lives in the prompt, not in code: the model sees the builder's latest message and reports the language it wrote in.
+- **Notes:** The language rule lives in the prompt, not in code: the model sees the builder's latest message and reports the language it wrote in. Put the CLI spawn (args, stdin, timeout, kill, JSON parse) in its own `workspace/app/src/main/secretary/cli.ts`: T-509 reuses it for a second prompt, and that separation is what lets T-509 and T-512 run in parallel.
 
 ### T-502: Speech client and speech-server settings in main
 
