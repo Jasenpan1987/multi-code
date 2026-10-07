@@ -19,6 +19,7 @@ import {
 } from "./settings-store";
 import type { ThemeName } from "./settings-store";
 import { testServer } from "./secretary/speech";
+import { secretary } from "./secretary";
 import type {
   CreateManagerResult,
   DiffSide,
@@ -470,14 +471,30 @@ export function registerIpcHandlers() {
   ipcMain.handle("remote-has-tailscale", () => hasTailscaleEndpoint());
 
   // ---------------------------------------------------------------------
-  // Secretary. Every reply is SecretarySettings or a test result: the speech
-  // key goes in through set-server and never comes back out.
+  // Secretary. The settings replies are SecretarySettings or a test result:
+  // the speech key goes in through set-server and never comes back out.
   // ---------------------------------------------------------------------
 
   ipcMain.handle("secretary:get-settings", () => loadSecretarySettings());
 
-  ipcMain.handle("secretary:set-mode", (_event, enabled: boolean) =>
-    setSecretaryMode(enabled === true)
+  // Saved first: if the save throws, the call rejects and the secretary keeps
+  // the mode it had. Turning it on prepares the live events; off drops them all.
+  ipcMain.handle("secretary:set-mode", (_event, enabled: boolean) => {
+    const next = setSecretaryMode(enabled === true);
+    secretary.setMode(next.secretaryMode);
+    return next;
+  });
+
+  // Live updates arrive on "secretary-brief"; this is for a renderer that just
+  // mounted or reloaded.
+  ipcMain.handle("secretary:get-briefs", () => secretary.briefs());
+
+  // The wav, fetched on demand so it doesn't ride every update. Arrives in the
+  // renderer as a Uint8Array; null for a seq that is no longer the brief.
+  ipcMain.handle("secretary:get-audio", (_event, instanceId: string, seq: number) =>
+    typeof instanceId === "string" && typeof seq === "number"
+      ? secretary.audioFor(instanceId, seq)
+      : null
   );
 
   ipcMain.handle(

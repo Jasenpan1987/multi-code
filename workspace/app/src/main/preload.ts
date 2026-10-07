@@ -65,6 +65,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   setSpeechServer: (url: string, key: unknown) =>
     ipcRenderer.invoke("secretary:set-server", url, key),
   testSpeechServer: () => ipcRenderer.invoke("secretary:test-server"),
+  getSecretaryBriefs: () => ipcRenderer.invoke("secretary:get-briefs"),
+  getSecretaryAudio: (instanceId: string, seq: number) =>
+    ipcRenderer.invoke("secretary:get-audio", instanceId, seq),
 
   // Manager activity feed
   getManagerActivity: () => ipcRenderer.invoke("manager-activity-list"),
@@ -163,6 +166,23 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("manager-activity", listener);
     return () => {
       ipcRenderer.removeListener("manager-activity", listener);
+    };
+  },
+  onSecretaryBrief: (
+    callback: (instanceId: string, state: unknown) => void
+  ) => {
+    const listener = (_event: unknown, instanceId: string, state: unknown) =>
+      callback(instanceId, state);
+    ipcRenderer.on("secretary-brief", listener);
+    return () => {
+      ipcRenderer.removeListener("secretary-brief", listener);
+    };
+  },
+  onSecretaryMode: (callback: (enabled: boolean) => void) => {
+    const listener = (_event: unknown, enabled: boolean) => callback(enabled);
+    ipcRenderer.on("secretary-mode", listener);
+    return () => {
+      ipcRenderer.removeListener("secretary-mode", listener);
     };
   },
 });

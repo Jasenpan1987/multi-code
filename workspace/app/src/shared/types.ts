@@ -42,6 +42,30 @@ export type SpeechTestResult =
   | { ok: true; ms: number }
   | { ok: false; step: "address" | "health" | "speech"; reason: string };
 
+// One instance's brief for its live event, as main pushes it on `secretary-brief`
+// (and returns from getSecretaryBriefs). Exists only while Secretary Mode is on and
+// the event is live; it goes away (null) when the event clears.
+//
+// `seq` is the event's: ask for the audio with it, and treat a state with a new
+// `seq` as a different brief. The text is there from "ready" on, while the audio
+// may still be coming: "pending" until the speech server answers, then "ready"
+// (fetch it with getSecretaryAudio) or "unavailable" with the reason (no server
+// set, or it failed). The wav itself never rides this update.
+export type SecretaryBriefState =
+  | { seq: number; kind: SecretaryEventKind; status: "preparing" }
+  | {
+      seq: number;
+      kind: SecretaryEventKind;
+      status: "ready";
+      text: string;
+      language: BriefLanguage;
+      audio: "pending" | "ready" | "unavailable";
+      voiceReason?: string;
+    }
+  | { seq: number; kind: SecretaryEventKind; status: "failed"; reason: string };
+
+export type SecretaryEventKind = "finished" | "needs-you";
+
 // Result of minting a pairing offer: the QR image the user scans plus the same
 // payload as text, for the case where scanning isn't practical.
 export interface RemotePairing {
@@ -297,6 +321,12 @@ export interface ElectronAPI {
     key: SpeechKeyChange
   ) => Promise<SecretarySettings>;
   testSpeechServer: () => Promise<SpeechTestResult>;
+  // Every live brief by instance id: for a renderer that mounts or reloads after
+  // briefs were prepared. Empty while Secretary Mode is off.
+  getSecretaryBriefs: () => Promise<Record<string, SecretaryBriefState>>;
+  // The wav of that instance's brief, or null when `seq` is no longer its brief
+  // or its audio isn't ready (pending, unavailable, or the brief was dropped).
+  getSecretaryAudio: (instanceId: string, seq: number) => Promise<Uint8Array | null>;
 
   // Manager activity feed
   getManagerActivity: () => Promise<ManagerActivityEntry[]>;
@@ -334,6 +364,14 @@ export interface ElectronAPI {
   onManagerActivity: (
     callback: (entry: ManagerActivityEntry) => void
   ) => () => void;
+  // Every change to an instance's brief; null when it is dropped (the event
+  // cleared, or Secretary Mode went off).
+  onSecretaryBrief: (
+    callback: (instanceId: string, state: SecretaryBriefState | null) => void
+  ) => () => void;
+  // Secretary Mode after every change. The value at mount comes from
+  // getSecretarySettings().
+  onSecretaryMode: (callback: (enabled: boolean) => void) => () => void;
 }
 
 declare global {

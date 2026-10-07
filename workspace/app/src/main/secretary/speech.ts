@@ -27,6 +27,9 @@ export interface SpeechOptions {
   fetch?: typeof fetch;
   // Replaces both timeouts below. Tests use it so a timeout takes milliseconds.
   timeoutMs?: number;
+  // Cancels the request early: the orchestrator aborts a brief's speech when a
+  // newer event replaces it or Secretary Mode goes off. Resolves "aborted".
+  signal?: AbortSignal;
 }
 
 // Story 7: "in time" is 15 seconds for the audio of one brief.
@@ -89,7 +92,8 @@ export async function synthesize(
       }),
     },
     options.timeoutMs ?? SPEECH_TIMEOUT_MS,
-    options.fetch ?? fetch
+    options.fetch ?? fetch,
+    options.signal
   );
   if (!got.ok) return { ok: false, reason: scrub(got.reason, server.key) };
 
@@ -152,15 +156,19 @@ type Got =
   | { ok: false; reason: string };
 
 // The timeout covers the whole exchange, body included: the signal aborts a body
-// read still in progress too.
+// read still in progress too. So does the caller's `cancel`, if given.
 async function request(
   url: URL,
   init: RequestInit,
   timeoutMs: number,
-  fetchImpl: typeof fetch
+  fetchImpl: typeof fetch,
+  cancel?: AbortSignal
 ): Promise<Got> {
+  if (cancel?.aborted) return { ok: false, reason: "aborted" };
+  const timeout = AbortSignal.timeout(timeoutMs);
+  const signal = cancel ? AbortSignal.any([cancel, timeout]) : timeout;
   try {
-    const res = await fetchImpl(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+    const res = await fetchImpl(url, { ...init, signal });
     const body = Buffer.from(await res.arrayBuffer());
     return {
       ok: true,
@@ -169,6 +177,7 @@ async function request(
       body,
     };
   } catch (err) {
+    if (cancel?.aborted) return { ok: false, reason: "aborted" };
     return { ok: false, reason: failureReason(err, timeoutMs) };
   }
 }
