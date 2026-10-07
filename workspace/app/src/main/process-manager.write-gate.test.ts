@@ -268,3 +268,29 @@ describe("run_command's double carriage return", () => {
     expect(pty().writes).toEqual(["/context"]);
   });
 });
+
+// The quit dialog reads the same run state the gate does, so it lives here.
+describe("what a quit would cut off", () => {
+  it("leaves out an idle instance, so quitting with idle sessions doesn't ask", () => {
+    goIdle();
+    expect(manager.unfinishedInstances()).toEqual([]);
+  });
+
+  it("counts an instance mid-turn", () => {
+    goIdle();
+    manager.sendPrompt(instanceId, "do the thing");
+    expect(manager.unfinishedInstances()).toEqual([{ name: "msk", state: "busy" }]);
+  });
+
+  it("counts an instance waiting on a dialog", () => {
+    goIdle();
+    block();
+    expect(manager.unfinishedInstances()).toEqual([{ name: "msk", state: "blocked" }]);
+  });
+
+  it("drops an instance once its pty has exited", () => {
+    manager.sendPrompt(instanceId, "do the thing");
+    pty().onExitCb?.({ exitCode: 0 });
+    expect(manager.unfinishedInstances()).toEqual([]);
+  });
+});

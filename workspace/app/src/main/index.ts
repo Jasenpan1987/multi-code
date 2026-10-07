@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, dialog, type MessageBoxOptions } from "electron";
 import path from "path";
 import { processManager } from "./process-manager";
 import { shellManager } from "./shell-manager";
@@ -81,7 +81,49 @@ app.on("activate", () => {
   }
 });
 
-app.on("before-quit", () => {
+// Set once the user has said yes, so the app.quit() that follows the dialog goes
+// straight through instead of asking again.
+let quitConfirmed = false;
+let confirmingQuit = false;
+
+async function confirmQuit(
+  unfinished: { name: string; state: "busy" | "blocked" }[]
+) {
+  confirmingQuit = true;
+  const lines = unfinished.map(
+    ({ name, state }) =>
+      `• ${name}${state === "blocked" ? " (waiting for your answer)" : ""}`
+  );
+  const count = unfinished.length;
+  const options: MessageBoxOptions = {
+    type: "warning",
+    message: `${count} session${count === 1 ? " is" : "s are"} still working`,
+    detail: `${lines.join("\n")}\n\nQuitting stops ${count === 1 ? "it" : "them"} mid-task.`,
+    buttons: ["Quit Anyway", "Cancel"],
+    // Cancel is the default, so a reflexive Enter after Cmd+Q doesn't kill the work.
+    defaultId: 1,
+    cancelId: 1,
+  };
+  // Free-standing rather than a sheet on the window: a quit from the Dock can come
+  // while the window is minimized or closed, and a sheet on it would never be seen.
+  app.focus({ steal: true });
+  const { response } = await dialog.showMessageBox(options);
+  confirmingQuit = false;
+  if (response === 0) {
+    quitConfirmed = true;
+    app.quit();
+  }
+}
+
+app.on("before-quit", (event) => {
+  if (!quitConfirmed) {
+    const unfinished = processManager.unfinishedInstances();
+    if (unfinished.length > 0) {
+      event.preventDefault();
+      if (!confirmingQuit) void confirmQuit(unfinished);
+      return;
+    }
+  }
   processManager.cleanup();
   shellManager.cleanup();
   void shutdownRemote();

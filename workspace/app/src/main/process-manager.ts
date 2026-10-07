@@ -867,6 +867,24 @@ export class ProcessManager {
     }
   }
 
+  // Instances a quit would cut off mid-task: a turn still running, or a dialog
+  // waiting on the user. Idle ones are left out: they lose nothing, since the next
+  // start picks the session up with --continue, and counting them would mean asking
+  // on every quit.
+  unfinishedInstances(): { name: string; state: "busy" | "blocked" }[] {
+    const unfinished: { name: string; state: "busy" | "blocked" }[] = [];
+    for (const instance of this.instances.values()) {
+      if (!instance.ptyProcess) continue;
+      const state = instance.runState.state();
+      if (state !== "busy" && state !== "blocked") continue;
+      unfinished.push({
+        name: instance.alias || path.basename(instance.cwd),
+        state,
+      });
+    }
+    return unfinished;
+  }
+
   cleanup() {
     for (const instance of this.instances.values()) {
       if (instance.ptyProcess) {
