@@ -83,21 +83,6 @@ export interface HookAttention {
   stop(): void;
 }
 
-export interface CompletionDetector {
-  stop(): void;
-
-  /**
-   * Feed a chunk of PTY output to the detector, for backends whose blocking
-   * state is only visible on the painted terminal.
-   *
-   * OpenCode needs this: its permission requests ("Allow once / Allow always / Reject") are
-   * never persisted, so reading the terminal is the only way to see one without
-   * changing how the process is launched. Optional so backends that have a
-   * structured source don't implement a no-op.
-   */
-  onPtyData?(chunk: string): void;
-}
-
 export interface SessionDiscovery {
   cancel(): void;
 }
@@ -131,7 +116,7 @@ export interface Backend {
   ): SessionDiscovery;
 
   /**
-   * The activity events, whichever of the two seams below produces them:
+   * The activity events:
    *   - "waiting": the agent finished and is waiting for a new message.
    *   - "prompt": the agent is blocked on a human decision (permission box,
    *     AskUserQuestion, plan approval, an MCP input request). Carries a
@@ -140,28 +125,18 @@ export interface Backend {
    *   - "prompt-cleared": a previously reported prompt was answered (on either
    *     the desktop or a paired phone).
    *
-   * A backend implements exactly one of the two.
-   *
-   * `createHookAttention`: the agent reports its own state through hooks Multi-Code
-   * injects at spawn, delivered to the `/alert` endpoint and routed here by
-   * instance. Claude Code. Per process, not per session, so it survives `/clear`.
-   * `pid` is the pty child's, which the CLI keys its own registry on.
-   * `onHooksHealth(false)` says the hooks don't seem to run at all, `true` that one
-   * was heard after all (PRD Story 6).
-   *
-   * `createCompletionDetector`: Multi-Code watches the session from outside.
-   * OpenCode, until it moves to its plugin (epic attention-alerts, Track 2).
+   * The agent reports its own state through what Multi-Code injects at spawn,
+   * Claude's hooks or OpenCode's plugin, delivered to the `/alert` endpoint and
+   * routed here by instance. Per process, not per session, so it survives `/clear`
+   * and `/new`. `pid` is the pty child's, which Claude keys its own registry on.
+   * `onHooksHealth(false)` says the hooks or plugin don't seem to run at all,
+   * `true` that one was heard after all (PRD Story 6).
    */
-  createHookAttention?(
+  createHookAttention(
     pid: number,
     onActivity: ActivityCallback,
     onHooksHealth: (ok: boolean) => void
   ): HookAttention;
-
-  createCompletionDetector?(
-    sessionId: string,
-    onActivity: ActivityCallback
-  ): CompletionDetector;
 
   /**
    * Translate "the user tapped option N on their phone" into the keystrokes

@@ -193,4 +193,17 @@ describe("alert delivery routing", () => {
     const created = manager.createInstance("/Users/x/code/repo", "repo");
     expect(created.alertsDegraded).toBe(true);
   });
+
+  it("judges each backend by its own wiring: OpenCode by the plugin, Claude by the settings", () => {
+    const manager = new ProcessManager();
+    manager.setSessionSpawnOptions({ settingsPath: "/ud/alert-settings.json" });
+    expect(manager.createInstance("/Users/x/code/a", "a", "opencode").alertsDegraded).toBe(true);
+    expect(manager.createInstance("/Users/x/code/b", "b", "claude").alertsDegraded).toBeUndefined();
+
+    manager.setSessionSpawnOptions({
+      opencodePlugin: { pluginPath: "/ud/opencode/multicode-plugin.js", targetPath: "/ud/opencode/alert.json" },
+    });
+    expect(manager.createInstance("/Users/x/code/c", "c", "opencode").alertsDegraded).toBeUndefined();
+    expect(manager.createInstance("/Users/x/code/d", "d", "claude").alertsDegraded).toBe(true);
+  });
 });

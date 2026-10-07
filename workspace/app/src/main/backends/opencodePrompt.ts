@@ -1,42 +1,19 @@
-// Detects OpenCode's blocking dialogs by reading the terminal it paints, and
-// maps a remote button tap back to the keystrokes its TUI expects.
+// What a paired phone is shown for an OpenCode dialog, and the keystrokes that
+// answer it from there.
 //
-// WHY TEXT MATCHING. OpenCode's two blocking dialogs are not equally readable:
+// The dialog itself comes from Multi-Code's plugin: `permission.asked` and
+// `question.asked` carry what is being asked (backends/opencodeAttention.ts). This
+// used to be read off the painted terminal, because a pending permission is never
+// persisted; the plugin made that unnecessary.
 //
-//   - The `question` tool (a choice box) IS in the sqlite db, as a `part` row
-//     with `state.status = "running"` and the full option list. That path lives
-//     in opencode.ts and is stable structured data.
-//   - Permission requests ("Allow once / Allow always / Reject") are NOT
-//     persisted. The `permission` table only holds granted rules; a request
-//     that is still waiting exists only in the running process's memory and on
-//     its SSE stream. Reading the painted terminal is the only way to see it
-//     without taking over how the process is launched.
-//
-// So this module is deliberately the fragile half, and it is scoped to exactly
-// the dialog that has no better source. If an OpenCode release changes this
-// wording, permission detection goes quiet (no false prompts — the markers
-// simply stop matching) while `question` detection keeps working. Everything
-// here was verified against opencode 1.18.91 by driving a real PTY.
-//
-// TWO FINDINGS THAT SHAPE THIS FILE, both measured rather than assumed:
-//
-//  1. The PTY never goes quiet while a permission dialog is up. A spinner keeps
-//     repainting: over a 31s dialog the longest gap between writes was 295ms.
-//     The Claude backend's "prompt = unpaired tool_use AND PTY idle 800ms" rule
-//     therefore can never fire here, which is why this needs its own detector
-//     instead of reusing that one.
-//  2. Options are driven by ARROW KEYS, not digits. Right arrow moves one step
-//     and wraps at the end; Tab does nothing; a digit does nothing. The `⇆` in
-//     the dialog's "⇆ select" hint is an arrow glyph, not a Tab key. Sending
-//     Claude's number keystrokes here would silently do nothing at all.
+// Options are driven by ARROW KEYS, not digits, measured on a live TUI: a permission
+// is a horizontal row (Right moves one step and wraps; Tab and digits do nothing), a
+// single-select question a vertical list. Sending Claude's number keystrokes here
+// would silently do nothing at all. Measured again on 1.18.35 (T-411): each mapping
+// below answered its dialog when sent 0.36s after the dialog's event, so there is no
+// need to wait for the dialog to settle.
 
 import type { PromptDetail } from "../remote/promptExtract";
-
-// The heading OpenCode prints above a permission request, and the option row it
-// prints below it. Both must be present: the heading alone also appears in
-// scrollback for already-answered requests, while the option row is only on
-// screen while the dialog is actually live.
-const PERMISSION_HEADING = "Permission required";
 
 // Option labels in the order the TUI lays them out left to right. The order is
 // what makes an index meaningful, so it is asserted rather than discovered.
@@ -47,9 +24,10 @@ export const PERMISSION_LABELS = ["Allow once", "Allow always", "Reject"] as con
 // distinction is load-bearing rather than cosmetic.
 export const PERMISSION_TOOL = "Permission";
 export const QUESTION_TOOL_LABEL = "Question";
-// A `question` with `multiple: true`. Reported under its own name so the answer
-// path can refuse it rather than send single-select keystrokes — see
-// keystrokeForQuestion for what goes wrong otherwise.
+// A question box one tap can't answer: `multiple: true`, or several questions in one
+// box. Reported under its own name so the answer path refuses it rather than send
+// single-select keystrokes (see keystrokeForQuestion), and the phone shows it
+// read-only.
 export const MULTI_QUESTION_TOOL_LABEL = "Question (multi-select)";
 
 // Same shape as the Claude side's PromptDetail — the activity callback carries
@@ -58,79 +36,61 @@ export type OpencodePromptDetail = PromptDetail;
 
 const PERMISSION_DESCRIPTIONS: Record<string, string> = {
   "Allow once": "Permit this one action",
-  "Allow always": "Permit this pattern for the rest of the session",
+  "Allow always": "Permit this pattern until OpenCode restarts",
   Reject: "Refuse and let the agent choose another route",
 };
 
-// Strip the escape sequences that carry no glyphs, so marker matching runs
-// against what a human would read on screen. Deliberately not a full terminal
-// emulator: OpenCode repaints absolutely-positioned cells, so the result is
-// jumbled in reading order but every visible substring is present, which is all
-// the markers need.
-export function visibleText(raw: string): string {
-  /* eslint-disable no-control-regex -- matching terminal escape sequences is the
-     entire job of this function; ESC and BEL are the delimiters being stripped. */
-  return (
-    raw
-      // OSC sequences (window title, clipboard, capability probes)
-      .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "")
-      // DCS
-      .replace(/\x1bP[^\x1b]*\x1b\\/g, "")
-      // CSI (colors, cursor moves, mode toggles)
-      .replace(/\x1b[[?][0-9;?]*[a-zA-Z$]/g, "")
-      // Anything else two-byte
-      .replace(/\x1b./g, "")
-  );
-  /* eslint-enable no-control-regex */
-}
+const str = (value: unknown): string | undefined =>
+  typeof value === "string" && value.length > 0 ? value : undefined;
 
-// True when the tail of the terminal shows a live permission dialog. Callers
-// pass a recent window of output, not the whole session, so an answered dialog
-// scrolls out of consideration.
-export function hasPermissionDialog(text: string): boolean {
-  if (!text.includes(PERMISSION_HEADING)) return false;
-  // Require the full option row: that is the part that only exists while the
-  // dialog is awaiting an answer.
-  return PERMISSION_LABELS.every((label) => text.includes(label));
-}
-
-// Pull the one-line summary of what is being asked. OpenCode prints the subject
-// on the line after the heading, e.g. "↵ Access external directory /tmp".
-export function permissionSubject(text: string): string | undefined {
-  const at = text.lastIndexOf(PERMISSION_HEADING);
-  if (at < 0) return undefined;
-  const after = text.slice(at + PERMISSION_HEADING.length);
-  // The TUI draws box borders and padding between cells; collapse them and take
-  // the first run of real words.
-  const cleaned = after
-    .replace(/[┃┏┓┗┛━┳┻┫┣╹╻▀▄█│─]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!cleaned) return undefined;
-  // Cut at whichever section comes first after the subject line. OpenCode
-  // follows the subject with a "Patterns" block listing the globs it would
-  // grant, then the option row; neither belongs in a one-line summary.
-  let stop = cleaned.length;
-  for (const boundary of ["Patterns", PERMISSION_LABELS[0]]) {
-    const at = cleaned.indexOf(boundary);
-    if (at > 0 && at < stop) stop = at;
-  }
-  const subject = cleaned.slice(0, stop).trim();
-  if (!subject) return undefined;
-  // Leading arrow glyphs OpenCode uses to indent the subject.
-  const withoutGlyph = subject.replace(/^[↵←→↳⤷»\-\s]+/, "").trim();
-  return withoutGlyph.length > 0 ? withoutGlyph.slice(0, 200) : undefined;
-}
-
-export function buildPermissionDetail(text: string): OpencodePromptDetail {
-  const subject = permissionSubject(text);
+// A `permission.asked` event's properties: `{permission: "bash", patterns:
+// ["touch a.txt"], always: ["touch *"], metadata, …}` (fixtures in
+// __fixtures__/opencode-plugin/). Every dialog offers the same three options.
+export function permissionDetail(properties: Record<string, unknown>): OpencodePromptDetail {
+  const patterns = Array.isArray(properties.patterns)
+    ? properties.patterns.filter((p): p is string => typeof p === "string" && p.length > 0)
+    : [];
+  const subject = [str(properties.permission), patterns.join(", ")].filter(Boolean).join(": ");
   return {
-    tool: "Permission",
-    question: subject ? `Permission required: ${subject}` : "Permission required",
+    tool: PERMISSION_TOOL,
+    question: subject ? `Permission required: ${subject}`.slice(0, 240) : "Permission required",
     options: PERMISSION_LABELS.map((label) => ({
       label,
       description: PERMISSION_DESCRIPTIONS[label],
     })),
+  };
+}
+
+// A `question.asked` event's properties: `{questions: [{question, header, options:
+// [{label, description}], multiple?}]}`, the same shape as Claude's AskUserQuestion
+// input. Null when there is nothing to offer; the phone then shows the terminal.
+export function questionDetail(properties: Record<string, unknown>): OpencodePromptDetail | null {
+  const questions = properties.questions;
+  if (!Array.isArray(questions) || questions.length === 0) return null;
+  const first = questions[0] as Record<string, unknown> | null;
+  if (typeof first !== "object" || first === null) return null;
+
+  const options: { label: string; description?: string }[] = [];
+  for (const entry of Array.isArray(first.options) ? first.options : []) {
+    const option = entry as Record<string, unknown> | null;
+    const label = str(option?.label);
+    if (label) options.push({ label, description: str(option?.description) });
+  }
+  if (options.length === 0) return null;
+
+  // OpenCode appends its own free-text escape hatch to the on-screen list, so
+  // the phone must offer it too — otherwise the indices the phone sends would
+  // line up against a shorter list than the one being navigated.
+  options.push({ label: "Type your own answer", description: "Send a custom reply" });
+
+  // A multi-select box is toggle-then-confirm, and a box with several questions
+  // takes an Enter per question and one more to submit (T-409, `question-multi`).
+  // Neither is one tap.
+  const oneTap = first.multiple !== true && questions.length === 1;
+  return {
+    tool: oneTap ? QUESTION_TOOL_LABEL : MULTI_QUESTION_TOOL_LABEL,
+    question: str(first.question) ?? str(first.header),
+    options,
   };
 }
 
@@ -141,12 +101,9 @@ export function buildPermissionDetail(text: string): OpencodePromptDetail {
 // right-arrow presses equals the target index. Right arrow wraps, but we never
 // rely on that because we only ever move forward from a known start.
 //
-// One caveat worth knowing, found by sampling a live dialog: for the first
-// ~3 seconds after a dialog paints, the highlight-colored cell is still being
-// animated and reads as a spinner glyph rather than an option label. The
-// selection is only reliably on option 0 once that settles. Answering hinges on
-// that starting position, so the caller must not fire keystrokes into a dialog
-// it has only just noticed — see PROMPT_SETTLE_MS in opencode.ts.
+// "Allow always" opens a second screen ("This will allow the following patterns
+// until OpenCode is restarted … Confirm / Cancel"), so it takes a second
+// Enter. Sent in the same write, measured to land on that screen (T-411).
 //
 // Returns null when the index is out of range, so the caller can decline rather
 // than confirm whatever happens to be highlighted — picking the wrong option
@@ -157,7 +114,8 @@ export function keystrokeForPermission(
 ): string | null {
   if (!Number.isInteger(index)) return null;
   if (index < 0 || index >= optionCount) return null;
-  return "\x1b[C".repeat(index) + "\r";
+  const confirm = PERMISSION_LABELS[index] === "Allow always" ? "\r" : "";
+  return "\x1b[C".repeat(index) + "\r" + confirm;
 }
 
 // The single-select `question` box is a DIFFERENT widget from the permission row,

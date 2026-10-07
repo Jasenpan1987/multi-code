@@ -10,7 +10,6 @@ import type {
   AlertDelivery,
   Backend,
   BackendName,
-  CompletionDetector,
   HookAttention,
   SessionDiscovery,
   SpawnOptions,
@@ -53,9 +52,8 @@ interface ManagedInstance {
   sessionId?: string;
   backend: BackendName;
   discovery: SessionDiscovery | null;
-  // Exactly one of these reports the instance's activity, by backend: a detector
-  // watching the session (OpenCode), or the agent's own hooks (Claude).
-  detector: CompletionDetector | null;
+  // Turns what the agent reports about itself (Claude's hooks, OpenCode's plugin)
+  // into its activity. Null while stopped.
   hookAttention: HookAttention | null;
   // Timestamp (Date.now()) of the last PTY byte received from this instance. Feeds
   // the write-safety gate's "did that write land" check and `start_session`'s
@@ -164,10 +162,8 @@ export class ProcessManager {
   // Adopt the session the running process actually has, if it has moved.
   //
   // The visible symptom of not doing this is a context percentage frozen at the
-  // previous session's figure, which is how it was reported. The unseen half is
-  // worse: the completion detector, and therefore notifications, prompt detection
-  // for a paired phone, and the write-safety gate, all keep watching the old
-  // transcript.
+  // previous session's figure, which is how it was reported. The transcript a
+  // paired phone and the manager read would be the old one too.
   private syncLiveSessionId(instance: ManagedInstance) {
     const ptyProcess = instance.ptyProcess;
     // A stopped instance has no live session to follow; its read paths already
@@ -219,7 +215,7 @@ export class ProcessManager {
   // manager slow: each poll costs it a whole model turn to decide to poll again, so
   // waiting on one session ran into minutes. A listener costs nothing while idle.
   //
-  // `type` is the backend detector's event, plus `exit` when the pty dies — a waiter
+  // `type` is the instance's activity event, plus `exit` when the pty dies — a waiter
   // has to give up on a session that is no longer there.
   onActivity(listener: (id: string, type: string) => void): () => void {
     this.activityListeners.add(listener);
@@ -233,7 +229,7 @@ export class ProcessManager {
       try {
         listener(id, type);
       } catch {
-        // A broken waiter must not take down the detector callback that feeds
+        // A broken waiter must not take down the activity callback that feeds
         // every other consumer of this event.
       }
     }
@@ -279,7 +275,6 @@ export class ProcessManager {
           ptyProcess: null,
           backend: contact.backend ?? DEFAULT_BACKEND,
           discovery: null,
-          detector: null,
           hookAttention: null,
           lastPtyByteAt: 0,
           isManager: contact.isManager,
@@ -401,9 +396,10 @@ export class ProcessManager {
     const backend: Backend = getBackend(backendName);
     // Manager options only for the manager. A project session must never get the
     // fleet-driving tools, which is why this is keyed off the instance rather than
-    // applied globally. Sessions get the alert hooks alone.
+    // applied globally. Sessions get the alert hooks or plugin alone.
     const opts = isManager ? this.managerSpawnOptions : this.sessionSpawnOptions;
-    const spawnedWithoutAlertHooks = backendName === "claude" && !opts?.settingsPath;
+    const spawnedWithoutAlertHooks =
+      backendName === "claude" ? !opts?.settingsPath : !opts?.opencodePlugin;
     if (spawnedWithoutAlertHooks) {
       debugTrace(
         `[alert-hook] ${id.slice(0, 8)} spawned without alert hooks (server not listening or files unwritable)`
@@ -432,7 +428,6 @@ export class ProcessManager {
       ptyProcess,
       backend: backendName,
       discovery: null,
-      detector: null,
       hookAttention: null,
       lastPtyByteAt: Date.now(),
       isManager,
@@ -443,12 +438,11 @@ export class ProcessManager {
 
     // Created at spawn, before any session exists: the hooks report from the
     // process's first moment, and keep reporting across /clear.
-    instance.hookAttention =
-      backend.createHookAttention?.(
-        ptyProcess.pid,
-        (type, detail) => this.reportActivity(instance, type, detail),
-        (ok) => this.setAlertsDegraded(instance, !ok)
-      ) ?? null;
+    instance.hookAttention = backend.createHookAttention(
+      ptyProcess.pid,
+      (type, detail) => this.reportActivity(instance, type, detail),
+      (ok) => this.setAlertsDegraded(instance, !ok)
+    );
 
     const isSessionClaimed = (candidate: string): boolean =>
       this.isSessionClaimedBy(candidate, id);
@@ -472,9 +466,6 @@ export class ProcessManager {
 
     ptyProcess.onData((data: string) => {
       instance.lastPtyByteAt = Date.now();
-      // Backends whose blocking state is only visible on screen (OpenCode's
-      // permission dialog) read it from here. Optional, since others don't need it.
-      instance.detector?.onPtyData?.(data);
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send("pty-output", id, data);
       }
@@ -500,32 +491,15 @@ export class ProcessManager {
     return instance;
   }
 
-  // Point every read path at `sessionId` and start watching it.
+  // Point every read path at `sessionId`: the transcript, context usage.
   //
   // Called from discovery at spawn, and again whenever a running process moves to
   // a different session. A session id is not stable for the life of a process:
   // `/new` and `/clear` start a fresh transcript under a new id and never write to
-  // the old file again (measured 2026-09-17). Rebuilding the detector is the part
-  // that matters most, and the part with no visible symptom — it feeds completion
-  // notifications, the prompt detection a paired phone renders, and the
-  // write-safety gate, all of which go quiet on a transcript nobody is writing.
+  // the old file again (measured 2026-09-17). Activity doesn't depend on it: the
+  // agent's own reports are per process.
   private attachSession(instance: ManagedInstance, sessionId: string) {
     const id = instance.id;
-    const backend = getBackend(instance.backend);
-
-    // Stopped, not merely replaced: two detectors on one instance would report
-    // every turn twice, and the outgoing one is polling a file that will never
-    // change again.
-    if (instance.detector) {
-      instance.detector.stop();
-      instance.detector = null;
-    }
-
-    // Relies on a detector starting from the session's *current* state rather than
-    // its beginning. If that ever changes, attaching to a session that already has
-    // content would replay its whole history as fresh activity — every past turn
-    // firing a notification at once.
-
     instance.sessionId = sessionId;
     // The cached usage belongs to the session we just left, and `/new` resets it
     // to zero. Dropping the timestamp too forces the next read instead of showing
@@ -536,17 +510,12 @@ export class ProcessManager {
     instance.resolvedSessionId = undefined;
     instance.resolvedSessionIdAt = undefined;
 
-    instance.detector =
-      backend.createCompletionDetector?.(sessionId, (type, detail) =>
-        this.reportActivity(instance, type, detail)
-      ) ?? null;
-
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send("instance-session-id", id, sessionId);
     }
   }
 
-  // One activity event, from whichever seam the backend uses, to everything that
+  // One activity event, from the agent's own reports, to everything that
   // listens: run state, the renderer's chime and red dot, a paired phone, and the
   // manager's waiters.
   private reportActivity(
@@ -612,10 +581,6 @@ export class ProcessManager {
       instance.discovery.cancel();
       instance.discovery = null;
     }
-    if (instance.detector) {
-      instance.detector.stop();
-      instance.detector = null;
-    }
     if (instance.hookAttention) {
       instance.hookAttention.stop();
       instance.hookAttention = null;
@@ -657,8 +622,8 @@ export class ProcessManager {
       instance.runState.onWrite();
       instance.ptyProcess.write(data);
       // Typing at the desk answers whatever was pending, so drop the phone's
-      // badge and stale option buttons now rather than waiting for the detector
-      // to notice. Harmless when nothing was pending.
+      // badge and stale option buttons now rather than waiting for the agent to
+      // report it. Harmless when nothing was pending.
       remoteServer.clearActivity(id);
     }
   }

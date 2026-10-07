@@ -230,12 +230,12 @@ probe method: `docs/timeline/2026-10-06_attention-alerts-investigation.md`.
 The CLIs report their own state: Claude Code through hooks (`Stop`, `PermissionRequest`,
 `StopFailure`) and the `status`/`waitingFor` fields of `~/.claude/sessions/<pid>.json`;
 OpenCode through plugin events (`session.status`, `permission.asked`, `question.asked`).
-Epic `attention-alerts` moves detection onto those. Shipped for Claude Code on
-2026-10-07 (`backends/claudeHooks.ts`, fixtures from the real CLI in
-`backends/__fixtures__/claude-hooks/`): change a rule there only with a fixture that shows
-the CLI doing it. Until it has shipped for OpenCode, treat that detector as
-known-unreliable, and fix it by moving to the reported state, not by tuning a timing
-constant or adding a text match.
+Epic `attention-alerts` moved detection onto those, for Claude Code
+(`backends/claudeHooks.ts`, fixtures from the real CLI in
+`backends/__fixtures__/claude-hooks/`) and then OpenCode (`backends/opencodeAttention.ts`,
+fixtures in `backends/__fixtures__/opencode-plugin/`), both 2026-10-07. Change a rule there
+only with a fixture that shows the CLI doing it, and fix a wrong alert by reading more of
+what the CLI reports, not by tuning a timing constant or adding a text match.
 
 ## An agent's report names its spawn, not just its instance (added 2026-10-07)
 

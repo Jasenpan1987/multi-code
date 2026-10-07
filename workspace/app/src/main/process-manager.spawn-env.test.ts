@@ -52,7 +52,7 @@ vi.mock("./backends", () => ({
       return { command: name, args: [], env: { PATH: "/bin" } };
     },
     discoverSessionId: () => ({ cancel: () => {} }),
-    createCompletionDetector: () => ({ stop: () => {} }),
+    createHookAttention: () => ({ handle: () => {}, stop: () => {} }),
     readTranscript: () => [],
     readContextUsage: () => null,
     keystrokeForChoice: () => null,

@@ -6,10 +6,9 @@
 // `/clear` move the CLI to a fresh transcript and stop writing to the old one
 // (measured 2026-09-17 — the old file did not gain a single byte afterwards).
 //
-// The frozen number is the least of it. The same id feeds the completion detector,
-// so notifications, the prompt detection a paired phone renders, and the
-// write-safety gate were all watching a file nobody would ever write to again, with
-// no symptom at all.
+// The frozen number is the least of it. The same id is what a paired phone's
+// transcript and the manager's read_session read, so both were showing a file
+// nobody would ever write to again.
 //
 // Mocked down to a fake pty for the same reason as the write-gate file: what is
 // being tested is the wiring, and a host interface is the thing that could lie.
@@ -27,13 +26,12 @@ let userData = "";
 const backendState: {
   liveSessionId: string | null;
   liveCalls: { cwd: string; pid: number }[];
-  detectorsCreated: string[];
-  detectorsStopped: string[];
+  // Every `instance-session-id` the renderer was sent, as [instance, session].
+  sessionIdSends: [string, string][];
 } = {
   liveSessionId: null,
   liveCalls: [],
-  detectorsCreated: [],
-  detectorsStopped: [],
+  sessionIdSends: [],
 };
 
 const cb: { sessionFound: ((sessionId: string) => void) | null } = {
@@ -90,12 +88,7 @@ vi.mock("./backends", () => ({
       cb.sessionFound = onFound;
       return { cancel: () => {} };
     },
-    createCompletionDetector: (sessionId: string) => {
-      backendState.detectorsCreated.push(sessionId);
-      return {
-        stop: () => backendState.detectorsStopped.push(sessionId),
-      };
-    },
+    createHookAttention: () => ({ handle: () => {}, stop: () => {} }),
     findLiveSessionId: (cwd: string, pid: number) => {
       backendState.liveCalls.push({ cwd, pid });
       return backendState.liveSessionId;
@@ -120,7 +113,11 @@ let instanceId = "";
 // run. Only the two members process-manager touches are provided.
 const fakeWindow = {
   isDestroyed: () => false,
-  webContents: { send: () => {} },
+  webContents: {
+    send: (channel: string, id: string, sessionId: string) => {
+      if (channel === "instance-session-id") backendState.sessionIdSends.push([id, sessionId]);
+    },
+  },
 } as unknown as Parameters<InstanceType<typeof ProcessManager>["setMainWindow"]>[0];
 
 beforeEach(() => {
@@ -128,8 +125,7 @@ beforeEach(() => {
   userData = fs.mkdtempSync(path.join(os.tmpdir(), "multicode-live-"));
   backendState.liveSessionId = null;
   backendState.liveCalls = [];
-  backendState.detectorsCreated = [];
-  backendState.detectorsStopped = [];
+  backendState.sessionIdSends = [];
   cb.sessionFound = null;
   manager = new ProcessManager();
   manager.setMainWindow(fakeWindow);
@@ -151,6 +147,10 @@ function poll(times = 1) {
   vi.advanceTimersByTime(4000 * times);
 }
 
+function sendsFor(id: string): string[] {
+  return backendState.sessionIdSends.filter(([i]) => i === id).map(([, s]) => s);
+}
+
 function sessionIdOf(): string | undefined {
   return manager.listInstances().find((i) => i.id === instanceId)?.sessionId;
 }
@@ -163,29 +163,23 @@ describe("following a session change", () => {
     expect(sessionIdOf()).toBe("ses-2");
   });
 
-  it("stops the old detector and starts one on the new session", () => {
-    // The half with no visible symptom, and the reason this bug was worth more
-    // than a cosmetic fix. Two live detectors would also report every turn twice.
+  it("tells the renderer about the new session", () => {
     backendState.liveSessionId = "ses-2";
     poll();
-    expect(backendState.detectorsStopped).toEqual(["ses-1"]);
-    expect(backendState.detectorsCreated).toEqual(["ses-1", "ses-2"]);
+    expect(sendsFor(instanceId)).toEqual(["ses-1", "ses-2"]);
   });
 
-  it("does not rebuild anything while the session is unchanged", () => {
-    // Rebuilding every tick would reset the detector's own watermark and replay
-    // old turns as new notifications.
+  it("does not re-announce a session that is unchanged", () => {
     backendState.liveSessionId = "ses-1";
     poll(5);
-    expect(backendState.detectorsCreated).toEqual(["ses-1"]);
-    expect(backendState.detectorsStopped).toEqual([]);
+    expect(sendsFor(instanceId)).toEqual(["ses-1"]);
   });
 
   it("does nothing when the backend cannot tell", () => {
     backendState.liveSessionId = null;
     poll(3);
     expect(sessionIdOf()).toBe("ses-1");
-    expect(backendState.detectorsCreated).toEqual(["ses-1"]);
+    expect(sendsFor(instanceId)).toEqual(["ses-1"]);
   });
 
   it("asks about the pty's own pid and cwd", () => {
@@ -231,7 +225,7 @@ describe("not stealing another instance's session", () => {
     poll();
 
     expect(sessionIdOf()).toBe("ses-1");
-    expect(backendState.detectorsStopped).toEqual([]);
+    expect(sendsFor(instanceId)).toEqual(["ses-1"]);
   });
 });
 

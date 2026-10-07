@@ -76,7 +76,7 @@ vi.mock("./backends", () => ({
       disk.discoverCalls.push({ cwd, onFound, isClaimed });
       return { cancel: () => {} };
     },
-    createCompletionDetector: () => ({ stop: () => {} }),
+    createHookAttention: () => ({ handle: () => {}, stop: () => {} }),
     readTranscript: (sessionId: string) => {
       disk.transcriptReads.push(sessionId);
       return [{ kind: "assistant", text: `transcript of ${sessionId}` }];

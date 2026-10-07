@@ -4,25 +4,19 @@ import { pathToFileURL } from "url";
 import { execSync } from "child_process";
 import Database from "better-sqlite3";
 import type {
-  ActivityCallback,
   Backend,
-  CompletionDetector,
+  HookAttention,
   SessionDiscovery,
   SpawnConfig,
   SpawnOptions,
 } from "./types";
 import {
-  buildPermissionDetail,
-  hasPermissionDialog,
   keystrokeForPermission,
   keystrokeForQuestion,
-  MULTI_QUESTION_TOOL_LABEL,
   PERMISSION_TOOL,
-  permissionSubject,
   QUESTION_TOOL_LABEL,
-  visibleText,
-  type OpencodePromptDetail,
 } from "./opencodePrompt";
+import { OpencodePluginAttention } from "./opencodeAttention";
 import type { TranscriptEntry } from "../../shared/remote-protocol";
 import type { ContextUsage } from "../../shared/types";
 import { resolvePath } from "./resolvePath";
@@ -100,7 +94,7 @@ function withAlertPlugin(
 }
 
 // Open a read-only sqlite handle. Throws on failure (caller decides how to handle).
-// `dbPath` is overridable so tests can point the detector at a scratch database;
+// `dbPath` is overridable so tests can point a reader at a scratch database;
 // production always uses the real OpenCode store.
 function openDb(dbPath: string = OPENCODE_DB): Database.Database {
   return new Database(dbPath, { readonly: true, fileMustExist: true });
@@ -178,418 +172,12 @@ class OpencodeSessionDiscovery implements SessionDiscovery {
   }
 }
 
-interface OpencodeMessageData {
-  role?: string;
-  finish?: string;
-  content?: unknown;
-}
-
-// Bound on the terminal text kept for permission-dialog matching. This only has
-// to hold one repaint of the dialog; it is NOT relied on to expire anything (see
-// the note on `permissionSeen` below for why eviction can't be a clear signal).
-const PTY_WINDOW_BYTES = 24 * 1024;
-
-// A dialog must stay up this long before it's reported. Two reasons, both
-// measured against a live dialog:
-//   - the option row animates for ~3s after painting, and the answer path
-//     depends on the selection having settled on option 0
-//   - it debounces a dialog the user answers at the desk immediately
-const PROMPT_SETTLE_MS = 3500;
-
-// Poll interval for both the db queries and the terminal-text check.
-const PTY_CHECK_MS = 500;
-
-// A running `question` tool part is the CLI waiting on a choice. Unlike a
-// permission request, this one IS in the db with its full option list, so it's
-// read from there rather than scraped off the screen.
+// The tool OpenCode asks a question with, as its transcript names it.
 const QUESTION_TOOL = "question";
 
-// Tools whose `running` state is normal work rather than a block. A permission
-// request always sits on top of some tool that is stuck mid-flight, so the db
-// tells us "a tool is in flight" and the terminal text tells us "and it's
-// blocked on a permission dialog". Neither signal alone is enough: `running`
-// covers a 5-minute test run just as much as a blocked one.
+// A tool part's state while the tool runs, which is how the transcript marks a call
+// still in flight.
 const IN_FLIGHT_STATUS = "running";
-
-interface OpencodeQuestionOption {
-  label?: unknown;
-  description?: unknown;
-}
-
-// Decode a `question` tool's stored input into renderable options. Mirrors what
-// promptExtract does for Claude's AskUserQuestion; kept separate because the
-// payload shape and the answering keystrokes both differ.
-function extractQuestionDetail(raw: string): OpencodePromptDetail | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  const part = parsed as Record<string, unknown>;
-  const state = part.state as Record<string, unknown> | undefined;
-  const input = state?.input as Record<string, unknown> | undefined;
-  const questions = input?.questions;
-  if (!Array.isArray(questions) || questions.length === 0) return null;
-
-  const first = questions[0] as Record<string, unknown>;
-  const rawOptions = Array.isArray(first.options) ? first.options : [];
-  const options: { label: string; description?: string }[] = [];
-  for (const entry of rawOptions) {
-    const option = entry as OpencodeQuestionOption;
-    if (typeof option?.label !== "string" || option.label.length === 0) continue;
-    options.push({
-      label: option.label,
-      description:
-        typeof option.description === "string" ? option.description : undefined,
-    });
-  }
-  if (options.length === 0) return null;
-
-  // OpenCode appends its own free-text escape hatch to the on-screen list, so
-  // the phone must offer it too — otherwise the indices the phone sends would
-  // line up against a shorter list than the one being navigated.
-  options.push({ label: "Type your own answer", description: "Send a custom reply" });
-
-  const question =
-    typeof first.question === "string"
-      ? first.question
-      : typeof first.header === "string"
-        ? first.header
-        : undefined;
-
-  // Multi-select boxes are a two-stage interaction (toggle, then Tab to a Confirm
-  // step) that tapping a single option can't express. Labelled separately so the
-  // answer path declines instead of ticking one box and stranding the agent; the
-  // phone still shows the question, and the free-text box and terminal both work.
-  const multiple = first.multiple === true;
-  return {
-    tool: multiple ? MULTI_QUESTION_TOOL_LABEL : QUESTION_TOOL_LABEL,
-    question,
-    options,
-  };
-}
-
-export class OpencodeCompletionDetector implements CompletionDetector {
-  private lastSeenTime = 0;
-  private pollInterval: ReturnType<typeof setInterval> | null = null;
-  private pendingNotify: ReturnType<typeof setTimeout> | null = null;
-  private stopped = false;
-
-  // Message ids whose finish="stop" already scheduled a "waiting" notify.
-  // OpenCode updates rows in place (see checkForChanges), so a single message
-  // is re-read on every cost/token update; without this set, each re-read
-  // would beep again.
-  private notifiedStopIds = new Set<string>();
-  // Watermark (max time_created) for user rows treated as "the user acted".
-  // A user row only counts when it was CREATED after the detector attached —
-  // a genuinely new message. OpenCode updates rows in place long after
-  // insertion (cost/token bookkeeping), and a detector that attaches after
-  // the user typed (discovery needs a tick or two) must not let that late
-  // update cancel a completion notify for the turn that just finished.
-  private lastUserActionAt = 0;
-
-  // Bounded tail of recently painted terminal text, the only place a permission
-  // request is visible at all.
-  private ptyWindow = "";
-  // Sticky flag: a permission dialog was seen on the terminal.
-  //
-  // This can't be re-derived from `ptyWindow` on each tick, because OpenCode
-  // paints the dialog's option row EXACTLY ONCE and never repaints it — after
-  // that only a one-glyph spinner cell updates. So the marker neither refreshes
-  // (a phone connecting later would miss it) nor disappears when the dialog is
-  // dismissed (teardown emits no clear sequence and no erase-in-display). The
-  // flag is therefore set from the terminal and cleared from the db, which is
-  // the only source that positively reports the block ending: answering lets the
-  // stuck tool proceed, so its part row leaves "running".
-  private permissionSeen = false;
-  // Snapshot of the terminal at the moment the dialog was latched, so the
-  // subject line is decoded from the text that actually contained the dialog
-  // rather than from a window that has since scrolled on.
-  private permissionText = "";
-  // When the current block was first observed, for the settle delay.
-  private blockedSince = 0;
-  // Edge-trigger latch: report a given blocking state once, and not again until
-  // it clears.
-  private promptReported = false;
-
-  // Subject line of the permission dialog currently latched, so a second
-  // dialog can be told apart from spinner repaints of the first one (see
-  // onPtyData).
-  private permissionSubject = "";
-
-  constructor(
-    private readonly sessionId: string,
-    private readonly onActivity: ActivityCallback,
-    private readonly dbPath: string = OPENCODE_DB
-  ) {
-    // Snapshot the latest message timestamps so existing rows don't trigger.
-    // `time_updated` rather than `time_created`: OpenCode inserts a message
-    // row when streaming starts and writes its final `finish` in place
-    // afterwards, so the only column that moves when a turn actually
-    // completes is time_updated. `time_created` is snapshotted separately to
-    // tell genuinely-new user messages apart from late updates to old ones.
-    const { updated, created } = this.snapshotWatermarks();
-    this.lastSeenTime = updated;
-    this.lastUserActionAt = created;
-    debugTrace(
-      `[oc-attach] session=${this.sessionId.slice(-8)} watermarkUpdated=${updated} watermarkCreated=${created} at ${new Date().toISOString()}`
-    );
-    this.pollInterval = setInterval(() => this.tick(), PTY_CHECK_MS);
-  }
-
-  stop() {
-    if (this.stopped) return;
-    this.stopped = true;
-    if (this.pollInterval) clearInterval(this.pollInterval);
-    if (this.pendingNotify) clearTimeout(this.pendingNotify);
-    this.pollInterval = null;
-    this.pendingNotify = null;
-  }
-
-  // Fed from process-manager. Matched against markers, never replayed, so only a
-  // bounded tail is kept.
-  onPtyData(chunk: string) {
-    if (this.stopped) return;
-    this.ptyWindow += visibleText(chunk);
-    if (this.ptyWindow.length > PTY_WINDOW_BYTES) {
-      this.ptyWindow = this.ptyWindow.slice(-PTY_WINDOW_BYTES);
-    }
-    // Latch as soon as a dialog appears. Checked here rather than on the poll
-    // tick because the option row is painted once and could otherwise be evicted
-    // between ticks by a burst of output.
-    //
-    // A dialog whose subject differs from the latched one is a NEW block, so
-    // re-arm the latch. Without this, two permission dialogs raised back to
-    // back are treated as one: `permissionSeen` only clears when no tool is in
-    // flight (checkForPrompt), and the tool released by the first answer is
-    // usually still running when the second dialog paints, so the second one
-    // would never be reported or notified.
-    if (hasPermissionDialog(this.ptyWindow)) {
-      const subject = permissionSubject(this.ptyWindow) ?? "";
-      if (!this.permissionSeen || this.permissionSubject !== subject) {
-        this.permissionSeen = true;
-        this.permissionSubject = subject;
-        this.permissionText = this.ptyWindow;
-        this.blockedSince = 0;
-        this.promptReported = false;
-      }
-    }
-  }
-
-  private tick() {
-    this.checkForChanges();
-    this.checkForPrompt();
-  }
-
-  private cancelPending() {
-    if (this.pendingNotify) {
-      clearTimeout(this.pendingNotify);
-      this.pendingNotify = null;
-    }
-  }
-
-  private snapshotWatermarks(): { updated: number; created: number } {
-    let db: Database.Database | null = null;
-    try {
-      db = openDb(this.dbPath);
-      const row = db
-        .prepare(
-          "SELECT MAX(time_updated) AS t, MAX(time_created) AS c FROM message WHERE session_id = ?"
-        )
-        .get(this.sessionId) as { t: number | null; c: number | null } | undefined;
-      return { updated: row?.t ?? 0, created: row?.c ?? 0 };
-    } catch (err) {
-      debugTrace(`[oc-snapshot] session=${this.sessionId.slice(-8)} err=${(err as Error).message}`);
-      return { updated: this.lastSeenTime, created: this.lastUserActionAt };
-    } finally {
-      db?.close();
-    }
-  }
-
-  private checkForChanges() {
-    let db: Database.Database | null = null;
-    try {
-      db = openDb(this.dbPath);
-      // Watermark on time_updated, not time_created. OpenCode writes a
-      // message row when the assistant starts streaming (finish unset) and
-      // then UPDATEs it in place — `finish: "stop"` lands seconds or minutes
-      // after time_created, so a time_created watermark reads every row once,
-      // before its final state exists, and completion notifications never
-      // fire. Rows are therefore re-read on every in-place update; the
-      // idempotency sets below make that safe.
-      const rows = db
-        .prepare(
-          "SELECT id, time_created, time_updated, data FROM message WHERE session_id = ? AND time_updated > ? ORDER BY time_updated ASC"
-        )
-        .all(this.sessionId, this.lastSeenTime) as Array<{
-        id: string;
-        time_created: number;
-        time_updated: number;
-        data: string;
-      }>;
-
-      if (rows.length === 0) return;
-
-      let shouldScheduleNotify = false;
-
-      for (const row of rows) {
-        this.lastSeenTime = Math.max(this.lastSeenTime, row.time_updated);
-        let parsed: OpencodeMessageData;
-        try {
-          parsed = JSON.parse(row.data);
-        } catch {
-          continue;
-        }
-
-        if (parsed.role === "assistant") {
-          // finish === "stop"        -> assistant truly done, schedule notify
-          // finish === "tool-calls"  -> still working, ignore
-          // finish === undefined     -> intermediate streaming state, ignore
-          if (parsed.finish === "stop" && !this.notifiedStopIds.has(row.id)) {
-            this.notifiedStopIds.add(row.id);
-            shouldScheduleNotify = true;
-          }
-        } else if (parsed.role === "user") {
-          // Distinguish a real user prompt from a tool result. In opencode,
-          // user prompts have no `content` field at the top level (the prompt
-          // text lives in linked `part` rows); tool results carry payload.
-          // We treat any user-role message as "user has acted" → cancel
-          // pending notify, since it means the user already responded.
-          //
-          // Only rows CREATED after the detector attached count. OpenCode
-          // re-writes user rows in place long after insertion (cost/token
-          // bookkeeping), so a late update to a row the user typed just
-          // before discovery attached must not cancel the completion notify
-          // for the turn that just finished — that was the exact failure
-          // mode where asking a question right after starting an instance
-          // swallowed the "waiting" notification forever.
-          if (row.time_created > this.lastUserActionAt) {
-            this.lastUserActionAt = row.time_created;
-            shouldScheduleNotify = false;
-            this.cancelPending();
-          }
-        }
-      }
-
-      if (shouldScheduleNotify) {
-        this.cancelPending();
-        this.pendingNotify = setTimeout(() => {
-          this.pendingNotify = null;
-          if (!this.stopped) this.onActivity("waiting");
-        }, 2000);
-      }
-    } catch (err) {
-      debugTrace(`[oc-changes] session=${this.sessionId.slice(-8)} err=${(err as Error).message}`);
-      // sqlite locked / db missing / etc — silent retry next tick
-    } finally {
-      db?.close();
-    }
-  }
-
-  // Scan the session's recent tool parts once, reporting both things the prompt
-  // logic needs: a pending `question` box (structured, with its options) and
-  // whether ANY tool is still in flight (which is what keeps a permission
-  // dialog alive).
-  private scanTools(): {
-    question: OpencodePromptDetail | null;
-    anyInFlight: boolean;
-  } {
-    let db: Database.Database | null = null;
-    try {
-      db = openDb(this.dbPath);
-      const rows = db
-        .prepare(
-          "SELECT data FROM part WHERE session_id = ? ORDER BY time_created DESC LIMIT 60"
-        )
-        .all(this.sessionId) as Array<{ data: string }>;
-
-      let question: OpencodePromptDetail | null = null;
-      let anyInFlight = false;
-
-      for (const row of rows) {
-        // Cheap pre-filter: most parts are text/reasoning/step markers.
-        if (!row.data.includes(IN_FLIGHT_STATUS)) continue;
-        let shape: Record<string, unknown>;
-        try {
-          shape = JSON.parse(row.data);
-        } catch {
-          continue;
-        }
-        if (shape.type !== "tool") continue;
-        const state = shape.state as Record<string, unknown> | undefined;
-        if (state?.status !== IN_FLIGHT_STATUS) continue;
-
-        anyInFlight = true;
-        if (!question && shape.tool === QUESTION_TOOL) {
-          question = extractQuestionDetail(row.data);
-        }
-      }
-      return { question, anyInFlight };
-    } catch (err) {
-      debugTrace(`[oc-scan] session=${this.sessionId.slice(-8)} err=${(err as Error).message}`);
-      // sqlite locked / db missing — report nothing rather than guessing, so a
-      // transient failure can't clear a live prompt.
-      return { question: null, anyInFlight: true };
-    } finally {
-      db?.close();
-    }
-  }
-
-  // Report "prompt" once when OpenCode is blocked, and "prompt-cleared" once it
-  // isn't.
-  //
-  // Deliberately NOT using PTY idleness the way the Claude detector does: a
-  // spinner repaints throughout an OpenCode dialog, so an idle threshold can
-  // never be crossed here.
-  //
-  // The two blocking kinds use different evidence, because that's what each one
-  // leaves behind:
-  //   - `question`: fully in the db. Its own `running` row both detects and
-  //     clears it.
-  //   - permission: not persisted at all. The terminal says a dialog appeared
-  //     (latched in onPtyData, since it's painted once and never repainted), and
-  //     the db's in-flight tool is what says it's still waiting — answering
-  //     releases the stuck tool, flipping its row out of "running".
-  private checkForPrompt() {
-    if (this.stopped) return;
-
-    const { question, anyInFlight } = this.scanTools();
-
-    // A latched permission dialog only counts while some tool is still in
-    // flight. This is what makes the latch self-clearing.
-    if (this.permissionSeen && !anyInFlight) {
-      this.permissionSeen = false;
-      this.permissionText = "";
-      this.permissionSubject = "";
-    }
-
-    const blocked = question !== null || this.permissionSeen;
-
-    if (!blocked) {
-      this.blockedSince = 0;
-      if (this.promptReported) {
-        this.promptReported = false;
-        this.onActivity("prompt-cleared");
-      }
-      return;
-    }
-
-    if (this.promptReported) return;
-
-    const now = Date.now();
-    if (this.blockedSince === 0) {
-      this.blockedSince = now;
-      return;
-    }
-    if (now - this.blockedSince < PROMPT_SETTLE_MS) return;
-
-    this.promptReported = true;
-    // Prefer the question box: its options are structured data, not markers.
-    const detail = question ?? buildPermissionDetail(this.permissionText);
-    this.onActivity("prompt", detail);
-  }
-}
 
 // One-line description of an OpenCode tool call. Its tool names are lowercase
 // and its inputs use different keys than Claude's, so this can't be shared.
@@ -713,7 +301,7 @@ export function readOpencodeTranscript(
 // totals: a real session was observed at `tokens_cache_read` of 17.1M against a
 // 200k–1M window, which would read as "impossibly full" every time.
 //
-// `dbPath` is overridable for tests, matching the detector's convention.
+// `dbPath` is overridable for tests, like everywhere else in this file.
 // This model's context window, from the user's opencode config.
 //
 // Exact rather than inferred, unlike the claude side: the config states
@@ -850,12 +438,11 @@ export const opencodeBackend: Backend = {
     return new OpencodeSessionDiscovery(cwd, onFound, isClaimed);
   },
 
-  // Blocking is detected from the db plus the painted dialog — see
-  // OpencodeCompletionDetector.checkForPrompt. Terminal silence can't be used:
-  // OpenCode keeps a spinner running while it blocks (the longest gap across a
-  // 31s dialog was 295ms).
-  createCompletionDetector(sessionId, onActivity): CompletionDetector {
-    return new OpencodeCompletionDetector(sessionId, onActivity);
+  // From Multi-Code's plugin, which every OpenCode spawn loads (opencodePlugin.ts).
+  // Per process like Claude's, and `pid` is unused: the plugin's deliveries already
+  // carry the instance and spawn they belong to.
+  createHookAttention(_pid, onActivity, onHooksHealth): HookAttention {
+    return new OpencodePluginAttention(onActivity, undefined, onHooksHealth);
   },
 
   readTranscript(sessionId, limit): TranscriptEntry[] {

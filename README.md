@@ -16,7 +16,7 @@ When working with multiple coding-agent sessions across different projects simul
 - **Multi-Backend** — Each instance runs either **Claude Code** or **OpenCode**. Pick the backend when creating an instance; mix both freely, even in the same project directory
 - **Instance Management** — Spawn, restart, and remove agent sessions per project directory
 - **Full Terminal Fidelity** — Real PTY via node-pty, rendered in xterm.js. No chat abstraction, no message parsing
-- **Session Notifications** — Knows when an agent has finished or is waiting on you (Claude reports it through hooks Multi-Code passes at launch, OpenCode via its session database); plays audio, flashes the contact, and bounces the macOS Dock
+- **Session Notifications** — Knows when an agent has finished or is waiting on you (Claude reports it through hooks Multi-Code passes at launch, OpenCode through a plugin Multi-Code loads into it); plays audio, flashes the contact, and bounces the macOS Dock
 - **Context usage at a glance** — Each contact row shows how full that session's context window is, as a percentage with a colour tint. Hover for the exact token count, the model, and when it was measured. Where the window size can't be established reliably, the row shows the raw token count instead of guessing a percentage. Stopped sessions show their last known usage too
 - **Follows `/clear` and `/new`** — When a running CLI moves to a fresh session, Multi-Code follows it, so context usage, notifications, and the manager's view keep tracking the live session
 - **Persistence** — Instance list (including each instance's backend) saved to disk, survives app restart
@@ -326,13 +326,14 @@ The manager's role guidance lives in a `CLAUDE.md` in its folder. You can edit i
 
 ### Notification behavior
 
-Notifications work identically for both backends — only the source differs. Claude Code reports its own state through hooks: every `claude` Multi-Code starts gets a `--settings` file from Multi-Code's data folder whose hooks post to the app's local `/alert` endpoint. Nothing is written to your own Claude settings, so `claude` run in an ordinary terminal is unaffected. OpenCode is read from its session database.
+Notifications work identically for both backends — only the source differs. Claude Code reports its own state through hooks: every `claude` Multi-Code starts gets a `--settings` file from Multi-Code's data folder whose hooks post to the app's local `/alert` endpoint. Nothing is written to your own Claude settings, so `claude` run in an ordinary terminal is unaffected. OpenCode does the same through a report-only plugin: every `opencode` Multi-Code starts loads it from Multi-Code's data folder, named in that process's `OPENCODE_CONFIG_CONTENT` on top of your own config, and nothing is written to `~/.config/opencode/` or a project's `.opencode/`.
 
 - Agent finishes, or stops to wait on you (a permission prompt, a question, a plan approval) → plays the "ding" once, for every instance, including the one you're looking at
 - Avatar blinks + red dot badge appears
 - macOS Dock icon bounces when Multi-Code isn't in front (`critical` mode — keeps bouncing until you bring the app to the front)
 - Typing, or clicking anywhere in a session's page, stops its chime and clears its red dot. Clicking a contact in the list does the same for that contact. Nothing clears on a timer or on window focus alone
 - A turn you interrupt with Esc, or a dialog you deny, doesn't chime
+- If a session's hooks or plugin never report (for example `"disableAllHooks": true` in your Claude settings), a bar on its page says Multi-Code can't tell when it finishes, instead of going quiet
 
 ### Offline state
 
@@ -409,7 +410,7 @@ Everything Multi-Code keeps lives in Electron's user-data folder. On macOS that 
 1. User creates an instance by selecting a project directory and a backend (Claude Code / OpenCode)
 2. App spawns the backend CLI (`claude` / `opencode`, resuming a prior session if one exists) via node-pty in that directory. Backends are pluggable behind a small `Backend` interface in `src/main/backends/`
 3. PTY stdout is piped in real-time to an xterm.js terminal in the renderer
-4. Each agent's state comes from the agent: Claude Code reports it through report-only hooks passed with `--settings` at launch (finished, waiting on a permission prompt or question), OpenCode is read from its session database. Neither writes anything into the user's own config
+4. Each agent's state comes from the agent: Claude Code reports it through report-only hooks passed with `--settings` at launch (finished, waiting on a permission prompt or question), OpenCode through a report-only plugin named in its `OPENCODE_CONFIG_CONTENT`. Neither writes anything into the user's own config
 5. On a finish or a needs-you: audio + flash + Dock bounce, for every instance. The red dot stays until you type or click in that session, or select it
 6. Toolbox sections each manage their own lifecycle:
    - Git: shells out to `git` every 5s while expanded

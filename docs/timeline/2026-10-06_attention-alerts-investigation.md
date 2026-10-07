@@ -358,6 +358,17 @@ auto-updated 1.18.34 → 1.18.35 between sessions; every fixture is 1.18.35. Rep
   initialises plugins twice in one process** (the TUI once), which is what the plugin's
   newest-init-wins guard is for. Probe: `.omt/probes/attention-alerts/t410/` (`server.ts`
   under `jiti`, then `check.py`).
+- **Phone keystrokes and end to end (T-411, 2026-10-07, 1.18.35).** Each phone mapping
+  answered its dialog when sent 0.36s after the dialog's event: Enter (`once`),
+  Right Right Enter (`reject`), Down Enter on a question (second option), and
+  **Right Enter Enter for Allow always**, the second Enter landing on the Confirm screen
+  (`always`). The old 3.5s settle before reporting a dialog is not needed. Real OpenCode
+  through the real plugin, `/alert` server and `OpencodePluginAttention`: a plain reply,
+  a permission allowed, a permission rejected, a question, an Esc interrupt and a subagent
+  raised exactly `waiting` / `prompt, prompt-cleared, waiting` / `prompt, prompt-cleared` /
+  `prompt, prompt-cleared, waiting` / nothing / `waiting`. Needs-you came 1–2ms after
+  OpenCode's event, Finished 5–15ms after the root's idle. Probes:
+  `.omt/probes/attention-alerts/t411/` (`keys.py`; `server.ts` under `jiti`, then `e2e.py`).
 
 ## Key Decisions
 

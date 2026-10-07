@@ -522,18 +522,34 @@ export function App() {
         {selectedInstance?.status === "running" && selectedInstance.alertsDegraded && (
           // PRD Story 6: say so rather than go quiet. No fallback guesses at the
           // state instead; see docs/specs/attention-alerts/prd.md.
-          <div
-            className="alerts-degraded-bar"
-            title={
-              "Multi-Code hears when a session finishes or needs you through hooks it passes " +
-              "to claude at launch, and none have arrived from this one. Likely causes: " +
-              '"disableAllHooks": true in your Claude settings, or a managed policy that ' +
-              "allows only managed hooks."
-            }
-          >
-            Hooks aren&apos;t running in this session, so Multi-Code can&apos;t tell you when it
-            finishes or needs you. Check on it yourself.
-          </div>
+          selectedInstance.backend === "opencode" ? (
+            <div
+              className="alerts-degraded-bar"
+              title={
+                "Multi-Code hears when a session finishes or needs you through a plugin it " +
+                "loads into opencode at launch, and it hasn't reported from this one. Likely " +
+                "causes: an OPENCODE_CONFIG_CONTENT in Multi-Code's environment that isn't " +
+                "plain JSON, opencode run with --pure, or a config error that stopped plugins " +
+                "loading."
+              }
+            >
+              Multi-Code&apos;s plugin isn&apos;t running in this session, so Multi-Code can&apos;t
+              tell you when it finishes or needs you. Check on it yourself.
+            </div>
+          ) : (
+            <div
+              className="alerts-degraded-bar"
+              title={
+                "Multi-Code hears when a session finishes or needs you through hooks it passes " +
+                "to claude at launch, and none have arrived from this one. Likely causes: " +
+                '"disableAllHooks": true in your Claude settings, or a managed policy that ' +
+                "allows only managed hooks."
+              }
+            >
+              Hooks aren&apos;t running in this session, so Multi-Code can&apos;t tell you when it
+              finishes or needs you. Check on it yourself.
+            </div>
+          )
         )}
         <div className="content-terminal">
           {instances.filter((i) => i.status === "running").length > 0 ? (

@@ -16,7 +16,7 @@
 - **多后端** — 每个实例跑 **Claude Code** 或 **OpenCode**。创建实例时选后端,可以任意混用,甚至同一个项目目录里两个都开
 - **实例管理** — 按项目目录 spawn / restart / remove agent 会话
 - **完整终端能力** — 用 node-pty 接真 PTY,xterm.js 渲染。不做 chat 抽象,不解析消息
-- **会话通知** — 知道 agent 什么时候做完、什么时候在等你(Claude 通过 Multi-Code 启动时传给它的 hooks 自己上报,OpenCode 读它的 session 数据库),播放声音、闪烁联系人、macOS Dock 弹跳
+- **会话通知** — 知道 agent 什么时候做完、什么时候在等你(Claude 通过 Multi-Code 启动时传给它的 hooks 自己上报,OpenCode 通过 Multi-Code 给它加载的插件上报),播放声音、闪烁联系人、macOS Dock 弹跳
 - **Context 用量一眼可见** — 每一行联系人都显示这个会话的 context 窗口用了百分之多少,并按用量上色。鼠标悬停能看到精确 token 数、模型和统计时间。窗口大小确定不了的时候只显示 token 数,不瞎猜百分比。已停止的会话也显示最后一次的用量
 - **跟得上 `/clear` 和 `/new`** — 运行中的 CLI 切到新 session 时,Multi-Code 会跟过去,context 用量、通知和 Manager 看到的都是当前那个 session
 - **持久化** — 实例列表(含每个实例的后端)存盘,重启后恢复
@@ -326,13 +326,14 @@ Manager 的角色 guidance 放在它文件夹里的 `CLAUDE.md`。你可以改;�
 
 ### 通知行为
 
-两种后端的通知行为完全一致,只是来源不同。Claude Code 通过 hooks 上报自己的状态:Multi-Code 启动的每个 `claude` 都带一个来自 Multi-Code 数据目录的 `--settings` 文件,里面的 hooks 把状态发到 app 本地的 `/alert` 接口。不会写你自己的 Claude 配置,所以在普通终端里跑 `claude` 不受影响。OpenCode 读它的 session 数据库。
+两种后端的通知行为完全一致,只是来源不同。Claude Code 通过 hooks 上报自己的状态:Multi-Code 启动的每个 `claude` 都带一个来自 Multi-Code 数据目录的 `--settings` 文件,里面的 hooks 把状态发到 app 本地的 `/alert` 接口。不会写你自己的 Claude 配置,所以在普通终端里跑 `claude` 不受影响。OpenCode 也一样,靠一个只上报的插件:Multi-Code 启动的每个 `opencode` 都从 Multi-Code 数据目录加载它,插件写在这个进程的 `OPENCODE_CONFIG_CONTENT` 里,叠加在你自己的配置之上,不会往 `~/.config/opencode/` 或项目的 `.opencode/` 里写任何东西。
 
 - Agent 做完了,或停下来等你(权限确认、提问、计划审批)→ 响一次"滴滴",每个实例都响,包括你正在看的那个
 - 头像闪烁 + 红点徽标
 - Multi-Code 不在前台时 macOS Dock 图标弹跳(`critical` 模式,持续到你切回 app)
 - 在某个会话的页面里打字或点任意位置,停掉它的提示音、清掉它的红点。在列表里点某个联系人,对那个联系人也一样。不会因为计时或窗口获得焦点就自动清掉
 - 你按 Esc 打断的一轮,或你拒绝的弹窗,不会响
+- 如果某个会话的 hooks 或插件一直没上报(比如你的 Claude 配置里有 `"disableAllHooks": true`),它的页面上会出一条提示,说 Multi-Code 没法知道它什么时候做完,而不是悄悄不响
 
 ### 离线状态
 
@@ -396,7 +397,7 @@ Multi-Code 自己存的东西都在 Electron 的 userData 目录里。macOS 上�
 1. 用户选一个项目目录和后端(Claude Code / OpenCode)创建实例
 2. App 通过 node-pty 在该目录 spawn 对应后端 CLI(`claude` / `opencode`,有历史 session 就续上)。后端在 `src/main/backends/` 的一个小 `Backend` 接口后面可插拔
 3. PTY stdout 实时管道到 renderer 里的 xterm.js 终端
-4. 每个 agent 的状态来自 agent 自己:Claude Code 通过启动时用 `--settings` 传入的只上报 hooks 报告(做完了、在等权限确认或回答问题),OpenCode 读它的 session 数据库。两者都不往用户自己的配置里写任何东西
+4. 每个 agent 的状态来自 agent 自己:Claude Code 通过启动时用 `--settings` 传入的只上报 hooks 报告(做完了、在等权限确认或回答问题),OpenCode 通过写在它 `OPENCODE_CONFIG_CONTENT` 里的只上报插件报告。两者都不往用户自己的配置里写任何东西
 5. 做完或等你时:声音 + 闪烁 + Dock 弹跳,每个实例都一样。红点一直留着,直到你在那个会话里打字、点击,或选中它
 6. 工具箱 sections 各自管理生命周期:
    - Git:展开期间每 5s 调用 `git`

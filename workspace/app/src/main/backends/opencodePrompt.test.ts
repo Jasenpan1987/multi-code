@@ -1,115 +1,72 @@
-// Tests for OpenCode's dialog detection and keystroke mapping.
-//
-// The permission fixture is REAL terminal output, captured by driving an actual
-// `opencode` process through a PTY until it asked for external-directory access.
-// Hand-written escape sequences would only prove the parser matches this file's
-// own assumptions; a recording of the CLI is what makes these tests mean
-// something. Regenerate it by capturing PTY output around a live dialog if a
-// future OpenCode release changes its layout.
+// What a paired phone is shown for an OpenCode dialog, and the keystrokes that answer
+// it. The dialogs are the ones OpenCode 1.18.35 sent through Multi-Code's plugin
+// (T-409 fixtures); the keystrokes were checked against the live TUI (T-411: each
+// answered its dialog when sent 0.36s after the dialog's event).
 
 import { describe, expect, it } from "vitest";
 import fs from "fs";
 import path from "path";
 import {
-  buildPermissionDetail,
-  hasPermissionDialog,
   keystrokeForPermission,
   keystrokeForQuestion,
-  permissionSubject,
   MULTI_QUESTION_TOOL_LABEL,
   PERMISSION_LABELS,
   PERMISSION_TOOL,
+  permissionDetail,
   QUESTION_TOOL_LABEL,
-  visibleText,
+  questionDetail,
 } from "./opencodePrompt";
 import { opencodeBackend } from "./opencode";
 
-const fixture = fs.readFileSync(
-  path.join(__dirname, "__fixtures__", "opencode-permission.txt"),
-  "utf8"
-);
+function asked(fixture: string, type: string): Record<string, unknown> {
+  const { events } = JSON.parse(
+    fs.readFileSync(path.join(__dirname, "__fixtures__/opencode-plugin", `${fixture}.json`), "utf8")
+  ) as { events: { type: string; properties: Record<string, unknown> }[] };
+  const event = events.find((e) => e.type === type);
+  if (!event) throw new Error(`${fixture} has no ${type}`);
+  return event.properties;
+}
 
-describe("visibleText", () => {
-  it("keeps the glyphs a human would read", () => {
-    const text = visibleText(fixture);
-    expect(text).toContain("Permission required");
-    expect(text).toContain("Allow once");
-  });
-
-  it("removes the escape sequences around them", () => {
-    const text = visibleText(fixture);
-    expect(text).not.toContain("\x1b[");
-    expect(text).not.toContain("38;5;");
-  });
-
-  it("strips OSC sequences without eating following text", () => {
-    expect(visibleText("\x1b]11;?\x07after")).toBe("after");
-    expect(visibleText("\x1b]0;title\x1b\\after")).toBe("after");
-  });
-
-  it("leaves plain text untouched", () => {
-    expect(visibleText("no escapes here")).toBe("no escapes here");
-  });
-});
-
-describe("hasPermissionDialog", () => {
-  it("detects the dialog in real captured output", () => {
-    expect(hasPermissionDialog(visibleText(fixture))).toBe(true);
-  });
-
-  it("ignores the heading alone", () => {
-    // The heading survives in scrollback after a dialog is answered, so it
-    // must not be enough on its own.
-    expect(hasPermissionDialog("Permission required")).toBe(false);
-  });
-
-  it("requires the whole option row", () => {
-    expect(
-      hasPermissionDialog("Permission required ... Allow once   Allow always")
-    ).toBe(false);
-  });
-
-  it("stays false for ordinary output", () => {
-    expect(hasPermissionDialog("$ pnpm test\n126 passed")).toBe(false);
-    expect(hasPermissionDialog("")).toBe(false);
-  });
-});
-
-describe("permissionSubject", () => {
-  it("extracts what is being asked from real output", () => {
-    expect(permissionSubject(visibleText(fixture))).toBe(
-      "Access external directory /etc"
-    );
-  });
-
-  it("stops before the Patterns block", () => {
-    // OpenCode lists the globs it would grant under a "Patterns" heading; that
-    // belongs in the terminal view, not in a one-line phone summary.
-    const subject = permissionSubject(visibleText(fixture));
-    expect(subject).not.toContain("Patterns");
-    expect(subject).not.toContain("/etc/*");
-  });
-
-  it("returns undefined when there is no heading", () => {
-    expect(permissionSubject("nothing here")).toBeUndefined();
-  });
-});
-
-describe("buildPermissionDetail", () => {
-  it("builds tappable options from real output", () => {
-    const detail = buildPermissionDetail(visibleText(fixture));
-    expect(detail.tool).toBe("Permission");
-    expect(detail.question).toBe(
-      "Permission required: Access external directory /etc"
-    );
+describe("permissionDetail", () => {
+  it("names what is asked and offers the dialog's three options in order", () => {
+    const detail = permissionDetail(asked("permission-once", "permission.asked"));
+    expect(detail.tool).toBe(PERMISSION_TOOL);
+    expect(detail.question).toBe("Permission required: bash: touch a.txt");
     expect(detail.options.map((o) => o.label)).toEqual([...PERMISSION_LABELS]);
   });
 
-  it("still returns options when the subject can't be read", () => {
-    // Losing the subject line should degrade to a usable prompt, not to nothing.
-    const detail = buildPermissionDetail("Permission required");
+  it("still offers the options when the event names nothing", () => {
+    const detail = permissionDetail({});
     expect(detail.question).toBe("Permission required");
     expect(detail.options).toHaveLength(3);
+  });
+});
+
+describe("questionDetail", () => {
+  it("offers the question's options plus OpenCode's own free-text one", () => {
+    const detail = questionDetail(asked("question", "question.asked"));
+    expect(detail?.tool).toBe(QUESTION_TOOL_LABEL);
+    expect(detail?.question).toBe("Do you prefer tea or coffee?");
+    expect(detail?.options.map((o) => o.label)).toEqual(["tea", "coffee", "Type your own answer"]);
+  });
+
+  it("marks a box with several questions as not one tap", () => {
+    // An Enter per question, then one more to submit (T-409, question-multi).
+    expect(questionDetail(asked("question-multi", "question.asked"))?.tool).toBe(
+      MULTI_QUESTION_TOOL_LABEL
+    );
+  });
+
+  it("marks a multi-select question as not one tap", () => {
+    const detail = questionDetail({
+      questions: [{ question: "Fruit?", multiple: true, options: [{ label: "Apple" }] }],
+    });
+    expect(detail?.tool).toBe(MULTI_QUESTION_TOOL_LABEL);
+  });
+
+  it("is null when there is nothing to offer", () => {
+    expect(questionDetail({})).toBeNull();
+    expect(questionDetail({ questions: [{ question: "?", options: [] }] })).toBeNull();
   });
 });
 
@@ -121,8 +78,13 @@ describe("keystrokeForPermission", () => {
   });
 
   it("sends one right arrow per step to reach later options", () => {
-    expect(keystrokeForPermission(1, 3)).toBe("\x1b[C\r");
     expect(keystrokeForPermission(2, 3)).toBe("\x1b[C\x1b[C\r");
+  });
+
+  it("confirms Allow always's second screen with another Enter", () => {
+    // "This will allow the following patterns until OpenCode is restarted …
+    // Confirm / Cancel": without it the dialog is left open on that screen.
+    expect(keystrokeForPermission(1, 3)).toBe("\x1b[C\r\r");
   });
 
   it("never sends digits, which the dialog ignores", () => {
@@ -175,8 +137,8 @@ describe("multi-select questions", () => {
 describe("opencodeBackend.keystrokeForChoice", () => {
   it("routes each dialog kind to its own axis", () => {
     // The whole point of per-backend routing: these must not be interchangeable.
-    expect(opencodeBackend.keystrokeForChoice(PERMISSION_TOOL, 1, 3)).toBe(
-      "\x1b[C\r"
+    expect(opencodeBackend.keystrokeForChoice(PERMISSION_TOOL, 2, 3)).toBe(
+      "\x1b[C\x1b[C\r"
     );
     expect(opencodeBackend.keystrokeForChoice(QUESTION_TOOL_LABEL, 1, 3)).toBe(
       "\x1b[B\r"

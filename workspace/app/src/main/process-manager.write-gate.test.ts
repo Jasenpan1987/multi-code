@@ -95,12 +95,9 @@ vi.mock("./backends", () => ({
       cb.sessionFound = onFound;
       return { cancel: () => {} };
     },
-    createCompletionDetector: (
-      _sessionId: string,
-      onActivity: (type: string) => void
-    ) => {
+    createHookAttention: (_pid: number, onActivity: (type: string) => void) => {
       cb.activity = onActivity;
-      return { stop: () => {} };
+      return { handle: () => {}, stop: () => {} };
     },
     readTranscript: () => [],
     readContextUsage: () => null,
@@ -121,7 +118,8 @@ beforeEach(() => {
   cb.sessionFound = null;
   manager = new ProcessManager();
   instanceId = manager.createInstance("/Users/x/code/msk", "msk").id;
-  // Discovery has to land before a detector exists, which is what feeds run state.
+  // Activity is wired at spawn; discovery is here so the instance looks like a
+  // real one, with a session.
   discover("ses-1");
 });
 

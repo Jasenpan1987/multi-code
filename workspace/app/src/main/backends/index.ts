@@ -27,7 +27,6 @@ export type {
   BackendName,
   SpawnConfig,
   SpawnOptions,
-  CompletionDetector,
   HookAttention,
   SessionDiscovery,
 } from "./types";
