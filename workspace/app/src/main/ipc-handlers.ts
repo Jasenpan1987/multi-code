@@ -9,13 +9,22 @@ import { getGitStatus } from "./git-status";
 import { getFileDiff, isInsideCwd } from "./git-diff";
 import { isBackendAvailable, getBackend } from "./backends";
 import type { BackendName } from "./backends";
-import { loadSettings, saveSettings } from "./settings-store";
+import {
+  loadSecretarySettings,
+  loadSettings,
+  loadSpeechServer,
+  saveSettings,
+  setSecretaryMode,
+  setSpeechServer,
+} from "./settings-store";
 import type { ThemeName } from "./settings-store";
+import { testServer } from "./secretary/speech";
 import type {
   CreateManagerResult,
   DiffSide,
   FileDiff,
   ReadFileResult,
+  SpeechKeyChange,
 } from "../shared/types";
 import { remoteServer } from "./remote/ws-server";
 import { setRemoteEnabled } from "./remote";
@@ -459,6 +468,24 @@ export function registerIpcHandlers() {
   // will still reach the desktop after leaving the house. Surfaced so the user
   // isn't surprised by a LAN-only pairing.
   ipcMain.handle("remote-has-tailscale", () => hasTailscaleEndpoint());
+
+  // ---------------------------------------------------------------------
+  // Secretary. Every reply is SecretarySettings or a test result: the speech
+  // key goes in through set-server and never comes back out.
+  // ---------------------------------------------------------------------
+
+  ipcMain.handle("secretary:get-settings", () => loadSecretarySettings());
+
+  ipcMain.handle("secretary:set-mode", (_event, enabled: boolean) =>
+    setSecretaryMode(enabled === true)
+  );
+
+  ipcMain.handle(
+    "secretary:set-server",
+    (_event, url: string, key: SpeechKeyChange) => setSpeechServer(url, key)
+  );
+
+  ipcMain.handle("secretary:test-server", () => testServer(loadSpeechServer()));
 
   // Compose box: save the current clipboard image to a temp PNG and return its
   // absolute path plus a data: URL of the same bytes (for the chip thumbnail —

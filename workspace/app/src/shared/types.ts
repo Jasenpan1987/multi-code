@@ -7,7 +7,40 @@ export type ThemeName = "light" | "dark" | "sepia";
 export interface AppSettings {
   theme: ThemeName;
   remoteEnabled: boolean;
+  secretaryMode: boolean;
+  speechServerUrl: string;
 }
+
+// ---------------------------------------------------------------------------
+// Secretary (epic voice-secretary)
+// ---------------------------------------------------------------------------
+
+// The language a brief is written and spoken in, named as the speech server
+// takes it.
+export type BriefLanguage = "Chinese" | "English";
+
+// What the renderer learns about the secretary's settings. The speech key never
+// leaves main: only whether one is saved.
+export interface SecretarySettings {
+  secretaryMode: boolean;
+  // Base address of the speech server; "" means none, and briefs are text only.
+  speechServerUrl: string;
+  hasSpeechKey: boolean;
+}
+
+// What saving the server settings does to the saved key. "unchanged" is what an
+// untouched key field sends, so leaving the field empty can never wipe the key;
+// a "set" with a blank key counts as unchanged too.
+export type SpeechKeyChange =
+  | { kind: "unchanged" }
+  | { kind: "set"; key: string }
+  | { kind: "clear" };
+
+// The Test button's one line: the step that failed and why ("address" covers no
+// server set and an unusable address), or the round trip time.
+export type SpeechTestResult =
+  | { ok: true; ms: number }
+  | { ok: false; step: "address" | "health" | "speech"; reason: string };
 
 // Result of minting a pairing offer: the QR image the user scans plus the same
 // payload as text, for the case where scanning isn't practical.
@@ -254,6 +287,16 @@ export interface ElectronAPI {
   createRemotePairing: () => Promise<RemotePairing | null>;
   revokeRemoteDevice: (deviceId: string) => Promise<RemoteStatus>;
   hasTailscale: () => Promise<boolean>;
+
+  // Secretary. setSpeechServer saves the address ("" for text only) and applies
+  // the key change; testSpeechServer tests what is saved.
+  getSecretarySettings: () => Promise<SecretarySettings>;
+  setSecretaryMode: (enabled: boolean) => Promise<SecretarySettings>;
+  setSpeechServer: (
+    url: string,
+    key: SpeechKeyChange
+  ) => Promise<SecretarySettings>;
+  testSpeechServer: () => Promise<SpeechTestResult>;
 
   // Manager activity feed
   getManagerActivity: () => Promise<ManagerActivityEntry[]>;

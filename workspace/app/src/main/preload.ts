@@ -57,6 +57,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("remote-revoke-device", deviceId),
   hasTailscale: () => ipcRenderer.invoke("remote-has-tailscale"),
 
+  // Secretary. `key` is a SpeechKeyChange; typed loose here like `backend`
+  // above, and validated in main.
+  getSecretarySettings: () => ipcRenderer.invoke("secretary:get-settings"),
+  setSecretaryMode: (enabled: boolean) =>
+    ipcRenderer.invoke("secretary:set-mode", enabled),
+  setSpeechServer: (url: string, key: unknown) =>
+    ipcRenderer.invoke("secretary:set-server", url, key),
+  testSpeechServer: () => ipcRenderer.invoke("secretary:test-server"),
+
   // Manager activity feed
   getManagerActivity: () => ipcRenderer.invoke("manager-activity-list"),
 
