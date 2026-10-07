@@ -268,3 +268,16 @@ server to get it running sooner: the builder rejected exactly that on 2026-10-07
 for "最正确、最官方的方案". If a shortcut is ever worth it, say so before taking it. The
 reference setup is `deploy/tts-server/`. (source:
 docs/timeline/2026-10-07_voice-engine-hosting.md)
+
+## A one-shot CLI call must not log the builder in (added 2026-10-08)
+
+Every `claude -p` Multi-Code runs on its own, with nobody at the screen, passes
+`--settings '{"awsAuthRefresh":"false"}'` (`secretary/cli.ts`, `NO_AUTH_REFRESH_SETTINGS`).
+The builder's `~/.claude/settings.json` has an `awsAuthRefresh` of `aws sso login …`, and
+the CLI runs it when the Bedrock token has expired, `-p --bare` included: measured against
+2.1.292 in a fake HOME, it ran the user's refresh command once and then failed. For an
+interactive session that's a login page the builder expects; for a brief written while they
+are away it's a browser window opening on an empty desk. With the override the call fails at
+once with the credential error, which is the right outcome. It must stay the call's only
+`--settings`, since a second one replaces the first. (source:
+docs/timeline/2026-10-08_brief-writer-spike.md, T-504 addendum)

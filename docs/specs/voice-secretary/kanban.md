@@ -112,7 +112,7 @@ read it instead.
 ### T-504: Brief writer: one event in, one spoken-style brief out
 
 - **Type:** feature
-- **Status:** in-progress
+- **Status:** done
 - **Requirement:** `docs/specs/voice-secretary/prd.md#story-4-what-the-secretary-says`
 - **Knowledge:** `docs/knowledge/business-overview.md#secretary-mode-planned-2026-10-07`
 - **Code:** new `workspace/app/src/main/secretary/briefWriter.ts`; reads `ProcessManager.readTranscript`
@@ -120,6 +120,7 @@ read it instead.
 - **Acceptance:** Unit tests with the CLI faked: the JSON contract, bad JSON, timeout, non-zero exit, and truncation that keeps the latest user message. A live test (skipped in CI) on T-501's three samples.
 - **Blocks:** T-505 · **Blocked by:** T-501, T-503
 - **Notes:** The language rule lives in the prompt, not in code: the model sees the builder's latest message and reports the language it wrote in. Put the CLI spawn (args, stdin, timeout, kill, JSON parse) in its own `workspace/app/src/main/secretary/cli.ts`: T-509 reuses it for a second prompt, and that separation is what lets T-509 and T-512 run in parallel.
+- **Done 2026-10-08:** `secretary/briefWriter.ts` (`writeBriefFor`, pure core `buildBriefInput` / `writeBrief`), `secretary/cli.ts` (`runJsonPrompt`, reusable by T-509), `secretary/turn.ts` (the builder's messages and the turn from the raw JSONL, as the spike prescribes). Every call passes `--settings '{"awsAuthRefresh":"false"}'`: measured in a fake HOME, `-p --bare` otherwise runs the builder's `aws sso login` when the token has expired, opening a browser nobody is watching (spike record, T-504 addendum). `ProcessManager.secretarySource(id)` re-checks the live session before reading. Live: the six spike samples in 3.9–6.1 s, language right on all six. End to end on the real orchestrator: finished → text +3.3 s → audio +6.7 s; an AskUserQuestion needs-you in Chinese → +3.6 s → +8.0 s. A Bash permission was not exercised (auto mode). 961 tests green, 6 live tests skipped in CI.
 
 ### T-502: Speech client and speech-server settings in main
 
