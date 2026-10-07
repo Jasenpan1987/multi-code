@@ -147,13 +147,14 @@ read it instead.
 ### T-506: Secretary toolbox section
 
 - **Type:** feature
-- **Status:** in-progress
+- **Status:** done
 - **Requirement:** `docs/specs/voice-secretary/prd.md#story-1-secretary-mode-switch`, `docs/specs/voice-secretary/prd.md#story-8-connect-a-speech-server`
 - **Knowledge:** `docs/knowledge/business-overview.md#ui-layout-current--planned`
 - **Code:** new `workspace/app/src/renderer/components/SecretarySection.tsx`, `workspace/app/src/renderer/components/Toolbox.tsx`
 - **Description:** A compact toolbox section like `PhoneSection`: the Secretary Mode switch; the speech server address; a key field that shows only "set" or "not set" and accepts a new key; a Test button that shows T-502's result in one line. Empty address reads "text only". The switch is global, not per instance.
 - **Acceptance:** Toggling the switch survives a restart. A saved key never reappears in the field. Test against the live server says OK; against a wrong key says the key was rejected; with no address says text only.
 - **Blocks:** T-507 · **Blocked by:** T-502
+- **Done 2026-10-08:** `SecretarySection.tsx` between Phone and Manager. Test saves pending edits first ("Save & test"); an empty key field sends `unchanged`; Clear removes the key at once. Verified over CDP on an isolated instance: no address says text only, the live server says "OK in 3.5 s", a wrong key says "Speech: key rejected (HTTP 401)", the switch and the key survive a restart, the key is never in the DOM. For T-507: App has to load the mode on mount and hear when it changes (the section can be collapsed); the switch is reachable only with a running contact selected.
 
 ### T-507: Secretary card and playback
 
