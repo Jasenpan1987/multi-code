@@ -1,0 +1,367 @@
+{
+  "opencode": "1.18.35",
+  "scenario": "api-error-429",
+  "description": "The provider answers every request with HTTP 429.",
+  "events": [
+    {
+      "ms": 0,
+      "type": "session.created",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+        "info": {
+          "id": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+          "slug": "eager-forest",
+          "version": "1.18.35",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-apierr429",
+          "path": "private/tmp/oc-spike/work-apierr429",
+          "title": "New session - 2026-10-06T23:27:32.060Z",
+          "agent": "build",
+          "model": {
+            "id": "m",
+            "providerID": "mockfail"
+          },
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "time": {
+            "created": 1791329252060,
+            "updated": 1791329252060
+          }
+        }
+      }
+    },
+    {
+      "ms": 24,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+        "info": {
+          "id": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+          "slug": "eager-forest",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-apierr429",
+          "path": "private/tmp/oc-spike/work-apierr429",
+          "title": "New session - 2026-10-06T23:27:32.060Z",
+          "agent": "build",
+          "model": {
+            "id": "m",
+            "providerID": "mockfail"
+          },
+          "version": "1.18.35",
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "time": {
+            "created": 1791329252060,
+            "updated": 1791329252089
+          }
+        }
+      }
+    },
+    {
+      "ms": 28,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 55,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+        "info": {
+          "id": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+          "slug": "eager-forest",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-apierr429",
+          "path": "private/tmp/oc-spike/work-apierr429",
+          "title": "New session - 2026-10-06T23:27:32.060Z",
+          "agent": "build",
+          "model": {
+            "id": "m",
+            "providerID": "mockfail"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "time": {
+            "created": 1791329252060,
+            "updated": 1791329252120
+          }
+        }
+      }
+    },
+    {
+      "ms": 501,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 511,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+        "status": {
+          "type": "retry",
+          "attempt": 1,
+          "message": "mock failure 429",
+          "next": 1791329254578
+        }
+      }
+    },
+    {
+      "ms": 2513,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 2522,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+        "status": {
+          "type": "retry",
+          "attempt": 2,
+          "message": "mock failure 429",
+          "next": 1791329256589
+        }
+      }
+    },
+    {
+      "ms": 4525,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 4534,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+        "status": {
+          "type": "retry",
+          "attempt": 3,
+          "message": "mock failure 429",
+          "next": 1791329258601
+        }
+      }
+    },
+    {
+      "ms": 4692,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+        "info": {
+          "id": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+          "slug": "eager-forest",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-apierr429",
+          "path": "private/tmp/oc-spike/work-apierr429",
+          "title": "Quick greeting",
+          "agent": "build",
+          "model": {
+            "id": "m",
+            "providerID": "mockfail"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "time": {
+            "created": 1791329252060,
+            "updated": 1791329252120
+          }
+        }
+      }
+    },
+    {
+      "ms": 6544,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 6552,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+        "status": {
+          "type": "retry",
+          "attempt": 4,
+          "message": "mock failure 429",
+          "next": 1791329260619
+        }
+      }
+    },
+    {
+      "ms": 8562,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 8570,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+        "status": {
+          "type": "retry",
+          "attempt": 5,
+          "message": "mock failure 429",
+          "next": 1791329262637
+        }
+      }
+    },
+    {
+      "ms": 10580,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 10589,
+      "type": "session.error",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+        "error": {
+          "name": "APIError",
+          "data": {
+            "message": "mock failure 429",
+            "statusCode": 429,
+            "isRetryable": true,
+            "responseHeaders": {
+              "content-length": "70",
+              "content-type": "application/json",
+              "date": "Tue, 06 Oct 2026 23:27:42 GMT",
+              "retry-after": "2",
+              "server": "BaseHTTP/0.6 Python/3.12.12"
+            },
+            "responseBody": "{\"error\": {\"message\": \"mock failure 429\", \"type\": \"rate_limit_error\"}}",
+            "metadata": {
+              "url": "http://127.0.0.1:63961/v1/chat/completions"
+            }
+          }
+        }
+      }
+    },
+    {
+      "ms": 10590,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+        "status": {
+          "type": "idle"
+        }
+      }
+    },
+    {
+      "ms": 10590,
+      "type": "session.idle",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu"
+      }
+    },
+    {
+      "ms": 10594,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu",
+        "status": {
+          "type": "idle"
+        }
+      }
+    },
+    {
+      "ms": 10595,
+      "type": "session.idle",
+      "properties": {
+        "sessionID": "ses_eec74cd23ffeJKTH7mP56bLCGu"
+      }
+    }
+  ],
+  "noisyCounts": {
+    "message.updated": 4,
+    "message.part.updated": 1,
+    "session.diff": 1,
+    "plugin.added": 45,
+    "catalog.updated": 2,
+    "reference.updated": 1,
+    "integration.updated": 1
+  },
+  "inputs": [
+    {
+      "ms": -26,
+      "key": "enter"
+    }
+  ]
+}

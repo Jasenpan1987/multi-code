@@ -1,6 +1,6 @@
 # PRD: Attention Alerts
 
-**Version:** 1.6
+**Version:** 1.7
 **Last Updated:** 2026-10-07
 **Status:** draft
 **Owner:** Jasen
@@ -207,7 +207,7 @@ OpenCode's events keep coming from its existing detector.
 - [ ] The bar disappears as soon as a hook delivery from that instance arrives
 - [ ] An instance whose hooks are working never shows it
 - [ ] A degraded instance raises no alerts at all: no chime, red dot or Dock bounce from any other source
-- [ ] OpenCode instances never show it
+- [ ] OpenCode instances show the same bar, worded for the plugin, once Story 7 has moved them onto it: an OpenCode instance whose plugin never reports within 10 seconds of starting shows it (builder, 2026-10-07)
 
 **Notes:**
 - Decided by the builder on 2026-10-07: a plain warning instead of a registry-driven fallback. The registry reads `waiting` while a slash-command panel is open and once blinked `idle` mid-handover (T-401), so alerts guessed from it would bring back the false chimes this epic removes. Hooks stop running when the user sets `disableAllHooks` or an admin enforces managed-hooks-only, both rare.
@@ -236,6 +236,7 @@ OpenCode's events keep coming from its existing detector.
 - [ ] Each delivery is attributed to exactly the instance that produced it, including two instances sharing one `cwd`; deliveries without Multi-Code's credentials are ignored
 - [ ] OpenCode attention is no longer derived from polling its SQLite tables or from parsing the screen; that code is removed. Reading the transcript and context usage from the database stays
 - [ ] Story 5's consumers keep working for OpenCode: manager `wait_for_idle`, the write-safety gate, context refresh, the phone
+- [ ] Story 6's bar works for OpenCode: a plugin that never reports (failed to load, `--pure`, a broken config) shows it on the instance's page
 
 **Notes:**
 - Measured on 1.18.34: `session.status`, `permission.asked`/`permission.replied`, `question.asked`/`question.replied`, child sessions carrying `parentID` on `session.created`/`session.updated`, `MessageAbortedError` followed by a doubled idle on Esc (source: docs/timeline/2026-10-06_attention-alerts-investigation.md).
@@ -313,3 +314,4 @@ See `docs/specs/attention-alerts/gaps.md`. G-001 to G-003 are resolved; none are
 - v1.4 (2026-10-06): Clarifications from a cold-read review before handoff: acknowledging by click means the session's own page, not the contact list; a manual `/compact` chimes if the CLI reports its end; a debounce on a reported `Stop` is allowed and is not a timing heuristic; reading the registry to confirm a `Stop` is allowed and is not an event source.
 - v1.5 (2026-10-07): Folded in the T-401 hook spike (CLI 2.1.291). Story 2: the turn after a background shell exits chimes (G-003, builder decision); a denied dialog raises no event (assumption, as Esc); `/compact` ends at `PostCompact`; automatic compaction mid-turn raises nothing; note that every subagent now runs in the background. Story 3: a denial sends no hook; plan and bypass modes report dialogs too. Story 6: registry `waiting (dialog open)` is a slash-command panel, not Needs you; a momentary `idle` on a background wake-up is not Finished. "To verify before building" replaced with the measured answers; Constraints note that only the last `--settings` applies.
 - v1.6 (2026-10-07): Story 6 replaced (builder decision): when an instance's hooks don't run, a bar on that instance's page says so and alerts stop for it; the registry-driven fallback is dropped.
+- v1.7 (2026-10-07): Story 6's bar extends to OpenCode once Story 7 ships (builder decision): a plugin that never reports shows it.

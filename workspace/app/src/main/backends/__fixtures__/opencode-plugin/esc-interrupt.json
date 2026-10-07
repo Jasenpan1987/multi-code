@@ -1,0 +1,173 @@
+{
+  "opencode": "1.18.35",
+  "scenario": "esc-interrupt",
+  "description": "A 40s bash call interrupted with Esc Esc after ~6s.",
+  "events": [
+    {
+      "ms": 0,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "info": {
+          "id": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "slug": "kind-lagoon",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.09928735,
+          "tokens": {
+            "input": 60,
+            "output": 821,
+            "reasoning": 0,
+            "cache": {
+              "read": 512711,
+              "write": 35081
+            }
+          },
+          "time": {
+            "created": 1791328864001,
+            "updated": 1791328983953
+          }
+        }
+      }
+    },
+    {
+      "ms": 1,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 8,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "info": {
+          "id": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "slug": "kind-lagoon",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.09928735,
+          "tokens": {
+            "input": 60,
+            "output": 821,
+            "reasoning": 0,
+            "cache": {
+              "read": 512711,
+              "write": 35081
+            }
+          },
+          "time": {
+            "created": 1791328864001,
+            "updated": 1791328983962
+          }
+        }
+      }
+    },
+    {
+      "ms": 12,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 7325,
+      "type": "session.error",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "error": {
+          "name": "MessageAbortedError",
+          "data": {
+            "message": "Aborted"
+          }
+        }
+      }
+    },
+    {
+      "ms": 7325,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "idle"
+        }
+      }
+    },
+    {
+      "ms": 7326,
+      "type": "session.idle",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ"
+      }
+    },
+    {
+      "ms": 7332,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "idle"
+        }
+      }
+    },
+    {
+      "ms": 7332,
+      "type": "session.idle",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ"
+      }
+    }
+  ],
+  "noisyCounts": {
+    "message.updated": 4,
+    "message.part.updated": 6,
+    "session.diff": 1
+  },
+  "inputs": [
+    {
+      "ms": -24,
+      "key": "enter"
+    },
+    {
+      "ms": 6985,
+      "key": "esc"
+    },
+    {
+      "ms": 7290,
+      "key": "esc"
+    }
+  ]
+}

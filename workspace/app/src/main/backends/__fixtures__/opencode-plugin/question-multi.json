@@ -1,0 +1,316 @@
+{
+  "opencode": "1.18.35",
+  "scenario": "question-multi",
+  "description": "One question tool call with two questions, each answered with Enter.",
+  "events": [
+    {
+      "ms": 0,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "info": {
+          "id": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "slug": "kind-lagoon",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.07159835,
+          "tokens": {
+            "input": 33,
+            "output": 340,
+            "reasoning": 0,
+            "cache": {
+              "read": 270641,
+              "write": 34241
+            }
+          },
+          "time": {
+            "created": 1791328864001,
+            "updated": 1791328929158
+          }
+        }
+      }
+    },
+    {
+      "ms": 1,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 7,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "info": {
+          "id": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "slug": "kind-lagoon",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.07159835,
+          "tokens": {
+            "input": 33,
+            "output": 340,
+            "reasoning": 0,
+            "cache": {
+              "read": 270641,
+              "write": 34241
+            }
+          },
+          "time": {
+            "created": 1791328864001,
+            "updated": 1791328929164
+          }
+        }
+      }
+    },
+    {
+      "ms": 11,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 1875,
+      "type": "question.asked",
+      "properties": {
+        "id": "que_113864cda001UN8ygx2ipm44IU",
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "questions": [
+          {
+            "question": "Do you prefer tea or coffee?",
+            "header": "Beverage preference",
+            "options": [
+              {
+                "label": "tea",
+                "description": "Tea"
+              },
+              {
+                "label": "coffee",
+                "description": "Coffee"
+              }
+            ]
+          },
+          {
+            "question": "Do you prefer cats or dogs?",
+            "header": "Pet preference",
+            "options": [
+              {
+                "label": "cats",
+                "description": "Cats"
+              },
+              {
+                "label": "dogs",
+                "description": "Dogs"
+              }
+            ]
+          }
+        ],
+        "tool": {
+          "messageID": "msg_113864589001o4EE7MaCIoMfYY",
+          "callID": "toolu_015Q7gDVwTXVhg66dwr6KaFi"
+        }
+      }
+    },
+    {
+      "ms": 6130,
+      "type": "question.replied",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "requestID": "que_113864cda001UN8ygx2ipm44IU",
+        "answers": [
+          [
+            "tea"
+          ],
+          [
+            "cats"
+          ]
+        ]
+      }
+    },
+    {
+      "ms": 6143,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 6149,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "info": {
+          "id": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "slug": "kind-lagoon",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.0758642,
+          "tokens": {
+            "input": 36,
+            "output": 494,
+            "reasoning": 0,
+            "cache": {
+              "read": 304882,
+              "write": 34296
+            }
+          },
+          "time": {
+            "created": 1791328864001,
+            "updated": 1791328935307
+          }
+        }
+      }
+    },
+    {
+      "ms": 6153,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 7049,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 7051,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "idle"
+        }
+      }
+    },
+    {
+      "ms": 7052,
+      "type": "session.idle",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ"
+      }
+    },
+    {
+      "ms": 7054,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "info": {
+          "id": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "slug": "kind-lagoon",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.07957255,
+          "tokens": {
+            "input": 41,
+            "output": 498,
+            "reasoning": 0,
+            "cache": {
+              "read": 339178,
+              "write": 34499
+            }
+          },
+          "time": {
+            "created": 1791328864001,
+            "updated": 1791328936211
+          }
+        }
+      }
+    }
+  ],
+  "noisyCounts": {
+    "message.updated": 10,
+    "message.part.updated": 10,
+    "session.diff": 3,
+    "message.part.delta": 1
+  },
+  "inputs": [
+    {
+      "ms": -18,
+      "key": "enter"
+    },
+    {
+      "ms": 3107,
+      "key": "enter (1)"
+    },
+    {
+      "ms": 4619,
+      "key": "enter (2)"
+    },
+    {
+      "ms": 6127,
+      "key": "enter (3)"
+    }
+  ]
+}

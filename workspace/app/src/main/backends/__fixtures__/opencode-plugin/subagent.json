@@ -1,0 +1,587 @@
+{
+  "opencode": "1.18.35",
+  "scenario": "subagent",
+  "description": "The task tool runs one general subagent doing a 10s bash call.",
+  "events": [
+    {
+      "ms": 0,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "info": {
+          "id": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "slug": "kind-lagoon",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.08359295,
+          "tokens": {
+            "input": 44,
+            "output": 602,
+            "reasoning": 0,
+            "cache": {
+              "read": 373677,
+              "write": 34537
+            }
+          },
+          "time": {
+            "created": 1791328864001,
+            "updated": 1791328949417
+          }
+        }
+      }
+    },
+    {
+      "ms": 1,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 9,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "info": {
+          "id": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "slug": "kind-lagoon",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.08359295,
+          "tokens": {
+            "input": 44,
+            "output": 602,
+            "reasoning": 0,
+            "cache": {
+              "read": 373677,
+              "write": 34537
+            }
+          },
+          "time": {
+            "created": 1791328864001,
+            "updated": 1791328949427
+          }
+        }
+      }
+    },
+    {
+      "ms": 16,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 1772,
+      "type": "session.created",
+      "properties": {
+        "sessionID": "ses_eec79646affeM7PUXjGu1IAsUg",
+        "info": {
+          "id": "ses_eec79646affeM7PUXjGu1IAsUg",
+          "slug": "shiny-wizard",
+          "version": "1.18.35",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "parentID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "title": "Run sleep command (@general subagent)",
+          "agent": "general",
+          "permission": [
+            {
+              "permission": "task",
+              "pattern": "*",
+              "action": "deny"
+            }
+          ],
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "time": {
+            "created": 1791328951189,
+            "updated": 1791328951189
+          }
+        }
+      }
+    },
+    {
+      "ms": 1778,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec79646affeM7PUXjGu1IAsUg",
+        "info": {
+          "id": "ses_eec79646affeM7PUXjGu1IAsUg",
+          "slug": "shiny-wizard",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "parentID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "title": "Run sleep command (@general subagent)",
+          "agent": "general",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot",
+            "variant": "default"
+          },
+          "version": "1.18.35",
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "permission": [
+            {
+              "permission": "task",
+              "pattern": "*",
+              "action": "deny"
+            }
+          ],
+          "time": {
+            "created": 1791328951189,
+            "updated": 1791328951196
+          }
+        }
+      }
+    },
+    {
+      "ms": 1782,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec79646affeM7PUXjGu1IAsUg",
+        "info": {
+          "id": "ses_eec79646affeM7PUXjGu1IAsUg",
+          "slug": "shiny-wizard",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "parentID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "title": "Run sleep command (@general subagent)",
+          "agent": "general",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot",
+            "variant": "default"
+          },
+          "version": "1.18.35",
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "permission": [
+            {
+              "permission": "task",
+              "pattern": "*",
+              "action": "deny"
+            }
+          ],
+          "time": {
+            "created": 1791328951189,
+            "updated": 1791328951200
+          }
+        }
+      }
+    },
+    {
+      "ms": 1786,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec79646affeM7PUXjGu1IAsUg",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 1790,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec79646affeM7PUXjGu1IAsUg",
+        "info": {
+          "id": "ses_eec79646affeM7PUXjGu1IAsUg",
+          "slug": "shiny-wizard",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "parentID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "title": "Run sleep command (@general subagent)",
+          "agent": "general",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot",
+            "variant": "default"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "permission": [
+            {
+              "permission": "task",
+              "pattern": "*",
+              "action": "deny"
+            }
+          ],
+          "time": {
+            "created": 1791328951189,
+            "updated": 1791328951208
+          }
+        }
+      }
+    },
+    {
+      "ms": 1793,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec79646affeM7PUXjGu1IAsUg",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 13102,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec79646affeM7PUXjGu1IAsUg",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 13107,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec79646affeM7PUXjGu1IAsUg",
+        "info": {
+          "id": "ses_eec79646affeM7PUXjGu1IAsUg",
+          "slug": "shiny-wizard",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "parentID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "title": "Run sleep command (@general subagent)",
+          "agent": "general",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot",
+            "variant": "default"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.0397755,
+          "tokens": {
+            "input": 3,
+            "output": 54,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 31602
+            }
+          },
+          "permission": [
+            {
+              "permission": "task",
+              "pattern": "*",
+              "action": "deny"
+            }
+          ],
+          "time": {
+            "created": 1791328951189,
+            "updated": 1791328962525
+          }
+        }
+      }
+    },
+    {
+      "ms": 13112,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec79646affeM7PUXjGu1IAsUg",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 14100,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec79646affeM7PUXjGu1IAsUg",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 14102,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec79646affeM7PUXjGu1IAsUg",
+        "status": {
+          "type": "idle"
+        }
+      }
+    },
+    {
+      "ms": 14102,
+      "type": "session.idle",
+      "properties": {
+        "sessionID": "ses_eec79646affeM7PUXjGu1IAsUg"
+      }
+    },
+    {
+      "ms": 14114,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 14119,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec79646affeM7PUXjGu1IAsUg",
+        "info": {
+          "id": "ses_eec79646affeM7PUXjGu1IAsUg",
+          "slug": "shiny-wizard",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "parentID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "title": "Run sleep command (@general subagent)",
+          "agent": "general",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot",
+            "variant": "default"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.0430432,
+          "tokens": {
+            "input": 8,
+            "output": 58,
+            "reasoning": 0,
+            "cache": {
+              "read": 31602,
+              "write": 31668
+            }
+          },
+          "permission": [
+            {
+              "permission": "task",
+              "pattern": "*",
+              "action": "deny"
+            }
+          ],
+          "time": {
+            "created": 1791328951189,
+            "updated": 1791328963537
+          }
+        }
+      }
+    },
+    {
+      "ms": 14121,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "info": {
+          "id": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "slug": "kind-lagoon",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.08778965,
+          "tokens": {
+            "input": 47,
+            "output": 707,
+            "reasoning": 0,
+            "cache": {
+              "read": 408214,
+              "write": 34709
+            }
+          },
+          "time": {
+            "created": 1791328864001,
+            "updated": 1791328963539
+          }
+        }
+      }
+    },
+    {
+      "ms": 14124,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 15156,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 15158,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "idle"
+        }
+      }
+    },
+    {
+      "ms": 15158,
+      "type": "session.idle",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ"
+      }
+    },
+    {
+      "ms": 15160,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "info": {
+          "id": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "slug": "kind-lagoon",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.0914868,
+          "tokens": {
+            "input": 52,
+            "output": 711,
+            "reasoning": 0,
+            "cache": {
+              "read": 442923,
+              "write": 34870
+            }
+          },
+          "time": {
+            "created": 1791328864001,
+            "updated": 1791328964578
+          }
+        }
+      }
+    }
+  ],
+  "noisyCounts": {
+    "message.updated": 20,
+    "message.part.updated": 22,
+    "session.diff": 6,
+    "message.part.delta": 2
+  },
+  "inputs": [
+    {
+      "ms": -34,
+      "key": "enter"
+    }
+  ]
+}

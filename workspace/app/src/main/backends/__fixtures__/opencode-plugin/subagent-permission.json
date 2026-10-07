@@ -1,0 +1,622 @@
+{
+  "opencode": "1.18.35",
+  "scenario": "subagent-permission",
+  "description": "A task-tool subagent whose bash call needs permission, answered Allow once.",
+  "events": [
+    {
+      "ms": 0,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "info": {
+          "id": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "slug": "kind-lagoon",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.0914868,
+          "tokens": {
+            "input": 52,
+            "output": 711,
+            "reasoning": 0,
+            "cache": {
+              "read": 442923,
+              "write": 34870
+            }
+          },
+          "time": {
+            "created": 1791328864001,
+            "updated": 1791328971405
+          }
+        }
+      }
+    },
+    {
+      "ms": 2,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 8,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "info": {
+          "id": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "slug": "kind-lagoon",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.0914868,
+          "tokens": {
+            "input": 52,
+            "output": 711,
+            "reasoning": 0,
+            "cache": {
+              "read": 442923,
+              "write": 34870
+            }
+          },
+          "time": {
+            "created": 1791328864001,
+            "updated": 1791328971413
+          }
+        }
+      }
+    },
+    {
+      "ms": 12,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 1517,
+      "type": "session.created",
+      "properties": {
+        "sessionID": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+        "info": {
+          "id": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+          "slug": "calm-cabin",
+          "version": "1.18.35",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "parentID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "title": "Run touch command (@general subagent)",
+          "agent": "general",
+          "permission": [
+            {
+              "permission": "task",
+              "pattern": "*",
+              "action": "deny"
+            }
+          ],
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "time": {
+            "created": 1791328972922,
+            "updated": 1791328972922
+          }
+        }
+      }
+    },
+    {
+      "ms": 1522,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+        "info": {
+          "id": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+          "slug": "calm-cabin",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "parentID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "title": "Run touch command (@general subagent)",
+          "agent": "general",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot",
+            "variant": "default"
+          },
+          "version": "1.18.35",
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "permission": [
+            {
+              "permission": "task",
+              "pattern": "*",
+              "action": "deny"
+            }
+          ],
+          "time": {
+            "created": 1791328972922,
+            "updated": 1791328972926
+          }
+        }
+      }
+    },
+    {
+      "ms": 1525,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+        "info": {
+          "id": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+          "slug": "calm-cabin",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "parentID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "title": "Run touch command (@general subagent)",
+          "agent": "general",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot",
+            "variant": "default"
+          },
+          "version": "1.18.35",
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "permission": [
+            {
+              "permission": "task",
+              "pattern": "*",
+              "action": "deny"
+            }
+          ],
+          "time": {
+            "created": 1791328972922,
+            "updated": 1791328972930
+          }
+        }
+      }
+    },
+    {
+      "ms": 1528,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 1532,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+        "info": {
+          "id": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+          "slug": "calm-cabin",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "parentID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "title": "Run touch command (@general subagent)",
+          "agent": "general",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot",
+            "variant": "default"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "permission": [
+            {
+              "permission": "task",
+              "pattern": "*",
+              "action": "deny"
+            }
+          ],
+          "time": {
+            "created": 1791328972922,
+            "updated": 1791328972937
+          }
+        }
+      }
+    },
+    {
+      "ms": 1535,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 2675,
+      "type": "permission.asked",
+      "properties": {
+        "id": "per_11386f500001nLYn5VC79NTlRK",
+        "sessionID": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+        "permission": "bash",
+        "patterns": [
+          "touch g.txt"
+        ],
+        "metadata": {
+          "command": "touch g.txt"
+        },
+        "always": [
+          "touch *"
+        ],
+        "tool": {
+          "messageID": "msg_11386f087001vmGOsab32UYNP4",
+          "callID": "toolu_019SzK6ajU1LKuQN2WLsVs7z"
+        }
+      }
+    },
+    {
+      "ms": 3969,
+      "type": "permission.replied",
+      "properties": {
+        "sessionID": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+        "requestID": "per_11386f500001nLYn5VC79NTlRK",
+        "reply": "once"
+      }
+    },
+    {
+      "ms": 3995,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 4002,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+        "info": {
+          "id": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+          "slug": "calm-cabin",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "parentID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "title": "Run touch command (@general subagent)",
+          "agent": "general",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot",
+            "variant": "default"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.0038247,
+          "tokens": {
+            "input": 3,
+            "output": 55,
+            "reasoning": 0,
+            "cache": {
+              "read": 31267,
+              "write": 336
+            }
+          },
+          "permission": [
+            {
+              "permission": "task",
+              "pattern": "*",
+              "action": "deny"
+            }
+          ],
+          "time": {
+            "created": 1791328972922,
+            "updated": 1791328975404
+          }
+        }
+      }
+    },
+    {
+      "ms": 4006,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 4934,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 4935,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+        "status": {
+          "type": "idle"
+        }
+      }
+    },
+    {
+      "ms": 4935,
+      "type": "session.idle",
+      "properties": {
+        "sessionID": "ses_eec790f85ffeFbGI7yPRz2yQNh"
+      }
+    },
+    {
+      "ms": 4941,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 4945,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+        "info": {
+          "id": "ses_eec790f85ffeFbGI7yPRz2yQNh",
+          "slug": "calm-cabin",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "parentID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "title": "Run touch command (@general subagent)",
+          "agent": "general",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot",
+            "variant": "default"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.007093749999999999,
+          "tokens": {
+            "input": 8,
+            "output": 59,
+            "reasoning": 0,
+            "cache": {
+              "read": 62870,
+              "write": 403
+            }
+          },
+          "permission": [
+            {
+              "permission": "task",
+              "pattern": "*",
+              "action": "deny"
+            }
+          ],
+          "time": {
+            "created": 1791328972922,
+            "updated": 1791328976350
+          }
+        }
+      }
+    },
+    {
+      "ms": 4948,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "info": {
+          "id": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "slug": "kind-lagoon",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.0955668,
+          "tokens": {
+            "input": 55,
+            "output": 817,
+            "reasoning": 0,
+            "cache": {
+              "read": 477793,
+              "write": 34918
+            }
+          },
+          "time": {
+            "created": 1791328864001,
+            "updated": 1791328976353
+          }
+        }
+      }
+    },
+    {
+      "ms": 4960,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 5747,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 5749,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "idle"
+        }
+      }
+    },
+    {
+      "ms": 5749,
+      "type": "session.idle",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ"
+      }
+    },
+    {
+      "ms": 5751,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "info": {
+          "id": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "slug": "kind-lagoon",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.09928735,
+          "tokens": {
+            "input": 60,
+            "output": 821,
+            "reasoning": 0,
+            "cache": {
+              "read": 512711,
+              "write": 35081
+            }
+          },
+          "time": {
+            "created": 1791328864001,
+            "updated": 1791328977156
+          }
+        }
+      }
+    }
+  ],
+  "noisyCounts": {
+    "message.updated": 20,
+    "message.part.updated": 22,
+    "session.diff": 6,
+    "message.part.delta": 2
+  },
+  "inputs": [
+    {
+      "ms": -33,
+      "key": "enter"
+    },
+    {
+      "ms": 3965,
+      "key": "enter (Allow once)"
+    }
+  ]
+}

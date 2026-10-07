@@ -1,7 +1,7 @@
 # Kanban: Attention Alerts
 
 **Generated:** 2026-10-06 · **Revised:** 2026-10-06 (cold-read review before handoff)
-**Source:** `docs/specs/attention-alerts/prd.md` v1.6 · `docs/specs/attention-alerts/gaps.md`
+**Source:** `docs/specs/attention-alerts/prd.md` v1.7 · `docs/specs/attention-alerts/gaps.md`
 **Evidence:** `docs/timeline/2026-10-06_attention-alerts-investigation.md`
 **Total Tasks:** 12 (T-401..T-412)
 **Milestones:** M1 (Claude alerts you can trust) · M2 (degraded warning) · M3 (OpenCode on its plugin)
@@ -143,21 +143,25 @@ events instead of database polling and screen parsing.
 
 ### T-409: OpenCode plugin spike
 - **Type:** qa
-- **Status:** backlog
-- **Requirement:** `docs/specs/attention-alerts/prd.md#story-7-opencode-reports-through-its-own-plugin-track-2`
-- **Knowledge:** `docs/timeline/2026-10-06_attention-alerts-investigation.md#opencode-source-research-anomalycoopencode-dev--652c090--11834`
-- **Description:** On the then-current OpenCode (re-check the version; v2 renames events), measure the PRD's Track 2 unknowns with the plugin injected through `OPENCODE_CONFIG_CONTENT`: a user plugin and a global `AGENTS.md` both still applying; the event sequence of an API-error stop; "Allow always", reject, and multi-question dialogs; a subagent's permission request; Esc while a permission is open. Save sequences as fixtures under `workspace/app/src/main/backends/__fixtures__/opencode-plugin/`.
-- **Blocked by:** T-407
+- **Status:** done (2026-10-07)
+- **Outcome:** measured on OpenCode 1.18.35 with the plugin injected through `OPENCODE_CONFIG_CONTENT`: `docs/timeline/2026-10-06_attention-alerts-investigation.md#opencode-plugin-spike-opencode-11835`; 15 fixtures in `workspace/app/src/main/backends/__fixtures__/opencode-plugin/`. What T-410/T-411 need:
+  - Loading is robust: one init per process, `MULTICODE_INSTANCE_ID` visible, a project `opencode.json` plugin coexists with ours, a broken sibling plugin doesn't stop OpenCode or ours. `--pure` loads no plugin (the Story 6 bar case).
+  - Finished = the root session's busy → idle. `busy` repeats 3–5 times per turn and idle arrives twice after errors and aborts: dedupe both. Child sessions (`info.parentID`) never finish the instance.
+  - **No chime when the builder ended the turn**: `permission.replied {reply:"reject"}` (Reject *or* Esc), `question.rejected`, and `session.error MessageAbortedError` are each followed by idle. An `APIError` followed by idle does chime (G-002).
+  - `session.status {type:"retry"}` (rate limit) repeats ~2s apart before the final `APIError`; it is neither busy nor idle.
+  - Needs you: `permission.asked` (child sessionID for a subagent) and `question.asked` (same `questions` shape as Claude's AskUserQuestion). Cleared by `permission.replied` / `question.replied` / `question.rejected`.
+  - "Allow always" needs a second Confirm screen (Enter) before `permission.replied {reply:"always"}`: check the phone's `keystrokeForChoice` for OpenCode.
 
 ### T-410: OpenCode plugin and `OPENCODE_CONFIG_CONTENT` injection
 - **Type:** feature
-- **Status:** backlog
+- **Status:** ready
 - **Description:** Write a plain-JS, report-only plugin to `<userData>/opencode/multicode-plugin.js`: one named export that is the plugin function and nothing else exported; no Bun-only APIs; does nothing unless `MULTICODE_INSTANCE_ID` is set; init guarded by a `globalThis` flag (init can run twice) and kept fast (it blocks bootstrap); handlers queued FIFO; posts with `fetch` and a short `AbortSignal.timeout` to `/alert`, every error swallowed; never writes to stdout. Token read from a 0600 file, not the env. Each OpenCode spawn gets `OPENCODE_CONFIG_CONTENT={"plugin":["<pathToFileURL(file).href>"]}` merged into any value the user already set, plus `MULTICODE_INSTANCE_ID`. **Not** `OPENCODE_CONFIG_DIR`: it drops the user's global `AGENTS.md`.
 - **Blocked by:** T-409
 
 ### T-411: OpenCode plugin-driven detector, old detection removed
 - **Type:** refactor
 - **Status:** backlog
+- **Also (PRD v1.7):** Story 6's bar for OpenCode: an instance whose plugin never reports shows it, worded for the plugin. There is no registry: start the clock at spawn and have the plugin post a delivery from its init.
 - **Description:** Finished = the root session's `session.status` going busy→idle (ignore `session.idle`; suppress after a `MessageAbortedError` in that turn; an error followed by idle chimes). Needs you = `permission.asked`/`question.asked` from any session of the instance, subagents included (parent ids cached from `session.created`/`session.updated`). Cleared by `permission.replied`, `question.replied`/`question.rejected`, or the session going idle or erroring. Also accept the v2 names. Emit the same activity vocabulary as T-404; remove SQLite completion polling and screen-parsed dialog detection, keeping transcript and context reads.
 - **Blocked by:** T-409, T-410
 

@@ -1,0 +1,281 @@
+{
+  "opencode": "1.18.35",
+  "scenario": "permission-once",
+  "description": "Bash permission dialog (touch is an ask rule), answered Allow once (Enter on the default).",
+  "events": [
+    {
+      "ms": 0,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "info": {
+          "id": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "slug": "kind-lagoon",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.04923545,
+          "tokens": {
+            "input": 11,
+            "output": 62,
+            "reasoning": 0,
+            "cache": {
+              "read": 67332,
+              "write": 33745
+            }
+          },
+          "time": {
+            "created": 1791328864001,
+            "updated": 1791328894766
+          }
+        }
+      }
+    },
+    {
+      "ms": 2,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 9,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "info": {
+          "id": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "slug": "kind-lagoon",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.04923545,
+          "tokens": {
+            "input": 11,
+            "output": 62,
+            "reasoning": 0,
+            "cache": {
+              "read": 67332,
+              "write": 33745
+            }
+          },
+          "time": {
+            "created": 1791328864001,
+            "updated": 1791328894775
+          }
+        }
+      }
+    },
+    {
+      "ms": 13,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 1316,
+      "type": "permission.asked",
+      "properties": {
+        "id": "per_11385c454001jDqW0f9bVsZ4ws",
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "permission": "bash",
+        "patterns": [
+          "touch a.txt"
+        ],
+        "metadata": {
+          "command": "touch a.txt"
+        },
+        "always": [
+          "touch *"
+        ],
+        "tool": {
+          "messageID": "msg_11385bf34001Wibr3gYjSlNf5F",
+          "callID": "toolu_01HAiXxhR7P8SztqxDdzSAJa"
+        }
+      }
+    },
+    {
+      "ms": 2582,
+      "type": "permission.replied",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "requestID": "per_11385c454001jDqW0f9bVsZ4ws",
+        "reply": "once"
+      }
+    },
+    {
+      "ms": 2614,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 2619,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "info": {
+          "id": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "slug": "kind-lagoon",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.0529292,
+          "tokens": {
+            "input": 14,
+            "output": 118,
+            "reasoning": 0,
+            "cache": {
+              "read": 101077,
+              "write": 33774
+            }
+          },
+          "time": {
+            "created": 1791328864001,
+            "updated": 1791328897386
+          }
+        }
+      }
+    },
+    {
+      "ms": 2631,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 3540,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 3542,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "status": {
+          "type": "idle"
+        }
+      }
+    },
+    {
+      "ms": 3542,
+      "type": "session.idle",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ"
+      }
+    },
+    {
+      "ms": 3545,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec7ab8feffeoJpCfunZT313JZ",
+        "info": {
+          "id": "ses_eec7ab8feffeoJpCfunZT313JZ",
+          "slug": "kind-lagoon",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-main",
+          "path": "private/tmp/oc-spike/work-main",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "claude-haiku-4.5",
+            "providerID": "github-copilot"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.05641535,
+          "tokens": {
+            "input": 19,
+            "output": 122,
+            "reasoning": 0,
+            "cache": {
+              "read": 134851,
+              "write": 33841
+            }
+          },
+          "time": {
+            "created": 1791328864001,
+            "updated": 1791328898311
+          }
+        }
+      }
+    }
+  ],
+  "noisyCounts": {
+    "message.updated": 10,
+    "message.part.updated": 11,
+    "session.diff": 3,
+    "message.part.delta": 1
+  },
+  "inputs": [
+    {
+      "ms": -24,
+      "key": "enter"
+    },
+    {
+      "ms": 2577,
+      "key": "enter (Allow once)"
+    }
+  ]
+}

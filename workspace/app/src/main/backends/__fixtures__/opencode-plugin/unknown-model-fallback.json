@@ -1,0 +1,265 @@
+{
+  "opencode": "1.18.35",
+  "scenario": "unknown-model-fallback",
+  "description": "-m set to a model id that doesn't exist (github-copilot/does-not-exist-9): OpenCode silently ran the user's default model instead, so this is a normal finish, not an API error.",
+  "events": [
+    {
+      "ms": 0,
+      "type": "session.created",
+      "properties": {
+        "sessionID": "ses_eec76d1dfffeTmhgZ9VCqEcJK1",
+        "info": {
+          "id": "ses_eec76d1dfffeTmhgZ9VCqEcJK1",
+          "slug": "swift-island",
+          "version": "1.18.35",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-apierror",
+          "path": "private/tmp/oc-spike/work-apierror",
+          "title": "New session - 2026-10-06T23:25:19.777Z",
+          "agent": "build",
+          "model": {
+            "id": "gpt-6-sol",
+            "providerID": "github-copilot",
+            "variant": "xhigh"
+          },
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "time": {
+            "created": 1791329119777,
+            "updated": 1791329119777
+          }
+        }
+      }
+    },
+    {
+      "ms": 26,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec76d1dfffeTmhgZ9VCqEcJK1",
+        "info": {
+          "id": "ses_eec76d1dfffeTmhgZ9VCqEcJK1",
+          "slug": "swift-island",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-apierror",
+          "path": "private/tmp/oc-spike/work-apierror",
+          "title": "New session - 2026-10-06T23:25:19.777Z",
+          "agent": "build",
+          "model": {
+            "id": "gpt-6-sol",
+            "providerID": "github-copilot",
+            "variant": "xhigh"
+          },
+          "version": "1.18.35",
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "time": {
+            "created": 1791329119777,
+            "updated": 1791329119808
+          }
+        }
+      }
+    },
+    {
+      "ms": 29,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec76d1dfffeTmhgZ9VCqEcJK1",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 53,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec76d1dfffeTmhgZ9VCqEcJK1",
+        "info": {
+          "id": "ses_eec76d1dfffeTmhgZ9VCqEcJK1",
+          "slug": "swift-island",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-apierror",
+          "path": "private/tmp/oc-spike/work-apierror",
+          "title": "New session - 2026-10-06T23:25:19.777Z",
+          "agent": "build",
+          "model": {
+            "id": "gpt-6-sol",
+            "providerID": "github-copilot",
+            "variant": "xhigh"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "time": {
+            "created": 1791329119777,
+            "updated": 1791329119835
+          }
+        }
+      }
+    },
+    {
+      "ms": 587,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec76d1dfffeTmhgZ9VCqEcJK1",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 4472,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec76d1dfffeTmhgZ9VCqEcJK1",
+        "info": {
+          "id": "ses_eec76d1dfffeTmhgZ9VCqEcJK1",
+          "slug": "swift-island",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-apierror",
+          "path": "private/tmp/oc-spike/work-apierror",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "gpt-6-sol",
+            "providerID": "github-copilot",
+            "variant": "xhigh"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0,
+          "tokens": {
+            "input": 0,
+            "output": 0,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "time": {
+            "created": 1791329119777,
+            "updated": 1791329119835
+          }
+        }
+      }
+    },
+    {
+      "ms": 4561,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec76d1dfffeTmhgZ9VCqEcJK1",
+        "status": {
+          "type": "busy"
+        }
+      }
+    },
+    {
+      "ms": 4562,
+      "type": "session.status",
+      "properties": {
+        "sessionID": "ses_eec76d1dfffeTmhgZ9VCqEcJK1",
+        "status": {
+          "type": "idle"
+        }
+      }
+    },
+    {
+      "ms": 4562,
+      "type": "session.idle",
+      "properties": {
+        "sessionID": "ses_eec76d1dfffeTmhgZ9VCqEcJK1"
+      }
+    },
+    {
+      "ms": 4565,
+      "type": "session.updated",
+      "properties": {
+        "sessionID": "ses_eec76d1dfffeTmhgZ9VCqEcJK1",
+        "info": {
+          "id": "ses_eec76d1dfffeTmhgZ9VCqEcJK1",
+          "slug": "swift-island",
+          "projectID": "global",
+          "directory": "/private/tmp/oc-spike/work-apierror",
+          "path": "private/tmp/oc-spike/work-apierror",
+          "title": "Greeting",
+          "agent": "build",
+          "model": {
+            "id": "gpt-6-sol",
+            "providerID": "github-copilot",
+            "variant": "xhigh"
+          },
+          "version": "1.18.35",
+          "summary": {
+            "additions": 0,
+            "deletions": 0,
+            "files": 0
+          },
+          "cost": 0.0547885,
+          "tokens": {
+            "input": 21896,
+            "output": 5,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          },
+          "time": {
+            "created": 1791329119777,
+            "updated": 1791329124348
+          }
+        }
+      }
+    }
+  ],
+  "noisyCounts": {
+    "message.updated": 6,
+    "message.part.updated": 5,
+    "session.diff": 2,
+    "plugin.added": 45,
+    "catalog.updated": 2,
+    "reference.updated": 1,
+    "integration.updated": 1,
+    "message.part.delta": 1
+  },
+  "inputs": [
+    {
+      "ms": -24,
+      "key": "enter"
+    }
+  ]
+}

@@ -236,3 +236,17 @@ Epic `attention-alerts` moves detection onto those. Shipped for Claude Code on
 the CLI doing it. Until it has shipped for OpenCode, treat that detector as
 known-unreliable, and fix it by moving to the reported state, not by tuning a timing
 constant or adding a text match.
+
+## An agent's report names its spawn, not just its instance (added 2026-10-07)
+
+Whatever reports an agent's state from inside its process (Claude's alert hooks today,
+OpenCode's plugin next) sends two ids with every delivery: `MULTICODE_INSTANCE_ID`, the
+contact, and `MULTICODE_SPAWN_ID`, minted per spawn (`backends/instance-env.ts`). Both
+reach the reporter through the agent's own env and travel as `X-Multicode-Instance` /
+`X-Multicode-Spawn`. A restart keeps the instance id, and the old process's async
+reporters can still deliver after the new one is up; `handleAlertDelivery` drops any
+delivery whose spawn id isn't the instance's current one. Every env Multi-Code builds
+strips inherited values of both first, so a dev build launched from inside a session
+doesn't hand its parent's ids to everything it starts. A new reporter that sends only the
+instance id would have every delivery dropped.
+

@@ -298,6 +298,57 @@ mock LLM). The user's `~/.config/opencode` was not touched.
   vibe-kanban (`opencode serve` + SSE). Common practice: gate the plugin on the host's own
   env var, count only busy→idle, run handlers through a FIFO.
 
+### OpenCode plugin spike (OpenCode 1.18.35)
+
+T-409. A probe plugin (`.omt/probes/attention-alerts/spike/oc_harness.py` writes it) loaded
+through **`OPENCODE_CONFIG_CONTENT={"plugin":["file://…"], …}`**, the production seam,
+logging every event in full except streaming/file-watch noise. TUI driven in a PTY,
+`-m github-copilot/claude-haiku-4.5`; dialogs forced with
+`"permission":{"bash":{"*":"allow","touch *":"ask"}}` in the same env value. OpenCode
+auto-updated 1.18.34 → 1.18.35 between sessions; every fixture is 1.18.35. Reproduce:
+`cd .omt/probes/attention-alerts/spike && uv run --with pyte python3 oc_group_main.py`
+(also `oc_group_misc.py`, `oc_group_apierr.py`; `oc_show.py <fixture>`). Fixtures:
+`workspace/app/src/main/backends/__fixtures__/opencode-plugin/*.json`, shape
+`{opencode, scenario, description, events: [{ms, type, properties}], noisyCounts, inputs}`.
+
+- **Loading.** The plugin initialised once per process (`globalThis` counter = 1) and saw
+  `MULTICODE_INSTANCE_ID` from the TUI's env. Init input keys: `client`, `project`,
+  `worktree`, `directory`, `experimental_workspace`, `serverUrl`, `$`. A plugin named in a
+  project's `opencode.json` and ours in `OPENCODE_CONFIG_CONTENT` both loaded. A file that
+  exports a non-function and a plugin whose init throws did **not** stop OpenCode or our
+  plugin; a turn completed normally. **`--pure` loads no external plugin** (ours never
+  initialised). The builder's machine has no user plugins and no global `AGENTS.md`, so
+  those two were not measurable here (the source research verified `AGENTS.md` survives
+  `OPENCODE_CONFIG_CONTENT` in a sandbox).
+- **Noise.** ~90 `plugin.added` at startup, plus `catalog.updated`, `integration.updated`,
+  `reference.updated`, `message.part.*`, `message.updated`, `session.diff`,
+  `session.updated`: none matter for alerts.
+- **Finished.** `session.status {type:"busy"}` arrives **3–5 times per turn**, then
+  `session.status {type:"idle"}` and `session.idle` in either order within 2ms. Dedupe busy;
+  key Finished on the root session's busy → idle.
+- **Subagents** (task tool) are child sessions: `session.created` with `info.parentID`. The
+  child goes busy → idle first, then the root goes busy again and idle at the real end.
+  Root idle never fired while the child ran.
+- **Permission.** `permission.asked {id, sessionID, permission:"bash", patterns:["touch a.txt"],
+  always:["touch *"], metadata, tool}`; dialog row "Allow once / Allow always / Reject",
+  ⇆ to move, Enter to confirm, default Allow once. `permission.replied {requestID, reply}`
+  ~5ms after the key: `once`; `always` only after a **second confirmation screen** ("This
+  will allow the following patterns until OpenCode is restarted … Confirm / Cancel", Enter);
+  `reject` for Reject **and for Esc**. After a reject the root goes idle at once: the turn is
+  over, like a Claude denial. A subagent's permission carries the **child's** sessionID.
+- **Question.** `question.asked {id, sessionID, questions:[…]}`; one tool call with two
+  questions is one `question.asked` (Enter per question, then Enter again to submit),
+  answered by one `question.replied {requestID, answers:[["tea"],["cats"]]}`. Esc →
+  `question.rejected {requestID}`, then idle.
+- **Esc interrupt.** `session.error {name:"MessageAbortedError"}` then idle, idle (the doubled
+  idle again).
+- **API errors** (a mock provider via `OPENCODE_CONFIG_CONTENT`'s `provider`, OpenAI-compatible):
+  HTTP 400 → `session.error {name:"APIError", data:{statusCode:400, isRetryable:false}}`, then
+  idle twice. HTTP 429 → **`session.status {type:"retry", attempt, message, next}`** five
+  times ~2s apart, each followed by busy, then the same `APIError` (`isRetryable:true`) and
+  idle twice. A retry status is neither busy nor idle. An unknown `-m` model id is *not* an
+  error: OpenCode silently ran the default model (`unknown-model-fallback`).
+
 ## Key Decisions
 
 - **Move Claude detection to hooks**, injected through `--settings` from Multi-Code's
