@@ -71,12 +71,29 @@ export interface AlertDelivery {
 }
 
 /**
+ * The tool call a dialog is asking about, exactly as the agent reported it: for a
+ * Bash permission, `toolInput` holds the command itself. Kept apart from
+ * PromptDetail on purpose: PromptDetail is what a paired phone is sent, and the
+ * raw input (a whole script, a file's new contents) is for the secretary in main
+ * only.
+ */
+export interface PromptToolCall {
+  toolName: string;
+  toolInput: unknown;
+}
+
+/**
  * Activity callback. `detail` is populated only for the "prompt" event, and
  * only when the blocking tool_use could be decoded into a question plus
  * options — it's what lets a paired phone render real buttons instead of a
- * raw terminal. Backends that can't decode their prompts omit it.
+ * raw terminal. Backends that can't decode their prompts omit it. `toolCall`
+ * comes with a "prompt" from a backend that knows which tool call raised it.
  */
-export type ActivityCallback = (type: string, detail?: PromptDetail) => void;
+export type ActivityCallback = (
+  type: string,
+  detail?: PromptDetail,
+  toolCall?: PromptToolCall
+) => void;
 
 export interface HookAttention {
   handle(delivery: AlertDelivery): void;
@@ -89,6 +106,14 @@ export interface SessionDiscovery {
 
 export interface Backend {
   readonly name: BackendName;
+
+  /**
+   * Whether this backend's instances keep a secretary event (their latest
+   * Finished or Needs-you, see ProcessManager.onSecretaryEvent). False for
+   * OpenCode, which the voice secretary leaves out as "a later track that may
+   * work differently" (docs/specs/voice-secretary/prd.md, Out of Scope).
+   */
+  readonly keepsSecretaryEvents: boolean;
 
   /**
    * Build the command line for a new instance. `opts` carries the manager's MCP

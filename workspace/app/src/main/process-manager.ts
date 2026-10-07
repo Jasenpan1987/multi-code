@@ -11,6 +11,7 @@ import type {
   Backend,
   BackendName,
   HookAttention,
+  PromptToolCall,
   SessionDiscovery,
   SpawnOptions,
 } from "./backends";
@@ -40,6 +41,39 @@ export interface InstanceInfo {
   // This instance's hooks aren't reaching Multi-Code, so it raises no alerts (PRD
   // Story 6). The renderer shows a bar on its page.
   alertsDegraded?: boolean;
+}
+
+/**
+ * The latest Finished or Needs-you a Claude instance raised that nobody has dealt
+ * with yet: what the voice secretary writes its brief from, and what it checks
+ * before answering (docs/specs/voice-secretary/prd.md, Stories 2 and 6).
+ *
+ * `seq` is unique per event and only ever grows for an instance, across restarts
+ * too, so "is this still the event I was working on" is one comparison.
+ * `prompt` is there when the dialog decoded into options: the detail the phone
+ * would show, plus the tool call exactly as the agent sent it (for a Bash
+ * permission, `toolInput.command` is the command). Read-only for consumers.
+ */
+export interface SecretaryEvent {
+  kind: "finished" | "needs-you";
+  seq: number;
+  at: number;
+  prompt?: { detail: PromptDetail; toolName: string; toolInput: unknown };
+}
+
+// `event` is the instance's new live event, or null when it was cleared.
+export type SecretaryEventListener = (
+  instanceId: string,
+  event: SecretaryEvent | null
+) => void;
+
+// Whether a write carries anything besides terminal focus reports. Claude turns on
+// focus reporting (`?1004h`, docs/timeline/2026-06-08_compose-box-ideation.md), so
+// xterm sends `ESC [ I` / `ESC [ O` down the same channel as keystrokes whenever
+// its terminal gains or loses focus, including when the builder comes back to the
+// window. Those aren't the builder acting on the session.
+function carriesInput(data: string): boolean {
+  return data.replaceAll("\x1b[I", "").replaceAll("\x1b[O", "") !== "";
 }
 
 interface ManagedInstance {
@@ -93,6 +127,9 @@ interface ManagedInstance {
   // delivery from the process a restart replaced can be told apart. Absent on a
   // contact that has never been spawned in this run.
   spawnId?: string;
+  // See SecretaryEvent. Never set on the manager or on a backend that doesn't keep
+  // them; cleared when the builder deals with it, and on exit.
+  secretaryEvent?: SecretaryEvent;
 }
 
 // Reading context usage parses a transcript that reaches 8MB+, and
@@ -127,6 +164,11 @@ export class ProcessManager {
   private instances = new Map<string, ManagedInstance>();
   private mainWindow: BrowserWindow | null = null;
   private activityListeners = new Set<(id: string, type: string) => void>();
+  private secretaryListeners = new Set<SecretaryEventListener>();
+  // One counter for every instance's secretary events. A per-record one would
+  // restart at zero when start or restart builds a fresh record, and an old
+  // event's seq could then outrank the new spawn's.
+  private secretarySeq = 0;
   // Set from outside rather than resolved here: the options carry the manager MCP
   // server's port and bearer token, and importing that module would close a cycle
   // (it imports this one to reach the instance list). main/index.ts and the
@@ -233,6 +275,112 @@ export class ProcessManager {
         // every other consumer of this event.
       }
     }
+  }
+
+  // Subscribe to secretary events, returning an unsubscribe function. Fires with
+  // the new event when one is set (a newer one replaces the old, with a higher
+  // seq), and with null when the live one is cleared.
+  onSecretaryEvent(listener: SecretaryEventListener): () => void {
+    this.secretaryListeners.add(listener);
+    return () => {
+      this.secretaryListeners.delete(listener);
+    };
+  }
+
+  // The instance's live secretary event, if it has one.
+  secretaryEventOf(id: string): SecretaryEvent | undefined {
+    return this.instances.get(id)?.secretaryEvent;
+  }
+
+  // Every live secretary event, for a consumer starting up with events already
+  // pending (Secretary Mode turned on while red dots show).
+  liveSecretaryEvents(): { instanceId: string; event: SecretaryEvent }[] {
+    const live: { instanceId: string; event: SecretaryEvent }[] = [];
+    for (const instance of this.instances.values()) {
+      if (instance.secretaryEvent) {
+        live.push({ instanceId: instance.id, event: instance.secretaryEvent });
+      }
+    }
+    return live;
+  }
+
+  // Set from the agent's own report. Called for every activity; only `waiting`
+  // and `prompt` set an event, and `prompt-cleared` clears a needs-you (the
+  // dialog was answered). Writes and exit clear through clearSecretaryEvent.
+  private updateSecretaryEvent(
+    instance: ManagedInstance,
+    type: string,
+    detail?: PromptDetail,
+    toolCall?: PromptToolCall
+  ) {
+    if (type === "prompt-cleared") {
+      if (instance.secretaryEvent?.kind === "needs-you") {
+        this.clearSecretaryEvent(instance);
+      }
+      return;
+    }
+    if (type !== "waiting" && type !== "prompt") return;
+    // The manager has no secretary in v1 (PRD Story 2); the backend says whether
+    // its instances do.
+    if (instance.isManager || !getBackend(instance.backend).keepsSecretaryEvents) {
+      return;
+    }
+    // A record a restart has replaced reports nothing any more.
+    if (this.instances.get(instance.id) !== instance) return;
+
+    const seq = ++this.secretarySeq;
+    const at = Date.now();
+    const event: SecretaryEvent =
+      type === "waiting"
+        ? { kind: "finished", seq, at }
+        : {
+            kind: "needs-you",
+            seq,
+            at,
+            ...(detail && toolCall
+              ? {
+                  prompt: {
+                    detail,
+                    toolName: toolCall.toolName,
+                    toolInput: toolCall.toolInput,
+                  },
+                }
+              : {}),
+          };
+    instance.secretaryEvent = event;
+    this.emitSecretaryEvent(instance.id, event);
+  }
+
+  // Drop the live event, if any. Listeners hear about it only while this record
+  // is still the instance's current one: the process a restart replaced exits
+  // after the new one is up, and a null from it would wipe the new spawn's event.
+  private clearSecretaryEvent(instance: ManagedInstance) {
+    if (!instance.secretaryEvent) return;
+    instance.secretaryEvent = undefined;
+    if (this.instances.get(instance.id) === instance) {
+      this.emitSecretaryEvent(instance.id, null);
+    }
+  }
+
+  private emitSecretaryEvent(id: string, event: SecretaryEvent | null) {
+    for (const listener of this.secretaryListeners) {
+      try {
+        listener(id, event);
+      } catch {
+        // Same as activity: one broken consumer must not break the report path.
+      }
+    }
+  }
+
+  // Every write to an instance's pty goes through here first, whoever sent it:
+  // keys at the desk, the compose box, a paired phone, the manager. Any of them
+  // means the session's pending event has been dealt with, a needs-you included:
+  // the CLI reports nothing at all when a dialog is denied (fixtures
+  // permission-denied-no, permission-denied-esc), so the keystroke is the only
+  // sign. Focus reports alone don't count; see carriesInput.
+  private noteWrite(instance: ManagedInstance, data: string) {
+    instance.runState.onWrite();
+    if (carriesInput(data)) this.clearSecretaryEvent(instance);
   }
 
   // The manager is a singleton. Callers check before offering to create one, and
@@ -440,7 +588,8 @@ export class ProcessManager {
     // process's first moment, and keep reporting across /clear.
     instance.hookAttention = backend.createHookAttention(
       ptyProcess.pid,
-      (type, detail) => this.reportActivity(instance, type, detail),
+      (type, detail, toolCall) =>
+        this.reportActivity(instance, type, detail, toolCall),
       (ok) => this.setAlertsDegraded(instance, !ok)
     );
 
@@ -478,6 +627,8 @@ export class ProcessManager {
       instance.status = "stopped";
       instance.ptyProcess = null;
       instance.runState.onExit();
+      // A dead process has no dialog to answer and no turn to report on.
+      this.clearSecretaryEvent(instance);
       this.teardownObservers(instance);
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send("instance-exit", id, exitCode);
@@ -516,12 +667,13 @@ export class ProcessManager {
   }
 
   // One activity event, from the agent's own reports, to everything that
-  // listens: run state, the renderer's chime and red dot, a paired phone, and the
-  // manager's waiters.
+  // listens: run state, the renderer's chime and red dot, a paired phone, the
+  // manager's waiters, and the secretary.
   private reportActivity(
     instance: ManagedInstance,
     type: string,
-    detail?: PromptDetail
+    detail?: PromptDetail,
+    toolCall?: PromptToolCall
   ) {
     const id = instance.id;
     debugTrace(`[activity] ${id.slice(0, 8)} ${type} at ${new Date().toISOString()}`);
@@ -532,6 +684,9 @@ export class ProcessManager {
     // A finished turn is exactly when context usage moved, so refresh now instead
     // of waiting for the TTL. Cheap: once per turn, not per list call.
     if (type === "waiting") this.refreshContextUsage(instance);
+    // Before anything else hears of it, so a write made in reaction to this
+    // activity clears the event it raised instead of landing before it exists.
+    this.updateSecretaryEvent(instance, type, detail, toolCall);
     // "prompt-cleared" exists for paired phones (drop the stale option buttons);
     // the desktop UI has nothing to do with it, so it isn't forwarded to the
     // renderer.
@@ -619,7 +774,7 @@ export class ProcessManager {
   writeToInstance(id: string, data: string) {
     const instance = this.instances.get(id);
     if (instance?.ptyProcess) {
-      instance.runState.onWrite();
+      this.noteWrite(instance, data);
       instance.ptyProcess.write(data);
       // Typing at the desk answers whatever was pending, so drop the phone's
       // badge and stale option buttons now rather than waiting for the agent to
@@ -635,8 +790,9 @@ export class ProcessManager {
   sendPrompt(id: string, text: string) {
     const instance = this.instances.get(id);
     if (!instance?.ptyProcess) return;
-    instance.runState.onWrite();
-    instance.ptyProcess.write(`\x1b[200~${text}\x1b[201~`);
+    const pasted = `\x1b[200~${text}\x1b[201~`;
+    this.noteWrite(instance, `${pasted}\r`);
+    instance.ptyProcess.write(pasted);
     instance.ptyProcess.write("\r");
   }
 
@@ -678,7 +834,8 @@ export class ProcessManager {
     }
 
     const ptyProcess = instance.ptyProcess;
-    instance.runState.onWrite();
+    // Everything this call writes, the two returns below included.
+    this.noteWrite(instance, `${command}\r\r`);
     ptyProcess.write(command);
     // Fire-and-forget: the caller gets its verdict now rather than holding the tool
     // call open for a quarter of a second. A write to a pty that exits in between is
@@ -784,7 +941,11 @@ export class ProcessManager {
     this.killInstance(id);
     shellManager.kill(id);
     const instance = this.instances.get(id);
-    if (instance) this.teardownObservers(instance);
+    if (instance) {
+      // Now, while it is still the current record: its pty's exit lands later.
+      this.clearSecretaryEvent(instance);
+      this.teardownObservers(instance);
+    }
     this.instances.delete(id);
     this.persist();
     remoteServer.broadcastInstances();
@@ -797,6 +958,8 @@ export class ProcessManager {
     if (instance.ptyProcess) {
       instance.ptyProcess.kill();
     }
+    // Before the new record replaces this one; see clearSecretaryEvent.
+    this.clearSecretaryEvent(instance);
     this.teardownObservers(instance);
 
     const restarted = this.spawnProcess(
