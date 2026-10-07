@@ -72,7 +72,7 @@ once, they read the same contacts and overwrite each other's spawn files. Never 
 
 - `contacts.json` — the instance list. Each entry: id, cwd (project directory),
   alias (display name), backend
-- `settings.json` — theme, phone-link enabled
+- `settings.json` — theme, phone-link enabled, Secretary Mode, speech server address
 - `remote-identity.json`, `remote-devices.json` — phone-link keys and paired devices
 - `manager-mcp.json` — the manager's `--mcp-config`, written 0600 because it carries
   a bearer token; removed on shutdown
@@ -85,6 +85,9 @@ once, they read the same contacts and overwrite each other's spawn files. Never 
 - `opencode/multicode-plugin.js`, `opencode/alert.json` — the report-only plugin every
   OpenCode instance loads (named in its `OPENCODE_CONFIG_CONTENT`) and the `/alert`
   endpoint and token it reads (path in `MULTICODE_ALERT_FILE`); 0600, removed on shutdown
+- `speech-key` — the secretary's speech-server bearer key, alone in its file at 0600;
+  never in `settings.json`, never logged, never sent to the renderer (it learns only
+  whether one is set); kept across runs
 
 ## IPC Pattern
 
