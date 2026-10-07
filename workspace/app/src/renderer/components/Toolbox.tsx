@@ -4,6 +4,7 @@ import { QuickActionsSection } from "./QuickActionsSection";
 import { TerminalSection } from "./TerminalSection";
 import { MarkdownSection } from "./MarkdownSection";
 import { PhoneSection } from "./PhoneSection";
+import { SecretarySection } from "./SecretarySection";
 import { ManagerSection } from "./ManagerSection";
 import type { DiffSide, Instance } from "../../shared/types";
 
@@ -92,6 +93,15 @@ export function Toolbox({
         onToggle={onExpandSection}
       >
         <PhoneSection active={isExpanded("phone")} />
+      </ToolboxSection>
+
+      <ToolboxSection
+        id="secretary"
+        title="Secretary"
+        expanded={isExpanded("secretary")}
+        onToggle={onExpandSection}
+      >
+        <SecretarySection active={isExpanded("secretary")} />
       </ToolboxSection>
 
       <ToolboxSection

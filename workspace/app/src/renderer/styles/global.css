@@ -1707,22 +1707,27 @@ body,
 
 
 /* Phone section (toolbox) — pairing + paired-device management. Follows the
-   quick-action button conventions so it reads as part of the same toolbox. */
+   quick-action button conventions so it reads as part of the same toolbox.
+   The Secretary section shares its switch, buttons and message boxes, so the
+   two app-wide sections look alike. */
 
-.phone-section {
+.phone-section,
+.secretary-section {
   display: flex;
   flex-direction: column;
   gap: 8px;
   font-size: 11px;
 }
 
-.phone-row {
+.phone-row,
+.secretary-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.phone-toggle {
+.phone-toggle,
+.secretary-toggle {
   padding: 6px 10px;
   background: linear-gradient(180deg, #e8eef8 0%, #c6d9f1 100%);
   border: 1px solid #7b9cc7;
@@ -1733,23 +1738,27 @@ body,
   font-weight: bold;
 }
 
-.phone-toggle[data-on="true"] {
+.phone-toggle[data-on="true"],
+.secretary-toggle[data-on="true"] {
   background: linear-gradient(180deg, #d9f0e0 0%, #a8d8b4 100%);
   border-color: #4bb066;
   color: #1f7a3d;
 }
 
-.phone-toggle:disabled {
+.phone-toggle:disabled,
+.secretary-toggle:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.phone-port {
+.phone-port,
+.secretary-tag {
   color: #777;
   font-size: 10px;
 }
 
-.phone-btn {
+.phone-btn,
+.secretary-btn {
   padding: 6px 10px;
   background: linear-gradient(180deg, #e8eef8 0%, #c6d9f1 100%);
   border: 1px solid #7b9cc7;
@@ -1759,24 +1768,29 @@ body,
   color: #2d5a8a;
 }
 
-.phone-btn:hover:not(:disabled) {
+.phone-btn:hover:not(:disabled),
+.secretary-btn:hover:not(:disabled) {
   background: linear-gradient(180deg, #f0f4fa 0%, #d0e0f5 100%);
 }
 
-.phone-btn:disabled {
+.phone-btn:disabled,
+.secretary-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
 .phone-hint,
 .phone-warn,
-.phone-error {
+.phone-error,
+.secretary-hint,
+.secretary-error {
   line-height: 1.45;
   padding: 5px 7px;
   border-radius: 3px;
 }
 
-.phone-hint {
+.phone-hint,
+.secretary-hint {
   color: #555;
   background: rgba(0, 0, 0, 0.03);
 }
@@ -1786,7 +1800,8 @@ body,
   background: rgba(217, 130, 43, 0.1);
 }
 
-.phone-error {
+.phone-error,
+.secretary-error {
   color: #c62828;
   background: rgba(198, 40, 40, 0.08);
 }
@@ -1876,7 +1891,8 @@ body,
   border-radius: 2px;
 }
 
-.phone-devices {
+.phone-devices,
+.secretary-server {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1884,7 +1900,8 @@ body,
   padding-top: 7px;
 }
 
-.phone-devices-title {
+.phone-devices-title,
+.secretary-server-title {
   font-weight: bold;
   color: #555;
 }
@@ -1920,7 +1937,8 @@ body,
   font-size: 10px;
 }
 
-.phone-revoke {
+.phone-revoke,
+.secretary-clear {
   padding: 2px 6px;
   font-size: 10px;
   background: none;
@@ -1930,23 +1948,28 @@ body,
   cursor: pointer;
 }
 
-.phone-revoke:hover {
+.phone-revoke:hover:not(:disabled),
+.secretary-clear:hover:not(:disabled) {
   background: rgba(198, 40, 40, 0.08);
 }
 
 [data-theme="dark"] .toolbox-section-body .phone-toggle,
-[data-theme="dark"] .toolbox-section-body .phone-btn {
+[data-theme="dark"] .toolbox-section-body .phone-btn,
+[data-theme="dark"] .toolbox-section-body .secretary-toggle,
+[data-theme="dark"] .toolbox-section-body .secretary-btn {
   background: linear-gradient(180deg, #3c3c3c 0%, #2d2d2d 100%);
   border-color: #555;
   color: #d4d4d4;
 }
 
-[data-theme="dark"] .toolbox-section-body .phone-toggle[data-on="true"] {
+[data-theme="dark"] .toolbox-section-body .phone-toggle[data-on="true"],
+[data-theme="dark"] .toolbox-section-body .secretary-toggle[data-on="true"] {
   border-color: #4bb066;
   color: #8fd9a3;
 }
 
-[data-theme="dark"] .toolbox-section-body .phone-hint {
+[data-theme="dark"] .toolbox-section-body .phone-hint,
+[data-theme="dark"] .toolbox-section-body .secretary-hint {
   color: #b0b0b0;
   background: rgba(255, 255, 255, 0.04);
 }
@@ -1972,13 +1995,99 @@ body,
   background: rgba(255, 255, 255, 0.04);
 }
 
-[data-theme="dark"] .toolbox-section-body .phone-devices {
+[data-theme="dark"] .toolbox-section-body .phone-devices,
+[data-theme="dark"] .toolbox-section-body .secretary-server {
   border-top-color: #3c3c3c;
 }
 
 [data-theme="dark"] .toolbox-section-body .phone-devices-title,
-[data-theme="dark"] .toolbox-section-body .phone-muted {
+[data-theme="dark"] .toolbox-section-body .phone-muted,
+[data-theme="dark"] .toolbox-section-body .secretary-server-title,
+[data-theme="dark"] .toolbox-section-body .secretary-label,
+[data-theme="dark"] .toolbox-section-body .secretary-tag {
   color: #a0a0a0;
+}
+
+
+/* Secretary section (toolbox) — what it doesn't share with the Phone section
+   above: the speech server's fields and the Test result line. */
+
+.secretary-fields {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.secretary-label {
+  color: #555;
+}
+
+/* Theme variables rather than fixed colours, so the fields follow light, dark
+   and sepia like the compose box does. */
+.secretary-input {
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--compose-textarea-border);
+  border-radius: 3px;
+  background: var(--compose-textarea-bg);
+  color: var(--compose-fg);
+  font-size: 11px;
+  font-family: inherit;
+}
+
+.secretary-input:focus {
+  outline: none;
+  border-color: var(--compose-focus-border);
+}
+
+.secretary-input:disabled {
+  opacity: 0.6;
+}
+
+.secretary-input::placeholder {
+  color: var(--compose-hint-fg);
+}
+
+.secretary-clear:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.secretary-test-line {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.secretary-test-line[data-tone="ok"] {
+  color: #1f7a3d;
+}
+
+.secretary-test-line[data-tone="warn"] {
+  color: #8a5200;
+}
+
+.secretary-test-line[data-tone="error"] {
+  color: #c62828;
+}
+
+[data-theme="dark"] .toolbox-section-body .secretary-test-line[data-tone="ok"] {
+  color: #8fd9a3;
+}
+
+[data-theme="dark"] .toolbox-section-body .secretary-test-line[data-tone="warn"] {
+  color: #f3d48a;
+}
+
+[data-theme="dark"] .toolbox-section-body .secretary-test-line[data-tone="error"],
+[data-theme="dark"] .toolbox-section-body .secretary-error {
+  color: #ff8a80;
+}
+
+[data-theme="dark"] .toolbox-section-body .secretary-error {
+  background: rgba(255, 138, 128, 0.1);
 }
 
 
