@@ -41,6 +41,12 @@
   --diff-ruler-del: #e5534b;
   --diff-ruler-view: rgba(45, 90, 138, 0.16);
   --diff-ruler-view-edge: rgba(45, 90, 138, 0.45);
+  /* Secretary card: its own accent, so the brief reads as the secretary's and
+     not as terminal output or the compose box. */
+  --secretary-accent: #6a4c9c;
+  --secretary-quote-border: #c3b3e0;
+  --secretary-muted-fg: #778;
+  --secretary-warn-fg: #9a5b00;
 }
 
 [data-theme="dark"] {
@@ -80,6 +86,10 @@
   --diff-ruler-del: #f85149;
   --diff-ruler-view: rgba(255, 255, 255, 0.12);
   --diff-ruler-view-edge: rgba(255, 255, 255, 0.35);
+  --secretary-accent: #9a78d4;
+  --secretary-quote-border: #5e4f7a;
+  --secretary-muted-fg: #999;
+  --secretary-warn-fg: #e0b060;
 }
 
 [data-theme="dark"] .alerts-degraded-bar {
@@ -172,6 +182,10 @@
   --diff-ruler-del: #b5533c;
   --diff-ruler-view: rgba(90, 74, 48, 0.16);
   --diff-ruler-view-edge: rgba(90, 74, 48, 0.45);
+  --secretary-accent: #7d5374;
+  --secretary-quote-border: #cdb3b8;
+  --secretary-muted-fg: #8a7855;
+  --secretary-warn-fg: #9a5200;
 }
 
 * {
@@ -1198,6 +1212,152 @@ body,
   font-size: 10px;
   color: var(--compose-hint-fg);
   user-select: none;
+}
+
+/* Secretary card — the brief for a red-dot contact, over the top right of the
+   terminal area so the terminal's prompt and any dialog at the bottom stay in
+   view. Below the compose box if the two ever meet. */
+.secretary-card {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 40;
+  width: min(560px, calc(100% - 16px));
+  max-height: 45%;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px 8px 7px 9px;
+  background: var(--compose-bg);
+  color: var(--compose-fg);
+  border: 1px solid var(--compose-border);
+  border-left: 3px solid var(--secretary-accent);
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+  font-size: 12px;
+}
+
+.secretary-card-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.secretary-card-badge {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--secretary-accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: bold;
+  letter-spacing: 0.3px;
+}
+
+.secretary-card-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: bold;
+}
+
+.secretary-card-kind,
+.secretary-card-playing {
+  flex: none;
+  font-size: 10px;
+  white-space: nowrap;
+  color: var(--secretary-muted-fg);
+}
+
+.secretary-card-kind[data-kind="needs-you"] {
+  color: var(--secretary-warn-fg);
+  font-weight: bold;
+}
+
+.secretary-card-playing {
+  color: var(--secretary-accent);
+  font-weight: bold;
+}
+
+.secretary-card-spacer {
+  flex: 1;
+}
+
+.secretary-card-btn {
+  flex: none;
+  padding: 2px 7px;
+  background: var(--compose-chip-bg);
+  color: var(--compose-chip-fg);
+  border: 1px solid var(--compose-chip-border);
+  border-radius: 3px;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.secretary-card-btn:hover:not(:disabled) {
+  border-color: var(--compose-focus-border);
+}
+
+.secretary-card-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.secretary-card-close {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  color: var(--compose-fg);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.secretary-card-close:hover {
+  background: rgba(204, 51, 51, 0.12);
+  border-color: #c66;
+  color: #c33;
+}
+
+.secretary-card-text {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1px 0 1px 8px;
+  border-left: 2px solid var(--secretary-quote-border);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+.secretary-card-note {
+  flex: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--secretary-muted-fg);
+}
+
+.secretary-card-note[data-tone="warn"] {
+  color: var(--secretary-warn-fg);
+}
+
+.secretary-card-detail {
+  margin-left: 6px;
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.secretary-card-detail::before {
+  content: "· ";
 }
 
 .dialog-warning {
