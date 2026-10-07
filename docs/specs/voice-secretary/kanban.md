@@ -99,13 +99,14 @@ read it instead.
 ### T-503: Keep each instance's latest event and its material in main
 
 - **Type:** data
-- **Status:** in-progress
+- **Status:** done
 - **Requirement:** `docs/specs/voice-secretary/prd.md#story-2-the-brief-is-ready-before-the-click`
 - **Knowledge:** `docs/specs/attention-alerts/prd.md` (the Finished and Needs-you events)
 - **Code:** `workspace/app/src/main/process-manager.ts` (`onActivity`, `handleAlertDelivery`), `workspace/app/src/main/backends/claudeHooks.ts` (`permissionDetail`, `raisePrompt`), `workspace/app/src/main/run-state.ts` (`onWrite`)
 - **Description:** Today the dialog's decoded options live only in the phone server (`ws-server.ts` `activePrompts`), and the raw tool input is thrown away after `extractPromptDetail`. The secretary needs both, in main, per instance. Add to each managed instance a `secretaryEvent?: { kind: "finished" | "needs-you"; seq: number; at: number; prompt?: { detail: PromptDetail; toolName: string; toolInput: unknown } }`. Set it on `waiting` (kind finished) and `prompt` (kind needs-you, carrying the delivery's `toolName` and `toolInput` alongside the detail; extend the `raisePrompt` path to pass them). `seq` increments per instance on every new event. Clear it on `prompt-cleared` for a needs-you, and on any write to the instance (`onWrite`) for a finished, since either means the builder already dealt with it. Expose a small subscription (`onSecretaryEvent(listener)`, firing on set and on clear) for T-505. Manager and OpenCode instances never get one.
 - **Acceptance:** Unit tests: a `waiting` sets a finished event; a `prompt` from a Bash `PermissionRequest` sets needs-you with the exact command in `toolInput`; `prompt-cleared` clears needs-you; a write clears finished; a newer event bumps `seq`; a manager or OpenCode instance never sets one. Existing alert and phone-link tests still pass.
 - **Blocks:** T-504, T-505, T-509 · **Blocked by:** none · **Parallel with:** T-501, T-502
+- **Done 2026-10-08:** API on `processManager`: `onSecretaryEvent(listener)` (fires with the event on set, `null` on clear, returns unsubscribe), `secretaryEventOf(id)`, `liveSecretaryEvents()`. **A write clears a needs-you too, not only a finished:** the CLI reports nothing after a denied dialog (fixtures `permission-denied-no`, `permission-denied-esc`), so the keystroke is the only sign. Focus reports (`ESC[I`/`ESC[O`) don't count as a write. One `seq` counter across all instances, so a restart can't reuse a number. The raw tool call travels beside `PromptDetail`, never inside it, so it can't reach the phone. OpenCode is excluded through `Backend.keepsSecretaryEvents`, the manager by `isManager`. For T-509: choosing Other is itself a write, so check `seq` once before both writes. For T-507: a manager dispatch can clear the event while the red dot stays, so the card needs a "nothing live" state. 851 tests green.
 
 ### T-504: Brief writer: one event in, one spoken-style brief out
 
