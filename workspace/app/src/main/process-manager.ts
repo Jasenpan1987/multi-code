@@ -67,13 +67,29 @@ export type SecretaryEventListener = (
   event: SecretaryEvent | null
 ) => void;
 
-// Whether a write carries anything besides terminal focus reports. Claude turns on
-// focus reporting (`?1004h`, docs/timeline/2026-06-08_compose-box-ideation.md), so
-// xterm sends `ESC [ I` / `ESC [ O` down the same channel as keystrokes whenever
-// its terminal gains or loses focus, including when the builder comes back to the
-// window. Those aren't the builder acting on the session.
+// Whether a write carries anything besides terminal focus reports and mouse motion
+// or wheel reports. Claude turns on focus reporting (`?1004h`,
+// docs/timeline/2026-06-08_compose-box-ideation.md), so xterm sends `ESC [ I` /
+// `ESC [ O` down the same channel as keystrokes whenever its terminal gains or loses
+// focus, including when the builder comes back to the window. It also turns on
+// any-motion mouse tracking in SGR form (`?1003h`, `?1006h`, CLI 2.1.292), so the
+// pointer merely crossing the terminal sends `ESC [ < Cb ; x ; y M` with Cb's
+// motion bit (32) set, and the wheel sends Cb 64 and up. None of those are the
+// builder acting on the session. A button press or release still counts: a click
+// can pick something in the TUI.
+const ESC = "\x1b";
+const SGR_MOUSE_REPORT = new RegExp(`${ESC}\\[<(\\d+);\\d+;\\d+[Mm]`, "g");
+const MOUSE_MOTION_OR_WHEEL = 32 | 64;
+
 function carriesInput(data: string): boolean {
-  return data.replaceAll("\x1b[I", "").replaceAll("\x1b[O", "") !== "";
+  return (
+    data
+      .replaceAll("\x1b[I", "")
+      .replaceAll("\x1b[O", "")
+      .replace(SGR_MOUSE_REPORT, (report, cb: string) =>
+        Number(cb) & MOUSE_MOTION_OR_WHEEL ? "" : report
+      ) !== ""
+  );
 }
 
 interface ManagedInstance {
