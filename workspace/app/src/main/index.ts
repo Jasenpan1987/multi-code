@@ -13,6 +13,8 @@ import {
   shutdownManagerMcp,
   startManagerMcpServer,
 } from "./manager-mcp";
+import { secretary } from "./secretary";
+import { loadSettings } from "./settings-store";
 
 // Must run before app 'ready' — privileged scheme registration is only honored
 // pre-ready. The handler itself is installed after ready (in whenReady).
@@ -63,6 +65,9 @@ app.whenReady().then(async () => {
   registerIpcHandlers();
   initRemote();
   initManagerActivityFeed();
+  // Subscribed before anything can spawn an instance. With the mode saved on, it
+  // prepares whatever is live: at startup, normally nothing.
+  secretary.start(loadSettings().secretaryMode);
   // Before the window, because the window is what spawns instances, and each
   // Claude instance needs the server's port and alert token in its launch files.
   await startManagerMcpServer();
@@ -124,6 +129,9 @@ app.on("before-quit", (event) => {
       return;
     }
   }
+  // First, so the instances' exits below don't reach it, and so no brief
+  // writer's CLI outlives the app.
+  secretary.stop();
   processManager.cleanup();
   shellManager.cleanup();
   void shutdownRemote();

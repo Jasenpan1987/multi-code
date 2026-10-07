@@ -136,6 +136,20 @@ describe("synthesize", () => {
     if (!res.ok) expect(res.reason).toMatch(/^timed out after/);
   });
 
+  it("stops when the caller aborts, and says aborted rather than timed out", async () => {
+    const f = fakeFetch({ "/v1/audio/speech": hang });
+    const cancel = new AbortController();
+    const pending = synthesize(server, "hello", "English", { fetch: f, signal: cancel.signal });
+    cancel.abort();
+    expect(await pending).toEqual({ ok: false, reason: "aborted" });
+
+    // Already aborted: no request at all.
+    const g = fakeFetch({ "/v1/audio/speech": audio });
+    const res = await synthesize(server, "hello", "English", { fetch: g, signal: cancel.signal });
+    expect(res).toEqual({ ok: false, reason: "aborted" });
+    expect(g).not.toHaveBeenCalled();
+  });
+
   it("waits 15 seconds by default (Story 7)", () => {
     expect(SPEECH_TIMEOUT_MS).toBe(15_000);
   });
