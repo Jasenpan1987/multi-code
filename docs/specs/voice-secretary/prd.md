@@ -1,7 +1,7 @@
 # PRD: Voice Secretary
 
-**Version:** 1.2
-**Last Updated:** 2026-10-07
+**Version:** 1.3
+**Last Updated:** 2026-10-08
 **Status:** approved
 **Owner:** Jasen
 
@@ -182,7 +182,7 @@ docs/timeline/2026-10-07_voice-engine-hosting.md)
 - [ ] With no speech server configured, or one that fails, errors or doesn't answer in time, the card shows the brief text and plays nothing, with a small note that the voice is unavailable
 - [ ] No error dialog, no retry storm, and nothing else in the app changes: chimes, red dots, terminals, the manager and the phone link behave as before
 - [ ] When the server comes back, the next brief speaks again without a restart
-- [ ] "in time" is 15 seconds for the audio of one brief
+- [ ] "in time" is 30 seconds for the audio of one brief
 
 ---
 
@@ -203,7 +203,7 @@ docs/timeline/2026-10-07_voice-engine-hosting.md)
 ## Non-Functional Requirements
 
 - **Cost:** none while Secretary Mode is off. While on, one brief per alert: one language-model call and, when a speech server is set, one speech request.
-- **Speed:** a click on a ready brief starts audio within a second. A brief is normally ready within 20 seconds of its alert; the speech server takes 5–6 seconds for a ~13 second brief (source: docs/timeline/2026-10-07_voice-engine-hosting.md).
+- **Speed:** a click on a ready brief starts audio within a second. A brief's text is normally ready within 10 seconds of its alert and its audio within 30; the speech server takes about 0.4 s per second of audio, 12–21 s for the 33–51 s briefs measured (source: docs/timeline/2026-10-08_brief-writer-spike.md).
 - **Privacy:** transcript excerpts go only to the language model that writes the brief; the brief text goes only to the configured speech server. Briefs and audio are kept in memory and not written to disk.
 - **Zero residue:** unchanged. Nothing is written to files the user owns (docs/knowledge/business-overview.md, Zero-residue principle).
 
@@ -255,3 +255,4 @@ and 20 s limits, nothing on disk) were confirmed by the builder on 2026-10-07.
 | 1.0 | 2026-10-07 | First draft, from the ideation interview, the voice-engine survey and the hosting POC |
 | 1.1 | 2026-10-07 | Story 5: attach originals only when words aren't enough (builder). Brief writer decided: Claude Sonnet 5.5 on the company's Bedrock (G-002) |
 | 1.2 | 2026-10-07 | All assumptions confirmed by the builder; the brief writer is a spawned `claude` CLI. Approved for task breakdown |
+| 1.3 | 2026-10-08 | Speech timeout 15 s → 30 s and "ready" split into text (10 s) and audio (30 s): the T-501 spike measured real briefs at 33–51 s of audio taking 12–21 s to synthesize, so 15 s failed most of them. Decided by the supervisor session while working autonomously; for the builder to review |

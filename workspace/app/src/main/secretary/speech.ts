@@ -32,8 +32,11 @@ export interface SpeechOptions {
   signal?: AbortSignal;
 }
 
-// Story 7: "in time" is 15 seconds for the audio of one brief.
-export const SPEECH_TIMEOUT_MS = 15_000;
+// Story 7: "in time" is 30 seconds for the audio of one brief. Synthesis runs at
+// about 0.4 s per second of audio (docs/timeline/2026-10-08_brief-writer-spike.md),
+// so this covers a brief of a minute and more; the first figure, 15 s, failed most
+// real briefs.
+export const SPEECH_TIMEOUT_MS = 30_000;
 // /health only shows the server is there. Ours answers in well under a second; a
 // stopped instance behind its Elastic IP never answers at all, so don't wait long.
 export const HEALTH_TIMEOUT_MS = 5_000;

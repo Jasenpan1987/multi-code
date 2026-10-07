@@ -87,7 +87,7 @@ read it instead.
 ### T-501: Brief-writer spike on the real CLI
 
 - **Type:** setup
-- **Status:** in-progress
+- **Status:** done
 - **Requirement:** `docs/specs/voice-secretary/prd.md#story-4-what-the-secretary-says`
 - **Knowledge:** `docs/specs/voice-secretary/prd.md#technical-constraints`
 - **Code:** `workspace/app/src/main/backends/instance-env.ts`, `workspace/app/src/main/process-manager.ts` (`readTranscript`)
@@ -95,6 +95,7 @@ read it instead.
 - **Acceptance:** A spike record in `docs/timeline/` with the exact command, the env it needs, timings, the no-residue check, the prompt text, and the three sample inputs and outputs. The three briefs read correctly when spoken (check with `deploy/tts-server/smoke-test.sh`-style calls).
 - **Blocks:** T-504 · **Blocked by:** none · **Parallel with:** T-502, T-503
 - **Notes:** Measured from a terminal on 2026-10-07: 3.3 s for a one-line prompt. If (1) fails, pass the Bedrock env explicitly the way instance spawns already do in `instance-env.ts`, rather than adding an SDK. `pnpm start` launches Electron from a shell and inherits its env, so it can't answer (1): test with the packaged app opened from Finder or with `open -a`.
+- **Done 2026-10-08:** `docs/timeline/2026-10-08_brief-writer-spike.md`. From a Dock-like launch (launchd, no `AWS_*`) the CLI still reaches Bedrock, because `--bare` keeps the `env` block of `~/.claude/settings.json`. Nothing persists; the CLI's registry and plugin markers exist only during the call, and SIGKILL leaves the plugin markers, so stop with SIGTERM first. 3.6 / 4.6 / 8.9 s min / median / max. Prompt-only JSON parsed on 142 of 142 runs; `--json-schema` was slower and got the language wrong. Extra flags: `--setting-sources user --tools "" --system-prompt`. The builder's messages must be read from the raw JSONL, not `readTranscript`. Briefs run 33–51 s spoken and take 12–21 s to synthesize, so the speech timeout went to 30 s (PRD v1.3).
 
 ### T-503: Keep each instance's latest event and its material in main
 
@@ -111,7 +112,7 @@ read it instead.
 ### T-504: Brief writer: one event in, one spoken-style brief out
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** in-progress
 - **Requirement:** `docs/specs/voice-secretary/prd.md#story-4-what-the-secretary-says`
 - **Knowledge:** `docs/knowledge/business-overview.md#secretary-mode-planned-2026-10-07`
 - **Code:** new `workspace/app/src/main/secretary/briefWriter.ts`; reads `ProcessManager.readTranscript`
@@ -127,7 +128,7 @@ read it instead.
 - **Requirement:** `docs/specs/voice-secretary/prd.md#story-8-connect-a-speech-server`, `docs/specs/voice-secretary/prd.md#story-7-no-voice-still-a-secretary`
 - **Knowledge:** `deploy/tts-server/README.md#using-it`
 - **Code:** `workspace/app/src/main/settings-store.ts`, new `workspace/app/src/main/secretary/speech.ts`, `workspace/app/src/main/ipc-handlers.ts`, `workspace/app/src/main/preload.ts`, `workspace/app/src/shared/types.ts`
-- **Description:** Add `secretaryMode: boolean` (default false) and `speechServerUrl: string` (default `""`, meaning text only) to `Settings`. Store the key in its own file, `<userData>/speech-key`, written `0600`, never in `settings.json`, never logged, never sent to the renderer: the renderer only learns whether a key is set. `synthesize(text, language): Promise<{ ok: true; wav: Buffer } | { ok: false; reason: string }>` posts `{ input, voice: "serena", language, instructions, response_format: "wav" }` to `<url>/v1/audio/speech` with `Authorization: Bearer <key>`, 15 s timeout; `instructions` is the casual-briefing tone in the brief's language (the Chinese and English strings in `deploy/tts-server/voice-samples.sh`). `testServer()` checks `/health`, then a one-sentence synthesis, and returns which step failed and why (unreachable, 401, timeout, not audio). IPC: `secretary:get-settings`, `secretary:set-mode`, `secretary:set-server` (url, key or unchanged), `secretary:test-server`.
+- **Description:** Add `secretaryMode: boolean` (default false) and `speechServerUrl: string` (default `""`, meaning text only) to `Settings`. Store the key in its own file, `<userData>/speech-key`, written `0600`, never in `settings.json`, never logged, never sent to the renderer: the renderer only learns whether a key is set. `synthesize(text, language): Promise<{ ok: true; wav: Buffer } | { ok: false; reason: string }>` posts `{ input, voice: "serena", language, instructions, response_format: "wav" }` to `<url>/v1/audio/speech` with `Authorization: Bearer <key>`, 30 s timeout (15 s originally; raised after T-501, PRD v1.3); `instructions` is the casual-briefing tone in the brief's language (the Chinese and English strings in `deploy/tts-server/voice-samples.sh`). `testServer()` checks `/health`, then a one-sentence synthesis, and returns which step failed and why (unreachable, 401, timeout, not audio). IPC: `secretary:get-settings`, `secretary:set-mode`, `secretary:set-server` (url, key or unchanged), `secretary:test-server`.
 - **Acceptance:** Unit tests with `fetch` faked: success, 401, timeout, non-audio body, empty URL meaning "no server" without any request. The key file is `0600` and absent from `settings.json`. A manual `testServer()` against `https://tts.jasenpan.com` passes.
 - **Blocks:** T-505, T-506 · **Blocked by:** none · **Parallel with:** T-501, T-503
 - **Notes:** Add `speech-key` to the Data Storage list in `CLAUDE.md`.
@@ -136,13 +137,14 @@ read it instead.
 ### T-505: Secretary orchestrator
 
 - **Type:** integration
-- **Status:** backlog
+- **Status:** done
 - **Requirement:** `docs/specs/voice-secretary/prd.md#story-2-the-brief-is-ready-before-the-click`, `docs/specs/voice-secretary/prd.md#story-1-secretary-mode-switch`, `docs/specs/voice-secretary/prd.md#story-7-no-voice-still-a-secretary`
 - **Knowledge:** `docs/knowledge/decisions.md` (2026-10-07 entries)
 - **Code:** new `workspace/app/src/main/secretary/index.ts`, wired in `workspace/app/src/main/index.ts`
 - **Description:** Subscribes to T-503's events. While `secretaryMode` is on: on a new event, write the brief (T-504), then, if a server is set, synthesize it (T-502); keep one `BriefState` per instance in memory only: `{ seq, status: "preparing" } | { seq, status: "ready", text, language, wav?: Buffer, voiceUnavailable: boolean } | { seq, status: "failed", reason }`. A result for an older `seq` than the instance's current event is discarded. When T-503 clears the event, drop the brief. Turning the mode on prepares briefs for every instance whose event is still live; turning it off drops all briefs. Send `secretary-brief` (instanceId, state without the wav) to the renderer on every change, and serve the audio on request (`secretary:get-audio` returning the wav bytes) so large buffers don't ride every update. While off, nothing is spawned or called.
 - **Acceptance:** Unit tests with writer and speech faked: mode off spawns nothing; a new event goes preparing → ready; speech failure gives ready with `voiceUnavailable`; writer failure gives failed; a newer event discards the older result; a clear drops the brief; mode on with two live events prepares both. Nothing is written to disk.
 - **Blocks:** T-507, T-509 · **Blocked by:** T-502, T-503, T-504
+- **Done 2026-10-08:** built before T-504 against a fixed contract: `briefWriter.ts` exports `Brief` and `writeBriefFor(instanceId, event, signal?)`; T-505 committed a stub that T-504 replaces. `createSecretary(deps)` in `secretary/index.ts`, started from `main/index.ts`. State per instance: `preparing` → `ready` with `audio: pending → ready | unavailable` (text first) or `failed`. A newer event, a clear or mode off aborts the writer and the speech request. Renderer API: push `secretary-brief` (id, state | null) and `secretary-mode` (boolean); `getSecretaryBriefs()`, `getSecretaryAudio(id, seq)` (null when stale). `synthesize` gained an abort signal. 876 tests green.
 
 ### T-506: Secretary toolbox section
 
@@ -159,7 +161,7 @@ read it instead.
 ### T-507: Secretary card and playback
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** in-progress
 - **Requirement:** `docs/specs/voice-secretary/prd.md#story-3-click-a-red-dot-hear-the-brief`, `docs/specs/voice-secretary/prd.md#story-7-no-voice-still-a-secretary`
 - **Knowledge:** `docs/specs/attention-alerts/prd.md` (chat-app alert rules, which stay as they are)
 - **Code:** new `workspace/app/src/renderer/components/SecretaryCard.tsx`, `workspace/app/src/renderer/App.tsx` (contact select, `unreadIds`), `workspace/app/src/renderer/audio/`

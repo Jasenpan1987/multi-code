@@ -150,8 +150,8 @@ describe("synthesize", () => {
     expect(g).not.toHaveBeenCalled();
   });
 
-  it("waits 15 seconds by default (Story 7)", () => {
-    expect(SPEECH_TIMEOUT_MS).toBe(15_000);
+  it("waits 30 seconds by default (Story 7)", () => {
+    expect(SPEECH_TIMEOUT_MS).toBe(30_000);
   });
 
   it("rejects a 200 whose body isn't audio", async () => {
