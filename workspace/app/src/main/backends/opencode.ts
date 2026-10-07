@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { pathToFileURL } from "url";
 import { execSync } from "child_process";
 import Database from "better-sqlite3";
 import type {
@@ -8,6 +9,7 @@ import type {
   CompletionDetector,
   SessionDiscovery,
   SpawnConfig,
+  SpawnOptions,
 } from "./types";
 import {
   buildPermissionDetail,
@@ -25,7 +27,8 @@ import type { TranscriptEntry } from "../../shared/remote-protocol";
 import type { ContextUsage } from "../../shared/types";
 import { resolvePath } from "./resolvePath";
 import { debugTrace } from "../debug-trace";
-import { INSTANCE_ENV, SPAWN_ENV } from "./instance-env";
+import { ALERT_FILE_ENV, INSTANCE_ENV, SPAWN_ENV } from "./instance-env";
+import { withMulticodePlugin } from "./opencodePlugin";
 
 const HOME = process.env.HOME || "";
 
@@ -74,7 +77,26 @@ function buildEnv(): Record<string, string> {
   const env = { ...process.env, PATH: SEARCH_PATH } as Record<string, string>;
   delete env[INSTANCE_ENV];
   delete env[SPAWN_ENV];
+  delete env[ALERT_FILE_ENV];
   return env;
+}
+
+// Points this spawn at Multi-Code's plugin, or leaves the env as built when the
+// inherited OPENCODE_CONFIG_CONTENT can't be merged into safely. The instance then
+// runs without the plugin, which is a missing alert, not a changed config.
+function withAlertPlugin(
+  env: Record<string, string>,
+  plugin: NonNullable<SpawnOptions["opencodePlugin"]>
+): Record<string, string> {
+  const content = withMulticodePlugin(
+    env.OPENCODE_CONFIG_CONTENT,
+    pathToFileURL(plugin.pluginPath).href
+  );
+  if (!content) {
+    debugTrace("[alert-hook] inherited OPENCODE_CONFIG_CONTENT can't be merged; spawning without the plugin");
+    return env;
+  }
+  return { ...env, OPENCODE_CONFIG_CONTENT: content, [ALERT_FILE_ENV]: plugin.targetPath };
 }
 
 // Open a read-only sqlite handle. Throws on failure (caller decides how to handle).
@@ -807,21 +829,20 @@ function finiteNumber(value: unknown): number {
 export const opencodeBackend: Backend = {
   name: "opencode",
 
-  spawn(_cwd: string): SpawnConfig {
+  spawn(_cwd: string, opts?: SpawnOptions): SpawnConfig {
     // OpenCode handles "no prior session" gracefully — always pass --continue.
     //
-    // SpawnOptions is deliberately ignored. Its settings file is a Claude
-    // `--settings` file (OpenCode reports through its own plugin, epic
-    // attention-alerts Track 2), and the rest exists for the manager, which is
-    // claude-only for now. OpenCode does support MCP, but through a
-    // different config shape, and `--allowedTools` has no equivalent — so a manager
-    // running here would stop for a permission prompt on every tool call. The
-    // create path refuses to make an OpenCode manager rather than silently
-    // producing one that can't work.
+    // Of SpawnOptions only `opencodePlugin` applies. The settings file is a Claude
+    // `--settings` file, and the rest exists for the manager, which is claude-only
+    // for now. OpenCode does support MCP, but through a different config shape, and
+    // `--allowedTools` has no equivalent — so a manager running here would stop for
+    // a permission prompt on every tool call. The create path refuses to make an
+    // OpenCode manager rather than silently producing one that can't work.
+    const env = buildEnv();
     return {
       command: opencodePath,
       args: ["--continue"],
-      env: buildEnv(),
+      env: opts?.opencodePlugin ? withAlertPlugin(env, opts.opencodePlugin) : env,
     };
   },
 

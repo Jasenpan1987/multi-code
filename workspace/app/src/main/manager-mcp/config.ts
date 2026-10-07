@@ -15,6 +15,7 @@ import fs from "fs";
 import path from "path";
 import { app } from "electron";
 import { hookEndpointFor, SELF_TOOL_MATCHER } from "./hook-activity";
+import { OPENCODE_PLUGIN_FILE, opencodePluginSource } from "../backends/opencodePlugin";
 
 // The name the CLI prefixes onto every tool, so the manager sees these as
 // `mcp__multi-code__list_sessions`. Short because it shows up in every tool call.
@@ -56,6 +57,21 @@ function alertSettingsPath(): string {
 // for the same reason as manager-hook.curl.
 function alertCurlConfigPath(): string {
   return path.join(app.getPath("userData"), "alert-hook.curl");
+}
+
+// OpenCode's counterpart of the two files above: Multi-Code's plugin, and the 0600
+// JSON it reads `/alert`'s endpoint and token from. Their own folder, so the plugin
+// sits in a directory holding nothing else OpenCode might look at.
+function opencodeDir(): string {
+  return path.join(app.getPath("userData"), "opencode");
+}
+
+function opencodePluginPath(): string {
+  return path.join(opencodeDir(), OPENCODE_PLUGIN_FILE);
+}
+
+function opencodeAlertPath(): string {
+  return path.join(opencodeDir(), "alert.json");
 }
 
 // The hook events a Claude instance reports for attention alerts: exactly the ones
@@ -181,6 +197,31 @@ export function writeAlertSettings(alert: McpConfigTarget | null): string | null
   );
 }
 
+// The plugin every OpenCode instance spawns with, and the file it reads its target
+// from. Null when the server isn't up or a file couldn't be written; the caller
+// then spawns OpenCode without the plugin.
+//
+// The plugin holds no secret and is the same on every start, but it is rewritten
+// each time with the rest, so a Multi-Code upgrade never runs an older copy.
+export function writeOpencodePlugin(
+  alert: McpConfigTarget | null
+): { pluginPath: string; targetPath: string } | null {
+  if (!alert) return null;
+  try {
+    fs.mkdirSync(opencodeDir(), { recursive: true, mode: 0o700 });
+  } catch {
+    return null;
+  }
+  const targetPath = writePrivateFile(
+    opencodeAlertPath(),
+    JSON.stringify({ endpoint: alert.endpoint, token: alert.token })
+  );
+  if (!targetPath) return null;
+  const pluginPath = writePrivateFile(opencodePluginPath(), opencodePluginSource());
+  if (!pluginPath) return null;
+  return { pluginPath, targetPath };
+}
+
 // One entry per alert event, all running the same command.
 //
 // The instance travels in a header expanded from MULTICODE_INSTANCE_ID, and the
@@ -251,9 +292,9 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-// Everything written for a spawn, the manager's and every session's alert hooks,
-// all of it stale the moment the server stops: the port is OS-assigned and the
-// tokens are minted per run.
+// Everything written for a spawn, the manager's, every Claude session's alert hooks
+// and OpenCode's plugin, all of it stale the moment the server stops: the port is
+// OS-assigned and the tokens are minted per run.
 export function removeSpawnFiles(): void {
   for (const file of [
     configPath(),
@@ -261,11 +302,18 @@ export function removeSpawnFiles(): void {
     hookCurlConfigPath(),
     alertSettingsPath(),
     alertCurlConfigPath(),
+    opencodePluginPath(),
+    opencodeAlertPath(),
   ]) {
     try {
       fs.unlinkSync(file);
     } catch {
       // Already gone, or userData is unwritable — nothing useful to do either way.
     }
+  }
+  try {
+    fs.rmdirSync(opencodeDir());
+  } catch {
+    // Not there, or something else was put in it: leave it.
   }
 }

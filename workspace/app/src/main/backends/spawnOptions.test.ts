@@ -117,6 +117,73 @@ describe("opencode spawn", () => {
   });
 });
 
+describe("opencode spawn with the alert plugin", () => {
+  // userData on macOS has a space in it, so the file URL must be encoded.
+  const opencodePlugin = {
+    pluginPath: "/Users/x/Library/Application Support/multi-code/opencode/multicode-plugin.js",
+    targetPath: "/Users/x/Library/Application Support/multi-code/opencode/alert.json",
+  };
+  const pluginUrl =
+    "file:///Users/x/Library/Application%20Support/multi-code/opencode/multicode-plugin.js";
+
+  function withInheritedContent(value: string | undefined, fn: () => void) {
+    const before = process.env.OPENCODE_CONFIG_CONTENT;
+    if (value === undefined) delete process.env.OPENCODE_CONFIG_CONTENT;
+    else process.env.OPENCODE_CONFIG_CONTENT = value;
+    try {
+      fn();
+    } finally {
+      if (before === undefined) delete process.env.OPENCODE_CONFIG_CONTENT;
+      else process.env.OPENCODE_CONFIG_CONTENT = before;
+    }
+  }
+
+  it("names the plugin in OPENCODE_CONFIG_CONTENT and its target file by path", () => {
+    withInheritedContent(undefined, () => {
+      const { args, env } = opencodeBackend.spawn(freshCwd, { opencodePlugin });
+      expect(args).toEqual(["--continue"]);
+      expect(JSON.parse(env.OPENCODE_CONFIG_CONTENT)).toEqual({ plugin: [pluginUrl] });
+      expect(env.MULTICODE_ALERT_FILE).toBe(opencodePlugin.targetPath);
+      // Never OPENCODE_CONFIG_DIR: it replaces the global config dir, dropping the
+      // user's AGENTS.md.
+      expect(env.OPENCODE_CONFIG_DIR).toBe(process.env.OPENCODE_CONFIG_DIR);
+    });
+  });
+
+  it("merges into the user's own OPENCODE_CONFIG_CONTENT", () => {
+    withInheritedContent(JSON.stringify({ model: "x/y", plugin: ["theirs"] }), () => {
+      const { env } = opencodeBackend.spawn(freshCwd, { opencodePlugin });
+      expect(JSON.parse(env.OPENCODE_CONFIG_CONTENT)).toEqual({
+        model: "x/y",
+        plugin: ["theirs", pluginUrl],
+      });
+    });
+  });
+
+  it("leaves a value it can't merge untouched and spawns without the plugin", () => {
+    const jsonc = '{ // theirs\n "model": "x/y" }';
+    withInheritedContent(jsonc, () => {
+      const { env } = opencodeBackend.spawn(freshCwd, { opencodePlugin });
+      expect(env.OPENCODE_CONFIG_CONTENT).toBe(jsonc);
+      expect(env.MULTICODE_ALERT_FILE).toBeUndefined();
+    });
+  });
+
+  it("adds nothing without the option", () => {
+    withInheritedContent(undefined, () => {
+      const { env } = opencodeBackend.spawn(freshCwd, { settingsPath: "/tmp/alert-settings.json" });
+      expect(env.OPENCODE_CONFIG_CONTENT).toBeUndefined();
+      expect(env.MULTICODE_ALERT_FILE).toBeUndefined();
+    });
+  });
+
+  it("is ignored by claude", () => {
+    const { args, env } = claudeBackend.spawn(freshCwd, { opencodePlugin });
+    expect(args).toEqual([]);
+    expect(env.MULTICODE_ALERT_FILE).toBeUndefined();
+  });
+});
+
 describe("an inherited instance id", () => {
   // A dev build launched from inside a Multi-Code session inherits that session's
   // MULTICODE_INSTANCE_ID. Passed on, every agent it starts would report its
@@ -125,20 +192,27 @@ describe("an inherited instance id", () => {
     const before = {
       instance: process.env.MULTICODE_INSTANCE_ID,
       spawn: process.env.MULTICODE_SPAWN_ID,
+      alertFile: process.env.MULTICODE_ALERT_FILE,
     };
     process.env.MULTICODE_INSTANCE_ID = "parent-instance";
     process.env.MULTICODE_SPAWN_ID = "parent-spawn";
+    process.env.MULTICODE_ALERT_FILE = "/parent/opencode/alert.json";
     try {
       for (const backend of [claudeBackend, opencodeBackend]) {
         const { env } = backend.spawn(freshCwd);
         expect(env.MULTICODE_INSTANCE_ID).toBeUndefined();
         expect(env.MULTICODE_SPAWN_ID).toBeUndefined();
       }
+      // OpenCode's plugin reads its token from the file this names, so a parent's
+      // must never reach an OpenCode spawned without the plugin.
+      expect(opencodeBackend.spawn(freshCwd).env.MULTICODE_ALERT_FILE).toBeUndefined();
     } finally {
       if (before.instance === undefined) delete process.env.MULTICODE_INSTANCE_ID;
       else process.env.MULTICODE_INSTANCE_ID = before.instance;
       if (before.spawn === undefined) delete process.env.MULTICODE_SPAWN_ID;
       else process.env.MULTICODE_SPAWN_ID = before.spawn;
+      if (before.alertFile === undefined) delete process.env.MULTICODE_ALERT_FILE;
+      else process.env.MULTICODE_ALERT_FILE = before.alertFile;
     }
   });
 });

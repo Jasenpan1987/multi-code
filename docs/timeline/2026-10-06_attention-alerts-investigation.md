@@ -348,6 +348,16 @@ auto-updated 1.18.34 → 1.18.35 between sessions; every fixture is 1.18.35. Rep
   times ~2s apart, each followed by busy, then the same `APIError` (`isRetryable:true`) and
   idle twice. A retry status is neither busy nor idle. An unknown `-m` model id is *not* an
   error: OpenCode silently ran the default model (`unknown-model-fallback`).
+- **Production plugin (T-410, 2026-10-07, 1.18.35).** The real plugin source and the real
+  `/alert` server, the plugin in a folder with a space (file URL `%20`), merged after a
+  stand-in user plugin: loaded, `multicode.init` arrived 1.9s after spawn, every
+  forwarded event arrived under the instance's ids with the TUI's own pid, the
+  `permission.asked` delivery landed before the probe plugin had logged it. The agent's
+  bash tool saw all three `MULTICODE_*` vars empty once the plugin had deleted them, and a
+  nested `opencode run` it started loaded the plugin but sent nothing. **`opencode run`
+  initialises plugins twice in one process** (the TUI once), which is what the plugin's
+  newest-init-wins guard is for. Probe: `.omt/probes/attention-alerts/t410/` (`server.ts`
+  under `jiti`, then `check.py`).
 
 ## Key Decisions
 

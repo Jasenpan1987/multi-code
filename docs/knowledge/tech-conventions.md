@@ -239,8 +239,8 @@ constant or adding a text match.
 
 ## An agent's report names its spawn, not just its instance (added 2026-10-07)
 
-Whatever reports an agent's state from inside its process (Claude's alert hooks today,
-OpenCode's plugin next) sends two ids with every delivery: `MULTICODE_INSTANCE_ID`, the
+Whatever reports an agent's state from inside its process (Claude's alert hooks,
+OpenCode's plugin) sends two ids with every delivery: `MULTICODE_INSTANCE_ID`, the
 contact, and `MULTICODE_SPAWN_ID`, minted per spawn (`backends/instance-env.ts`). Both
 reach the reporter through the agent's own env and travel as `X-Multicode-Instance` /
 `X-Multicode-Spawn`. A restart keeps the instance id, and the old process's async
@@ -249,4 +249,10 @@ delivery whose spawn id isn't the instance's current one. Every env Multi-Code b
 strips inherited values of both first, so a dev build launched from inside a session
 doesn't hand its parent's ids to everything it starts. A new reporter that sends only the
 instance id would have every delivery dropped.
+
+A reporter loaded through the environment must also take the ids out of its own process's
+env once read. OpenCode's plugin is named by `OPENCODE_CONFIG_CONTENT`, which the agent's
+bash tool inherits, so an `opencode` the agent runs would load it with the same ids and
+report its sessions as the instance's. Measured 2026-10-07 on 1.18.35: after the plugin
+deletes them, the bash tool sees none, and a nested `opencode run` stays silent.
 

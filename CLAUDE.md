@@ -82,6 +82,9 @@ once, they read the same contacts and overwrite each other's spawn files. Never 
 - `alert-settings.json`, `alert-hook.curl` — every other Claude instance's
   `--settings` (alert hooks only) and the curl config holding the `/alert` token; 0600,
   removed on shutdown
+- `opencode/multicode-plugin.js`, `opencode/alert.json` — the report-only plugin every
+  OpenCode instance loads (named in its `OPENCODE_CONFIG_CONTENT`) and the `/alert`
+  endpoint and token it reads (path in `MULTICODE_ALERT_FILE`); 0600, removed on shutdown
 
 ## IPC Pattern
 

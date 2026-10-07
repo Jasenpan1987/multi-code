@@ -24,10 +24,12 @@ const {
   writeMcpConfig,
   writeManagerSettings,
   writeAlertSettings,
+  writeOpencodePlugin,
   removeSpawnFiles,
   MCP_SERVER_NAME,
   ALERT_HOOK_EVENTS,
 } = await import("./config");
+const { opencodePluginSource } = await import("../backends/opencodePlugin");
 
 const configFile = path.join(userData, "manager-mcp.json");
 const settingsFile = path.join(userData, "manager-settings.json");
@@ -36,6 +38,9 @@ const target = { endpoint: "http://127.0.0.1:54321/mcp", token: "tok_abc" };
 const alertSettingsFile = path.join(userData, "alert-settings.json");
 const alertCurlFile = path.join(userData, "alert-hook.curl");
 const alert = { endpoint: "http://127.0.0.1:54321/alert", token: "alert_tok_xyz" };
+const opencodeDir = path.join(userData, "opencode");
+const opencodePluginFile = path.join(opencodeDir, "multicode-plugin.js");
+const opencodeAlertFile = path.join(opencodeDir, "alert.json");
 
 const modeOf = (file: string) => (fs.statSync(file).mode & 0o777).toString(8);
 
@@ -270,6 +275,34 @@ describe("writeManagerSettings with alert hooks", () => {
   });
 });
 
+describe("writeOpencodePlugin", () => {
+  it("writes the plugin and the file it reads its target from, both 0600", () => {
+    const written = writeOpencodePlugin(alert);
+    expect(written).toEqual({ pluginPath: opencodePluginFile, targetPath: opencodeAlertFile });
+    expect(fs.readFileSync(opencodePluginFile, "utf8")).toBe(opencodePluginSource());
+    expect(JSON.parse(fs.readFileSync(opencodeAlertFile, "utf8"))).toEqual(alert);
+    expect(modeOf(opencodeAlertFile)).toBe("600");
+    expect(modeOf(opencodePluginFile)).toBe("600");
+  });
+
+  it("keeps the token out of the plugin itself", () => {
+    writeOpencodePlugin(alert);
+    expect(fs.readFileSync(opencodePluginFile, "utf8")).not.toContain(alert.token);
+  });
+
+  it("forces 0600 on the target file even over a laxer one", () => {
+    writeOpencodePlugin(alert);
+    fs.chmodSync(opencodeAlertFile, 0o644);
+    writeOpencodePlugin(alert);
+    expect(modeOf(opencodeAlertFile)).toBe("600");
+  });
+
+  it("returns null and writes nothing for a null target", () => {
+    expect(writeOpencodePlugin(null)).toBeNull();
+    expect(fs.existsSync(opencodeDir)).toBe(false);
+  });
+});
+
 describe("removeSpawnFiles", () => {
   it("deletes every file, so a dead token doesn't outlive the run", () => {
     writeMcpConfig(target);
@@ -288,6 +321,12 @@ describe("removeSpawnFiles", () => {
     removeSpawnFiles();
     expect(fs.existsSync(alertSettingsFile)).toBe(false);
     expect(fs.existsSync(alertCurlFile)).toBe(false);
+  });
+
+  it("deletes OpenCode's plugin, its target file and their folder", () => {
+    writeOpencodePlugin(alert);
+    removeSpawnFiles();
+    expect(fs.existsSync(opencodeDir)).toBe(false);
   });
 
   it("is a no-op when the files are already gone", () => {

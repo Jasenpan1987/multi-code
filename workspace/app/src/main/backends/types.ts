@@ -11,8 +11,9 @@ export interface SpawnConfig {
 }
 
 /**
- * Extra spawn wiring. The manager gets all three fields; every other Claude
- * instance gets only `settingsPath`, carrying its alert hooks.
+ * Extra spawn wiring. The manager gets the three Claude fields; every other
+ * instance gets its backend's alert wiring alone: `settingsPath` for Claude,
+ * `opencodePlugin` for OpenCode.
  *
  * The MCP fields are needed together or not at all: an MCP server the instance can
  * reach but whose tools it must ask permission for on every call is useless to an
@@ -35,6 +36,10 @@ export interface SpawnOptions {
   // the user's own settings, and holds no permission rules — see config.ts. One
   // file, because the CLI applies only the last `--settings` it is given.
   settingsPath?: string;
+  // OpenCode's alert wiring: Multi-Code's plugin, loaded through
+  // OPENCODE_CONFIG_CONTENT, and the 0600 file it reads `/alert`'s endpoint and
+  // token from. Both in userData; see backends/opencodePlugin.ts.
+  opencodePlugin?: { pluginPath: string; targetPath: string };
 }
 
 /**

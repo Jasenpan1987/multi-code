@@ -24,6 +24,7 @@ import {
   writeAlertSettings,
   writeManagerSettings,
   writeMcpConfig,
+  writeOpencodePlugin,
 } from "./config";
 import { buildReadTools } from "./read-tools";
 import { buildWriteTools } from "./write-tools";
@@ -102,9 +103,10 @@ function registerTools() {
 // alert hooks (getAlertTarget is null), and the manager's own path retries the
 // start when it spawns.
 //
-// Also writes the alert settings every Claude project session spawns with, and
-// hands them to process-manager: the port and token exist only once the server is
-// listening, and this runs before anything can spawn.
+// Also writes what every project session spawns with to report its state, the
+// alert settings for Claude and the plugin for OpenCode, and hands them to
+// process-manager: the port and token exist only once the server is listening, and
+// this runs before anything can spawn.
 export async function startManagerMcpServer(): Promise<void> {
   registerTools();
   managerMcpServer.onAlertDelivery((delivery) => processManager.handleAlertDelivery(delivery));
@@ -112,14 +114,23 @@ export async function startManagerMcpServer(): Promise<void> {
   if (!info.running) {
     debugTrace(`[alert-hook] server failed to start: ${info.error ?? "unknown"}`);
   }
-  const settingsPath = writeAlertSettings(getAlertTarget());
+  const alert = getAlertTarget();
+  const settingsPath = writeAlertSettings(alert);
   if (!settingsPath && info.running) {
     debugTrace("[alert-hook] alert settings could not be written; sessions spawn without alert hooks");
   }
-  processManager.setSessionSpawnOptions(settingsPath ? { settingsPath } : null);
+  const opencodePlugin = writeOpencodePlugin(alert);
+  if (!opencodePlugin && info.running) {
+    debugTrace("[alert-hook] OpenCode plugin could not be written; OpenCode spawns without it");
+  }
+  processManager.setSessionSpawnOptions(
+    settingsPath || opencodePlugin
+      ? { settingsPath: settingsPath ?? undefined, opencodePlugin: opencodePlugin ?? undefined }
+      : null
+  );
 }
 
-// Where a Claude instance's alert hooks deliver to, and the token they carry.
+// Where an instance's alert hooks or plugin deliver to, and the token they carry.
 // Null when the server isn't listening; callers spawn without alert hooks then.
 export function getAlertTarget(): { endpoint: string; token: string } | null {
   const endpoint = managerMcpServer.getAlertEndpoint();
@@ -196,7 +207,7 @@ export function getManagerActivity(): ManagerActivityEntry[] {
 
 export async function shutdownManagerMcp(): Promise<void> {
   await managerMcpServer.stop();
-  // Three of these files carry a bearer token that is now dead. Remove them rather
+  // Most of these files carry a bearer token that is now dead. Remove them rather
   // than leave a stale credential on disk between runs.
   removeSpawnFiles();
 }
