@@ -60,6 +60,12 @@ describe("typedText: what counts as the builder's message", () => {
     expect(typedText(typed([{ type: "text", text: "<command-name>/plan</command-name>" }]))).toBeNull();
   });
 
+  it("keeps a message of the builder's that merely starts with <", () => {
+    for (const text of ["<div>Why is this hidden?</div>", "<T> generics are off", "< 5 items please"]) {
+      expect(typedText(typed(text))).toBe(text);
+    }
+  });
+
   it("skips the interruption marker", () => {
     expect(typedText(typed("[Request interrupted by user for tool use]"))).toBeNull();
     expect(typedText(typed([{ type: "text", text: "[Request interrupted by user]" }]))).toBeNull();
@@ -157,6 +163,38 @@ describe("readBuilderTurn", () => {
         builderEarlierMessages: [],
         turn: [{ kind: "assistant", text: "hi" }],
       });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reads only the end of a long transcript, widening until it has the messages", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "multicode-turn-"));
+    const file = path.join(dir, "s.jsonl");
+    try {
+      const filler = Array.from({ length: 400 }, (_, i) => JSON.stringify(says(`old ${i} ${"z".repeat(200)}`)));
+      const rows = [
+        JSON.stringify(typed("first")),
+        ...filler,
+        JSON.stringify(typed("second")),
+        JSON.stringify(typed("third")),
+        JSON.stringify(typed("fourth")),
+        ...filler,
+        JSON.stringify(typed("latest")),
+        JSON.stringify(says("done")),
+      ];
+      fs.writeFileSync(file, rows.join("\n") + "\n");
+      // A 1 KiB start window holds only the latest message; it has to widen past
+      // the filler to find three more, and never needs the very first row.
+      const got = await readBuilderTurn(file, { startBytes: 1024, maxBytes: 1 << 20 });
+      expect(got?.builderLatestMessage).toBe("latest");
+      expect(got?.builderEarlierMessages).toEqual(["second", "third", "fourth"]);
+      expect(got?.turn).toEqual([{ kind: "assistant", text: "done" }]);
+
+      // Capped short of the earlier messages, it settles for what the cap holds.
+      const capped = await readBuilderTurn(file, { startBytes: 256, maxBytes: 1024 });
+      expect(capped?.builderLatestMessage).toBe("latest");
+      expect(capped?.builderEarlierMessages).toEqual([]);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

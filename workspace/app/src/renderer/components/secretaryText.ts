@@ -39,6 +39,28 @@ export function ipcErrorMessage(err: unknown): string {
   );
 }
 
+// Main forgets a saved key when the address moves to another server (another
+// scheme, host or port, or none) without a new key, so the key is only ever sent
+// where it was saved for. True when saving these fields would do that, so the
+// section can say so before it happens.
+export function savingDropsKey(
+  urlDraft: string,
+  savedUrl: string,
+  hasSpeechKey: boolean,
+  keyDraft: string
+): boolean {
+  return hasSpeechKey && keyDraft.trim() === "" && originOf(urlDraft) !== originOf(savedUrl);
+}
+
+function originOf(raw: string): string | null {
+  try {
+    const { origin } = new URL(raw.trim());
+    return origin === "null" ? null : origin;
+  } catch {
+    return null;
+  }
+}
+
 function formatSeconds(ms: number): string {
   return `${(Math.max(0, ms) / 1000).toFixed(1)} s`;
 }

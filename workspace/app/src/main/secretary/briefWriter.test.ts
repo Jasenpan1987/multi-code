@@ -166,11 +166,66 @@ describe("truncation", () => {
     expect(input.session).toBe("eat-what");
   });
 
-  it("always keeps the last entry, even when it alone is over the budget", () => {
+  it("always keeps the last entry, clipped when it alone is over the budget", () => {
     const turn = [entry(1), entry(2), entry(3, INPUT_BUDGET_CHARS * 2)];
     const input = buildBriefInput(material(finished, turn));
-    expect(input.turn).toEqual([turn[2]]);
-    expect(input.turnEntriesDropped).toBe(2);
+    expect(JSON.stringify(input).length).toBeLessThanOrEqual(INPUT_BUDGET_CHARS);
+    const last = input.turn.at(-1);
+    expect(last?.text.startsWith("3:xxx")).toBe(true);
+    expect(last?.text).toContain("more characters]");
+    expect(last?.text.length).toBeLessThan(TEXT_CLIP_CHARS + 50);
+  });
+
+  it("fits the budget even when the fields besides the turn are over it", () => {
+    const long = "y".repeat(TEXT_CLIP_CHARS * 2);
+    const write: SecretaryEvent = {
+      kind: "needs-you",
+      seq: 5,
+      at: 0,
+      prompt: {
+        toolName: "MultiEdit",
+        toolInput: { edits: Array.from({ length: 10 }, () => ({ old: long, new: long })) },
+        detail: { tool: "MultiEdit", options: [{ label: "Yes" }, { label: "No" }] },
+      },
+    };
+    const input = buildBriefInput({
+      ...material(write, [entry(1, long.length)]),
+      builderLatestMessage: long,
+      builderEarlierMessages: [long, long, long],
+    });
+    expect(JSON.stringify(input).length).toBeLessThanOrEqual(INPUT_BUDGET_CHARS);
+    expect(input.prompt?.options).toEqual([{ label: "Yes" }, { label: "No" }]);
+    expect(input.builderLatestMessage.startsWith("yyy")).toBe(true);
+  });
+
+  it("fits the budget even for a tool input made of hundreds of small fields", () => {
+    const edits = Array.from({ length: 300 }, () => ({
+      old_string: "o".repeat(1000),
+      new_string: "n".repeat(1000),
+    }));
+    const multiEdit: SecretaryEvent = {
+      kind: "needs-you",
+      seq: 6,
+      at: 0,
+      prompt: {
+        toolName: "MultiEdit",
+        toolInput: { file_path: "/p/a.ts", edits },
+        detail: { tool: "MultiEdit", options: [{ label: "Yes" }, { label: "No" }] },
+      },
+    };
+    const input = buildBriefInput(material(multiEdit, [entry(1)]));
+    expect(JSON.stringify(input).length).toBeLessThanOrEqual(INPUT_BUDGET_CHARS);
+    expect(typeof input.prompt?.toolInput).toBe("string");
+    expect(input.prompt?.toolInput as string).toContain('"file_path":"/p/a.ts"');
+    expect(input.prompt?.toolName).toBe("MultiEdit");
+  });
+
+  it("never cuts a character in half", () => {
+    const emoji = "a".repeat(TEXT_CLIP_CHARS - 1) + "😀b";
+    const input = buildBriefInput({ ...material(finished), builderLatestMessage: emoji });
+    const message = input.builderLatestMessage;
+    expect(message.startsWith("a".repeat(TEXT_CLIP_CHARS - 1) + "…")).toBe(true);
+    expect(/[\ud800-\udbff](?![\udc00-\udfff])/.test(message)).toBe(false);
   });
 
   it("clips a huge pasted message and huge strings in the tool input", () => {

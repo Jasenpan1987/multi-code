@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ipcErrorMessage, speechTestLine } from "./secretaryText";
+import { ipcErrorMessage, savingDropsKey, speechTestLine } from "./secretaryText";
 
 describe("speechTestLine", () => {
   it("says OK with the round trip in seconds", () => {
@@ -51,5 +51,19 @@ describe("ipcErrorMessage", () => {
   it("passes other messages and non-errors through", () => {
     expect(ipcErrorMessage(new Error("disk full"))).toBe("Disk full");
     expect(ipcErrorMessage("nope")).toBe("Nope");
+  });
+});
+
+describe("savingDropsKey", () => {
+  const saved = "https://tts.example.com";
+  it.each([
+    ["https://tts.example.com/v1", saved, true, "", false],
+    ["https://other.example.com", saved, true, "", true],
+    ["https://tts.example.com:8443", saved, true, "", true],
+    ["", saved, true, "", true],
+    ["https://other.example.com", saved, true, "sk-new", false],
+    ["https://other.example.com", saved, false, "", false],
+  ])("%j from %j (key saved %j, typed %j) -> %j", (draft, from, has, typed, want) => {
+    expect(savingDropsKey(draft, from, has, typed)).toBe(want);
   });
 });

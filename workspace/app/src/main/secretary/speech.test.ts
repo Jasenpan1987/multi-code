@@ -10,6 +10,7 @@ import {
   BRIEFING_INSTRUCTIONS,
   SPEECH_TIMEOUT_MS,
   normalizeServerUrl,
+  serverOrigin,
   synthesize,
   testServer,
 } from "./speech";
@@ -102,11 +103,74 @@ describe("synthesize", () => {
 
   it("refuses a non-http address without a request", async () => {
     const f = fakeFetch({});
-    for (const url of ["ftp://tts.example.com", "tts dot example", "file:///etc/passwd"]) {
+    for (const [url, reason] of [
+      ["ftp://tts.example.com", "not an http(s) address"],
+      ["file:///etc/passwd", "not an http(s) address"],
+      ["tts dot example", "not a web address"],
+    ]) {
       const res = await synthesize({ url, key: KEY }, "hello", "English", { fetch: f });
-      expect(res).toEqual({ ok: false, reason: "not an http(s) address" });
+      expect(res).toEqual({ ok: false, reason });
     }
     expect(f).not.toHaveBeenCalled();
+  });
+
+  it("refuses plain http to another machine, so the key never travels unencrypted", async () => {
+    const f = fakeFetch({ "/v1/audio/speech": audio });
+    for (const url of ["http://tts.example.com", "http://192.168.1.20:8091"]) {
+      const res = await synthesize({ url, key: KEY }, "hello", "English", { fetch: f });
+      expect(res).toEqual({
+        ok: false,
+        reason: "needs an https address: plain http would send the key unencrypted",
+      });
+    }
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("allows plain http to this computer", async () => {
+    for (const url of ["http://localhost:8091", "http://127.0.0.1:8091", "http://[::1]:8091"]) {
+      const f = fakeFetch({ "/v1/audio/speech": audio });
+      const res = await synthesize({ url, key: KEY }, "hello", "English", { fetch: f });
+      expect(res.ok).toBe(true);
+    }
+  });
+
+  it("calls the speech route even when the address carries a query or fragment", async () => {
+    for (const url of ["https://tts.example.com/#config", "https://tts.example.com/?a=1"]) {
+      const f = fakeFetch({ "/v1/audio/speech": audio });
+      const res = await synthesize({ url, key: KEY }, "hello", "English", { fetch: f });
+      expect(res.ok).toBe(true);
+      const called = new URL(String(f.mock.calls[0][0]));
+      expect(called.pathname).toBe("/v1/audio/speech");
+      expect(called.search + called.hash).toBe("");
+    }
+  });
+
+  it("doesn't follow a redirect, so the brief can't be sent somewhere unchecked", async () => {
+    const f = fakeFetch({
+      "/v1/audio/speech": () =>
+        new Response(null, { status: 307, headers: { location: "http://plain.example/v1/audio/speech" } }),
+    });
+    const res = await synthesize(server, "hello", "English", { fetch: f });
+    expect(res).toEqual({
+      ok: false,
+      reason: "the server redirected (HTTP 307) to http://plain.example; set the address it redirects to",
+    });
+    expect(f.mock.calls[0][1]?.redirect).toBe("manual");
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+
+  it("scrubs a key that straddles the point where a long error is cut", async () => {
+    const f = fakeFetch({
+      "/v1/audio/speech": () =>
+        new Response(JSON.stringify({ error: { message: `${"x".repeat(150)}${KEY}` } }), {
+          status: 400,
+        }),
+    });
+    const res = await synthesize(server, "hello", "English", { fetch: f });
+    expect(res.ok).toBe(false);
+    const reason = (res as { reason: string }).reason;
+    expect(reason).not.toContain(KEY.slice(0, 8));
+    expect(reason).toContain("[key]");
   });
 
   it("reports a rejected key on 401 and 403", async () => {
@@ -330,6 +394,33 @@ describe("against a real socket", () => {
   });
 });
 
+describe("a redirect from a real server", () => {
+  it("is reported, and nothing is sent to where it points", async () => {
+    let elsewhere = 0;
+    const target = http.createServer((_req, res) => {
+      elsewhere++;
+      res.end("got it");
+    });
+    await new Promise<void>((r) => target.listen(0, "127.0.0.1", r));
+    const targetPort = (target.address() as AddressInfo).port;
+    const redirector = http.createServer((_req, res) => {
+      res.writeHead(307, { location: `http://127.0.0.1:${targetPort}/v1/audio/speech` });
+      res.end();
+    });
+    await new Promise<void>((r) => redirector.listen(0, "127.0.0.1", r));
+    const port = (redirector.address() as AddressInfo).port;
+    try {
+      const res = await synthesize({ url: `http://127.0.0.1:${port}`, key: KEY }, "hi", "English");
+      expect(res.ok).toBe(false);
+      expect((res as { reason: string }).reason).toContain("redirected (HTTP 307)");
+      expect(elsewhere).toBe(0);
+    } finally {
+      await new Promise((r) => redirector.close(r));
+      await new Promise((r) => target.close(r));
+    }
+  });
+});
+
 describe("normalizeServerUrl", () => {
   it.each([
     ["https://tts.example.com", "https://tts.example.com"],
@@ -337,8 +428,24 @@ describe("normalizeServerUrl", () => {
     ["https://tts.example.com/v1", "https://tts.example.com"],
     ["https://tts.example.com/v1/", "https://tts.example.com"],
     ["https://example.com/tts/", "https://example.com/tts"],
+    ["https://tts.example.com/#config", "https://tts.example.com"],
+    ["https://tts.example.com/v1?x=1", "https://tts.example.com"],
+    ["https://user:pw@tts.example.com:8443/", "https://tts.example.com:8443"],
+    ["tts.example.com/", "tts.example.com"],
     ["", ""],
   ])("%j -> %j", (raw, want) => {
     expect(normalizeServerUrl(raw)).toBe(want);
+  });
+});
+
+describe("serverOrigin", () => {
+  it.each([
+    ["https://tts.example.com/v1/", "https://tts.example.com"],
+    ["https://tts.example.com:8443/tts", "https://tts.example.com:8443"],
+    ["http://127.0.0.1:8091", "http://127.0.0.1:8091"],
+    ["", null],
+    ["tts dot example", null],
+  ])("%j -> %j", (raw, want) => {
+    expect(serverOrigin(raw)).toBe(want);
   });
 });

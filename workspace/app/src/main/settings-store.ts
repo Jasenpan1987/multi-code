@@ -3,7 +3,7 @@ import path from "path";
 import { app } from "electron";
 
 import type { SecretarySettings, SpeechKeyChange } from "../shared/types";
-import { normalizeServerUrl } from "./secretary/speech";
+import { normalizeServerUrl, serverOrigin } from "./secretary/speech";
 import type { SpeechServer } from "./secretary/speech";
 
 export type ThemeName = "light" | "dark" | "sepia";
@@ -90,11 +90,19 @@ export function setSecretaryMode(enabled: boolean): SecretarySettings {
 // Throws on a malformed change or an unwritable key file, so the renderer's call
 // rejects rather than reporting a key as saved when it isn't. No message here
 // ever contains the key.
+//
+// A saved key belongs to the server it was saved for. Moving the address to
+// another origin (or to none) without giving a key drops the saved one, so
+// nothing that can reach this IPC, a compromised renderer included, can point
+// the key at a server of its choosing and have Test or a brief hand it over.
 export function setSpeechServer(
   url: string,
   key: SpeechKeyChange
 ): SecretarySettings {
   if (typeof url !== "string") throw new TypeError("speech server address must be a string");
+  const next = normalizeServerUrl(url);
+  const movesOrigin = serverOrigin(next) !== serverOrigin(loadSettings().speechServerUrl);
+  let newKey: string | null = null;
   if (key?.kind === "set" && typeof key.key === "string") {
     const value = key.key.trim();
     // A bearer key is printable ASCII with no spaces (RFC 6750); anything else
@@ -102,13 +110,16 @@ export function setSpeechServer(
     if (/[^\x21-\x7e]/.test(value)) {
       throw new Error("the key can only contain printable characters without spaces");
     }
-    if (value) writeSpeechKey(value);
-  } else if (key?.kind === "clear") {
-    fs.rmSync(SPEECH_KEY_PATH, { force: true });
-  } else if (key?.kind !== "unchanged") {
+    newKey = value || null;
+  } else if (key?.kind !== "clear" && key?.kind !== "unchanged") {
     throw new TypeError("unknown speech key change");
   }
-  saveSettings({ ...loadSettings(), speechServerUrl: normalizeServerUrl(url) });
+  // In this order so a failure at any step leaves no key paired with a server it
+  // wasn't saved for: the old key goes before the address moves, and a new key is
+  // written only once the address it belongs to is saved.
+  if (key.kind === "clear" || movesOrigin) fs.rmSync(SPEECH_KEY_PATH, { force: true });
+  saveSettings({ ...loadSettings(), speechServerUrl: next });
+  if (newKey) writeSpeechKey(newKey);
   return loadSecretarySettings();
 }
 
@@ -120,11 +131,19 @@ function readSpeechKey(): string {
   }
 }
 
-// Unlink, write at 0600, then chmod: writeFileSync's mode applies only when it
-// creates the file, and is subject to the umask even then.
+// Written to a fresh file of our own and renamed into place, so the key is never
+// in a file anyone else could have opened first: `wx` refuses a name that already
+// exists, and the rename replaces whatever sits at the real path, a planted file
+// or symlink included, without writing through it. chmod after the write because
+// the create mode is subject to the umask.
 function writeSpeechKey(value: string): void {
   fs.mkdirSync(path.dirname(SPEECH_KEY_PATH), { recursive: true });
-  fs.rmSync(SPEECH_KEY_PATH, { force: true });
-  fs.writeFileSync(SPEECH_KEY_PATH, value, { mode: 0o600 });
-  fs.chmodSync(SPEECH_KEY_PATH, 0o600);
+  const temp = `${SPEECH_KEY_PATH}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    fs.writeFileSync(temp, value, { mode: 0o600, flag: "wx" });
+    fs.chmodSync(temp, 0o600);
+    fs.renameSync(temp, SPEECH_KEY_PATH);
+  } finally {
+    fs.rmSync(temp, { force: true });
+  }
 }

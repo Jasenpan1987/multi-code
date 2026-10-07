@@ -267,6 +267,29 @@ describe("clearing once the builder has dealt with it", () => {
     expect(manager.secretaryEventOf(id)).toBeUndefined();
   });
 
+  it("run_command's delayed returns clear a dialog raised while they were pending", () => {
+    const manager = new ProcessManager();
+    const id = create(manager);
+    replay(manager, id, "plain-finish");
+    manager.tryRunCommand(id, "/compact");
+    expect(manager.secretaryEventOf(id)).toBeUndefined();
+
+    // A subagent's permission dialog lands in the gap before the first return.
+    const request = fixture("permission-denied-no").deliveries.find(
+      (d) => d.payload.hook_event_name === "PermissionRequest"
+    );
+    if (!request) throw new Error("fixture has no PermissionRequest");
+    const delivery = parseAlertDelivery(id, JSON.stringify(request.payload), latestSpawn(id).spawnId);
+    if (!delivery) throw new Error("unparseable PermissionRequest");
+    manager.handleAlertDelivery(delivery);
+    expect(manager.secretaryEventOf(id)?.kind).toBe("needs-you");
+
+    // The return that follows answers it, so its brief must not outlive it.
+    vi.advanceTimersByTime(1_000);
+    expect(manager.secretaryEventOf(id)).toBeUndefined();
+    expect(latestSpawn(id).written).toEqual(["/compact", "\r", "\r"]);
+  });
+
   it("the keystroke that denies a dialog clears its needs-you, since the CLI reports nothing", () => {
     // permission-denied-no ends at the PermissionRequest: the builder pressed 2 and
     // no delivery followed.

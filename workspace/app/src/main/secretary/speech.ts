@@ -55,17 +55,52 @@ const TEST_SENTENCE = "Hi, this is your secretary. The speech server is working.
 
 // Trims, and drops trailing slashes and a trailing /v1: OpenAI-style clients take a
 // base URL ending in /v1, so that is what people paste, and the paths below add it.
+// Only scheme, host and path are kept: a query or fragment pasted along with the
+// address would otherwise swallow the routes added to it. An address that doesn't
+// parse is kept as typed, so Test can say what is wrong with it.
 export function normalizeServerUrl(raw: string): string {
-  return raw.trim().replace(/\/+$/, "").replace(/\/v1$/i, "");
+  const trimmed = raw.trim();
+  const tidy = (path: string) => path.replace(/\/+$/, "").replace(/\/v1$/i, "");
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return tidy(trimmed);
+  }
+  return `${url.protocol}//${url.host}${tidy(url.pathname)}`;
 }
 
-function endpointOf(base: string, route: string): URL | null {
+// The origin a saved key belongs to, or null for no usable address. A key is only
+// ever sent to the server it was saved for: see settings-store's setSpeechServer.
+export function serverOrigin(raw: string): string | null {
   try {
-    const url = new URL(normalizeServerUrl(base) + route);
-    return url.protocol === "https:" || url.protocol === "http:" ? url : null;
+    const { origin } = new URL(normalizeServerUrl(raw));
+    return origin === "null" ? null : origin;
   } catch {
     return null;
   }
+}
+
+// Plain http would carry the key and the brief unencrypted, so it is only allowed
+// to this computer, for a server run locally.
+function isLoopback(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "[::1]" || /^127(\.\d+){3}$/.test(hostname);
+}
+
+// The URL to call, or why there is none.
+function endpointOf(base: string, route: string): URL | string {
+  let url: URL;
+  try {
+    url = new URL(normalizeServerUrl(base));
+  } catch {
+    return "not a web address";
+  }
+  if (url.protocol === "http:" && !isLoopback(url.hostname)) {
+    return "needs an https address: plain http would send the key unencrypted";
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return "not an http(s) address";
+  url.pathname = url.pathname.replace(/\/+$/, "") + route;
+  return url;
 }
 
 export async function synthesize(
@@ -76,7 +111,7 @@ export async function synthesize(
 ): Promise<SynthesizeResult> {
   if (!server.url.trim()) return { ok: false, reason: "no speech server set" };
   const url = endpointOf(server.url, "/v1/audio/speech");
-  if (!url) return { ok: false, reason: "not an http(s) address" };
+  if (typeof url === "string") return { ok: false, reason: url };
   if (!text.trim()) return { ok: false, reason: "nothing to say" };
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -101,6 +136,9 @@ export async function synthesize(
   if (!got.ok) return { ok: false, reason: scrub(got.reason, server.key) };
 
   const { status, contentType, body } = got;
+  if (status >= 300 && status < 400) {
+    return { ok: false, reason: redirectReason(status, got.location) };
+  }
   if (status === 401 || status === 403) {
     return {
       ok: false,
@@ -110,7 +148,7 @@ export async function synthesize(
     };
   }
   if (status < 200 || status >= 300) {
-    return { ok: false, reason: scrub(`HTTP ${status}${errorDetail(body)}`, server.key) };
+    return { ok: false, reason: `HTTP ${status}${errorDetail(body, server.key)}` };
   }
   if (!isWav(body)) {
     return {
@@ -132,7 +170,7 @@ export async function testServer(
     return { ok: false, step: "address", reason: "no speech server set, briefs are text only" };
   }
   const health = endpointOf(server.url, "/health");
-  if (!health) return { ok: false, step: "address", reason: "not an http(s) address" };
+  if (typeof health === "string") return { ok: false, step: "address", reason: health };
 
   // No key on /health: it's public on ours, and the key goes nowhere it isn't needed.
   const got = await request(
@@ -155,7 +193,7 @@ export async function testServer(
 }
 
 type Got =
-  | { ok: true; status: number; contentType: string; body: Buffer }
+  | { ok: true; status: number; contentType: string; location: string; body: Buffer }
   | { ok: false; reason: string };
 
 // The timeout covers the whole exchange, body included: the signal aborts a body
@@ -171,12 +209,16 @@ async function request(
   const timeout = AbortSignal.timeout(timeoutMs);
   const signal = cancel ? AbortSignal.any([cancel, timeout]) : timeout;
   try {
-    const res = await fetchImpl(url, { ...init, signal });
+    // Redirects are not followed: the address was checked (https, or this
+    // computer), and a redirect could send the brief somewhere that wasn't, such
+    // as plain http. Node drops the key on a cross-origin hop, but not the brief.
+    const res = await fetchImpl(url, { ...init, signal, redirect: "manual" });
     const body = Buffer.from(await res.arrayBuffer());
     return {
       ok: true,
       status: res.status,
       contentType: res.headers.get("content-type") ?? "",
+      location: res.headers.get("location") ?? "",
       body,
     };
   } catch (err) {
@@ -195,9 +237,22 @@ function failureReason(err: unknown, timeoutMs: number): string {
   return `unreachable (${detail})`;
 }
 
+// Says where it pointed, by origin only, so the builder can set that address.
+function redirectReason(status: number, location: string): string {
+  let where = "";
+  try {
+    where = ` to ${new URL(location).origin}`;
+  } catch {
+    // A relative or missing Location: just say it redirected.
+  }
+  return `the server redirected (HTTP ${status})${where}; set the address it redirects to`;
+}
+
 // The server's own words for an error, shortened: vLLM answers
-// `{"error": {"message": …}}`, FastAPI-style servers `{"detail": …}`.
-function errorDetail(body: Buffer): string {
+// `{"error": {"message": …}}`, FastAPI-style servers `{"detail": …}`. The key is
+// scrubbed out before shortening: cut first, and a key straddling the cut would
+// leave its first half behind where the scrub can no longer recognise it.
+function errorDetail(body: Buffer, key: string): string {
   const text = body.toString("utf8").trim();
   if (!text) return "";
   let detail = text;
@@ -208,7 +263,7 @@ function errorDetail(body: Buffer): string {
   } catch {
     // Not JSON: the text as it is.
   }
-  detail = detail.replace(/\s+/g, " ");
+  detail = scrub(detail, key).replace(/\s+/g, " ");
   return `: ${detail.length > 160 ? `${detail.slice(0, 160)}…` : detail}`;
 }
 

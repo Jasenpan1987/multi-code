@@ -56,7 +56,8 @@ export const INPUT_BUDGET_CHARS = 60_000;
 
 // One pasted document or one file's contents in a Write's input must not take the
 // whole budget, or overflow the model's window on its own. Applied to the builder's
-// messages and to every string inside the tool input; the turn is cut by entries.
+// messages, to every string inside the tool input, and to each entry of the turn,
+// which is then cut by entries.
 export const TEXT_CLIP_CHARS = 10_000;
 
 // The spike's final prompt (v7), verbatim; briefWriter.test.ts pins its hash.
@@ -138,16 +139,56 @@ export function buildBriefInput(
         }
       : {}),
     builderLatestMessage: clipText(material.builderLatestMessage ?? ""),
-    builderEarlierMessages: material.builderEarlierMessages.map(clipText),
-    turn: material.turn,
+    builderEarlierMessages: material.builderEarlierMessages.map((text) => clipText(text)),
+    turn: material.turn.map((entry) => clipEntry(entry)),
   };
   return fitToBudget(input, budget);
 }
 
 // Drop entries from the front of `turn` until the serialized input fits, always
 // keeping the last one: the agent's final message, or the tool it is stopped on.
-// The builder's messages are fields of their own, so they always survive.
+// The builder's messages are fields of their own, so they always survive. If what
+// is left still doesn't fit (four long messages and a tool input of many long
+// strings can), every string is clipped shorter until it does.
 export function fitToBudget(input: BriefWriterInput, budget: number): BriefWriterInput {
+  let cut = dropFromTurn(input, budget);
+  for (
+    let limit = TEXT_CLIP_CHARS / 2;
+    JSON.stringify(cut).length > budget && limit >= 100;
+    limit = Math.floor(limit / 2)
+  ) {
+    cut = clipEverything(cut, limit);
+  }
+  // Still over: what's left is the shape of a huge tool input (hundreds of small
+  // fields), not long strings. Its start, as text, says what the call is.
+  if (JSON.stringify(cut).length > budget && cut.prompt) {
+    const preview = clipText(JSON.stringify(cut.prompt.toolInput) ?? "", Math.floor(budget / 4));
+    cut = { ...cut, prompt: { ...cut.prompt, toolInput: preview } };
+  }
+  return cut;
+}
+
+function clipEverything(input: BriefWriterInput, limit: number): BriefWriterInput {
+  return {
+    ...input,
+    ...(input.prompt
+      ? {
+          prompt: {
+            ...input.prompt,
+            toolInput: clipStrings(input.prompt.toolInput, limit),
+            question:
+              input.prompt.question === undefined ? undefined : clipText(input.prompt.question, limit),
+            options: clipStrings(input.prompt.options, limit) as PromptOption[],
+          },
+        }
+      : {}),
+    builderLatestMessage: clipText(input.builderLatestMessage, limit),
+    builderEarlierMessages: input.builderEarlierMessages.map((text) => clipText(text, limit)),
+    turn: input.turn.map((entry) => clipEntry(entry, limit)),
+  };
+}
+
+function dropFromTurn(input: BriefWriterInput, budget: number): BriefWriterInput {
   if (JSON.stringify(input).length <= budget) return input;
 
   const { turn } = input;
@@ -172,17 +213,26 @@ function withDropped(input: BriefWriterInput, dropped: number): BriefWriterInput
   return { ...input, turn: input.turn.slice(dropped), turnEntriesDropped: dropped };
 }
 
-function clipText(text: string): string {
-  if (text.length <= TEXT_CLIP_CHARS) return text;
-  return `${text.slice(0, TEXT_CLIP_CHARS)}… [${text.length - TEXT_CLIP_CHARS} more characters]`;
+// Never between the two halves of a character outside the BMP (an emoji, a rare
+// CJK ideograph): a lone surrogate isn't text, and serializes as a broken escape.
+function clipText(text: string, limit: number = TEXT_CLIP_CHARS): string {
+  if (text.length <= limit) return text;
+  let end = limit;
+  const last = text.charCodeAt(end - 1);
+  if (last >= 0xd800 && last <= 0xdbff) end--;
+  return `${text.slice(0, end)}… [${text.length - end} more characters]`;
 }
 
-function clipStrings(value: unknown): unknown {
-  if (typeof value === "string") return clipText(value);
-  if (Array.isArray(value)) return value.map(clipStrings);
+function clipEntry(entry: TranscriptEntry, limit: number = TEXT_CLIP_CHARS): TranscriptEntry {
+  return entry.text.length <= limit ? entry : { ...entry, text: clipText(entry.text, limit) };
+}
+
+function clipStrings(value: unknown, limit: number = TEXT_CLIP_CHARS): unknown {
+  if (typeof value === "string") return clipText(value, limit);
+  if (Array.isArray(value)) return value.map((inner) => clipStrings(inner, limit));
   if (typeof value === "object" && value !== null) {
     return Object.fromEntries(
-      Object.entries(value).map(([key, inner]) => [key, clipStrings(inner)])
+      Object.entries(value).map(([key, inner]) => [key, clipStrings(inner, limit)])
     );
   }
   return value;

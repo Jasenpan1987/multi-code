@@ -12,7 +12,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { SecretarySettings } from "../../shared/types";
-import { ipcErrorMessage, speechTestLine } from "./secretaryText";
+import { ipcErrorMessage, savingDropsKey, speechTestLine } from "./secretaryText";
 import type { SpeechTestLine } from "./secretaryText";
 
 interface SecretarySectionProps {
@@ -142,6 +142,9 @@ export function SecretarySection({ active }: SecretarySectionProps) {
     }
   };
 
+  const dropsKey =
+    saved !== null &&
+    savingDropsKey(urlDraft, saved.speechServerUrl, saved.hasSpeechKey, keyDraft);
   const modeOn = saved?.secretaryMode === true;
   const textOnly = saved !== null && saved.speechServerUrl === "";
 
@@ -215,6 +218,12 @@ export function SecretarySection({ active }: SecretarySectionProps) {
             <span />
           )}
         </div>
+
+        {dropsKey ? (
+          <div className="secretary-hint">
+            A different server needs its own key: saving forgets the one saved now.
+          </div>
+        ) : null}
 
         <div className="secretary-row">
           <button type="submit" className="secretary-btn" disabled={!dirty || busy}>

@@ -872,13 +872,18 @@ export class ProcessManager {
     // call open for a quarter of a second. A write to a pty that exits in between is
     // swallowed by node-pty, so the re-check is about correctness of state, not
     // about avoiding a throw.
+    // Each return is a write in its own right for the secretary: a dialog raised in
+    // the gap would be answered by it, so its event goes too. Run state already
+    // heard about the whole call above.
     setTimeout(() => {
       const still = this.instances.get(id);
-      if (still?.ptyProcess !== ptyProcess) return;
+      if (!still || still.ptyProcess !== ptyProcess) return;
+      this.clearSecretaryEvent(still);
       ptyProcess.write("\r");
       setTimeout(() => {
         const alive = this.instances.get(id);
-        if (alive?.ptyProcess !== ptyProcess) return;
+        if (!alive || alive.ptyProcess !== ptyProcess) return;
+        this.clearSecretaryEvent(alive);
         ptyProcess.write("\r");
       }, MENU_SETTLE_MS);
     }, MENU_SETTLE_MS);

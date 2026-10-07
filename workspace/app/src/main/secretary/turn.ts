@@ -20,6 +20,18 @@ import type { TranscriptEntry } from "../../shared/remote-protocol";
 // falls back to these, newest first.
 export const EARLIER_MESSAGES = 3;
 
+// The CLI's own tagged rows all open with a hyphenated tag: `<command-name>`,
+// `<bash-input>`, `<bash-stdout>`, `<task-notification>`, `<local-command-stdout>`
+// (every one found in the builder's transcripts). A message the builder typed that
+// merely starts with `<`, such as pasted HTML, is still theirs.
+const CLI_TAGGED_ROW = /^<[a-z]+(?:-[a-z]+)+[\s>]/;
+
+// How much of the transcript's end is read, doubled until it holds the builder's
+// latest message and the ones before it, up to the cap. A session runs to hundreds
+// of megabytes of old tool output and images, and only its end matters.
+export const TAIL_START_BYTES = 1 << 20;
+export const TAIL_MAX_BYTES = 32 << 20;
+
 export interface BuilderTurn {
   // Absent when the session has no message the builder typed.
   builderLatestMessage?: string;
@@ -59,7 +71,7 @@ export function typedText(row: unknown): string | null {
     return null;
   }
 
-  if (!text || text.startsWith("<") || text.startsWith("[Request interrupted")) return null;
+  if (!text || CLI_TAGGED_ROW.test(text) || text.startsWith("[Request interrupted")) return null;
   return text;
 }
 
@@ -87,13 +99,55 @@ export function builderTurnFromLines(lines: string[]): BuilderTurn {
   };
 }
 
-// Null when the transcript can't be read.
-export async function readBuilderTurn(jsonlPath: string): Promise<BuilderTurn | null> {
-  let raw: string;
+// Null when the transcript can't be read. Reads only the end of the file (see
+// TAIL_START_BYTES); a turn longer than the cap is read from the cap on, without
+// the builder's message that started it.
+export async function readBuilderTurn(
+  jsonlPath: string,
+  window: { startBytes: number; maxBytes: number } = {
+    startBytes: TAIL_START_BYTES,
+    maxBytes: TAIL_MAX_BYTES,
+  }
+): Promise<BuilderTurn | null> {
+  let handle: fs.promises.FileHandle;
   try {
-    raw = await fs.promises.readFile(jsonlPath, "utf8");
+    handle = await fs.promises.open(jsonlPath, "r");
   } catch {
     return null;
   }
-  return builderTurnFromLines(raw.split("\n"));
+  try {
+    const { size } = await handle.stat();
+    let length = Math.min(size, window.startBytes);
+    for (;;) {
+      const start = size - length;
+      const lines = (await readRange(handle, start, length)).split("\n");
+      // The first line is cut wherever the window began, mid-character included.
+      if (start > 0) lines.shift();
+      const found = builderTurnFromLines(lines);
+      const complete =
+        found.builderLatestMessage !== undefined &&
+        found.builderEarlierMessages.length >= EARLIER_MESSAGES;
+      if (complete || start === 0 || length >= window.maxBytes) return found;
+      length = Math.min(size, length * 2, window.maxBytes);
+    }
+  } catch {
+    return null;
+  } finally {
+    await handle.close().catch(() => {});
+  }
+}
+
+async function readRange(
+  handle: fs.promises.FileHandle,
+  start: number,
+  length: number
+): Promise<string> {
+  const buffer = Buffer.alloc(length);
+  let filled = 0;
+  while (filled < length) {
+    const { bytesRead } = await handle.read(buffer, filled, length - filled, start + filled);
+    if (bytesRead === 0) break;
+    filled += bytesRead;
+  }
+  return buffer.toString("utf8", 0, filled);
 }

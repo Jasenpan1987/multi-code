@@ -52,12 +52,17 @@ export function SecretaryCard({ instanceId, name, brief, onClose }: SecretaryCar
   // Bumped by every play, stop and the close, so an audio fetch that comes back
   // after any of them is dropped.
   const request = useRef(0);
+  // An audio fetch is on its way: Stop must work then too, or the fetch would
+  // start the brief right after the builder asked it not to.
+  const [fetching, setFetching] = useState(false);
 
   const play = useCallback(async () => {
     const mine = ++request.current;
     if (replayBrief(key)) return;
+    setFetching(true);
     const wav = await window.electronAPI.getSecretaryAudio(instanceId, seq);
     if (mine !== request.current) return;
+    setFetching(false);
     if (!wav) {
       setStale(true);
       return;
@@ -82,12 +87,14 @@ export function SecretaryCard({ instanceId, name, brief, onClose }: SecretaryCar
   const stop = () => {
     request.current++;
     setAutoplay(false);
+    setFetching(false);
     stopBrief(key);
   };
 
   const canReplay = view.audioReady && !stale;
-  // While it plays, or while it is still waiting to play on its own.
-  const canStop = playing || (autoplay && view.voiceComing);
+  // While it plays, while its audio is being fetched, or while it is still
+  // waiting to play on its own.
+  const canStop = playing || fetching || (autoplay && view.voiceComing);
   const note: CardNote | null = stale
     ? { tone: "muted", text: "This brief is out of date" }
     : playFailed

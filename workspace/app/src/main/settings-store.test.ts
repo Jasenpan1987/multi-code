@@ -113,24 +113,84 @@ describe("setSpeechServer", () => {
     expect(fs.readFileSync(keyFile, "utf8")).toBe(KEY);
   });
 
-  it("keeps the key on unchanged and on a blank set, and removes it on clear", () => {
+  it("keeps the key on unchanged and on a blank set at the same server, and removes it on clear", () => {
     setSpeechServer("https://tts.example.com", { kind: "set", key: KEY });
 
-    setSpeechServer("https://other.example.com", { kind: "unchanged" });
-    expect(loadSpeechServer()).toEqual({ url: "https://other.example.com", key: KEY });
+    setSpeechServer("https://tts.example.com/v1/", { kind: "unchanged" });
+    expect(loadSpeechServer()).toEqual({ url: "https://tts.example.com", key: KEY });
 
-    setSpeechServer("https://other.example.com", { kind: "set", key: "   " });
+    setSpeechServer("https://tts.example.com", { kind: "set", key: "   " });
     expect(loadSpeechServer().key).toBe(KEY);
 
-    const reply = setSpeechServer("https://other.example.com", { kind: "clear" });
+    const reply = setSpeechServer("https://tts.example.com", { kind: "clear" });
     expect(reply.hasSpeechKey).toBe(false);
     expect(fs.existsSync(keyFile)).toBe(false);
   });
 
-  it("allows an empty address, which means text only, and keeps the key", () => {
+  it("drops the key when the address moves to another server without a new key", () => {
+    setSpeechServer("https://tts.example.com", { kind: "set", key: KEY });
+    const reply = setSpeechServer("https://attacker.example", { kind: "unchanged" });
+    expect(reply).toMatchObject({ speechServerUrl: "https://attacker.example", hasSpeechKey: false });
+    expect(loadSpeechServer().key).toBe("");
+    expect(fs.existsSync(keyFile)).toBe(false);
+  });
+
+  it("drops the key on another port or scheme too, since that is another server", () => {
+    setSpeechServer("https://tts.example.com", { kind: "set", key: KEY });
+    expect(setSpeechServer("https://tts.example.com:8443", { kind: "unchanged" }).hasSpeechKey).toBe(false);
+    setSpeechServer("https://tts.example.com", { kind: "set", key: KEY });
+    expect(setSpeechServer("http://tts.example.com", { kind: "unchanged" }).hasSpeechKey).toBe(false);
+  });
+
+  it("never pairs a new key with the old server when saving the address fails", () => {
+    setSpeechServer("https://a.example", { kind: "set", key: KEY });
+    // settings.json can't be written: a directory stands in its place.
+    const settingsFile = path.join(userData, "settings.json");
+    const saved = fs.readFileSync(settingsFile, "utf8");
+    fs.rmSync(settingsFile);
+    fs.mkdirSync(settingsFile);
+    try {
+      expect(() =>
+        setSpeechServer("https://b.example", { kind: "set", key: "sk-b-key" })
+      ).toThrow();
+      expect(fs.existsSync(keyFile) ? fs.readFileSync(keyFile, "utf8") : "").not.toBe("sk-b-key");
+    } finally {
+      fs.rmSync(settingsFile, { recursive: true });
+      fs.writeFileSync(settingsFile, saved);
+    }
+    // A's address is still the saved one, and B's key went nowhere near it.
+    expect(loadSpeechServer()).toEqual({ url: "https://a.example", key: "" });
+  });
+
+  it("keeps a key given with the move", () => {
+    setSpeechServer("https://tts.example.com", { kind: "set", key: KEY });
+    setSpeechServer("https://other.example.com", { kind: "set", key: "sk-other-key" });
+    expect(loadSpeechServer()).toEqual({ url: "https://other.example.com", key: "sk-other-key" });
+  });
+
+  it("allows an empty address, which means text only, and forgets the key with it", () => {
     setSpeechServer("https://tts.example.com", { kind: "set", key: KEY });
     const reply = setSpeechServer("", { kind: "unchanged" });
-    expect(reply).toMatchObject({ speechServerUrl: "", hasSpeechKey: true });
+    expect(reply).toMatchObject({ speechServerUrl: "", hasSpeechKey: false });
+    // Coming back from "" is a move too: no key rides along to whatever is set next.
+    expect(setSpeechServer("https://attacker.example", { kind: "unchanged" }).hasSpeechKey).toBe(false);
+  });
+
+  it("writes the key through a fresh file, replacing a planted one rather than writing into it", () => {
+    fs.mkdirSync(path.dirname(keyFile), { recursive: true });
+    fs.writeFileSync(keyFile, "planted", { mode: 0o644 });
+    const elsewhere = path.join(path.dirname(keyFile), "planted-target");
+    fs.writeFileSync(elsewhere, "untouched");
+    fs.rmSync(keyFile);
+    fs.symlinkSync(elsewhere, keyFile);
+
+    setSpeechServer("https://tts.example.com", { kind: "set", key: KEY });
+
+    expect(fs.lstatSync(keyFile).isSymbolicLink()).toBe(false);
+    expect(fs.statSync(keyFile).mode & 0o777).toBe(0o600);
+    expect(fs.readFileSync(keyFile, "utf8")).toBe(KEY);
+    expect(fs.readFileSync(elsewhere, "utf8")).toBe("untouched");
+    expect(fs.readdirSync(path.dirname(keyFile)).filter((f) => f.endsWith(".tmp"))).toEqual([]);
   });
 
   it("trims a pasted key and normalizes the address", () => {
