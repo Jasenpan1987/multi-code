@@ -84,3 +84,19 @@ Each instance has a `backend` field (`"claude"` or `"opencode"`) chosen at creat
 **Zero-residue principle (revised 2026-10-06):** Multi-Code never writes a file the user owns: not `~/.claude/settings.json`, not a project's `.claude/` or `.opencode/`, not any CLI's global config. An agent run outside Multi-Code behaves exactly as if Multi-Code were not installed. Anything Multi-Code needs an agent to load (its MCP config, report-only hooks) lives in Multi-Code's own `userData` directory and reaches only the processes Multi-Code spawns, through their launch options (`--mcp-config`, `--settings`). Uninstalling Multi-Code leaves no trace in claude/opencode behavior.
 
 (source: 2026-05-18 opencode-support ideation, which rejected hooks because they would have had to be written into the user's own config; revised by the builder on 2026-10-06, when passing them with `--settings` removed that reason — see docs/timeline/2026-10-06_attention-alerts-investigation.md)
+
+## Secretary Mode (planned 2026-10-07)
+
+The builder wants agents to keep working while they are away from the screen. Each session gets a **secretary** that briefs them by voice, the way a secretary briefs a CEO: a narrated account of what happened, with the details, not the screen read aloud.
+
+- **Pull, not push.** The chime and red dot fire as today. With Secretary Mode switched on in the toolbox, clicking a red-dot contact plays that session's brief; with it off, nothing changes.
+- **Only the moments the CLI answers the builder**: a turn finished (done, or can't be done) and needs-you (a decision or a permission). Never mid-turn narration.
+- **The card carries originals, and only when words aren't enough.** When the brief can't make something clear, or the builder needs the exact detail to decide, the secretary attaches the original (the exact command, the question and its options, the flagged code with its risky lines highlighted, a reviewer's comment, an image the agent produced) and never rewrites it. When the brief alone gets it across, there is no attachment. (refined by the builder on 2026-10-07 during the PRD review)
+- **Briefs are written by Claude Sonnet 5.5 on the company's Bedrock** (`global.anthropic.claude-sonnet-5-5`), using the Bedrock access Claude Code already has on the machine.
+- **The builder answers in words, the secretary presses the keys.** The builder dictates with their own software into the card's input box; the secretary maps the sentence to the dialog choice, confirms, and asks back when unsure. Multi-Code does no speech recognition.
+- **A brief speaks the user's language of the moment.** It follows the language of the user's latest message in that session: pure English gets English, Chinese or mixed gets Chinese with English technical terms kept. No setting decides it, so whoever is at the keyboard is answered in their own language.
+- **The voice is Qwen3-TTS with the Serena voice, served from a GPU server, never generated on the user's Mac.** Locally it peaks at 6–7 GB of memory, too much to ask of a user. Multi-Code calls an OpenAI-shaped speech API with a bearer key; the server is reproducible from `deploy/tts-server/`, and the builder's runs at `https://tts.jasenpan.com`.
+- **The voice is optional; the secretary is not.** With no speech server configured, or one that is stopped, unreachable or deleted, Secretary Mode still works and shows the brief as text on the card. Nothing else in the app depends on the server.
+- **v1:** Mac audio only, Claude Code only. Phone delivery and OpenCode follow as their own tracks.
+
+(source: docs/timeline/2026-10-07_voice-secretary-ideation.md, docs/timeline/2026-10-07_voice-engine-hosting.md)

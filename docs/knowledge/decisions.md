@@ -4,6 +4,50 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-10-07 — Attachments only when the brief can't carry it
+
+**Decision:** Refines "The secretary's card shows originals" below. The secretary attaches original material only when words can't make it clear, or when the builder needs the exact detail to decide. When the brief alone gets it across, the card has the brief and nothing else. Whatever is attached is still an original, never rewritten.
+
+**Why:** The builder doesn't want detail they don't need: "如果你说话就能直接把这事儿差不多说明白了……就不要放".
+
+**Source:** builder, 2026-10-07, reviewing `docs/specs/voice-secretary/prd.md` (Story 5).
+**Affects:** Secretary card content.
+
+---
+
+## 2026-10-07 — The secretary's voice runs on a GPU server, deployed only from official components
+
+**Decision:** Qwen3-TTS-12Hz-1.7B-CustomVoice (voice Serena) runs on an EC2 GPU instance, served by vLLM-Omni's published image with its Qwen3-TTS launch command, behind Caddy at `https://tts.jasenpan.com`. It does not run on the user's Mac. The POC lives in the builder's personal AWS account; moving to the company account swaps Caddy for ALB plus ACM and leaves the model server unchanged.
+
+**Why:** Generating locally peaks at 6–7 GB of memory, which no user can be asked to spare. Alibaba Cloud's hosted Qwen API and fal.ai were rejected: the builder doesn't want Alibaba Cloud, and fal.ai would be a different setup from the eventual company deployment. A hand-written Python wrapper was replaced by vLLM-Omni because the builder requires the vendor-recommended deployment, not a shortcut.
+
+**Source:** docs/timeline/2026-10-07_voice-engine-hosting.md
+**Affects:** How Multi-Code produces audio for a brief (an HTTPS call with a bearer key); `docs/specs/voice-secretary/gaps.md` G-003 (company code in a personal account).
+
+---
+
+## 2026-10-07 — The voice secretary is per-session and speaks only when clicked
+
+**Decision:** Every session has its own secretary; there is no single secretary watching all sessions. A secretary speaks only when the builder clicks its red-dot contact with Secretary Mode on, never on its own. It briefs at the moments the CLI answers the builder (turn finished, needs-you), never mid-turn.
+
+**Why:** The builder hears the chime, walks over, and chooses which session to hear, the same way they would tap a message notification on a phone. That makes queueing several talking secretaries unnecessary, and keeps the planned phone flow identical. A per-session secretary follows one session end to end, so it can say what was already tried. Auto-speaking and a single all-sessions secretary were both proposed by the interviewer and replaced by the builder.
+
+**Source:** docs/timeline/2026-10-07_voice-secretary-ideation.md
+**Affects:** Contact click behaviour while Secretary Mode is on; when briefs are prepared (at the event, so a click plays at once).
+
+---
+
+## 2026-10-07 — The secretary's card shows originals, and answers go through the secretary
+
+**Decision:** Attachments on the secretary's card are chosen by the secretary but are always originals: the exact command, the question and its options, real code with flagged lines highlighted, reviewer comments verbatim. The builder answers in words in the card's own input box, and the secretary turns the answer into the dialog keystroke. The answer never goes into the terminal as text.
+
+**Why:** The spoken brief simplifies, so the card is what the builder checks it against; if the secretary misreads a command, the original on the card shows it. A CLI dialog takes keystrokes, not words, and text written into a session sitting on a dialog has been observed to select the wrong option.
+
+**Source:** docs/timeline/2026-10-07_voice-secretary-ideation.md
+**Affects:** Secretary card UI; how a needs-you answer reaches the session (not through the compose box).
+
+---
+
 ## 2026-07-09 — Markdown View is a single-file reader, not a document manager
 
 **Decision:** The "View" toolbox section shows one Markdown file at a time. Opening a new path replaces the current one — no tabs, no open-file list. Open-path state is per-instance and follows the selected instance.
