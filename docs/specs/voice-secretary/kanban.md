@@ -4,7 +4,7 @@
 **Source:** `docs/specs/voice-secretary/prd.md` v1.2 · `docs/specs/voice-secretary/gaps.md` (nothing open)
 **Evidence:** `docs/timeline/2026-10-07_voice-secretary-ideation.md` · `docs/timeline/2026-10-07_voice-engine-hosting.md`
 **Speech server:** `deploy/tts-server/README.md`
-**Total Tasks:** 14 (T-501..T-514)
+**Total Tasks:** 19 (T-501..T-514, follow-ups T-515..T-519)
 **Milestones:** M1 (hear the brief) · M2 (answer in words) · M3 (originals when words aren't enough)
 
 Task ids start at T-501, after attention-alerts' T-4xx. Only M1 is committed; M2 and M3 are
@@ -174,14 +174,50 @@ read it instead.
 ### T-508: M1 QA pass
 
 - **Type:** qa
-- **Status:** backlog
+- **Status:** done
 - **Requirement:** `docs/specs/voice-secretary/prd.md#success-metrics`
 - **Code:** —
 - **Description:** Run M1's "done when" list on a real build with two Claude sessions, once with the speech server running and once stopped. Check the no-residue rule: nothing new under `~/.claude/projects/` from brief writing, nothing in files the user owns. Record results and bugs in a `test-plan.md` beside this file.
 - **Acceptance:** Every M1 item passes, or has a bug task filed.
 - **Blocks:** T-509 · **Blocked by:** T-507
+- **Done 2026-10-08:** `docs/specs/voice-secretary/test-plan.md`. **Milestone 1 complete.** On the packaged app launched the way the Dock launches it (launchd env, no `AWS_*`), every M1 "done when" item passes: 36 briefs, all in the right language, one writer per brief and none left behind, exactly one speech attempt per brief on a dead address, voice back without a restart. Text 3.1–5.4 s and audio 9.1–17.4 s after the event; click to playing 14–64 ms. The T-507 "restarted from 0" sighting did not recur in 10 plays. Low-severity follow-ups are T-515..T-519 below.
 
 ---
+
+## After Milestone 1: follow-ups
+
+Found in T-508 and along the way (`.omt/voice-secretary-decisions.md`). None blocks M2.
+
+### T-515: Briefs play at a normal loudness
+
+- **Type:** feature · **Status:** ready · **Blocked by:** none
+- **Code:** `workspace/app/src/main/secretary/index.ts` (where the wav is kept) or `workspace/app/src/renderer/audio/briefPlayer.ts`
+- **Description:** The speech server's audio is quiet: measured RMS −26 to −28 dBFS with peaks at −7 to −10 dBFS, 7–9 dB under ordinary speech loudness; the builder had to turn the Mac to full volume (2026-10-08, with the QA instance at 1% volume, but the files themselves are quiet). Normalize each brief to a target loudness (about −18 dBFS RMS) with the gain capped so peaks stay below clipping. Supervisor's call, from two options (automatic normalization vs a volume slider); a slider can follow if wanted.
+- **Acceptance:** each brief's measured RMS lands near the target, no sample clips, and a brief at the Mac's normal volume is as loud as other apps' speech.
+
+### T-516: Friendlier speech errors and an http warning at save time
+
+- **Type:** bug (low) · **Status:** ready · **Blocked by:** none
+- **Code:** `workspace/app/src/main/secretary/speech.ts` (`failureReason`), `workspace/app/src/renderer/components/SecretarySection.tsx`
+- **Description:** (B-1) An unreachable host fails after ~10 s with undici's own code, "unreachable (UND_ERR_CONNECT_TIMEOUT)": map undici's codes to plain words. (B-2) A non-local `http://` address saves silently; the refusal shows only on Test or as each brief's note. Say so when saving (or refuse the save). (O-1) The section re-reads settings only when expanded; listen to `onSecretaryMode` so its switch label can't go stale.
+
+### T-517: Brief wording: numbers and screen-only details
+
+- **Type:** prompt (low) · **Status:** backlog · **Blocked by:** none
+- **Code:** `workspace/app/src/main/secretary/briefWriter.ts` (`SYSTEM_PROMPT`, its hash test)
+- **Description:** (B-3) Some briefs carry details meant for the eye: "permissions to 600" read as "six hundred", a sentence on the `@` in an `ls -l` listing, Chinese briefs keeping "hello.txt" as written. Tighten the prompt and re-run the spike's samples.
+
+### T-518: Mouse motion and focus reports count as writes outside the secretary
+
+- **Type:** bug (pre-existing) · **Status:** backlog · **Blocked by:** none
+- **Code:** `workspace/app/src/main/process-manager.ts` (`writeToInstance`, `noteWrite`), `workspace/app/src/main/run-state.ts`, `workspace/app/src/main/remote/ws-server.ts`
+- **Description:** The CLI turns on mouse tracking and focus reporting, so the pointer crossing a terminal sends input. The secretary ignores those (`carriesInput`), but run state still treats them as a write (the manager's write gate can then refuse `send_task` for a few seconds) and the phone link clears a paired phone's badge and option buttons. Use the same filter there. Read the write-gate convention in tech-conventions first.
+
+### T-519: Several questions in one AskUserQuestion
+
+- **Type:** bug (low, for M2) · **Status:** backlog · **Blocked by:** none
+- **Code:** `workspace/app/src/main/remote/promptExtract.ts`
+- **Description:** Real dialogs carry two or three questions, but `extractPromptDetail` keeps only the first (T-501). The brief already covers all of them from the raw tool input; T-509's reply mapping will need all of them. Fold into T-509 or do first.
 
 ## Milestone 2: Answer in words
 
