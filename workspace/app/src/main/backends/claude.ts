@@ -289,6 +289,7 @@ class ClaudeSessionDiscovery implements SessionDiscovery {
 
 export const claudeBackend: Backend = {
   name: "claude",
+  keepsSecretaryEvents: true,
 
   spawn(cwd: string, opts?: SpawnOptions): SpawnConfig {
     const args = hasExistingSession(cwd) ? ["--continue"] : [];

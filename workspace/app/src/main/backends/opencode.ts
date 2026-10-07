@@ -416,6 +416,8 @@ function finiteNumber(value: unknown): number {
 
 export const opencodeBackend: Backend = {
   name: "opencode",
+  // Out of the voice secretary's v1 (its PRD, Out of Scope).
+  keepsSecretaryEvents: false,
 
   spawn(_cwd: string, opts?: SpawnOptions): SpawnConfig {
     // OpenCode handles "no prior session" gracefully — always pass --continue.

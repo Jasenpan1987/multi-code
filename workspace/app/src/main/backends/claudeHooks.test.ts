@@ -8,7 +8,7 @@ import fs from "fs";
 import path from "path";
 import { ClaudeHookAttention, type HookTimers } from "./claudeHooks";
 import { parseAlertDelivery } from "../manager-mcp/server";
-import type { AlertDelivery } from "./types";
+import type { AlertDelivery, PromptToolCall } from "./types";
 import type { PromptDetail } from "../remote/promptExtract";
 
 const FIXTURES = path.join(__dirname, "__fixtures__/claude-hooks");
@@ -53,13 +53,14 @@ interface Raised {
   ms: number;
   type: string;
   detail?: PromptDetail;
+  toolCall?: PromptToolCall;
 }
 
 function harness(registryAt: (ms: number) => string | null) {
   const timers = new VirtualTimers();
   const raised: Raised[] = [];
   const attention = new ClaudeHookAttention(
-    (type, detail) => raised.push({ ms: timers.now, type, detail }),
+    (type, detail, toolCall) => raised.push({ ms: timers.now, type, detail, toolCall }),
     () => registryAt(timers.now),
     timers
   );
@@ -220,6 +221,36 @@ describe("prompt detail for a paired phone", () => {
 
   it("an MCP elicitation has no detail, so the phone shows the terminal", () => {
     expect(replay("mcp-elicitation").raised[0].detail).toBeUndefined();
+  });
+});
+
+// The secretary needs the tool call itself, not the phone's one-line summary of it.
+describe("the tool call behind a prompt", () => {
+  const requestOf = (name: string) =>
+    replay(name).fixture.deliveries.find(
+      (d) => d.payload.hook_event_name === "PermissionRequest"
+    )?.payload;
+
+  it("a Bash permission carries the exact command the agent asked to run", () => {
+    const { raised } = replay("permission-approved");
+    expect(raised[0].toolCall?.toolName).toBe("Bash");
+    expect(raised[0].toolCall?.toolInput).toEqual(requestOf("permission-approved")?.tool_input);
+    expect(raised[0].toolCall?.toolInput).toMatchObject({ command: "touch a.txt" });
+  });
+
+  it("AskUserQuestion carries its questions as the agent wrote them", () => {
+    const { raised } = replay("ask-question");
+    expect(raised[0].toolCall?.toolName).toBe("AskUserQuestion");
+    expect(raised[0].toolCall?.toolInput).toEqual(requestOf("ask-question")?.tool_input);
+  });
+
+  it("an MCP elicitation is no tool call", () => {
+    expect(replay("mcp-elicitation").raised[0].toolCall).toBeUndefined();
+  });
+
+  it("nothing but a prompt carries one", () => {
+    const { raised } = replay("permission-approved");
+    expect(raised.filter((r) => r.type !== "prompt").every((r) => !r.toolCall)).toBe(true);
   });
 });
 

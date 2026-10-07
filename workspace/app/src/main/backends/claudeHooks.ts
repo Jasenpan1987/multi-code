@@ -17,7 +17,7 @@
 // Pure: no electron, no node-pty, no fs. Timers are injected so the tests replay a
 // fixture's timeline without sleeping.
 
-import type { ActivityCallback, AlertDelivery } from "./types";
+import type { ActivityCallback, AlertDelivery, PromptToolCall } from "./types";
 import { extractPromptDetail, type PromptDetail } from "../remote/promptExtract";
 
 // How long after a main-agent `Stop` to read the registry. Measured: the status was
@@ -218,8 +218,12 @@ export class ClaudeHookAttention {
         // these, so each one is a dialog: no dedupe. From a subagent too, because
         // its dialog blocks the builder just the same. A pending finish is left
         // alone: its registry read sees `waiting` and stands down by itself, and a
-        // hold must survive a subagent's dialog.
-        this.raisePrompt(permissionDetail(delivery));
+        // hold must survive a subagent's dialog. The tool call itself travels too:
+        // the detail only summarizes it, and the secretary needs the whole thing.
+        this.raisePrompt(permissionDetail(delivery), {
+          toolName: delivery.toolName ?? "",
+          toolInput: delivery.toolInput,
+        });
         return;
 
       case "Elicitation":
@@ -290,9 +294,9 @@ export class ClaudeHookAttention {
     }
   }
 
-  private raisePrompt(detail: PromptDetail | undefined) {
+  private raisePrompt(detail: PromptDetail | undefined, toolCall?: PromptToolCall) {
     this.promptOutstanding = true;
-    this.onActivity("prompt", detail);
+    this.onActivity("prompt", detail, toolCall);
   }
 
   private clearPrompt() {
