@@ -239,3 +239,22 @@ describe("a stopped instance", () => {
     expect(sessionIdOf()).toBe("ses-1");
   });
 });
+
+describe("what the secretary's brief writer reads", () => {
+  it("gets the session the process is on now, without waiting for the poll", () => {
+    // A turn can end within one poll of a /clear; the brief must be read from the
+    // new transcript, not the one the CLI stopped writing to.
+    backendState.liveSessionId = "ses-2";
+    expect(manager.secretarySource(instanceId)).toEqual({ name: "msk", sessionId: "ses-2" });
+    expect(sessionIdOf()).toBe("ses-2");
+  });
+
+  it("names an instance without an alias after its directory", () => {
+    const bare = manager.createInstance("/Users/x/code/eat-what");
+    expect(manager.secretarySource(bare.id)?.name).toBe("eat-what");
+  });
+
+  it("is null for an id that isn't an instance", () => {
+    expect(manager.secretarySource("nope")).toBeNull();
+  });
+});

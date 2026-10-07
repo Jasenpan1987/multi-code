@@ -234,6 +234,14 @@ function buildEnv(): Record<string, string> {
   };
 }
 
+// The binary and env an instance is spawned with, for the one-shot `claude -p`
+// calls the voice secretary makes (secretary/cli.ts). Same resolution, so a brief
+// writer reaches Bedrock exactly when an instance would, from a Dock launch too
+// (docs/timeline/2026-10-08_brief-writer-spike.md).
+export function claudeCliCommand(): { command: string; env: Record<string, string> } {
+  return { command: claudePath, env: buildEnv() };
+}
+
 // The registry status of a running claude: `idle`, `busy`, `waiting`, `shell`, or
 // null when the entry can't be read. Read only to confirm a `Stop` the CLI
 // reported through a hook (see claudeHooks.ts), never as an event source.
@@ -379,8 +387,13 @@ export function readClaudeTranscript(
   } catch {
     return [];
   }
+  return claudeTranscriptEntries(raw.split("\n")).slice(-limit);
+}
 
-  const lines = raw.split("\n");
+// The same entries from a run of JSONL lines, for a reader that wants only part of
+// a session: the secretary's brief writer reads the turn since the builder's last
+// message. A tool use is pending when its result isn't among these lines.
+export function claudeTranscriptEntries(lines: string[]): TranscriptEntry[] {
   const entries: TranscriptEntry[] = [];
   // Tool uses still awaiting a result, so they can be marked pending — that's
   // the tool the agent is currently on, which is what a phone is for.
@@ -449,7 +462,7 @@ export function readClaudeTranscript(
     if (entry && unpaired.has(id)) entry.pending = true;
   }
 
-  return entries.slice(-limit);
+  return entries;
 }
 
 // How full the window is, from the newest assistant turn that reported usage.
@@ -599,7 +612,7 @@ function summarizeTranscriptTool(name: string, input: unknown): string | undefin
   }
 }
 
-function findJsonlBySessionId(sessionId: string): string | null {
+export function findJsonlBySessionId(sessionId: string): string | null {
   try {
     const projectDirs = fs.readdirSync(PROJECTS_DIR);
     for (const dir of projectDirs) {
