@@ -87,7 +87,7 @@ read it instead.
 ### T-501: Brief-writer spike on the real CLI
 
 - **Type:** setup
-- **Status:** ready
+- **Status:** in-progress
 - **Requirement:** `docs/specs/voice-secretary/prd.md#story-4-what-the-secretary-says`
 - **Knowledge:** `docs/specs/voice-secretary/prd.md#technical-constraints`
 - **Code:** `workspace/app/src/main/backends/instance-env.ts`, `workspace/app/src/main/process-manager.ts` (`readTranscript`)
@@ -99,7 +99,7 @@ read it instead.
 ### T-503: Keep each instance's latest event and its material in main
 
 - **Type:** data
-- **Status:** backlog
+- **Status:** in-progress
 - **Requirement:** `docs/specs/voice-secretary/prd.md#story-2-the-brief-is-ready-before-the-click`
 - **Knowledge:** `docs/specs/attention-alerts/prd.md` (the Finished and Needs-you events)
 - **Code:** `workspace/app/src/main/process-manager.ts` (`onActivity`, `handleAlertDelivery`), `workspace/app/src/main/backends/claudeHooks.ts` (`permissionDetail`, `raisePrompt`), `workspace/app/src/main/run-state.ts` (`onWrite`)
@@ -122,7 +122,7 @@ read it instead.
 ### T-502: Speech client and speech-server settings in main
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Requirement:** `docs/specs/voice-secretary/prd.md#story-8-connect-a-speech-server`, `docs/specs/voice-secretary/prd.md#story-7-no-voice-still-a-secretary`
 - **Knowledge:** `deploy/tts-server/README.md#using-it`
 - **Code:** `workspace/app/src/main/settings-store.ts`, new `workspace/app/src/main/secretary/speech.ts`, `workspace/app/src/main/ipc-handlers.ts`, `workspace/app/src/main/preload.ts`, `workspace/app/src/shared/types.ts`
@@ -130,6 +130,7 @@ read it instead.
 - **Acceptance:** Unit tests with `fetch` faked: success, 401, timeout, non-audio body, empty URL meaning "no server" without any request. The key file is `0600` and absent from `settings.json`. A manual `testServer()` against `https://tts.jasenpan.com` passes.
 - **Blocks:** T-505, T-506 · **Blocked by:** none · **Parallel with:** T-501, T-503
 - **Notes:** Add `speech-key` to the Data Storage list in `CLAUDE.md`.
+- **Done 2026-10-08:** `secretary/speech.ts` takes the server as an argument, `synthesize(server, text, language)` and `testServer(server)`, so it imports nothing from electron; `settings-store.ts` `loadSpeechServer()` reads the address and key fresh per call, so T-505 wires `(text, lang) => synthesize(loadSpeechServer(), text, lang)`. A key change is `SpeechKeyChange` (`unchanged` / `set` / `clear`). WAV is checked by its RIFF header. Live: Test OK in 3.6 s; 6.6 s of Chinese audio in 3.1 s, 9.6 s of English in 4.3 s; wrong key gives "key rejected (HTTP 401)". 821 tests green.
 
 ### T-505: Secretary orchestrator
 
@@ -145,7 +146,7 @@ read it instead.
 ### T-506: Secretary toolbox section
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** in-progress
 - **Requirement:** `docs/specs/voice-secretary/prd.md#story-1-secretary-mode-switch`, `docs/specs/voice-secretary/prd.md#story-8-connect-a-speech-server`
 - **Knowledge:** `docs/knowledge/business-overview.md#ui-layout-current--planned`
 - **Code:** new `workspace/app/src/renderer/components/SecretarySection.tsx`, `workspace/app/src/renderer/components/Toolbox.tsx`
