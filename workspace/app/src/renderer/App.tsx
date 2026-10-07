@@ -8,6 +8,14 @@ import {
   getTerminal,
 } from "./components/TerminalView";
 import { ComposeBox } from "./components/ComposeBox";
+import { SecretaryCard } from "./components/SecretaryCard";
+import {
+  applyBriefUpdate,
+  cardOnSelect,
+  mergeBriefSnapshot,
+  openCardBrief,
+} from "./components/secretaryBrief";
+import type { BriefMap, OpenCard } from "./components/secretaryBrief";
 import { DiffWindow } from "./components/DiffWindow";
 import { cleanupShellTerminal } from "./components/TerminalSection";
 import { Toolbox } from "./components/Toolbox";
@@ -60,6 +68,13 @@ export function App() {
     text: string;
     nonce: number;
   } | null>(null);
+
+  // Voice secretary (epic voice-secretary). The mode and every live brief as main
+  // pushes them, and the card open over the terminal, if any. See secretaryBrief.ts
+  // for when a card opens and closes.
+  const [secretaryMode, setSecretaryMode] = useState(false);
+  const [briefs, setBriefs] = useState<BriefMap>({});
+  const [card, setCard] = useState<OpenCard | null>(null);
 
   const { notify, markRead } = useNotifications();
   // Per-instance timestamp of the last audible alert, for the
@@ -128,6 +143,42 @@ export function App() {
     document.documentElement.dataset.theme = next;
     void window.electronAPI.setTheme(next);
   }, []);
+
+  // Subscribed before the initial values are fetched, so a push in between isn't
+  // lost; for an instance a push has already touched, the push wins over the
+  // snapshot.
+  useEffect(() => {
+    let live = true;
+    let modePushed = false;
+    const touched = new Set<string>();
+    const offBrief = window.electronAPI.onSecretaryBrief((id, state) => {
+      touched.add(id);
+      setBriefs((prev) => applyBriefUpdate(prev, id, state));
+    });
+    const offMode = window.electronAPI.onSecretaryMode((enabled) => {
+      modePushed = true;
+      setSecretaryMode(enabled);
+    });
+    void window.electronAPI.getSecretarySettings().then((settings) => {
+      if (live && !modePushed) setSecretaryMode(settings.secretaryMode);
+    });
+    void window.electronAPI.getSecretaryBriefs().then((snapshot) => {
+      if (live) setBriefs((prev) => mergeBriefSnapshot(prev, snapshot, touched));
+    });
+    return () => {
+      live = false;
+      offBrief();
+      offMode();
+    };
+  }, []);
+
+  // The card belongs to one brief of the shown contact. Switching contacts, the
+  // mode going off, the brief dropped (answered in the terminal) or replaced by a
+  // newer event's: each closes it, and closing it stops its audio.
+  const cardBrief = openCardBrief(card, { modeOn: secretaryMode, selectedId, briefs });
+  useEffect(() => {
+    if (card && !cardBrief) setCard(null);
+  }, [card, cardBrief]);
 
   // Listen for unread updates
   useEffect(() => {
@@ -304,12 +355,20 @@ export function App() {
     setComposeOpen(true);
   }, []);
 
-  // Selecting a contact acknowledges that contact, never the one being left.
+  // Selecting a contact acknowledges that contact, never the one being left. With
+  // Secretary Mode on, a contact that showed a red dot at the moment of the click
+  // and has a brief also opens its card, which plays the brief. Read from refs,
+  // as rendered, before markRead clears the dot.
+  const secretaryRef = useRef({ modeOn: secretaryMode, unreadIds, briefs });
+  secretaryRef.current = { modeOn: secretaryMode, unreadIds, briefs };
   const handleSelect = useCallback(
     (id: string) => {
+      const { modeOn, unreadIds: unread, briefs: live } = secretaryRef.current;
+      const opened = cardOnSelect(id, modeOn, unread, live);
       setSelectedId(id);
       stopMessageSound(id);
       markRead(id);
+      if (opened) setCard(opened);
     },
     [markRead]
   );
@@ -595,6 +654,15 @@ export function App() {
             }
             return null;
           })()}
+          {selectedInstance && card && cardBrief ? (
+            <SecretaryCard
+              key={`${card.instanceId}#${card.seq}`}
+              instanceId={card.instanceId}
+              name={selectedInstance.name}
+              brief={cardBrief}
+              onClose={() => setCard(null)}
+            />
+          ) : null}
           {(() => {
             if (
               !composeOpen ||
