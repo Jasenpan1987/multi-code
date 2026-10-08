@@ -4,7 +4,7 @@
 **Source:** `docs/specs/voice-secretary/prd.md` v1.2 · `docs/specs/voice-secretary/gaps.md` (nothing open)
 **Evidence:** `docs/timeline/2026-10-07_voice-secretary-ideation.md` · `docs/timeline/2026-10-07_voice-engine-hosting.md`
 **Speech server:** `deploy/tts-server/README.md`
-**Total Tasks:** 24 (T-501..T-514, follow-ups T-515..T-519, OpenCode T-520..T-523, T-524)
+**Total Tasks:** 25 (T-501..T-514, follow-ups T-515..T-519, OpenCode T-520..T-523, T-524, T-525)
 **Milestones:** M1 (hear the brief) · M2 (answer in words) · M3 (originals when words aren't enough)
 
 Task ids start at T-501, after attention-alerts' T-4xx. Only M1 is committed; M2 and M3 are
@@ -213,6 +213,7 @@ Found in T-508 and along the way (`.omt/voice-secretary-decisions.md`). None blo
 - **Type:** bug (pre-existing) · **Status:** backlog · **Blocked by:** none
 - **Code:** `workspace/app/src/main/process-manager.ts` (`writeToInstance`, `noteWrite`), `workspace/app/src/main/run-state.ts`, `workspace/app/src/main/remote/ws-server.ts`
 - **Description:** The CLI turns on mouse tracking and focus reporting, so the pointer crossing a terminal sends input. The secretary ignores those (`carriesInput`), but run state still treats them as a write (the manager's write gate can then refuse `send_task` for a few seconds) and the phone link clears a paired phone's badge and option buttons. Use the same filter there. Read the write-gate convention in tech-conventions first.
+- **Also seen 2026-10-09:** the quit dialog listed two idle sessions as "still working". Neither had run a turn; the pointer had crossed their terminals, and `unfinishedInstances` reads the same run state.
 
 ### T-519: Several questions in one AskUserQuestion
 
@@ -266,6 +267,13 @@ next steps…") is marked `synthetic: true`. Order: T-520 → T-521 → T-522 �
 - **Type:** bug (pre-existing, low) · **Status:** backlog · **Blocked by:** none
 - **Code:** `workspace/app/src/main/process-manager.ts` (the three `ptyProcess.kill()` calls: stop, restart, quit)
 - **Description:** Seen in T-523: two OpenCode TUIs stuck at start-up (no terminal had answered their capability queries) survived a restart, kept burning ~50% CPU each as children of the app, and ignored SIGTERM too; only SIGKILL ended them. A healthy OpenCode exits within seconds of the same restart. Escalate when the process is still there a few seconds after `kill()`. The stuck state needs an instance spawned without a terminal, which the UI never does, so this is only reachable from a probe today.
+
+### T-525: A lone modifier key clears the shown session's red dot, and with it the card
+
+- **Type:** bug (low) · **Status:** backlog · **Blocked by:** none
+- **Code:** `workspace/app/src/renderer/App.tsx` (the capture-phase `acknowledge` listener), `workspace/app/src/renderer/audio/attentionPolicy.ts`
+- **Description:** Found 2026-10-09 by the builder on the dev build, Secretary Mode on, no speech server: on the session they were watching, the red dot came and went and no card opened. Any keydown or pointerdown in the shown session's page acknowledges it (attention-alerts Story 4), and the card opens only from a red-dot click, so the brief stays in main with no way to reach it. That much is by design: the builder at the screen saw it happen. But a bare Cmd, Shift, Option or Ctrl counts too, and macOS shortcuts the page never sees whole (Cmd+Shift+4 for a screenshot, Cmd+Tab away) still deliver the modifier's keydown first. Ignore keydowns whose `key` is only a modifier.
+- **Alternative the builder may want instead:** with Secretary Mode on, open the card on its own when the shown session's event arrives, rather than waiting for a red-dot click. That changes PRD Story 3's trigger, so it is the builder's call; it would also speak while they watch.
 
 ## Milestone 2: Answer in words
 
