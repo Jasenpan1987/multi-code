@@ -103,6 +103,9 @@ function endpointOf(base: string, route: string): URL | string {
   return url;
 }
 
+// `language` picks the tone instruction only. The server is not told the language:
+// it detects it itself (`Auto`), which the builder chose on 2026-10-08 for Chinese
+// briefs full of English terms, and kept after an A/B listen of 11 real briefs.
 export async function synthesize(
   server: SpeechServer,
   text: string,
@@ -124,7 +127,6 @@ export async function synthesize(
       body: JSON.stringify({
         input: text,
         voice: VOICE,
-        language,
         instructions: BRIEFING_INSTRUCTIONS[language],
         response_format: "wav",
       }),

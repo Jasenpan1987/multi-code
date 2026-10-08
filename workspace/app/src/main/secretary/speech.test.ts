@@ -62,7 +62,7 @@ const hang: Route = (init) =>
   });
 
 describe("synthesize", () => {
-  it("posts the brief with Serena, the language, its tone and the key, and returns the wav", async () => {
+  it("posts the brief with Serena, its tone and the key, and returns the wav", async () => {
     const f = fakeFetch({ "/v1/audio/speech": audio });
     const res = await synthesize(server, "MSK 那边做完了。", "Chinese", { fetch: f });
 
@@ -76,17 +76,16 @@ describe("synthesize", () => {
     expect(JSON.parse(String(init?.body))).toEqual({
       input: "MSK 那边做完了。",
       voice: "serena",
-      language: "Chinese",
       instructions: BRIEFING_INSTRUCTIONS.Chinese,
       response_format: "wav",
     });
   });
 
-  it("uses the English tone for an English brief", async () => {
+  it("uses the English tone for an English brief, and leaves the language to the server", async () => {
     const f = fakeFetch({ "/v1/audio/speech": audio });
     await synthesize(server, "MSK just finished.", "English", { fetch: f });
     const body = JSON.parse(String(f.mock.calls[0][1]?.body));
-    expect(body.language).toBe("English");
+    expect(body).not.toHaveProperty("language");
     expect(body.instructions).toBe(BRIEFING_INSTRUCTIONS.English);
     expect(body.instructions).toMatch(/colleague briefing you/);
   });

@@ -1,6 +1,6 @@
 # PRD: Voice Secretary
 
-**Version:** 1.3
+**Version:** 1.4
 **Last Updated:** 2026-10-08
 **Status:** approved
 **Owner:** Jasen
@@ -130,7 +130,7 @@ docs/timeline/2026-10-07_voice-engine-hosting.md)
 - [ ] **Needs you, decision:** the question and each option in plain words
 - [ ] Never anything from the middle of a turn: no "reading file X", no "trying another approach"
 - [ ] **Language follows the builder's latest message in that session.** Pure English gets an English brief; Chinese or mixed gets a Chinese brief that keeps English technical terms as they are. No setting overrides it
-- [ ] The language the brief is written in is the language sent to the speech server
+- [ ] The speech server detects the spoken language itself (its `Auto`); the brief's language only picks the tone instruction sent with it
 - [ ] The voice is Serena in both languages
 - [ ] Written to be heard: no code blocks, tables or long paths; acronyms and symbols written the way they should sound
 - [ ] a brief normally runs under a minute when spoken
@@ -256,3 +256,4 @@ and 20 s limits, nothing on disk) were confirmed by the builder on 2026-10-07.
 | 1.1 | 2026-10-07 | Story 5: attach originals only when words aren't enough (builder). Brief writer decided: Claude Sonnet 5.5 on the company's Bedrock (G-002) |
 | 1.2 | 2026-10-07 | All assumptions confirmed by the builder; the brief writer is a spawned `claude` CLI. Approved for task breakdown |
 | 1.3 | 2026-10-08 | Speech timeout 15 s → 30 s and "ready" split into text (10 s) and audio (30 s): the T-501 spike measured real briefs at 33–51 s of audio taking 12–21 s to synthesize, so 15 s failed most of them. Decided by the supervisor session while working autonomously; for the builder to review |
+| 1.4 | 2026-10-08 | The speech request no longer sends `language`: the server detects it (`Auto`), for Chinese briefs full of English terms. Builder's decision, kept after an A/B listen of 11 real briefs spoken both ways |

@@ -4,6 +4,17 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-10-08 — The speech server detects the brief's language itself
+
+**Decision:** The secretary's speech request no longer sends `language`; Qwen3-TTS uses its default, `Auto`, and detects the language from the text. The brief writer still chooses the brief's language (it follows the builder's latest message), and that choice still picks the tone instruction sent with the text.
+
+**Why:** Chinese briefs keep English technical terms ("eat-what 那边……", PR, NPM), and the builder prefers the engine to judge mixed text itself rather than be forced into one language. Kept after the builder listened to 11 real briefs spoken both ways; revisit if a brief is misread.
+
+**Source:** builder, 2026-10-08, in session.
+**Affects:** `workspace/app/src/main/secretary/speech.ts`; `docs/specs/voice-secretary/prd.md` Story 4 (v1.4).
+
+---
+
 ## 2026-10-07 — Attachments only when the brief can't carry it
 
 **Decision:** Refines "The secretary's card shows originals" below. The secretary attaches original material only when words can't make it clear, or when the builder needs the exact detail to decide. When the brief alone gets it across, the card has the brief and nothing else. Whatever is attached is still an original, never rewritten.
