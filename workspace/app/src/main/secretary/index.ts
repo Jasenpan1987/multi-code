@@ -29,6 +29,7 @@ import { processManager } from "../process-manager";
 import type { SecretaryEvent, SecretaryEventListener } from "../process-manager";
 import { loadSpeechServer } from "../settings-store";
 import { synthesize } from "./speech";
+import { normalizeLoudness } from "./loudness";
 import type { SpeechOptions, SpeechServer, SynthesizeResult } from "./speech";
 import { writeBriefFor } from "./briefWriter";
 import type { Brief } from "./briefWriter";
@@ -158,7 +159,8 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
     }
     if (!isCurrent(instanceId, job)) return;
     if (spoken.ok) {
-      job.wav = spoken.wav;
+      // The server speaks about 10 dB under ordinary speech (T-515).
+      job.wav = normalizeLoudness(spoken.wav);
       publish(instanceId, job, { ...ready, audio: "ready" });
     } else {
       publish(instanceId, job, { ...ready, audio: "unavailable", voiceReason: spoken.reason });

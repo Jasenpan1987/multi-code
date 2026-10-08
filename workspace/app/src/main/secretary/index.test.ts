@@ -53,6 +53,7 @@ vi.mock("./briefWriter", () => ({
 }));
 
 import { createSecretary, NO_SERVER_REASON } from "./index";
+import { TARGET_DBFS } from "./loudness";
 import type { SecretaryDeps } from "./index";
 
 interface Pending<T> {
@@ -221,6 +222,40 @@ describe("one event", () => {
     expect(h.secretary.audioFor("a", 7)).toBe(WAV);
     // The wav never rides an update.
     expect(JSON.stringify(h.pushes("a"))).not.toContain("RIFF");
+  });
+
+  it("keeps the server's audio brought to speech loudness (T-515)", async () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.writes[0].settle(brief("MSK finished the migration.", "English"));
+    await flush();
+    // One second of a 220 Hz tone at -27 dBFS RMS, the server's level.
+    const pcm = Buffer.alloc(48000);
+    for (let i = 0; i < 24000; i++) {
+      const v = 0.0447 * Math.SQRT2 * Math.sin((2 * Math.PI * 220 * i) / 24000);
+      pcm.writeInt16LE(Math.round(v * 32768), i * 2);
+    }
+    const head = Buffer.alloc(44);
+    head.write("RIFF", 0, "latin1");
+    head.writeUInt32LE(36 + pcm.length, 4);
+    head.write("WAVEfmt ", 8, "latin1");
+    head.writeUInt32LE(16, 16);
+    head.writeUInt16LE(1, 20);
+    head.writeUInt16LE(1, 22);
+    head.writeUInt32LE(24000, 24);
+    head.writeUInt32LE(48000, 28);
+    head.writeUInt16LE(2, 32);
+    head.writeUInt16LE(16, 34);
+    head.write("data", 36, "latin1");
+    head.writeUInt32LE(pcm.length, 40);
+    h.speaks[0].settle({ ok: true, wav: Buffer.concat([head, pcm]) });
+    await flush();
+
+    const kept = h.secretary.audioFor("a", 1)!;
+    let sum = 0;
+    for (let i = 0; i < 24000; i++) sum += (kept.readInt16LE(44 + i * 2) / 32768) ** 2;
+    expect(20 * Math.log10(Math.sqrt(sum / 24000))).toBeCloseTo(TARGET_DBFS, 0);
   });
 
   it("is ready with audio unavailable and the reason when synthesis fails, and doesn't retry", async () => {
