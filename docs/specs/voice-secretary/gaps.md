@@ -2,6 +2,7 @@
 
 | ID | Question | Impact | Ask | Status |
 |-------|-------------------------------|--------------------------|-----------------|--------|
+| G-004 | PRD Story 8 promises "any server with the OpenAI speech API shape works", but the app always sends `voice: "serena"` and Qwen-style `instructions`, so only a Qwen3-TTS server built from `deploy/tts-server/` actually speaks. Narrow the promise, or make the voice configurable? | Another engine's server fails Test ("unknown voice") and every brief falls back to text; nothing breaks | Builder: (A) narrow Story 8 and the section's wording to `deploy/tts-server/` servers, no code; or (B) add a voice field (maybe `model` too) to the Secretary section. Supervisor recommends A until someone wants another engine | open (raised 2026-10-08) |
 
 ## Resolved
 
