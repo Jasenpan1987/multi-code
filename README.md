@@ -60,7 +60,8 @@ When working with multiple coding-agent sessions across different projects simul
 - **Themes** — Light, dark, and sepia, switched from the top-right toggle
 - **Backend at a glance** — Claude Code instances have **circular** avatars and blue window chrome; OpenCode instances have **rounded-square** avatars and green chrome. The header also names the backend
 - **Pinned manager** — The manager row always sits at the top of the list, styled apart from the projects
-- **Long names scroll** — A name too long for the sidebar slides to its end when you hover it
+- **Long names in a bubble** — A name too long for the sidebar shows in full in a bubble beside its row when you hover it
+- **Fold any pane** — The small arrow tabs on the pane edges fold the session list, the terminal or the toolbox to a thin strip; click the strip to bring it back. Fold the terminal and the toolbox fills the window, for reading a Markdown file at full width
 - **Version badge** — The current build version shows in the top-right of the window (next to the theme toggle), so you can always tell which build is running. A dev build adds a **DEV** chip and amber stripes across the titlebar, so it can't be mistaken for the installed app
 - **Mac-style shortcuts** — In the agent terminal, `Cmd+Backspace` clears the input line and `Cmd+Left` / `Cmd+Right` jump to its start / end. `Cmd+R` is disabled so it can't reload the window by accident
 - **Dock Bounce** — macOS Dock icon bounces when an agent finishes while the app is in the background

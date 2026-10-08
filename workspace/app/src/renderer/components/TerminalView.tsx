@@ -137,7 +137,9 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
     });
 
     terminal.open(containerRef.current);
-    fitAddon.fit();
+    // Not when it opens out of sight (a folded or unselected pane): there it
+    // measures a few columns wide. It is fitted once it shows.
+    if (containerRef.current.offsetWidth > 0) fitAddon.fit();
 
     // Notify main process of initial size
     window.electronAPI.resizeInstance(instanceId, terminal.cols, terminal.rows);
@@ -191,6 +193,9 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
     // the last buffer line. If the user has deliberately scrolled up (to read
     // or select), leave the viewport where it is.
     const refit = () => {
+      // Not while its pane is folded away: hidden, it measures a few columns
+      // wide, and fitting it would shrink the session to that. Unfolding refits.
+      if (!containerRef.current?.offsetWidth) return;
       const atBottom = isAtBottom(terminal);
       try {
         fitAddon.fit();

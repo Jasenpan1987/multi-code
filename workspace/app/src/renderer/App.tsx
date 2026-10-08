@@ -48,6 +48,14 @@ export function App() {
   >(new Map());
   const [hasOutput, setHasOutput] = useState<Set<string>>(new Set());
   const [toolboxWidth, setToolboxWidth] = useState(480);
+  // Any pane can fold to a thin strip, for when only one of them matters. The
+  // terminal and the toolbox never fold together, since one of them has to fill
+  // the window: one value for the pair, so folding one unfolds the other. Not
+  // saved; a restart shows all three.
+  const [sidebarFolded, setSidebarFolded] = useState(false);
+  const [foldedPane, setFoldedPane] = useState<"content" | "toolbox" | null>(
+    null
+  );
   const [theme, setThemeState] = useState<ThemeName>("light");
   // A dev run and the installed app can be open at once, on separate data
   // directories. This is what marks which is which.
@@ -314,6 +322,8 @@ export function App() {
         return;
       }
       setComposeOpen(true);
+      // The box opens over the terminal, so a folded terminal comes back.
+      setFoldedPane((p) => (p === "content" ? null : p));
     };
     window.addEventListener("compose-open", handler);
     return () => window.removeEventListener("compose-open", handler);
@@ -353,6 +363,7 @@ export function App() {
   const handleAskAgent = useCallback((ref: string) => {
     setComposeSeed({ text: `${ref} `, nonce: Date.now() });
     setComposeOpen(true);
+    setFoldedPane((p) => (p === "content" ? null : p));
   }, []);
 
   // Selecting a contact acknowledges that contact, never the one being left. With
@@ -537,6 +548,15 @@ export function App() {
   // rides selection rather than the global <html data-theme>. Falls back to
   // claude when nothing is selected so the empty state keeps the classic look.
   const activeBackend: BackendName = selectedInstance?.backend ?? "claude";
+  // The toolbox only exists for a selected session, so without one nothing is
+  // folded and the terminal area fills the window.
+  const folded = selectedInstance ? foldedPane : null;
+
+  // Folding or unfolding a pane resizes the others, and terminals only refit
+  // when told to.
+  useEffect(() => {
+    window.dispatchEvent(new Event("layout-resize"));
+  }, [sidebarFolded, folded]);
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme }}>
@@ -558,8 +578,11 @@ export function App() {
         onStart={handleStart}
         onRestart={handleRestart}
         onRemove={handleRemove}
+        folded={sidebarFolded}
+        onToggleFolded={() => setSidebarFolded((f) => !f)}
       />
-      <main className="content">
+      {/* Hidden rather than unmounted: its terminals keep their scrollback. */}
+      <main className="content" hidden={folded === "content"}>
         {selectedInstance && (
           <div className="content-header">
             <span className="content-header-name">
@@ -682,53 +705,109 @@ export function App() {
           })()}
         </div>
       </main>
+      {folded === "content" && (
+        <button
+          type="button"
+          className="fold-strip"
+          onClick={() => setFoldedPane(null)}
+          title="Show the terminal"
+          aria-label="Show the terminal"
+        >
+          ›
+        </button>
+      )}
 
       {(() => {
         if (!selectedInstance) return null;
         const isOffline = selectedInstance.status === "stopped";
         return (
           <>
-            <div
-              className="resizer"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                const startX = e.clientX;
-                const startWidth = toolboxWidth;
-                let raf = 0;
-                const dispatchLayoutResize = () => {
-                  if (raf) return;
-                  raf = requestAnimationFrame(() => {
-                    raf = 0;
+            {folded === null && (
+              <div
+                className="resizer"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  const startX = e.clientX;
+                  const startWidth = toolboxWidth;
+                  let raf = 0;
+                  const dispatchLayoutResize = () => {
+                    if (raf) return;
+                    raf = requestAnimationFrame(() => {
+                      raf = 0;
+                      window.dispatchEvent(new Event("layout-resize"));
+                    });
+                  };
+                  // The sidebar is narrower when folded, which leaves the toolbox
+                  // more room to grow into.
+                  const sidebarWidth =
+                    document.querySelector(".sidebar")?.getBoundingClientRect()
+                      .width ?? 0;
+                  const onMove = (ev: MouseEvent) => {
+                    const delta = startX - ev.clientX;
+                    const next = Math.max(
+                      280,
+                      Math.min(
+                        window.innerWidth - 280 - sidebarWidth,
+                        startWidth + delta
+                      )
+                    );
+                    setToolboxWidth(next);
+                    dispatchLayoutResize();
+                  };
+                  const onUp = () => {
+                    document.removeEventListener("mousemove", onMove);
+                    document.removeEventListener("mouseup", onUp);
+                    document.body.style.cursor = "";
+                    document.body.style.userSelect = "";
+                    if (raf) cancelAnimationFrame(raf);
+                    // Final fit after resize finishes
                     window.dispatchEvent(new Event("layout-resize"));
-                  });
-                };
-                const onMove = (ev: MouseEvent) => {
-                  const delta = startX - ev.clientX;
-                  const next = Math.max(
-                    280,
-                    Math.min(
-                      window.innerWidth - 280 - 180,
-                      startWidth + delta
-                    )
-                  );
-                  setToolboxWidth(next);
-                  dispatchLayoutResize();
-                };
-                const onUp = () => {
-                  document.removeEventListener("mousemove", onMove);
-                  document.removeEventListener("mouseup", onUp);
-                  document.body.style.cursor = "";
-                  document.body.style.userSelect = "";
-                  if (raf) cancelAnimationFrame(raf);
-                  // Final fit after resize finishes
-                  window.dispatchEvent(new Event("layout-resize"));
-                };
-                document.addEventListener("mousemove", onMove);
-                document.addEventListener("mouseup", onUp);
-                document.body.style.cursor = "col-resize";
-                document.body.style.userSelect = "none";
-              }}
-            />
+                  };
+                  document.addEventListener("mousemove", onMove);
+                  document.addEventListener("mouseup", onUp);
+                  document.body.style.cursor = "col-resize";
+                  document.body.style.userSelect = "none";
+                }}
+              >
+                {/* Each tab sits on the edge of the pane it folds and points the
+                    way that pane goes. */}
+                <button
+                  type="button"
+                  className="fold-tab"
+                  data-edge="content"
+                  // Not the start of a drag.
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={() => setFoldedPane("content")}
+                  title="Hide the terminal, the toolbox takes its room"
+                  aria-label="Hide the terminal"
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  className="fold-tab"
+                  data-edge="toolbox"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={() => setFoldedPane("toolbox")}
+                  title="Hide the toolbox"
+                  aria-label="Hide the toolbox"
+                >
+                  ›
+                </button>
+              </div>
+            )}
+            {folded === "toolbox" && (
+              <button
+                type="button"
+                className="fold-strip"
+                data-pane="toolbox"
+                onClick={() => setFoldedPane(null)}
+                title="Show the toolbox"
+                aria-label="Show the toolbox"
+              >
+                ‹
+              </button>
+            )}
             <Toolbox
               instance={selectedInstance}
               expandedSection={
@@ -742,7 +821,9 @@ export function App() {
               onOpenPath={isOffline ? () => {} : handleOpenPath}
               onPreviewInView={isOffline ? () => {} : handlePreviewInView}
               onViewDiff={handleViewDiff}
-              width={toolboxWidth}
+              // With the terminal folded, the toolbox fills the window.
+              width={folded === "content" ? null : toolboxWidth}
+              hidden={folded === "toolbox"}
             />
           </>
         );

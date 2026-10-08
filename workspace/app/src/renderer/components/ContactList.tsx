@@ -55,6 +55,9 @@ interface ContactListProps {
   onRemove: (id: string) => void;
   // One drag, as an intent: put `dragId` before or after `targetId`.
   onMove: (dragId: string, targetId: string, placeBefore: boolean) => void;
+  // Folded to a thin strip that unfolds it again; see the fold rules in App.
+  folded: boolean;
+  onToggleFolded: () => void;
 }
 
 export function ContactList({
@@ -68,6 +71,8 @@ export function ContactList({
   onRestart,
   onRemove,
   onMove,
+  folded,
+  onToggleFolded,
 }: ContactListProps) {
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -78,11 +83,37 @@ export function ContactList({
   // line, so the user can see the result before letting go.
   const [dragId, setDragId] = useState<string | null>(null);
   const [drop, setDrop] = useState<{ id: string; before: boolean } | null>(null);
+  // The bubble with the full name of the row under the pointer, when the sidebar
+  // cuts that name short. Placed beside the row, in viewport coordinates.
+  const [nameTip, setNameTip] = useState<{
+    text: string;
+    left: number;
+    top: number;
+  } | null>(null);
 
   const endDrag = () => {
     setDragId(null);
     setDrop(null);
   };
+
+  if (folded) {
+    // Still `.sidebar`, so a click here never acknowledges the shown session
+    // (attentionPolicy). The dot says some session is waiting, without unfolding.
+    return (
+      <aside className="sidebar folded">
+        <button
+          type="button"
+          className="fold-strip"
+          onClick={onToggleFolded}
+          title="Show the session list"
+          aria-label="Show the session list"
+        >
+          ›
+          {unreadIds.size > 0 && <span className="fold-strip-dot" />}
+        </button>
+      </aside>
+    );
+  }
 
   const hasManager = instances.some((i) => i.isManager);
 
@@ -102,7 +133,18 @@ export function ContactList({
 
   return (
     <aside className="sidebar">
-      <div className="contact-list">
+      <button
+        type="button"
+        className="fold-tab"
+        data-edge="sidebar"
+        onClick={onToggleFolded}
+        title="Hide the session list"
+        aria-label="Hide the session list"
+      >
+        ‹
+      </button>
+      {/* A scrolled row leaves its bubble behind, so scrolling drops it. */}
+      <div className="contact-list" onScroll={() => setNameTip(null)}>
         {ordered.length === 0 ? (
           <div className="sidebar-placeholder">No instances</div>
         ) : (
@@ -112,6 +154,20 @@ export function ContactList({
               className={`contact-item ${selectedId === inst.id ? "selected" : ""} ${inst.status === "stopped" ? "stopped" : ""} ${unreadIds.has(inst.id) ? "unread" : ""} ${inst.isManager ? "manager" : ""}`}
               onClick={() => onSelect(inst.id)}
               onContextMenu={(e) => handleContextMenu(e, inst.id)}
+              onMouseEnter={(e) => {
+                const name =
+                  e.currentTarget.querySelector<HTMLElement>(".contact-name");
+                // Only a name the sidebar cuts short gets a bubble. Measured here,
+                // because CSS can't tell whether the ellipsis is showing.
+                if (!name || name.scrollWidth <= name.clientWidth) return;
+                const row = e.currentTarget.getBoundingClientRect();
+                setNameTip({
+                  text: inst.name,
+                  left: row.right,
+                  top: row.top + row.height / 2,
+                });
+              }}
+              onMouseLeave={() => setNameTip(null)}
               // The manager is pinned, so it can't be dragged out of first place.
               draggable={!inst.isManager}
               data-dragging={dragId === inst.id ? "true" : undefined}
@@ -119,6 +175,7 @@ export function ContactList({
                 drop?.id === inst.id ? (drop.before ? "before" : "after") : undefined
               }
               onDragStart={(e) => {
+                setNameTip(null);
                 setDragId(inst.id);
                 e.dataTransfer.effectAllowed = "move";
                 // Some data is required or Firefox-style browsers cancel the drag;
@@ -161,22 +218,7 @@ export function ContactList({
                 backend={inst.backend}
                 isManager={inst.isManager}
               />
-              <span
-                className="contact-name"
-                // A name too long for the sidebar is an ellipsis at rest. On hover
-                // it scrolls to its end once — the distance has to be measured
-                // here, because CSS can't know how much is hidden.
-                onMouseEnter={(e) => {
-                  const el = e.currentTarget;
-                  const hidden = el.scrollWidth - el.clientWidth;
-                  el.style.setProperty(
-                    "--name-scroll",
-                    hidden > 2 ? `${-hidden}px` : "0px"
-                  );
-                }}
-              >
-                {inst.name}
-              </span>
+              <span className="contact-name">{inst.name}</span>
               {inst.contextUsage && (
                 <span
                   className="contact-context"
@@ -221,6 +263,16 @@ export function ContactList({
           </button>
         )}
       </div>
+
+      {nameTip && (
+        <div
+          className="name-tip"
+          style={{ left: nameTip.left, top: nameTip.top }}
+          aria-hidden="true"
+        >
+          {nameTip.text}
+        </div>
+      )}
 
       {contextMenu && contextInstance && (
         <ContextMenu

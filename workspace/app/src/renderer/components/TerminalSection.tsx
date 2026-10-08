@@ -110,10 +110,11 @@ export function TerminalSection({ instanceId, active }: TerminalSectionProps) {
       window.electronAPI.spawnShell(instanceId);
     }
 
-    // Fit + push size to PTY
+    // Fit + push size to PTY. Neither fit runs while the toolbox is folded away:
+    // hidden, the container measures a few columns wide. Unfolding refits.
     requestAnimationFrame(() => {
       try {
-        entry.fitAddon.fit();
+        if (container.offsetWidth > 0) entry.fitAddon.fit();
       } catch {
         // ignore — container may not be ready in some edge cases
       }
@@ -124,7 +125,9 @@ export function TerminalSection({ instanceId, active }: TerminalSectionProps) {
       );
     });
 
-    const handleResize = () => entry.fitAddon.fit();
+    const handleResize = () => {
+      if (container.offsetWidth > 0) entry.fitAddon.fit();
+    };
     window.addEventListener("resize", handleResize);
     window.addEventListener("layout-resize", handleResize);
     return () => {

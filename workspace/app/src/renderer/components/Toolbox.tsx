@@ -16,7 +16,10 @@ interface ToolboxProps {
   onOpenPath: (path: string) => void;
   onPreviewInView: (path: string) => void;
   onViewDiff: (relPath: string, side: DiffSide, oldPath?: string) => void;
-  width: number;
+  // null fills whatever room is left.
+  width: number | null;
+  // Folded away. Hidden rather than unmounted, so the shell keeps its session.
+  hidden: boolean;
 }
 
 export function Toolbox({
@@ -28,11 +31,16 @@ export function Toolbox({
   onPreviewInView,
   onViewDiff,
   width,
+  hidden,
 }: ToolboxProps) {
   const isExpanded = (id: string) => expandedSection === id;
 
   return (
-    <aside className="toolbox" style={{ width: `${width}px`, flex: "none" }}>
+    <aside
+      className="toolbox"
+      hidden={hidden}
+      style={width === null ? undefined : { width: `${width}px`, flex: "none" }}
+    >
       <ToolboxSection
         id="git"
         title="Git"
