@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { builderTurnFromLines, readBuilderTurn, typedText } from "./turn";
+import { builderTurnFromLines, readBuilderTurn, typedText } from "./claudeTranscript";
 
 const typed = (content: unknown, extra: Record<string, unknown> = {}) => ({
   type: "user",

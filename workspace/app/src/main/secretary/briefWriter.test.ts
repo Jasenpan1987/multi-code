@@ -9,11 +9,16 @@ import os from "os";
 import path from "path";
 import type { SecretaryEvent } from "../process-manager";
 import type { TranscriptEntry } from "../../shared/remote-protocol";
+import type { BuilderTurn } from "../backends/types";
 import type { CliOptions, CliResult } from "./cli";
 
 const fakes = vi.hoisted(() => ({
-  source: (_id: string): { name: string; sessionId?: string } | null => null,
+  source: (_id: string): { name: string; backend?: string; sessionId?: string } | null => null,
+  // A Claude session's JSONL, read by the real reader.
   jsonlFor: (_sessionId: string): string | null => null,
+  // An OpenCode session's turn, as its backend would read it.
+  opencodeTurn: (_sessionId: string): BuilderTurn | null => null,
+  readFrom: [] as { backend: string; sessionId: string }[],
   calls: [] as { systemPrompt: string; stdin: string; options: CliOptions }[],
   answer: async (): Promise<CliResult> => ({
     ok: true,
@@ -24,9 +29,17 @@ const fakes = vi.hoisted(() => ({
 vi.mock("../process-manager", () => ({
   processManager: { secretarySource: (id: string) => fakes.source(id) },
 }));
-vi.mock("../backends/claude", async (orig) => ({
-  ...(await orig<typeof import("../backends/claude")>()),
-  findJsonlBySessionId: (sessionId: string) => fakes.jsonlFor(sessionId),
+vi.mock("../backends", () => ({
+  getBackend: (backend: string) => ({
+    readBuilderTurn: async (sessionId: string) => {
+      fakes.readFrom.push({ backend, sessionId });
+      if (backend === "opencode") return fakes.opencodeTurn(sessionId);
+      const file = fakes.jsonlFor(sessionId);
+      if (!file) return null;
+      const { readBuilderTurn } = await import("../backends/claudeTranscript");
+      return readBuilderTurn(file);
+    },
+  }),
 }));
 vi.mock("./cli", async (orig) => ({
   ...(await orig<typeof import("./cli")>()),
@@ -81,6 +94,8 @@ const entry = (i: number, size = 100): TranscriptEntry => ({
 beforeEach(() => {
   fakes.source = () => null;
   fakes.jsonlFor = () => null;
+  fakes.opencodeTurn = () => null;
+  fakes.readFrom = [];
   fakes.calls = [];
   fakes.answer = async () => ({
     ok: true,
@@ -89,11 +104,11 @@ beforeEach(() => {
 });
 
 describe("the prompt", () => {
-  it("is the spike's final prompt (v7), byte for byte", () => {
-    // docs/timeline/2026-10-08_brief-writer-spike.md, "Final system prompt". A
-    // deliberate change gets a new hash here and a line in the spike's record.
+  it("is the spike's final prompt (v7) plus OpenCode's dialogs (v8), byte for byte", () => {
+    // docs/timeline/2026-10-08_brief-writer-spike.md, "Final system prompt" and its
+    // T-522 addendum. A deliberate change gets a new hash here and a line there.
     expect(crypto.createHash("sha256").update(SYSTEM_PROMPT).digest("hex")).toBe(
-      "5e66247fb957d2fde37971de75a012e82c00bb19049bec76482cd20e3bcb3330"
+      "9ebd3266fe18af1593197cb63fa8a9acf637100dc214036e06bd9582e70b1ce5"
     );
   });
 });
@@ -353,11 +368,13 @@ describe("writeBriefFor", () => {
       typed("ok, push it to main"),
       says("Pushed."),
     ]);
-    fakes.source = (id) => (id === "inst-1" ? { name: "eat-what", sessionId: "ses-1" } : null);
+    fakes.source = (id) =>
+      id === "inst-1" ? { name: "eat-what", backend: "claude", sessionId: "ses-1" } : null;
     fakes.jsonlFor = (sessionId) => (sessionId === "ses-1" ? file : null);
     try {
       const brief = await writeBriefFor("inst-1", finished);
       expect(brief).toEqual({ ok: true, language: "English", text: "eat-what is done." });
+      expect(fakes.readFrom).toEqual([{ backend: "claude", sessionId: "ses-1" }]);
       expect(lastInput()).toEqual({
         session: "eat-what",
         event: "finished",
@@ -369,6 +386,33 @@ describe("writeBriefFor", () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("reads an OpenCode session through its own backend", async () => {
+    fakes.source = () => ({ name: "phase", backend: "opencode", sessionId: "ses_oc" });
+    fakes.opencodeTurn = (sessionId) =>
+      sessionId === "ses_oc"
+        ? {
+            builderLatestMessage: "把测试跑一下",
+            builderEarlierMessages: [],
+            turn: [
+              { kind: "tool", tool: "bash", text: "pnpm test" },
+              { kind: "assistant", text: "全部通过。" },
+            ],
+          }
+        : null;
+    expect((await writeBriefFor("inst-2", finished)).ok).toBe(true);
+    expect(fakes.readFrom).toEqual([{ backend: "opencode", sessionId: "ses_oc" }]);
+    expect(lastInput()).toEqual({
+      session: "phase",
+      event: "finished",
+      builderLatestMessage: "把测试跑一下",
+      builderEarlierMessages: [],
+      turn: [
+        { kind: "tool", tool: "bash", text: "pnpm test" },
+        { kind: "assistant", text: "全部通过。" },
+      ],
+    });
   });
 
   it("is a failure, not a throw, for an unknown instance", async () => {

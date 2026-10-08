@@ -16,7 +16,7 @@
 // No timers decide anything here: OpenCode reports a turn's end exactly, so the
 // only timer is the plugin-health one. Pure otherwise: no electron, no fs.
 
-import type { ActivityCallback, AlertDelivery } from "./types";
+import type { ActivityCallback, AlertDelivery, PromptToolCall } from "./types";
 import type { HookTimers } from "./claudeHooks";
 import type { PromptDetail } from "../remote/promptExtract";
 import { permissionDetail, questionDetail } from "./opencodePrompt";
@@ -55,6 +55,22 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
+// The request a dialog is about, for the secretary's brief (it never reaches the
+// phone, like Claude's PromptToolCall). A permission names what it guards in
+// `permission` ("bash", "edit", …), and `metadata` holds the specifics: for bash,
+// `{command}`. A question's input is its questions, the same shape as Claude's
+// AskUserQuestion input.
+function permissionCall(props: Record<string, unknown>): PromptToolCall {
+  return {
+    toolName: typeof props.permission === "string" ? props.permission : "permission",
+    toolInput: { patterns: props.patterns, metadata: props.metadata },
+  };
+}
+
+function questionCall(props: Record<string, unknown>): PromptToolCall {
+  return { toolName: "question", toolInput: { questions: props.questions } };
+}
+
 export class OpencodePluginAttention {
   // Subagent session → its parent, from `info.parentID` on session.created/updated:
   // the only place a child is marked. Everything else is a root. A resumed root
@@ -65,8 +81,12 @@ export class OpencodePluginAttention {
   // 3–5 times a turn and `idle` twice after an error or abort, so Finished is this
   // set losing a session, which happens once.
   private busyRoots = new Set<string>();
-  // Open dialogs, request id → the session that asked and what it asked.
-  private openRequests = new Map<string, { session: string; detail?: PromptDetail }>();
+  // Open dialogs, request id → the session that asked, what it asked, and the
+  // request itself for the secretary.
+  private openRequests = new Map<
+    string,
+    { session: string; detail?: PromptDetail; toolCall: PromptToolCall }
+  >();
   private promptOutstanding = false;
   // Roots whose turn the builder ended: a Reject (or Esc) on a permission, Esc on a
   // question, or an Esc interrupt, in that root or one of its subagents. OpenCode
@@ -153,12 +173,14 @@ export class OpencodePluginAttention {
 
     if (ASKED.has(event)) {
       // From any session: a subagent's dialog blocks the builder just the same.
-      const detail = event.startsWith("permission")
-        ? permissionDetail(props)
-        : (questionDetail(props) ?? undefined);
-      if (typeof props.id === "string") this.openRequests.set(props.id, { session, detail });
+      const isPermission = event.startsWith("permission");
+      const detail = isPermission ? permissionDetail(props) : (questionDetail(props) ?? undefined);
+      const toolCall = isPermission ? permissionCall(props) : questionCall(props);
+      if (typeof props.id === "string") {
+        this.openRequests.set(props.id, { session, detail, toolCall });
+      }
       this.promptOutstanding = true;
-      this.onActivity("prompt", detail);
+      this.onActivity("prompt", detail, toolCall);
       return;
     }
 
@@ -213,7 +235,7 @@ export class OpencodePluginAttention {
     const newest = [...this.openRequests.values()].at(-1);
     if (!newest) return;
     this.promptOutstanding = true;
-    this.onActivity("prompt", newest.detail);
+    this.onActivity("prompt", newest.detail, newest.toolCall);
   }
 
   private clearPrompt() {

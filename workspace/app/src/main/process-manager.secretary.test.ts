@@ -95,7 +95,7 @@ vi.mock("./backends", async () => {
     buildResumeCommand: () => "x",
   });
   const claude = backend("claude", true);
-  const opencode = backend("opencode", false);
+  const opencode = backend("opencode", true);
   return { getBackend: (name: string) => (name === "opencode" ? opencode : claude) };
 });
 
@@ -445,26 +445,42 @@ describe("instances that never get one", () => {
     expect(manager.secretaryEventOf(id)).toBeUndefined();
   });
 
-  it("an OpenCode instance", () => {
+  it("the manager doesn't disturb the activity everything else hears", () => {
     const manager = new ProcessManager();
-    const id = create(manager, "opencode");
-    const { seen } = listen(manager);
-    const report = latestSpawn(id).report;
-    report("prompt", { tool: "bash", question: "rm -rf build", options: [{ label: "Allow once" }] });
-    report("waiting");
-
-    expect(seen).toEqual([]);
-    expect(manager.secretaryEventOf(id)).toBeUndefined();
-  });
-
-  it("neither one disturbs the activity everything else hears", () => {
-    const manager = new ProcessManager();
-    const id = create(manager, "opencode");
+    const { id } = manager.createInstance("/Users/x/ud/manager", "Manager", "claude", true);
     const heard: string[] = [];
     manager.onActivity((_id, type) => heard.push(type));
     latestSpawn(id).report("waiting");
     expect(heard).toEqual(["waiting"]);
     expect(manager.runStateOf(id)).toBe("idle");
+  });
+});
+
+describe("an OpenCode instance (PRD v1.6)", () => {
+  it("keeps its dialog's request and its finish, like a Claude one", () => {
+    const manager = new ProcessManager();
+    const id = create(manager, "opencode");
+    const { kinds } = listen(manager);
+    const report = latestSpawn(id).report;
+    const detail = {
+      tool: "Permission",
+      question: "Permission required: bash: rm -rf build",
+      options: [{ label: "Allow once" }, { label: "Allow always" }, { label: "Reject" }],
+    };
+    const call = {
+      toolName: "bash",
+      toolInput: { patterns: ["rm -rf build"], metadata: { command: "rm -rf build" } },
+    };
+    report("prompt", detail, call);
+    expect(manager.secretaryEventOf(id)).toMatchObject({
+      kind: "needs-you",
+      prompt: { detail, toolName: "bash", toolInput: call.toolInput },
+    });
+    report("prompt-cleared");
+    expect(manager.secretaryEventOf(id)).toBeUndefined();
+    report("waiting");
+    expect(manager.secretaryEventOf(id)).toMatchObject({ kind: "finished" });
+    expect(kinds()).toEqual(["needs-you", null, "finished"]);
   });
 });
 

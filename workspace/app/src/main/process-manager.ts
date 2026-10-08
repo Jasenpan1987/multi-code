@@ -309,16 +309,19 @@ export class ProcessManager {
   }
 
   // What the secretary's brief writer reads for an instance: the name the builder
-  // knows it by, and the session it is on now. The live session is re-checked
+  // knows it by, the backend whose session it reads, and the session it is on now. The live session is re-checked
   // first rather than waiting for the next poll, so a turn that ends within
   // seconds of a `/clear` is read from the new transcript, not the abandoned one.
   // Null for an id that isn't an instance.
-  secretarySource(id: string): { name: string; sessionId?: string } | null {
+  secretarySource(
+    id: string
+  ): { name: string; backend: BackendName; sessionId?: string } | null {
     const instance = this.instances.get(id);
     if (!instance) return null;
     this.syncLiveSessionId(instance);
     return {
       name: instance.alias || path.basename(instance.cwd),
+      backend: instance.backend,
       sessionId: this.readableSessionId(instance),
     };
   }

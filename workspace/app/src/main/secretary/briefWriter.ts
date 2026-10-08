@@ -15,13 +15,12 @@
 
 import { processManager } from "../process-manager";
 import type { SecretaryEvent } from "../process-manager";
-import { findJsonlBySessionId } from "../backends/claude";
+import { getBackend } from "../backends";
 import type { PromptOption, TranscriptEntry } from "../../shared/remote-protocol";
 import type { BriefLanguage } from "../../shared/types";
 import { ABORTED_REASON, runJsonPrompt } from "./cli";
 import type { CliOptions, CliResult } from "./cli";
-import { readBuilderTurn } from "./turn";
-import type { BuilderTurn } from "./turn";
+import type { BuilderTurn } from "../backends/types";
 
 export type Brief =
   | { ok: true; language: BriefLanguage; text: string }
@@ -66,7 +65,7 @@ export const SYSTEM_PROMPT = `You are the secretary of one coding-agent session 
 The input is one JSON object about one event:
 - "session": the session's name, as the builder knows it.
 - "event": "finished" (the agent ended its turn and is waiting for the builder) or "needs-you" (the agent is stopped on a dialog only the builder can answer).
-- "prompt" (needs-you only): the dialog. "toolName" is the tool that raised it and "toolInput" its exact input. "question" and "options" are what the dialog shows. For AskUserQuestion, every question and its options are in toolInput.questions.
+- "prompt" (needs-you only): the dialog. "toolName" is the tool that raised it and "toolInput" its exact input. "question" and "options" are what the dialog shows. For AskUserQuestion, and for "question" (the same dialog in OpenCode), every question and its options are in toolInput.questions.
 - "builderLatestMessage": the last thing the builder typed in this session.
 - "builderEarlierMessages": up to three messages the builder typed before that, oldest first.
 - "turn": what happened since builderLatestMessage, in order: the agent's messages ("assistant"), the tools it ran ("tool", with a one-line summary; "pending": true marks the one it is stopped on), and rows the system added ("user").
@@ -81,9 +80,9 @@ Retell in your own words. Never read out or paraphrase the agent's reply line by
 
 finished: the outcome first, then what the builder asked for and what was done, whether it worked (tests pass, the build succeeded, what failed or couldn't be done), and anything left for the builder, such as a decision, something to check, or a question the agent asked at the end. If the agent ended on a question, end the brief with that question.
 
-needs-you, permission (any toolName except AskUserQuestion and ExitPlanMode): what the agent is working on and why it needs this step, then what the operation will actually do, in plain words: its effect, not its syntax. Say so when it deletes, overwrites, pushes, installs, kills processes, or reaches outside the project. Skip the harmless parts of a command, such as printing or filtering its output. Then ask whether to allow it. "It wants to run a shell command, allow?" is not enough.
+needs-you, permission (any toolName except AskUserQuestion, question and ExitPlanMode; OpenCode names them in lowercase, such as bash or edit, with the details in toolInput.metadata): what the agent is working on and why it needs this step, then what the operation will actually do, in plain words: its effect, not its syntax. Say so when it deletes, overwrites, pushes, installs, kills processes, or reaches outside the project. Skip the harmless parts of a command, such as printing or filtering its output. Then ask whether to allow it. "It wants to run a shell command, allow?" is not enough.
 
-needs-you, AskUserQuestion: in one sentence, what the agent is deciding. Then each question, and each of its options as a short phrase: what choosing it means and its main cost, not its full description. Say which option the agent recommends, if it does. With several questions, say how many and take them in order. Leave out the automatic "Other" choice.
+needs-you, AskUserQuestion or question: in one sentence, what the agent is deciding. Then each question, and each of its options as a short phrase: what choosing it means and its main cost, not its full description. Say which option the agent recommends, if it does. With several questions, say how many and take them in order. Leave out the automatic "Other" or "Type your own answer" choice.
 
 needs-you, ExitPlanMode: the plan in a few sentences, then that it is waiting for approval to start.
 
@@ -276,7 +275,7 @@ export async function writeBrief(
 // writes. Never throws. Aborting the signal kills the CLI and resolves
 // { ok: false, reason: "aborted" }.
 //
-// With no transcript to read (no session found, or the file unreadable), a dialog
+// With no transcript to read (no session found, or it can't be read), a dialog
 // is still briefed from the tool call and its options, which say what is being
 // asked. A finished turn, or a dialog that didn't decode, with nothing since the
 // builder's message is not: the model would have only the session's name, and a
@@ -291,8 +290,9 @@ export async function writeBriefFor(
     const source = processManager.secretarySource(instanceId);
     if (!source) return { ok: false, reason: "no such session" };
 
-    const jsonlPath = source.sessionId ? findJsonlBySessionId(source.sessionId) : null;
-    const read: BuilderTurn | null = jsonlPath ? await readBuilderTurn(jsonlPath) : null;
+    const read: BuilderTurn | null = source.sessionId
+      ? await getBackend(source.backend).readBuilderTurn(source.sessionId)
+      : null;
     if (signal?.aborted) return { ok: false, reason: ABORTED_REASON };
 
     const turn = read ?? { builderEarlierMessages: [], turn: [] };

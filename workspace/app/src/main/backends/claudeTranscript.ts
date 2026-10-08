@@ -1,5 +1,7 @@
-// What the builder last said in a Claude session, and what happened since: the
-// brief writer's material, read from the session's JSONL.
+// Reading a Claude session's JSONL: the entries the phone and the manager see
+// (`claudeTranscriptEntries`), and what the builder last said and what happened
+// since (`readBuilderTurn`), the secretary's material behind
+// `Backend.readBuilderTurn`.
 //
 // The builder's messages come from the raw rows, not from `readClaudeTranscript`,
 // which keeps every `isMeta` row with string content as a "user" entry and drops
@@ -9,12 +11,12 @@
 // builder's brief, and 40 real messages lost because they carried a pasted image
 // (docs/timeline/2026-10-08_brief-writer-spike.md, "Input format").
 //
-// The turn itself is `readClaudeTranscript`'s entries over the rows after that
-// message, so it reads the way the phone and the manager see a session.
+// The turn itself is `claudeTranscriptEntries` over the rows after that message, so
+// it reads the way the phone and the manager see a session.
 
 import fs from "fs";
-import { claudeTranscriptEntries } from "../backends/claude";
 import type { TranscriptEntry } from "../../shared/remote-protocol";
+import type { BuilderTurn } from "./types";
 
 // For the language rule only: a bare "B" or "[Image #1]" as the latest message
 // falls back to these, newest first.
@@ -31,15 +33,6 @@ const CLI_TAGGED_ROW = /^<[a-z]+(?:-[a-z]+)+[\s>]/;
 // of megabytes of old tool output and images, and only its end matters.
 export const TAIL_START_BYTES = 1 << 20;
 export const TAIL_MAX_BYTES = 32 << 20;
-
-export interface BuilderTurn {
-  // Absent when the session has no message the builder typed.
-  builderLatestMessage?: string;
-  // Up to three typed before it, oldest first.
-  builderEarlierMessages: string[];
-  // Everything after the latest message, or the whole session when there is none.
-  turn: TranscriptEntry[];
-}
 
 // The text of a row the builder typed, or null for anything else: rows the CLI
 // adds (`isMeta`: image notes, "Continue from where you left off.", messages from
@@ -150,4 +143,107 @@ async function readRange(
     filled += bytesRead;
   }
   return buffer.toString("utf8", 0, filled);
+}
+
+// The same entries from a run of JSONL lines, for a reader that wants only part of
+// a session: the secretary's brief writer reads the turn since the builder's last
+// message. A tool use is pending when its result isn't among these lines.
+export function claudeTranscriptEntries(lines: string[]): TranscriptEntry[] {
+  const entries: TranscriptEntry[] = [];
+  // Tool uses still awaiting a result, so they can be marked pending — that's
+  // the tool the agent is currently on, which is what a phone is for.
+  const unpaired = new Set<string>();
+  // Entry index -> tool_use id, so the pending flags can be resolved after the
+  // whole file is read. Local to the call: two instances read concurrently.
+  const toolEntryIds = new Map<number, string>();
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    let msg: Record<string, unknown>;
+    try {
+      msg = JSON.parse(line);
+    } catch {
+      continue;
+    }
+
+    const message = msg.message as Record<string, unknown> | undefined;
+    const content = message?.content;
+
+    if (msg.type === "user") {
+      // A string body is something the user actually typed. Array bodies are
+      // tool results, which only matter here for pairing.
+      if (typeof content === "string") {
+        const text = content.trim();
+        if (text) entries.push({ kind: "user", text });
+      } else if (Array.isArray(content)) {
+        for (const item of content) {
+          const entry = item as Record<string, unknown>;
+          if (entry?.type === "tool_result" && typeof entry.tool_use_id === "string") {
+            unpaired.delete(entry.tool_use_id);
+          }
+        }
+      }
+      continue;
+    }
+
+    if (msg.type !== "assistant" || !Array.isArray(content)) continue;
+
+    for (const item of content) {
+      const entry = item as Record<string, unknown>;
+      if (entry?.type === "text" && typeof entry.text === "string") {
+        const text = entry.text.trim();
+        if (text) entries.push({ kind: "assistant", text });
+        continue;
+      }
+      if (entry?.type === "tool_use" && typeof entry.name === "string") {
+        if (typeof entry.id === "string") unpaired.add(entry.id);
+        const summary = summarizeTranscriptTool(entry.name, entry.input);
+        entries.push({
+          kind: "tool",
+          tool: entry.name,
+          text: summary ?? "",
+        });
+        if (typeof entry.id === "string") {
+          toolEntryIds.set(entries.length - 1, entry.id);
+        }
+      }
+    }
+  }
+
+  // Resolve pending only now: a tool_use paired further down the file must not
+  // stay flagged from when it was first seen.
+  for (const [index, id] of toolEntryIds) {
+    const entry = entries[index];
+    if (entry && unpaired.has(id)) entry.pending = true;
+  }
+
+  return entries;
+}
+
+// One-line description of a tool call, matching what the desktop shows.
+function summarizeTranscriptTool(name: string, input: unknown): string | undefined {
+  if (typeof input !== "object" || input === null) return undefined;
+  const record = input as Record<string, unknown>;
+  const str = (value: unknown): string | undefined =>
+    typeof value === "string" && value.length > 0 ? value : undefined;
+
+  switch (name) {
+    case "Bash":
+      return str(record.command);
+    case "Read":
+    case "Write":
+    case "Edit":
+    case "NotebookEdit":
+      return str(record.file_path);
+    case "Grep":
+      return str(record.pattern);
+    case "Glob":
+      return str(record.pattern);
+    case "WebFetch":
+      return str(record.url);
+    case "Task":
+      return str(record.description);
+    default:
+      return str(record.description) ?? str(record.command);
+  }
 }

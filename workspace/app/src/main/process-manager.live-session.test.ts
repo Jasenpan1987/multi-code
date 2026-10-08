@@ -245,7 +245,11 @@ describe("what the secretary's brief writer reads", () => {
     // A turn can end within one poll of a /clear; the brief must be read from the
     // new transcript, not the one the CLI stopped writing to.
     backendState.liveSessionId = "ses-2";
-    expect(manager.secretarySource(instanceId)).toEqual({ name: "msk", sessionId: "ses-2" });
+    expect(manager.secretarySource(instanceId)).toEqual({
+      name: "msk",
+      backend: "claude",
+      sessionId: "ses-2",
+    });
     expect(sessionIdOf()).toBe("ses-2");
   });
 

@@ -13,7 +13,7 @@ import { OPENCODE_INIT_EVENT, OPENCODE_PLUGIN_EVENTS } from "./opencodePlugin";
 import { MULTI_QUESTION_TOOL_LABEL, PERMISSION_TOOL, QUESTION_TOOL_LABEL } from "./opencodePrompt";
 import { parseAlertDelivery } from "../manager-mcp/server";
 import type { HookTimers } from "./claudeHooks";
-import type { AlertDelivery } from "./types";
+import type { AlertDelivery, PromptToolCall } from "./types";
 import type { PromptDetail } from "../remote/promptExtract";
 
 const FIXTURES = path.join(__dirname, "__fixtures__/opencode-plugin");
@@ -57,6 +57,7 @@ interface Raised {
   ms: number;
   type: string;
   detail?: PromptDetail;
+  toolCall?: PromptToolCall;
 }
 
 function harness() {
@@ -64,7 +65,7 @@ function harness() {
   const raised: Raised[] = [];
   const health: boolean[] = [];
   const attention = new OpencodePluginAttention(
-    (type, detail) => raised.push({ ms: timers.now, type, detail }),
+    (type, detail, toolCall) => raised.push({ ms: timers.now, type, detail, toolCall }),
     timers,
     (ok) => health.push(ok)
   );
@@ -195,6 +196,41 @@ describe("prompt detail for a paired phone", () => {
 
   it("a box with two questions is shown read-only", () => {
     expect(replay("question-multi").raised[0].detail?.tool).toBe(MULTI_QUESTION_TOOL_LABEL);
+  });
+});
+
+describe("the request behind a dialog, for the secretary", () => {
+  it("a bash permission carries the exact command", () => {
+    const call = replay("permission-once").raised[0].toolCall;
+    expect(call).toEqual({
+      toolName: "bash",
+      toolInput: { patterns: ["touch a.txt"], metadata: { command: "touch a.txt" } },
+    });
+  });
+
+  it("a question carries every question with its options", () => {
+    const { raised, events } = replay("question-multi");
+    const asked = events.find((e) => e.type === "question.asked");
+    expect(raised[0].toolCall).toEqual({
+      toolName: "question",
+      toolInput: { questions: asked?.properties.questions },
+    });
+    expect(raised[0].toolCall?.toolInput).toMatchObject({ questions: [{}, {}] });
+  });
+
+  it("a dialog said again keeps its request", () => {
+    const { attention, raised } = harness();
+    attention.handle(status("a", "busy"));
+    attention.handle(status("b", "busy"));
+    attention.handle(permission("p1", "b"));
+    attention.handle(status("a", "idle"));
+    expect(raised[2].type).toBe("prompt");
+    expect(raised[2].toolCall).toEqual(raised[0].toolCall);
+    expect(raised[2].toolCall?.toolName).toBe("bash");
+  });
+
+  it("a finish carries no request", () => {
+    expect(replay("plain-finish").raised[0].toolCall).toBeUndefined();
   });
 });
 

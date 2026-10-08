@@ -5,6 +5,7 @@ import { execSync } from "child_process";
 import Database from "better-sqlite3";
 import type {
   Backend,
+  BuilderTurn,
   HookAttention,
   SessionDiscovery,
   SpawnConfig,
@@ -219,6 +220,38 @@ function summarizeOpencodeTool(
   }
 }
 
+// A message row's role; "assistant" when it can't be read.
+function messageRole(data: string): string {
+  try {
+    const message = JSON.parse(data) as { role?: unknown };
+    return typeof message.role === "string" ? message.role : "assistant";
+  } catch {
+    return "assistant";
+  }
+}
+
+// One part as a transcript entry, or null for bookkeeping (step-start /
+// step-finish / reasoning / patch / file / compaction). `role` is only read for a
+// text part, so a caller can defer parsing the message.
+function partEntry(part: Record<string, unknown>, role: () => string): TranscriptEntry | null {
+  if (part.type === "text") {
+    const text = typeof part.text === "string" ? part.text.trim() : "";
+    if (!text) return null;
+    return { kind: role() === "user" ? "user" : "assistant", text };
+  }
+  if (part.type === "tool" && typeof part.tool === "string") {
+    const state = part.state as Record<string, unknown> | undefined;
+    const input = state?.input as Record<string, unknown> | undefined;
+    return {
+      kind: "tool",
+      tool: part.tool,
+      text: summarizeOpencodeTool(part.tool, input),
+      pending: state?.status === IN_FLIGHT_STATUS ? true : undefined,
+    };
+  }
+  return null;
+}
+
 // Read the tail of an OpenCode session as reflowable lines.
 //
 // The `part` table holds the conversation broken into typed pieces, which maps
@@ -251,39 +284,116 @@ export function readOpencodeTranscript(
         continue;
       }
 
-      if (part.type === "text") {
-        const text = typeof part.text === "string" ? part.text.trim() : "";
-        if (!text) continue;
-        let role = "assistant";
-        try {
-          const message = JSON.parse(row.message) as { role?: string };
-          if (typeof message.role === "string") role = message.role;
-        } catch {
-          // fall back to assistant
-        }
-        entries.push({
-          kind: role === "user" ? "user" : "assistant",
-          text,
-        });
-        continue;
-      }
-
-      if (part.type === "tool" && typeof part.tool === "string") {
-        const state = part.state as Record<string, unknown> | undefined;
-        const input = state?.input as Record<string, unknown> | undefined;
-        entries.push({
-          kind: "tool",
-          tool: part.tool,
-          text: summarizeOpencodeTool(part.tool, input),
-          pending: state?.status === IN_FLIGHT_STATUS ? true : undefined,
-        });
-      }
-      // step-start / step-finish / reasoning / patch: bookkeeping, not content.
+      const entry = partEntry(part, () => messageRole(row.message));
+      if (entry) entries.push(entry);
     }
 
     return entries.reverse();
   } catch {
     return [];
+  } finally {
+    db?.close();
+  }
+}
+
+// For the language rule only, as on the Claude side: a bare "B" as the latest
+// message falls back to these, newest first.
+const EARLIER_MESSAGES = 3;
+
+// How many of a session's newest messages the builder-turn reader looks at. Each
+// step of an agent's turn is a message of its own, so a long turn runs to a few
+// hundred; past this the turn is read without the message that started it.
+export const BUILDER_TURN_SCAN_MESSAGES = 300;
+
+// One message of a session as the builder-turn reader takes it, newest first. The
+// parts are fetched only when asked for: an older assistant message's parts (its
+// tool output included) are never needed.
+export interface OpencodeTurnMessage {
+  role: string;
+  parts(): Record<string, unknown>[];
+}
+
+// What the builder typed in a user message: its text parts, minus the ones
+// OpenCode wrote itself. Those are marked `synthetic` ("<system-reminder>Note: The
+// user opened the file …", "Continue if you have next steps, or stop and ask …"
+// after a compaction); `ignored` is honoured the same way. Null when nothing is
+// left: a message of only synthetic text, a file or a compaction marker.
+export function opencodeTypedText(parts: Record<string, unknown>[]): string | null {
+  const text = parts
+    .filter(
+      (part) =>
+        part.type === "text" &&
+        typeof part.text === "string" &&
+        part.synthetic !== true &&
+        part.ignored !== true
+    )
+    .map((part) => part.text as string)
+    .join("\n")
+    .trim();
+  return text || null;
+}
+
+export function opencodeBuilderTurn(newestFirst: OpencodeTurnMessage[]): BuilderTurn {
+  const typed: { index: number; text: string }[] = [];
+  for (let i = 0; i < newestFirst.length && typed.length <= EARLIER_MESSAGES; i++) {
+    const message = newestFirst[i];
+    if (message.role !== "user") continue;
+    const text = opencodeTypedText(message.parts());
+    if (text !== null) typed.push({ index: i, text });
+  }
+
+  const [latest, ...earlier] = typed;
+  const since = newestFirst.slice(0, latest ? latest.index : newestFirst.length).reverse();
+  const turn: TranscriptEntry[] = [];
+  for (const message of since) {
+    for (const part of message.parts()) {
+      const entry = partEntry(part, () => message.role);
+      if (entry) turn.push(entry);
+    }
+  }
+  return {
+    builderLatestMessage: latest?.text,
+    builderEarlierMessages: earlier.reverse().map((message) => message.text),
+    turn,
+  };
+}
+
+// The builder's turn from OpenCode's database. Null when the session can't be read.
+// `dbPath` is overridable for tests, like everywhere else in this file.
+export function readOpencodeBuilderTurn(sessionId: string, dbPath?: string): BuilderTurn | null {
+  let db: Database.Database | null = null;
+  try {
+    db = dbPath ? openDb(dbPath) : openDb();
+    const rows = db
+      .prepare(
+        "SELECT id, data FROM message WHERE session_id = ? " +
+          "ORDER BY time_created DESC, id DESC LIMIT ?"
+      )
+      .all(sessionId, BUILDER_TURN_SCAN_MESSAGES) as Array<{ id: string; data: string }>;
+    if (rows.length === 0) return null;
+    const partsOf = db.prepare("SELECT data FROM part WHERE message_id = ? ORDER BY id");
+    const messages: OpencodeTurnMessage[] = rows.map((row) => {
+      let cached: Record<string, unknown>[] | null = null;
+      return {
+        role: messageRole(row.data),
+        parts: () => {
+          cached ??= (partsOf.all(row.id) as Array<{ data: string }>).flatMap((part) => {
+            try {
+              const parsed: unknown = JSON.parse(part.data);
+              return typeof parsed === "object" && parsed !== null
+                ? [parsed as Record<string, unknown>]
+                : [];
+            } catch {
+              return [];
+            }
+          });
+          return cached;
+        },
+      };
+    });
+    return opencodeBuilderTurn(messages);
+  } catch {
+    return null;
   } finally {
     db?.close();
   }
@@ -416,8 +526,7 @@ function finiteNumber(value: unknown): number {
 
 export const opencodeBackend: Backend = {
   name: "opencode",
-  // Out of the voice secretary's v1 (its PRD, Out of Scope).
-  keepsSecretaryEvents: false,
+  keepsSecretaryEvents: true,
 
   spawn(_cwd: string, opts?: SpawnOptions): SpawnConfig {
     // OpenCode handles "no prior session" gracefully — always pass --continue.
@@ -449,6 +558,10 @@ export const opencodeBackend: Backend = {
 
   readTranscript(sessionId, limit): TranscriptEntry[] {
     return readOpencodeTranscript(sessionId, limit);
+  },
+
+  async readBuilderTurn(sessionId) {
+    return readOpencodeBuilderTurn(sessionId);
   },
 
   readContextUsage(sessionId): ContextUsage | null {

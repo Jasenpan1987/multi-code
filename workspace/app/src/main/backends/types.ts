@@ -83,6 +83,19 @@ export interface PromptToolCall {
 }
 
 /**
+ * What the builder last said in a session and what happened since: the voice
+ * secretary's material for a brief (`Backend.readBuilderTurn`).
+ */
+export interface BuilderTurn {
+  // Absent when the session has no message the builder typed.
+  builderLatestMessage?: string;
+  // Up to three typed before it, oldest first.
+  builderEarlierMessages: string[];
+  // Everything after the latest message, or the whole session when there is none.
+  turn: TranscriptEntry[];
+}
+
+/**
  * Activity callback. `detail` is populated only for the "prompt" event, and
  * only when the blocking tool_use could be decoded into a question plus
  * options — it's what lets a paired phone render real buttons instead of a
@@ -109,9 +122,9 @@ export interface Backend {
 
   /**
    * Whether this backend's instances keep a secretary event (their latest
-   * Finished or Needs-you, see ProcessManager.onSecretaryEvent). False for
-   * OpenCode, which the voice secretary leaves out as "a later track that may
-   * work differently" (docs/specs/voice-secretary/prd.md, Out of Scope).
+   * Finished or Needs-you, see ProcessManager.onSecretaryEvent), which the voice
+   * secretary briefs from `readBuilderTurn`. True for both today; OpenCode joined
+   * in voice-secretary PRD v1.6.
    */
   readonly keepsSecretaryEvents: boolean;
 
@@ -197,6 +210,14 @@ export interface Backend {
    * shows as "no transcript" while leaving the terminal view available.
    */
   readTranscript(sessionId: string, limit: number): TranscriptEntry[];
+
+  /**
+   * What the builder last typed in this session, up to three messages before it,
+   * and everything since, for the voice secretary's brief. Only what the builder
+   * typed counts as theirs, never text the CLI added to the conversation itself.
+   * Null when the session can't be read.
+   */
+  readBuilderTurn(sessionId: string): Promise<BuilderTurn | null>;
 
   /**
    * How full this session's context window is, from the newest assistant turn.
