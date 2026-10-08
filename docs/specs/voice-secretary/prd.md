@@ -1,6 +1,6 @@
 # PRD: Voice Secretary
 
-**Version:** 1.4
+**Version:** 1.6
 **Last Updated:** 2026-10-08
 **Status:** approved
 **Owner:** Jasen
@@ -8,7 +8,7 @@
 ## Overview
 
 The builder wants agents to keep working while they are away from the screen, washing dishes
-or doing other chores. Each Claude Code session gets a secretary. When the session finishes
+or doing other chores. Each Claude Code and OpenCode session gets a secretary. When the session finishes
 or needs the builder, the usual chime and red dot fire; with Secretary Mode on, clicking the
 contact has the secretary brief the builder out loud, the way a secretary briefs a CEO: a
 retold account with the details, not the screen read aloud. When words aren't enough, a
@@ -24,7 +24,8 @@ docs/timeline/2026-10-07_voice-engine-hosting.md)
 ## Background & Context
 
 - **The moments already exist.** Claude instances report Finished and Needs-you through
-  report-only hooks (`docs/specs/attention-alerts/prd.md`). The secretary speaks at those
+  report-only hooks, OpenCode instances through Multi-Code's plugin
+  (`docs/specs/attention-alerts/prd.md`). The secretary speaks at those
   moments and no others. (source: docs/timeline/2026-10-07_voice-secretary-ideation.md)
 - **The dialog's contents are already parsed.** A Needs-you from a permission request,
   `AskUserQuestion` or `ExitPlanMode` carries the tool, the question and the option list
@@ -92,10 +93,10 @@ docs/timeline/2026-10-07_voice-engine-hosting.md)
 **So that** when I walk over and click, it plays at once
 
 **Acceptance Criteria:**
-- [ ] While Secretary Mode is on, every Finished or Needs-you event from a Claude Code instance starts that session's brief right away, text first, then audio
+- [ ] While Secretary Mode is on, every Finished or Needs-you event from a Claude Code or OpenCode instance starts that session's brief right away, text first, then audio
 - [ ] One brief per event. A newer event for the same session replaces the older brief
 - [ ] If the alert clears before the builder clicks (they answered in the terminal or on the phone), the brief is dropped and never plays
-- [ ] OpenCode instances get no brief and behave as today
+- [ ] An OpenCode instance is briefed the same way: its permission dialogs say what the command or edit will do, and its question dialogs read their questions and options (added v1.6)
 - [ ] the manager instance gets no secretary in v1
 - [ ] If writing the brief fails, the card still opens with its attachments and one line saying no brief could be written
 
@@ -196,7 +197,7 @@ docs/timeline/2026-10-07_voice-engine-hosting.md)
 - [ ] Settings take a server address and a key. Leaving them empty is valid and means text only
 - [ ] The key is stored only on this machine, in Multi-Code's own data folder, is never shown in full after it is saved, and never appears in logs
 - [ ] A test button reports whether the server is reachable, the key is accepted, and a short sample comes back, with the reason when it isn't
-- [ ] Any server with the OpenAI speech API shape and a bearer key works, not only `tts.jasenpan.com`
+- [ ] Any server built from `deploy/tts-server/` works, not only `tts.jasenpan.com`. Other engines with the OpenAI speech API shape are out of scope: the request names the Serena voice and carries Qwen-style tone instructions, so another engine fails Test and the secretary stays text only (G-004)
 
 ---
 
@@ -228,7 +229,7 @@ docs/timeline/2026-10-07_voice-engine-hosting.md)
 - Mid-turn narration, and asking the secretary for progress on demand.
 - Speech recognition inside Multi-Code; the builder uses their own dictation software.
 - Delivery to the phone, SMS or iMessage. The phone keeps the same pull model when it comes.
-- OpenCode sessions, as a later track that may work differently.
+- Answering OpenCode dialogs in words (Story 6) until Milestone 2 is planned: its dialogs take arrow keys, not digits, and need their own mapping.
 - Generating audio on the user's Mac.
 - A designed English female voice; Serena speaks both languages.
 - Use on company projects during the POC.
@@ -257,3 +258,5 @@ and 20 s limits, nothing on disk) were confirmed by the builder on 2026-10-07.
 | 1.2 | 2026-10-07 | All assumptions confirmed by the builder; the brief writer is a spawned `claude` CLI. Approved for task breakdown |
 | 1.3 | 2026-10-08 | Speech timeout 15 s → 30 s and "ready" split into text (10 s) and audio (30 s): the T-501 spike measured real briefs at 33–51 s of audio taking 12–21 s to synthesize, so 15 s failed most of them. Decided by the supervisor session while working autonomously; for the builder to review |
 | 1.4 | 2026-10-08 | The speech request no longer sends `language`: the server detects it (`Auto`), for Chinese briefs full of English terms. Builder's decision, kept after an A/B listen of 11 real briefs spoken both ways |
+| 1.5 | 2026-10-08 | Story 8 narrowed to servers built from `deploy/tts-server/`, since the request names the Serena voice; no voice setting (G-004, builder's decision) |
+| 1.6 | 2026-10-08 | OpenCode sessions get a secretary too (Story 2), brought into Milestone 1 before release. Answering their dialogs in words waits for Milestone 2. Builder's decision |

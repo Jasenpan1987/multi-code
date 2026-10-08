@@ -2,7 +2,7 @@
 
 **Generated:** 2026-09-02
 **PRD Version:** 1.0
-**Total Tasks:** 17 (T-215, T-216 and T-217 added 2026-09-15 to 09-17, all from real use)
+**Total Tasks:** 20 (T-215, T-216 and T-217 added 2026-09-15 to 09-17, all from real use; T-218..T-220 added 2026-10-08 from the post-epic code review)
 **Milestones:** M1 (See who's full), M2 (Manager can look), M3 (Manager can dispatch), M4 (Handoff + safety regression)
 
 ## Task Overview
@@ -1079,3 +1079,33 @@ escalation is covered by a test that fails if the gate ever regresses.
   that knows it just started something, never in the gate — loosening the silence
   guard to make this case pass would have removed the only protection against a write
   landing on a dialog.
+
+---
+
+## After the epic: review follow-ups
+
+Three defects a code review found after all 15 tasks were done, each confirmed then by
+probing the running app (2026-09-15). Filed 2026-10-08. Run state has since moved to the
+report-only hooks (attention-alerts), so re-check each one before fixing it.
+
+### T-218: `/clear` and `/new` only on an idle session
+
+- **Type:** bug (P2, irreversible) · **Status:** ready · **Blocked by:** none
+- **Code:** `workspace/app/src/main/manager-mcp/write-tools.ts` (`run_command`, `settleIfStarting`), `workspace/app/src/main/run-state.ts`
+- **Description:** `run_command` only waits for `starting`, and run state refuses only `blocked`, so a `busy` target is accepted. A slash command sent while busy is queued and runs when the turn ends (probed with `/context`), so `/clear` lands the moment the work finishes and wipes the conversation. Files are safe; the conversation is not, and it can't be undone. Require `idle` for `/clear` and `/new` and refuse a busy target with "it is mid-task".
+- **Acceptance:** a test where a busy target refuses `/clear` and `/new` with zero bytes reaching the pty; an idle target still accepts them; the other allowlisted commands behave as today.
+
+### T-219: `/context` leaves the target `busy` forever
+
+- **Type:** bug (P2) · **Status:** ready · **Blocked by:** none
+- **Code:** `workspace/app/src/main/process-manager.ts` (`tryRunCommand`), `workspace/app/src/main/run-state.ts` (`onWrite`)
+- **Description:** `tryRunCommand` marks run state busy through `noteWrite`, but a local command like `/context` starts no model turn, so nothing ever reports it finished. Measured 2026-09-15: `busy` 60 s later with the screen idle; `list_sessions` misreports it and `wait_for_idle` sits out its full 5 minutes. Restore the pre-call state once the command is submitted, or keep local commands out of `onWrite`. First check whether the Stop hook fires for a local command now.
+- **Acceptance:** after `run_command /context` on an idle session, `list_sessions` reports it idle again within seconds, and `wait_for_idle` returns at once.
+
+### T-220: Stopped sessions' transcripts re-read every 20 s
+
+- **Type:** bug (P2, performance) · **Status:** ready · **Blocked by:** none
+- **Code:** `workspace/app/src/main/process-manager.ts` (`refreshStaleContextUsage`)
+- **Description:** T-214 made the context-usage refresh read every contact's transcript, not only running ones. Measured 2026-09-15: 44 ms of main-process blocking every 20 s with 10 Claude contacts (largest transcript 11 MB), not counting 9 OpenCode sqlite reads. A stopped session's transcript can't change: read it once (at start-up and on `instance-exit`) and skip it after.
+- **Acceptance:** a stopped instance's transcript is read once, not on every refresh; a running one still refreshes on the TTL; the contact list still shows a stopped session's figure at launch.
+

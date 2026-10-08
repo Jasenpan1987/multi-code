@@ -1,6 +1,44 @@
 # Test plan: Voice Secretary
 
-**Epic:** `docs/specs/voice-secretary/prd.md` v1.3 · **Tasks:** `docs/specs/voice-secretary/kanban.md`
+**Epic:** `docs/specs/voice-secretary/prd.md` v1.3 (T-508), v1.6 (T-523) · **Tasks:** `docs/specs/voice-secretary/kanban.md`
+
+## OpenCode in Milestone 1 (T-523)
+
+**Result: every OpenCode item passes.** One pre-existing low follow-up (T-524).
+
+### Build, launch, sessions
+
+- **Build:** branch `voice-secretary` at `bc99f99` plus the uncommitted T-515 and T-520..T-522
+  work, `pnpm run pack`; the asar was checked to hold `readOpencodeBuilderTurn` and
+  `keepsSecretaryEvents: true` in `opencode.js`.
+- **Launch and isolation:** as T-508, through launchd, own userData under
+  `$CLAUDE_JOB_DIR/tmp/t523/`, CDP on 9523 (`.omt/probes/voice-secretary/t523/`, `launch.sh`,
+  `q.mjs`, `raw.mjs`, `quit.sh`). The builder's installed Multi-Code ran throughout, untouched.
+- **Sessions:** two OpenCode 1.18.35 instances, `oc-zh` (Chinese messages) and `oc-en`
+  (English), in empty projects whose `opencode.json` sets `bash: {"*": "allow", "touch *":
+  "ask", "rm *": "ask"}`, as the attention-alerts spike did. Model GPT-6.1 Sol (the builder's
+  OpenCode default). Speech: `https://tts.jasenpan.com`, Test OK in 3.3 s.
+- **Harness artifact, not a product bug:** instances created over IPC before the page knew of
+  them had no terminal to answer OpenCode's start-up terminal queries, so the TUI sat at
+  33% CPU painting nothing. Restarted once the page showed them, they started normally.
+
+### Results
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Bash permission, Chinese: chime and red dot at the dialog; brief in Chinese says what the command does and asks | **pass**: "oc-zh 这边需要你点头。……只会多一个空文件，不会删除或覆盖别的东西，也不会碰项目外面。要允许它执行吗？" Text +9.5 s, audio +18.3 s |
+| 2 | Bash permission, English | **pass**: "oc-en is waiting on a permission. … Nothing gets deleted, and if the file already exists, only its timestamp changes. Do you want to allow it once, allow it always, or reject it?" Text +7.7 s, audio +19.2 s; the dialog stayed open 80 s untouched |
+| 3 | Rejected in the terminal (Esc) before the click: the click opens nothing | **pass**: brief dropped 20 ms after the keystroke, no file created, the click opened no card |
+| 4 | Question box, Chinese: briefed as a question with its options, without "Type your own answer" | **pass**: "……你喜欢茶还是咖啡。一共两个选项，选茶，或者选咖啡，没有别的。它没有给推荐。" The card read "Needs you" and played (15.8 s) |
+| 5 | Answered in the terminal, then a finish: Finished brief, click plays it | **pass** (Chinese and English): "oc-en just finished. … Nothing was created or changed, and there's nothing left for you to do." |
+| 6 | No residue | **pass**: no brief writer left; nothing of the QA instance left after quit |
+
+Not re-run for OpenCode, since nothing backend-specific is in them: mode off, the server
+stopped, two sessions at once, mouse motion, settings (all T-508).
+
+**Explained:** in check 1 the dialog was approved 2.7 s after its audio was ready, before the
+probe's click: the builder, seeing the test window, pressed Allow themselves (confirmed in
+session). Not a product bug.
 
 ## Milestone 1 QA pass (T-508)
 

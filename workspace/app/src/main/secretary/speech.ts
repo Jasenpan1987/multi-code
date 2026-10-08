@@ -1,6 +1,8 @@
 // The secretary's voice: one HTTP call to a speech server with the OpenAI speech
 // API shape (`POST /v1/audio/speech`, bearer key), such as the one in
-// deploy/tts-server/. Any server of that shape works, not only ours.
+// deploy/tts-server/. Any server built from there works, not only ours; another
+// engine of the same shape doesn't, since the request names the Serena voice and
+// carries Qwen-style tone instructions (G-004).
 //
 // Nothing here imports electron: the caller passes the server it read from userData
 // (settings-store's `loadSpeechServer`), so this runs in tests and from a plain node

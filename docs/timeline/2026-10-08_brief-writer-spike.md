@@ -424,3 +424,25 @@ it is the credential source itself, and this builder doesn't use it.
 The real login happened to have expired during the work (token `expiresAt` 13:53 UTC, call at
 14:03). One real call with the override returned `Token is expired` and ran `false`; no browser
 opened. Fifteen minutes later the token had been renewed and the same calls succeeded.
+
+## T-522 addendum: OpenCode's dialogs (prompt v8, 2026-10-08)
+
+OpenCode sessions joined Milestone 1 (PRD v1.6). Their dialogs reach the brief writer as
+`toolName` `bash`, `edit`, … for a permission (with `toolInput: {patterns, metadata}`, the
+command in `metadata.command`) and `question` for a question box (`toolInput: {questions}`,
+the same shape as AskUserQuestion's). v7 said "any toolName except AskUserQuestion and
+ExitPlanMode" is a permission, so a question box would have been briefed as one. v8 changes
+four phrases and nothing else (`.omt/probes/voice-secretary/t501/system-prompt-v8.txt`, diff
+against v7): `question` is named beside AskUserQuestion twice, OpenCode's lowercase permission
+names and `toolInput.metadata` are mentioned, and "Type your own answer" (OpenCode's automatic
+choice) is left out like "Other". sha256 `9ebd3266…b1ce5`.
+
+Re-run on the live CLI (`briefWriter.live.test.ts`, 2026-10-08): the six T-501 samples and
+three OpenCode ones, all nine in the right language, opening with the session's name, 4.3–7.1 s.
+The OpenCode samples are real personal sessions read by `readOpencodeBuilderTurn`
+(`ai-nativ-sdlc`, Chinese, a version check; `mp-compare-ws`, English, a skills comparison) with
+the dialog shaped exactly as `opencodeAttention` passes it: a finish, a bash permission to
+delete a temp clone ("The delete is permanent, but it only touches a temporary copy in the temp
+folder … Your own repo isn't touched. Do you want to allow it?"), and a two-question box read
+question by question with its options and the recommended one, without "Type your own answer".
+

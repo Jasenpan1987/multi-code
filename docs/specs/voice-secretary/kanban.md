@@ -4,14 +4,14 @@
 **Source:** `docs/specs/voice-secretary/prd.md` v1.2 · `docs/specs/voice-secretary/gaps.md` (nothing open)
 **Evidence:** `docs/timeline/2026-10-07_voice-secretary-ideation.md` · `docs/timeline/2026-10-07_voice-engine-hosting.md`
 **Speech server:** `deploy/tts-server/README.md`
-**Total Tasks:** 19 (T-501..T-514, follow-ups T-515..T-519)
+**Total Tasks:** 24 (T-501..T-514, follow-ups T-515..T-519, OpenCode T-520..T-523, T-524)
 **Milestones:** M1 (hear the brief) · M2 (answer in words) · M3 (originals when words aren't enough)
 
 Task ids start at T-501, after attention-alerts' T-4xx. Only M1 is committed; M2 and M3 are
 re-planned when M1 ships. Work happens on the `voice-secretary` branch, merged into `master`
 when the epic is done. Tasks can be taken one at a time in the order below, or in parallel
-along the [lanes](#parallel-lanes). Every task is Claude Code only: OpenCode instances and the
-manager get no secretary (PRD Story 2).
+along the [lanes](#parallel-lanes). T-501..T-519 are Claude Code only; OpenCode joined M1 with T-520..T-523 (PRD v1.6). The
+manager gets no secretary (PRD Story 2).
 
 ## Task Overview
 
@@ -190,10 +190,11 @@ Found in T-508 and along the way (`.omt/voice-secretary-decisions.md`). None blo
 
 ### T-515: Briefs play at a normal loudness
 
-- **Type:** feature · **Status:** ready · **Blocked by:** none
+- **Type:** feature · **Status:** done · **Blocked by:** none
 - **Code:** `workspace/app/src/main/secretary/index.ts` (where the wav is kept) or `workspace/app/src/renderer/audio/briefPlayer.ts`
 - **Description:** The speech server's audio is quiet: measured RMS −26 to −28 dBFS with peaks at −7 to −10 dBFS, 7–9 dB under ordinary speech loudness; the builder had to turn the Mac to full volume (2026-10-08, with the QA instance at 1% volume, but the files themselves are quiet). Normalize each brief to a target loudness (about −18 dBFS RMS) with the gain capped so peaks stay below clipping. Supervisor's call, from two options (automatic normalization vs a volume slider); a slider can follow if wanted.
 - **Acceptance:** each brief's measured RMS lands near the target, no sample clips, and a brief at the Mac's normal volume is as loud as other apps' speech.
+- **Done 2026-10-08:** `secretary/loudness.ts` (`normalizeLoudness`), applied in `index.ts` as the wav is kept. A plain gain couldn't do it: the server's speech has an 18–22 dB crest factor, so the gain to −18 would push its peaks to +3 dBFS. So one gain to −18 dBFS (RMS over 50 ms blocks above −50 dBFS, so pauses don't count; at most +20 dB), then a limiter with a −1 dBFS ceiling (moving minimum of the needed gain, smoothed by a moving average of the same 5 ms half-width, which can't clip by construction; 80 ms release). Anything not 16-bit PCM WAV passes through. On the 22 spike briefs: −22.7..−29.4 → −17.6..−18.0, every peak ≤ −1.0 dBFS; the limiter cuts more than 1 dB on under 1% of 10 ms blocks, at most 4 dB. A fresh brief from `tts.jasenpan.com`: −26.8 → −18.1; macOS `say` measures −17.4. 20–35 ms per brief, once, in main; past 3 minutes' worth of samples (24 kHz mono) the audio plays as it came, and an extensible header counts only with the PCM SubFormat (both from GPT review). Target raised to −16.5 dBFS (about 20% louder) after the builder listened at normal volume and found −18 still a little quiet (2026-10-09); the spike briefs then land at −16.2..−16.6, peaks ≤ −1.0, the limiter cutting more than 1 dB on about 1% of 10 ms blocks, at most 5.5 dB.
 
 ### T-516: Friendlier speech errors and an http warning at save time
 
@@ -218,6 +219,53 @@ Found in T-508 and along the way (`.omt/voice-secretary-decisions.md`). None blo
 - **Type:** bug (low, for M2) · **Status:** backlog · **Blocked by:** none
 - **Code:** `workspace/app/src/main/remote/promptExtract.ts`
 - **Description:** Real dialogs carry two or three questions, but `extractPromptDetail` keeps only the first (T-501). The brief already covers all of them from the raw tool input; T-509's reply mapping will need all of them. Fold into T-509 or do first.
+
+## OpenCode in Milestone 1 (PRD v1.6)
+
+Added 2026-10-08 at the builder's request, before the first release. Same card, same voice,
+same brief writer; what differs is where the material comes from. OpenCode's plugin already
+reports Finished and Needs-you (attention-alerts T-410/T-411), and `permission.asked` /
+`question.asked` already carry the raw request to main; it is dropped after
+`permissionDetail`. The builder's messages are in OpenCode's SQLite (`message` and `part`
+tables), where text OpenCode adds itself (`<system-reminder>` notes, "Continue if you have
+next steps…") is marked `synthetic: true`. Order: T-520 → T-521 → T-522 → T-523.
+
+### T-520: OpenCode dialogs carry their request to the secretary
+
+- **Type:** feature · **Status:** done · **Blocked by:** none
+- **Code:** `workspace/app/src/main/backends/opencodeAttention.ts`, `workspace/app/src/main/backends/opencode.ts` (`keepsSecretaryEvents`)
+- **Description:** Pass a `PromptToolCall` with every `prompt` the plugin raises, as claudeHooks does: for a permission, `toolName` is its `permission` (`bash`, `edit`, …) and `toolInput` its `patterns` and `metadata` (`{command}` for bash); for a question, `toolName` `question` and `toolInput` `{questions}`. A re-raised dialog keeps its call. Turn `keepsSecretaryEvents` on for OpenCode.
+- **Acceptance:** fixture-driven tests: `permission-once` raises needs-you with `touch a.txt` in `toolInput`; `question` carries its questions; a re-raise after another root's finish carries the same call; `permission-reject` clears the event.
+- **Done 2026-10-08:** `permissionCall` / `questionCall` in `opencodeAttention.ts`, kept with each open request so a re-raise carries it. `toolInput` is `{patterns, metadata}` or `{questions}`; the raw request still never reaches the phone. Tests on the `permission-once`, `question-multi` and `plain-finish` fixtures plus a re-raise; `process-manager.secretary.test.ts` now checks an OpenCode instance keeps its events like a Claude one.
+
+### T-521: The builder's turn, read per backend
+
+- **Type:** feature · **Status:** done · **Blocked by:** none
+- **Code:** `workspace/app/src/main/secretary/turn.ts` (moves to `backends/claudeTurn.ts`), `workspace/app/src/main/backends/types.ts`, `workspace/app/src/main/backends/opencode.ts`, `workspace/app/src/main/secretary/briefWriter.ts` (`writeBriefFor`), `workspace/app/src/main/process-manager.ts` (`secretarySource`)
+- **Description:** `Backend.readBuilderTurn(sessionId)` returns the `BuilderTurn` the brief writer reads (latest typed message, up to three before it, the turn since). Claude's is today's JSONL reader, moved behind the interface since its reason to live outside it (only Claude had events) is gone. OpenCode's walks the session's messages newest first: a user message is the builder's when it has a text part not marked `synthetic` or `ignored`; the turn is every later message's parts, as `readOpencodeTranscript` maps them. Bounded scan; the database is several GB.
+- **Acceptance:** unit tests on the pure part (rows in, `BuilderTurn` out): synthetic parts never count as the builder's, a message of only synthetic parts is skipped, a file part alongside text keeps the text, the turn holds assistant text and tool lines in order, a pending tool is marked. A live read of a real personal-project OpenCode session.
+- **Done 2026-10-08:** `secretary/turn.ts` moved to `backends/claudeTranscript.ts`, together with `claudeTranscriptEntries` from `claude.ts`, so `claude.ts` can call it without an import cycle; `BuilderTurn` now lives in `backends/types.ts`. OpenCode: `opencodeBuilderTurn` (pure, parts fetched lazily so an older assistant message's tool output is never parsed) and `readOpencodeBuilderTurn` (newest 300 messages). `secretarySource` returns the backend; `writeBriefFor` calls `getBackend(...).readBuilderTurn`. Live on three personal sessions: right messages and turn, 13–125 ms, about half of it opening the 7.5 GB database; once per brief, in main, like the phone's transcript read.
+
+### T-522: The brief prompt knows OpenCode's dialogs
+
+- **Type:** prompt · **Status:** done · **Blocked by:** T-520
+- **Code:** `workspace/app/src/main/secretary/briefWriter.ts` (`SYSTEM_PROMPT`, its hash test, the live test)
+- **Description:** The prompt names Claude's tools: "any toolName except AskUserQuestion and ExitPlanMode" is a permission, so OpenCode's `question` would be briefed as a permission. Treat `question` like AskUserQuestion, and say that permission tool names may be lowercase (`bash`, `edit`). Re-run the six spike samples to check Claude's briefs didn't move, plus an OpenCode finish, bash permission and question.
+- **Acceptance:** the live test passes on all nine samples, language right on each.
+- **Done 2026-10-08:** prompt v8, four phrases changed (spike record, T-522 addendum). Nine of nine live samples pass, 4.3–7.1 s; the OpenCode question box is briefed question by question without "Type your own answer".
+
+### T-523: OpenCode secretary QA
+
+- **Type:** qa · **Status:** done · **Blocked by:** T-520, T-521, T-522
+- **Description:** M1's "done when" list on a real OpenCode instance in a personal project, on the packaged app: a finish, a bash permission (allowed and rejected before the click), a question, both languages. Results into `test-plan.md`.
+- **Acceptance:** every item passes, or has a bug task filed.
+- **Done 2026-10-08:** `test-plan.md`, "OpenCode in Milestone 1". Every item passes on the packaged app launched the Dock's way. One dialog was approved before the click by the builder, in the test window. Found along the way: T-524.
+
+### T-524: Stopping an instance never escalates past SIGHUP
+
+- **Type:** bug (pre-existing, low) · **Status:** backlog · **Blocked by:** none
+- **Code:** `workspace/app/src/main/process-manager.ts` (the three `ptyProcess.kill()` calls: stop, restart, quit)
+- **Description:** Seen in T-523: two OpenCode TUIs stuck at start-up (no terminal had answered their capability queries) survived a restart, kept burning ~50% CPU each as children of the app, and ignored SIGTERM too; only SIGKILL ended them. A healthy OpenCode exits within seconds of the same restart. Escalate when the process is still there a few seconds after `kill()`. The stuck state needs an instance spawned without a terminal, which the UI never does, so this is only reachable from a probe today.
 
 ## Milestone 2: Answer in words
 

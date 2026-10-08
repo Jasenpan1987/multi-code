@@ -97,6 +97,6 @@ The builder wants agents to keep working while they are away from the screen. Ea
 - **A brief speaks the user's language of the moment.** It follows the language of the user's latest message in that session: pure English gets English, Chinese or mixed gets Chinese with English technical terms kept. No setting decides it, so whoever is at the keyboard is answered in their own language.
 - **The voice is Qwen3-TTS with the Serena voice, served from a GPU server, never generated on the user's Mac.** Locally it peaks at 6–7 GB of memory, too much to ask of a user. Multi-Code calls an OpenAI-shaped speech API with a bearer key; the server is reproducible from `deploy/tts-server/`, and the builder's runs at `https://tts.jasenpan.com`.
 - **The voice is optional; the secretary is not.** With no speech server configured, or one that is stopped, unreachable or deleted, Secretary Mode still works and shows the brief as text on the card. Nothing else in the app depends on the server.
-- **v1:** Mac audio only, Claude Code only. Phone delivery and OpenCode follow as their own tracks.
+- **v1:** Mac audio only, Claude Code and OpenCode sessions (OpenCode added 2026-10-08 at the builder's request, before the first release). Phone delivery follows as its own track; answering OpenCode dialogs in words waits for Milestone 2.
 
 (source: docs/timeline/2026-10-07_voice-secretary-ideation.md, docs/timeline/2026-10-07_voice-engine-hosting.md)
