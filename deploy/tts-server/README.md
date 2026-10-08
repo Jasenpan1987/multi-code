@@ -169,8 +169,10 @@ running.
 **Success:** `READY`.
 
 The script also generates the API key into `/etc/qwen-tts/env` (root only) the first time.
-It reads `IMAGE`, `MODEL` and `GPU_MEMORY` from the environment if the defaults
-(`vllm/vllm-omni:v0.30.0`, the 1.7B CustomVoice model, 0.9) need changing.
+It reads `IMAGE`, `MODEL`, `STAGE0_MEMORY` and `STAGE1_MEMORY` from the environment if the
+defaults (`vllm/vllm-omni:v0.30.0`, the 1.7B CustomVoice model, 0.25 and 0.15 of the card for
+its two stages) need changing. Those shares leave room for the speech-to-text server in
+`deploy/asr-server/`.
 
 ## Step 9: HTTPS
 
@@ -263,10 +265,9 @@ second brief takes 5 to 6 seconds on an L4.
 - **Moving to a company account.** Same instance and steps 1–8. Replace Caddy with an
   Application Load Balancer and an ACM certificate, keep the key in Secrets Manager, and
   describe the setup in Terraform or CDK. An ALB bills even while the instance is stopped.
-- **Speech-to-text on the same card.** Qwen3-ASR has an official vLLM path
-  (`vllm serve Qwen/Qwen3-ASR-1.7B`, OpenAI `/v1/audio/transcriptions`). Re-run step 8 with
-  `GPU_MEMORY=0.45`, run the ASR server on port 8092, and give Caddy a matcher that sends
-  `/v1/audio/transcriptions` to 8092 ahead of the existing one.
+- **Speech-to-text on the same card.** Done 2026-10-08: `deploy/asr-server/` (Qwen3-ASR-1.7B at
+  `asr.jasenpan.com`, its own key). The earlier idea here, lowering one global
+  `GPU_MEMORY` to 0.45, would not have worked: that flag applies to each TTS stage separately.
 
 ## Tear down
 

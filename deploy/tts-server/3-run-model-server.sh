@@ -6,9 +6,12 @@ set -euo pipefail
 
 IMAGE=${IMAGE:-vllm/vllm-omni:v0.30.0}
 MODEL=${MODEL:-Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice}
-# Share of the GPU's memory this server claims. Lower it (about 0.45) before putting a second
-# model, such as speech-to-text, on the same card.
-GPU_MEMORY=${GPU_MEMORY:-0.9}
+# Share of the GPU's memory each of the TTS's two stages claims (talker, code2wav). Set per
+# stage: a global --gpu-memory-utilization is applied to each stage separately, so 0.9 let
+# stage 0 take nearly the whole card. 0.25 + 0.15 measured 7.3 GB idle and at peak on the
+# L4, leaving room for the speech-to-text server (deploy/asr-server/).
+STAGE0_MEMORY=${STAGE0_MEMORY:-0.25}
+STAGE1_MEMORY=${STAGE1_MEMORY:-0.15}
 
 # The API key is generated once, on this machine, and never printed. vLLM reads VLLM_API_KEY.
 if ! sudo test -f /etc/qwen-tts/env; then
@@ -28,7 +31,8 @@ sudo docker run -d --name qwen-tts --restart unless-stopped --runtime nvidia --g
   "$IMAGE" \
   vllm-omni serve "$MODEL" \
     --deploy-config /app/vllm-omni/vllm_omni/deploy/qwen3_tts.yaml \
-    --host 0.0.0.0 --port 8091 --gpu-memory-utilization "$GPU_MEMORY" --trust-remote-code --omni
+    --host 0.0.0.0 --port 8091 --trust-remote-code --omni \
+    --stage-overrides "{\"0\": {\"gpu_memory_utilization\": $STAGE0_MEMORY}, \"1\": {\"gpu_memory_utilization\": $STAGE1_MEMORY}}"
 
 echo "Waiting for the model to load. The first run also downloads ~10 GB of image and ~4.5 GB of weights."
 for _ in $(seq 1 90); do

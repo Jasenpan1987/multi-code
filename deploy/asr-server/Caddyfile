@@ -1,0 +1,34 @@
+# The speech server's whole Caddy config (/etc/caddy/Caddyfile): text-to-speech for Multi-Code,
+# speech-to-text for Sounds Good. deploy/tts-server/4-install-caddy.sh writes the TTS block;
+# deploy/asr-server/README.md step 9 adds the ASR block.
+tts.jasenpan.com {
+	# vLLM-Omni serves many routes (robot policies, video, metrics). Expose only speech and
+	# the health check; everything else is a 404 before it reaches the model server.
+	@api path /v1/audio/* /health
+	handle @api {
+		# -1 passes every write straight through, so streamed audio isn't held in a buffer.
+		reverse_proxy 127.0.0.1:8091 {
+			flush_interval -1
+		}
+	}
+	handle {
+		respond 404
+	}
+}
+
+# Speech-to-text, Qwen3-ASR-1.7B. Its own key (/etc/asr/env), separate from the TTS's.
+asr.jasenpan.com {
+	request_body {
+		max_size 25MB
+	}
+	# vLLM leaves /invocations unauthenticated, so forward only what clients need.
+	@api path /v1/audio/transcriptions /v1/models /health
+	handle @api {
+		reverse_proxy 127.0.0.1:8092 {
+			flush_interval -1
+		}
+	}
+	handle {
+		respond 404
+	}
+}
