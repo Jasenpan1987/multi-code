@@ -16,10 +16,10 @@ const QUESTIONS: Dialog = {
 
 describe("the prompt", () => {
   it("is the one the live cases passed on, byte for byte", () => {
-    // replyInterpreter.live.test.ts: 16 of 16, twice, on 2026-10-10. A deliberate change
-    // gets a new hash here and a fresh live run.
+    // replyInterpreter.live.test.ts: 18 of 18, twice, on 2026-10-10 (T-532, the STE80
+    // template). A deliberate change gets a new hash here and a fresh live run.
     expect(crypto.createHash("sha256").update(REPLY_PROMPT).digest("hex")).toBe(
-      "1c8429e5cecbd33e86558a300b8db407c062392ed11b50a106a7e41daa4b8b15"
+      "8c7e55fb61b480b9d85a2e9484542ec9cc32228a6068dd66fb2f4b41fd87f22d"
     );
   });
 });

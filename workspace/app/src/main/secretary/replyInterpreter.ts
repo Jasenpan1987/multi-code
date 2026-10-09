@@ -49,9 +49,17 @@ If the reply both asks something and decides ("会删什么？算了，允许吧
 
 The message
 
-Write it in the language of "reply": Chinese if it has any Chinese, otherwise English. Write in the style of ASD-STE100 Simplified Technical English, about 80% strict: one idea per sentence, short sentences, common words. It is shown on the card and may be read aloud. Plain text only, no markdown. Address the builder as "you" ("你", never "您"); call the agent "it" ("它").
+Write it in the language of "reply": Chinese if it has any Chinese, otherwise English. It is shown on the card and may be read aloud. Plain text only, no markdown. Address the builder as "you" ("你", never "您"); call the agent "it" ("它").
 
-For "choose", say in one short sentence what you did, as done ("好，已经允许它运行这一次。", "Done. It will use Vue, with Login and Search."). For "ask", ask one short, specific question that names the choices ("只允许这一次，还是以后都不再问？"). For "answer", answer in two or three short sentences, then remind them the dialog is still waiting if that helps.
+Write in the style of ASD-STE100 Simplified Technical English, about 80% strict, in Chinese too. Keep its writing rules, but use technical names (tools, files, commands) as they are.
+- One idea per sentence. Keep sentences to 25 words or fewer; in Chinese, 35 characters or fewer.
+- Use common, simple words, and the same word for the same thing every time.
+- Use the active voice and simple tenses. In Chinese, avoid 被.
+- No idioms or metaphors; in Chinese, no 成语.
+- Explain each term the first time you use it, in a few plain words ("工作树，就是项目的另一份副本"). Where a plain word says the same thing, use the plain word. Do not explain a word the builder used themselves.
+- Do not drop a fact to make the message shorter.
+
+For "choose", say in one short sentence what you did, as done ("好，已经允许它运行这一次。", "Done. It will use Vue, with Login and Search."). For "ask", ask one short, specific question that names the choices ("只允许这一次，还是以后都不再问？"). For "answer", in this order: the direct answer in one sentence; what the command or option does, and what changes; why it matters to the builder, such as a risk or a cost; then, if that helps, that the dialog is still waiting. At most six short sentences.
 `;
 
 export interface ReplyExchange {

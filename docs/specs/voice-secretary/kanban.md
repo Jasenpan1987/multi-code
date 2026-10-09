@@ -325,6 +325,16 @@ The builder's feedback after the first full day with Secretary Mode, 2026-10-09
 - **Code:** `workspace/app/src/main/backends/claudeHooks.ts`
 - **Description:** A dialog now clears only on its own tool's finish from the same agent (T-509). Two calls of the same tool from the main agent at once, one auto-allowed and one on a dialog, still look alike: the first one's PostToolUse clears the second one's dialog. `PreToolUse` carries `tool_use_id` and precedes the `PermissionRequest` by 25–100 ms with the same input; matching them would make the clearing exact.
 
+## Plainer words (PRD v1.9)
+
+### T-532: Briefs and answers follow the STE80 template
+
+- **Type:** prompt · **Status:** done · **Blocked by:** none
+- **Requirement:** `docs/specs/voice-secretary/prd.md#story-4-what-the-secretary-says`, `docs/specs/voice-secretary/prd.md#story-6-answer-a-dialog-in-words`
+- **Code:** `workspace/app/src/main/secretary/briefWriter.ts` (`SYSTEM_PROMPT`), `workspace/app/src/main/secretary/replyInterpreter.ts` (`REPLY_PROMPT`), their hash tests and live tests
+- **Description:** The builder found the secretary hard to follow, briefs and card answers both. Bring in the parts of the STE80 output style (`~/.claude/output-styles/ste80.md`) that suit speech: explain each term the first time, the report order (result, before and now, why it matters, what to do), its sentence limits, and no fact dropped to be short. Leave out its lists, exact paths and two-option rule.
+- **Done 2026-10-10:** brief prompt v10 and a new reply prompt (spike record, T-532 addendum). Terms come with their meaning and finishes follow the order; Chinese sentences average 18–24 units against v9's 15–17, with few over the new 35 limit. English briefs run 97–143 words, around the new 140 cap. The reply live test gained two "answer" cases; 18 of 18 passed twice. Left open: one copied 被 and raw "m2-ui" in s1, both in v9 too.
+
 ## Milestone 2: Answer in words
 
 **Goal:** the builder answers a permission or a question by dictating into the card, and the

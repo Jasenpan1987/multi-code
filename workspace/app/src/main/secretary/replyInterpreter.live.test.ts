@@ -66,6 +66,8 @@ const CASES: [name: string, dialog: Dialog, reply: string, want: Expectation, ea
   ["English always", permission("npm test"), "yes, and don't ask me again", { confirm: true }],
   ["嗯，再说吧 asks back", permission("rm -rf build"), "嗯，再说吧", { action: "ask" }],
   ["a question gets an answer", permission("rm -rf build dist"), "这个命令会删什么？", { action: "answer" }],
+  ["an answer explains its terms", permission("git worktree remove ../m2-ui --force"), "这是要干嘛？", { action: "answer" }],
+  ["an English answer", permission("npm publish --access public"), "what happens if I allow this?", { action: "answer" }],
   ["no with a reason sends it on", permission("curl -sI https://example.com"), "不行，用 wget 吧", { keys: ["3"], followUp: true }],
   ["asks, then decides", permission("rm -rf build"), "会删什么？算了，允许吧", { keys: ["1"] }],
   ["plan yes approves with manual edits", plan, "可以，开始吧", { keys: ["2"] }],

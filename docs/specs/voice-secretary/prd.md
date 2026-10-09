@@ -1,6 +1,6 @@
 # PRD: Voice Secretary
 
-**Version:** 1.8
+**Version:** 1.9
 **Last Updated:** 2026-10-10
 **Status:** approved
 **Owner:** Jasen
@@ -138,6 +138,8 @@ docs/timeline/2026-10-07_voice-engine-hosting.md)
 - [ ] The voice is Serena in both languages
 - [ ] Written to be heard: no code blocks, tables or long paths; acronyms and symbols written the way they should sound
 - [ ] Written to the rules of ASD-STE100 Simplified Technical English at about 80% strictness, in both languages: one idea per sentence, short sentences, common words, the active voice, no idioms. Not limited to STE's dictionary, and still spoken like a person, not a manual (v1.7)
+- [ ] Each term the builder may not know is explained in a few plain words the first time it is used; a plain word replaces a term where it can (v1.9)
+- [ ] A Finished brief goes in this order: the result in one sentence, what was there before and what is there now, why it matters, and what the builder must do, or that nothing is needed (v1.9)
 - [ ] a brief normally runs under a minute when spoken
 
 ---
@@ -171,6 +173,7 @@ docs/timeline/2026-10-07_voice-engine-hosting.md)
 - [ ] A "no" that says what to do instead denies the dialog, then sends that as the builder's next message; a plan sent back carries what to change (v1.8)
 - [ ] It picks "don't ask again", or a plan's "accept edits without asking", only when the builder clearly asks for it ("以后都可以"), and only after asking them to confirm that exact choice and hearing a bare yes (v1.8)
 - [ ] After acting, the card shows one line saying what it did ("已经给 MSK 权限了")
+- [ ] What the card says follows Story 4's writing rules, terms explained included. An answer gives the direct answer first, then what the operation does, then why it matters, such as a risk (v1.9)
 - [ ] When the reply could mean more than one thing ("嗯，再说吧"), it asks back and presses nothing
 - [ ] When the reply is a question rather than an answer ("这个脚本会删什么？"), it answers from what it knows and presses nothing.
 - [ ] If the dialog has gone or changed by the time the builder replies, it says so and presses nothing; likewise if anyone types in the terminal while its keys are going in, it stops (v1.8)
@@ -270,3 +273,4 @@ and 20 s limits, nothing on disk) were confirmed by the builder on 2026-10-07.
 | 1.6 | 2026-10-08 | OpenCode sessions get a secretary too (Story 2), brought into Milestone 1 before release. Answering their dialogs in words waits for Milestone 2. Builder's decision |
 | 1.8 | 2026-10-10 | Milestone 2 built as one piece (builder's decision): question boxes with several questions and multi-select answered whole, a denial's reason sent on, the CLI's record of answers checked, keys stopped by input from anyone else, and a confirmation before any wider choice (Story 6). OpenCode answers the phone link's subset. Key flows measured in `docs/timeline/2026-10-10_reply-key-flows-spike.md` |
 | 1.7 | 2026-10-09 | After a day of use: the session on screen briefs without a click (Story 3); a brief is kept after its event clears and can be reopened from the session header (Stories 2 and 3); briefs follow Simplified Technical English at about 80% strictness (Story 4). Builder's feedback, `docs/timeline/2026-10-09_secretary-first-day.md` |
+| 1.9 | 2026-10-10 | The secretary was hard to follow. Briefs and card answers take the speech-friendly parts of the STE80 output style: each term explained the first time, a Finished brief's order (result, before and now, why it matters, what to do), its looser sentence limits, and no fact dropped to be short (Stories 4 and 6). Builder's request; measured in the brief-writer spike record's T-532 addendum |

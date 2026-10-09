@@ -485,3 +485,53 @@ All six passed in both runs: the right language, opening with the session's name
 s each. The trade-off is length in English: short sentences need more words, and s2 and s6
 ended at 130–138 words, at or just over the 130-word cap, about 55 s spoken. The OpenCode
 samples (oc-*) weren't rebuilt.
+
+## T-532 addendum: the STE80 template (prompt v10, 2026-10-10)
+
+The builder found the secretary's words hard to follow and asked to bring in the STE80
+output style (`~/.claude/output-styles/ste80.md`), written that day in another session.
+The template is for on-screen chat, so three of its rules stay out: numbered lists, exact
+paths and commands, and "two options at most" (a dialog's options are the agent's, and all
+are read out). Four come in, in both prompts:
+
+- **Explain each term the first time.** Neither prompt asked for it. v9's s1 said "搬到了新的
+  m2-ui worktree" and s5 "只走 Multi-Code 自己的通道", with nothing about what either is.
+- **The report order** for a finish: the result in one sentence, what was there before and
+  what is there now, why it matters in one sentence, what the builder must do (or that
+  nothing is needed).
+- **The template's sentence limits**, looser than v9's: 20 words most and 25 at most (was 15
+  and 20); in Chinese 25 and 35 characters (was 20 and 30). v9 cut sentences so short that
+  the links between facts went missing; v10 also asks for "because", "so", "but", "then".
+- **No fact dropped to be short**, now in the reply prompt too. Its "answer" grew from "two
+  or three short sentences" to the same order, at most six.
+
+Also: at most three nouns in a row, one topic per paragraph, "never use 被" with an example,
+and a reread step for both. Length: aim 150–230 characters or 70–110 words, never more than
+280 or 140 (was 250 or 130), since explanations take room. sha256 `afa401f1…485399a3`
+(`.omt/probes/voice-secretary/t501/system-prompt-v10.txt`). The first v10 draft capped
+English at 150 words and s2 ran 155–166; 140, with "why it matters" held to one sentence,
+brought it to 134–140.
+
+Measured on the six Claude samples, rebuilt with `build_inputs.cjs` against this
+checkout's `dist/` (`.omt/probes/voice-secretary/t532/`, with `measure.py`). Units as in the
+T-528 addendum; "over" means sentences over 25 words or 35 units.
+
+| Sample | v9 total / avg / max / over | v10 final, two runs |
+|---|---|---|
+| s1-finish-zh | 241 / 17.2 / 38 / 1 | 225–265 / 22.5–24.1 / 33–44 / 0–2 |
+| s2-finish-en | 134 / 12.2 / 20 / 0 | 134–140 / 10.3–10.8 / 18–19 / 0 |
+| s3-bash-zh | 146 / 14.6 / 22 / 0 | 148–152 / 18.5–21.7 / 35–41 / 0–1 |
+| s4-bash-en | 94 / 10.4 / 19 / 0 | 97–114 / 11.4–12.1 / 17–20 / 0 |
+| s5-ask-zh | 195 / 15.0 / 26 / 0 | 167–183 / 18.3–18.6 / 33 / 0 |
+| s6-ask-en | 129 / 8.1 / 16 / 0 | 126–143 / 9.7–10.2 / 15–20 / 0 |
+
+All passed in every run. Terms now come with their meaning ("worktree，也就是项目的另一份副本",
+"esbuild, a fast code bundler", "快进的意思是，只把 master 往前挪，不产生新的合并提交"), and
+finishes follow the order ("Before, you had no way to … Now …"). Still there: s1 keeps one
+被, copied from the agent's own "我被开进了 m3-ai", and its raw "m2-ui", which v9 had too;
+"hdiutil" and "DMG" go unexplained in some runs. The reply prompt passed 18 of 18 twice,
+with two new "answer" cases (`git worktree remove ../m2-ui --force` asked about in Chinese,
+`npm publish --access public` in English): v10's answers name the risk and what to check
+("Check the package name, the version, and the files before you say yes."). The OpenCode
+samples (oc-*) weren't rebuilt. Before and after audio of s3, s5 and s2 is in
+`.omt/probes/voice-secretary/t532/audio/`.

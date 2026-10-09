@@ -104,12 +104,12 @@ beforeEach(() => {
 });
 
 describe("the prompt", () => {
-  it("is the spike's prompt as of v9 (Simplified Technical English), byte for byte", () => {
+  it("is the spike's prompt as of v10 (the STE80 template), byte for byte", () => {
     // docs/timeline/2026-10-08_brief-writer-spike.md, "Final system prompt" (v7), its
-    // T-522 addendum (v8) and its T-528 addendum (v9). A deliberate change gets a new
-    // hash here and a line there.
+    // T-522 addendum (v8), its T-528 addendum (v9) and its T-532 addendum (v10). A
+    // deliberate change gets a new hash here and a line there.
     expect(crypto.createHash("sha256").update(SYSTEM_PROMPT).digest("hex")).toBe(
-      "11ef4809dbafc8c44a73105991d8489462db1b4dc0eed02a884692306c6ac8a6"
+      "afa401f1c547c31138fd9f528846b63d3dbaa3f83014a22868cd6f91485399a3"
     );
   });
 });
