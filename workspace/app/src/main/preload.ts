@@ -68,6 +68,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getSecretaryBriefs: () => ipcRenderer.invoke("secretary:get-briefs"),
   getSecretaryAudio: (instanceId: string, seq: number) =>
     ipcRenderer.invoke("secretary:get-audio", instanceId, seq),
+  replyToSecretary: (instanceId: string, seq: number, text: string) =>
+    ipcRenderer.invoke("secretary:reply", instanceId, seq, text),
 
   // Manager activity feed
   getManagerActivity: () => ipcRenderer.invoke("manager-activity-list"),

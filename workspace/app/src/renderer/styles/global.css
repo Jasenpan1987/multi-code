@@ -1495,6 +1495,74 @@ body,
   user-select: text;
 }
 
+/* The builder's replies and the secretary's answers (T-510), between the brief and
+   the reply box. Scrolls on its own so the box stays in view. */
+.secretary-card-exchanges {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 8px;
+}
+
+.secretary-card-exchange {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.45;
+  user-select: text;
+}
+
+.secretary-card-reply {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--compose-chip-bg);
+  white-space: pre-wrap;
+}
+
+.secretary-card-response {
+  white-space: pre-wrap;
+}
+
+.secretary-card-response[data-outcome="pending"] {
+  color: var(--secretary-muted-fg);
+  font-style: italic;
+}
+
+.secretary-card-response[data-outcome="refused"],
+.secretary-card-response[data-outcome="failed"] {
+  color: var(--secretary-warn-fg);
+}
+
+.secretary-card-replybox {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.secretary-card-input {
+  flex: 1;
+  min-width: 0;
+  max-height: 72px;
+  resize: none;
+  padding: 3px 6px;
+  background: var(--compose-textarea-bg);
+  color: var(--compose-fg);
+  border: 1px solid var(--compose-textarea-border);
+  border-radius: 4px;
+  font: inherit;
+  line-height: 1.4;
+}
+
+.secretary-card-input:focus {
+  outline: none;
+  border-color: var(--compose-focus-border);
+}
+
 .secretary-card-note {
   flex: none;
   overflow: hidden;

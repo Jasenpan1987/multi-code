@@ -8,6 +8,9 @@ import type { SecretaryEvent, SecretaryEventListener } from "../process-manager"
 import type { BriefLanguage, SecretaryBriefState } from "../../shared/types";
 import type { Brief } from "./briefWriter";
 import type { SpeechOptions, SpeechServer, SynthesizeResult } from "./speech";
+import type { AnswerPlan, Dialog } from "./dialog";
+import type { Interpretation, ReplyInterpreterInput } from "./replyInterpreter";
+import type { AnswerOutcome } from "../process-manager";
 
 // Anything in this module graph touching the disk is recorded, never performed.
 const disk = vi.hoisted(() => {
@@ -51,6 +54,11 @@ vi.mock("./briefWriter", () => ({
     throw new Error("a test called the real brief writer");
   },
 }));
+vi.mock("./replyInterpreter", () => ({
+  interpretReply: () => {
+    throw new Error("a test called the real reply interpreter");
+  },
+}));
 
 import { createSecretary, NO_SERVER_REASON } from "./index";
 import { TARGET_DBFS } from "./loudness";
@@ -64,6 +72,18 @@ interface Pending<T> {
 interface WriteCall extends Pending<Brief> {
   instanceId: string;
   event: SecretaryEvent;
+}
+
+interface InterpretCall extends Pending<Interpretation> {
+  input: ReplyInterpreterInput;
+}
+
+interface AnswerCall {
+  instanceId: string;
+  seq: number;
+  plan: AnswerPlan;
+  signal: AbortSignal;
+  settle: (outcome: AnswerOutcome) => void;
 }
 
 interface SpeakCall extends Pending<SynthesizeResult> {
@@ -97,6 +117,9 @@ function harness() {
   const speaks: SpeakCall[] = [];
   const sent: unknown[][] = [];
   const speech = { server: SERVER };
+  const interprets: InterpretCall[] = [];
+  const answers: AnswerCall[] = [];
+  const dialogs: { dialog: Dialog | null } = { dialog: null };
 
   // Like the real ones: an abort resolves "aborted". A test can still settle the
   // call afterwards, to play a writer that comes back anyway.
@@ -130,6 +153,16 @@ function harness() {
     send: vi.fn((...args: unknown[]) => {
       sent.push(args);
     }),
+    dialogFor: vi.fn(() => dialogs.dialog),
+    interpretReply: vi.fn((input: ReplyInterpreterInput, signal: AbortSignal) =>
+      pending<Interpretation>(signal, { ok: false, reason: "aborted" }, (p) =>
+        interprets.push({ ...p, input })
+      )
+    ),
+    answerDialog: vi.fn(
+      (instanceId: string, seq: number, plan: AnswerPlan, signal: AbortSignal) =>
+        new Promise<AnswerOutcome>((settle) => answers.push({ instanceId, seq, plan, signal, settle }))
+    ),
   };
 
   const secretary = createSecretary(deps);
@@ -140,6 +173,9 @@ function harness() {
     writes,
     speaks,
     speech,
+    interprets,
+    answers,
+    dialogs,
     // As process-manager fires it: a new event, or null when it clears.
     fire: (instanceId: string, event: SecretaryEvent | null) => listener?.(instanceId, event),
     subscribed: () => listener !== null,
@@ -609,5 +645,249 @@ describe("the disk", () => {
     await flush();
 
     expect(disk.writes).toEqual([]);
+  });
+});
+
+describe("a reply on the card (T-509)", () => {
+  const PERMISSION: Dialog = {
+    kind: "permission",
+    backend: "claude",
+    toolName: "Bash",
+    toolInput: { command: "rm -rf build" },
+    options: [
+      { effect: "allow-once", label: "Yes" },
+      { effect: "allow-always", label: "Yes, and don't ask again" },
+      { effect: "deny", label: "No" },
+    ],
+  };
+  const QUESTION: Dialog = {
+    kind: "questions",
+    backend: "claude",
+    questions: [{ question: "Which color?", multiSelect: false, options: [{ label: "Red" }, { label: "Blue" }] }],
+  };
+
+  // A needs-you on "a" with its brief written, ready for replies.
+  async function waiting(dialog: Dialog | null = PERMISSION) {
+    const h = harness();
+    h.dialogs.dialog = dialog;
+    h.secretary.start(true);
+    h.fire("a", ev(3, "needs-you"));
+    h.writes[0].settle(brief("MSK 想删 build 文件夹。要允许吗？"));
+    await flush();
+    return h;
+  }
+  const last = (h: ReturnType<typeof harness>) => h.pushes("a").at(-1);
+
+  it("marks a dialog it can answer as replyable", async () => {
+    const h = await waiting();
+    expect(last(h)).toMatchObject({ seq: 3, status: "ready", replyable: true });
+    const none = await waiting(null);
+    expect(none.pushes("a").at(-1)).not.toHaveProperty("replyable");
+  });
+
+  it("reads the reply against the dialog and the brief, presses the plan, and says what it did", async () => {
+    const h = await waiting();
+    const done = h.secretary.reply("a", 3, "  是的  ");
+    expect(last(h)?.exchanges).toEqual([{ reply: "是的" }]);
+    expect(h.interprets[0].input).toEqual({
+      dialog: PERMISSION,
+      brief: "MSK 想删 build 文件夹。要允许吗？",
+      earlier: [],
+      reply: "是的",
+    });
+    h.interprets[0].settle({
+      ok: true,
+      action: "choose",
+      choice: { effect: "allow-once" },
+      message: "好，已经允许它这一次。",
+    });
+    await flush();
+    expect(h.answers.map(({ instanceId, seq, plan }) => ({ instanceId, seq, plan }))).toEqual([
+      { instanceId: "a", seq: 3, plan: { keys: ["1"] } },
+    ]);
+    h.answers[0].settle({ ok: true });
+    await done;
+    expect(last(h)?.exchanges).toEqual([
+      { reply: "是的", outcome: "pressed", response: "好，已经允许它这一次。" },
+    ]);
+  });
+
+  it("asks back and presses nothing, then hands the exchange to the next reading", async () => {
+    const h = await waiting();
+    const first = h.secretary.reply("a", 3, "嗯，再说吧");
+    h.interprets[0].settle({ ok: true, action: "ask", message: "要允许，还是不允许？" });
+    await first;
+    expect(h.answers).toHaveLength(0);
+    expect(last(h)?.exchanges?.[0]).toMatchObject({ outcome: "asked", response: "要允许，还是不允许？" });
+
+    void h.secretary.reply("a", 3, "允许");
+    expect(h.interprets[1].input.earlier).toEqual([
+      { builder: "嗯，再说吧", secretary: "要允许，还是不允许？" },
+    ]);
+  });
+
+  it("answers a question and presses nothing", async () => {
+    const h = await waiting();
+    const done = h.secretary.reply("a", 3, "这个命令会删什么？");
+    h.interprets[0].settle({ ok: true, action: "answer", message: "它会删 build 文件夹。" });
+    await done;
+    expect(h.answers).toHaveLength(0);
+    expect(last(h)?.exchanges?.[0]).toMatchObject({ outcome: "answered" });
+  });
+
+  it("asks to confirm don't-ask-again, and presses it on a plain yes to that, unread by the model", async () => {
+    const h = await waiting();
+    const first = h.secretary.reply("a", 3, "以后都可以");
+    h.interprets[0].settle({
+      ok: true,
+      action: "choose",
+      choice: { effect: "allow-always", explicit: true },
+      message: "好，以后都不问了。",
+    });
+    await first;
+    expect(h.answers).toHaveLength(0);
+    expect(last(h)?.exchanges?.[0]).toMatchObject({
+      outcome: "asked",
+      response: "确认一下：以后这类操作都不再问你，直接允许，对吗？回答“是”我就照办。",
+    });
+
+    const yes = h.secretary.reply("a", 3, "是");
+    await flush();
+    expect(h.interprets).toHaveLength(1);
+    expect(h.answers[0].plan).toEqual({ keys: ["2"] });
+    h.answers[0].settle({ ok: true });
+    await yes;
+    expect(last(h)?.exchanges?.[1]).toMatchObject({ outcome: "pressed", response: "好，以后都不问了。" });
+  });
+
+  it("reads anything but a plain yes to the confirmation afresh, and confirms only once", async () => {
+    const h = await waiting();
+    const first = h.secretary.reply("a", 3, "always");
+    h.interprets[0].settle({
+      ok: true,
+      action: "choose",
+      choice: { effect: "allow-always", explicit: true },
+      message: "Done.",
+    });
+    await first;
+    void h.secretary.reply("a", 3, "no, just this once");
+    expect(h.interprets).toHaveLength(2);
+    expect(h.interprets[1].input.earlier.at(-1)?.secretary).toMatch(/^To confirm/);
+    h.interprets[1].settle({ ok: true, action: "choose", choice: { effect: "allow-once" }, message: "Done, once." });
+    await flush();
+    expect(h.answers[0].plan).toEqual({ keys: ["1"] });
+  });
+
+  it("presses nothing once the dialog is answered in the terminal, before or during the reading", async () => {
+    const h = await waiting();
+    h.fire("a", null);
+    await h.secretary.reply("a", 3, "yes");
+    expect(h.interprets).toHaveLength(0);
+    expect(last(h)?.exchanges?.[0]).toMatchObject({
+      outcome: "refused",
+      response: "This dialog was already answered. I pressed nothing.",
+    });
+
+    const g = await waiting();
+    const done = g.secretary.reply("a", 3, "是的");
+    g.fire("a", null);
+    g.interprets[0].settle({ ok: true, action: "choose", choice: { effect: "allow-once" }, message: "好" });
+    await done;
+    expect(g.answers).toHaveLength(0);
+    expect(g.pushes("a").at(-1)?.exchanges?.[0]).toMatchObject({ outcome: "refused" });
+  });
+
+  it("refuses a dialog it can't answer in words, without reading the reply", async () => {
+    const h = await waiting(null);
+    await h.secretary.reply("a", 3, "yes");
+    expect(h.interprets).toHaveLength(0);
+    expect(h.pushes("a").at(-1)?.exchanges?.[0]).toMatchObject({
+      outcome: "refused",
+      response: "I can't answer this dialog. Please answer it in the terminal.",
+    });
+  });
+
+  it("says so when the keys found the dialog gone, or a new one came up", async () => {
+    for (const [reason, says] of [
+      ["answered", "The dialog was answered while I was thinking. I pressed nothing."],
+      ["changed", "A new dialog came up while I was pressing keys. I stopped. Please check the terminal."],
+      [
+        "interrupted",
+        "Someone typed in the terminal while I was pressing keys. I stopped. Please check the terminal.",
+      ],
+    ] as const) {
+      const h = await waiting();
+      const done = h.secretary.reply("a", 3, "yes");
+      h.interprets[0].settle({ ok: true, action: "choose", choice: { effect: "deny" }, message: "Denied." });
+      await flush();
+      h.answers[0].settle({ ok: false, reason });
+      await done;
+      expect(last(h)?.exchanges?.[0]).toMatchObject({ outcome: "refused", response: says });
+    }
+  });
+
+  it("adds a note when the CLI recorded something other than what was meant", async () => {
+    const h = await waiting(QUESTION);
+    const done = h.secretary.reply("a", 3, "蓝色");
+    h.interprets[0].settle({
+      ok: true,
+      action: "choose",
+      choice: { answers: [{ question: 1, picks: [2] }] },
+      message: "好，选了蓝色。",
+    });
+    await flush();
+    expect(h.answers[0].plan).toEqual({ keys: ["2"], expect: { "Which color?": "Blue" } });
+    h.answers[0].settle({
+      ok: true,
+      recorded: { toolName: "AskUserQuestion", toolInput: { answers: { "Which color?": "Red" } } },
+    });
+    await done;
+    expect(last(h)?.exchanges?.[0].response).toBe(
+      "好，选了蓝色。 注意：CLI 记下的答案和我想按的不一样：Which color?。请看一下终端。"
+    );
+  });
+
+  it("presses nothing when the reply can't be read, or while the last one is still being read", async () => {
+    const h = await waiting();
+    const first = h.secretary.reply("a", 3, "yes");
+    await h.secretary.reply("a", 3, "no");
+    expect(last(h)?.exchanges?.[1]).toMatchObject({
+      outcome: "refused",
+      response: "I'm still working on your last reply.",
+    });
+    h.interprets[0].settle({ ok: false, reason: "timed out after 60 s" });
+    await first;
+    expect(last(h)?.exchanges?.[0]).toMatchObject({
+      outcome: "failed",
+      detail: "timed out after 60 s",
+    });
+    expect(h.answers).toHaveLength(0);
+  });
+
+  it("ignores a reply for an event that isn't the brief's any more", async () => {
+    const h = await waiting();
+    const before = h.sentCount();
+    await h.secretary.reply("a", 2, "yes");
+    await h.secretary.reply("b", 3, "yes");
+    expect(h.sentCount()).toBe(before);
+  });
+
+  it("calls off keys still going in when a newer event replaces the brief", async () => {
+    const h = await waiting();
+    void h.secretary.reply("a", 3, "yes");
+    h.interprets[0].settle({ ok: true, action: "choose", choice: { effect: "allow-once" }, message: "Done." });
+    await flush();
+    expect(h.answers[0].signal.aborted).toBe(false);
+    h.secretary.setMode(false);
+    expect(h.answers[0].signal.aborted).toBe(true);
+  });
+
+  it("stops reading when a newer event replaces the brief", async () => {
+    const h = await waiting();
+    const done = h.secretary.reply("a", 3, "yes");
+    h.fire("a", ev(4, "needs-you"));
+    expect(h.interprets[0].signal.aborted).toBe(true);
+    await done;
+    expect(h.answers).toHaveLength(0);
   });
 });

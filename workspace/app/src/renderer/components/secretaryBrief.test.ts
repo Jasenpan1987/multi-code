@@ -9,6 +9,7 @@ import {
   cardToReopen,
   mergeBriefSnapshot,
   openCardBrief,
+  replyView,
 } from "./secretaryBrief";
 import type { BriefMap } from "./secretaryBrief";
 
@@ -81,23 +82,31 @@ describe("cardOnSelect", () => {
 
 describe("cardOnArrival", () => {
   it("opens a new event's card for the contact on screen, to play", () => {
-    expect(cardOnArrival("a", preparing(5), "a")).toEqual({ instanceId: "a", seq: 5, play: true });
+    expect(cardOnArrival("a", preparing(5), "a", 4)).toEqual({ instanceId: "a", seq: 5, play: true });
+    expect(cardOnArrival("a", preparing(5), "a", undefined)).toEqual({
+      instanceId: "a",
+      seq: 5,
+      play: true,
+    });
   });
 
   it("opens nothing for a contact that isn't shown: it waits for a red-dot click", () => {
-    expect(cardOnArrival("a", preparing(5), "b")).toBeNull();
-    expect(cardOnArrival("a", preparing(5), null)).toBeNull();
+    expect(cardOnArrival("a", preparing(5), "b", 4)).toBeNull();
+    expect(cardOnArrival("a", preparing(5), null, 4)).toBeNull();
   });
 
   it("opens nothing for a later push of the same event, so a closed card stays closed", () => {
-    expect(cardOnArrival("a", ready(5, "pending"), "a")).toBeNull();
-    expect(cardOnArrival("a", ready(5, "ready"), "a")).toBeNull();
-    expect(cardOnArrival("a", failed(5), "a")).toBeNull();
-    expect(cardOnArrival("a", handled(preparing(5)), "a")).toBeNull();
+    expect(cardOnArrival("a", ready(5, "pending"), "a", 5)).toBeNull();
+    expect(cardOnArrival("a", ready(5, "ready"), "a", 5)).toBeNull();
+    expect(cardOnArrival("a", failed(5), "a", 5)).toBeNull();
+    expect(cardOnArrival("a", handled(preparing(5)), "a", 5)).toBeNull();
+    // A reply on the card while its brief is still being written is still "preparing".
+    const replying = { ...preparing(5), kind: "needs-you" as const, exchanges: [{ reply: "要" }] };
+    expect(cardOnArrival("a", replying, "a", 5)).toBeNull();
   });
 
   it("opens nothing for a drop", () => {
-    expect(cardOnArrival("a", null, "a")).toBeNull();
+    expect(cardOnArrival("a", null, "a", 5)).toBeNull();
   });
 });
 
@@ -261,5 +270,30 @@ describe("briefLang", () => {
     expect(briefLang("Chinese")).toBe("zh");
     expect(briefLang("English")).toBe("en");
     expect(briefLang(null)).toBeUndefined();
+  });
+});
+
+describe("replyView", () => {
+  const dialog = { ...ready(4, "ready"), replyable: true as const };
+
+  it("offers the box on a Needs-you the secretary can answer, until it is handled", () => {
+    expect(replyView(dialog)).toEqual({ exchanges: [], boxShown: true, pending: false });
+    expect(replyView({ ...dialog, handled: true }).boxShown).toBe(false);
+    expect(replyView(ready(4, "ready")).boxShown).toBe(false);
+    // While the brief is still being written, too: the dialog is on screen already.
+    const early: SecretaryBriefState = { ...preparing(4), kind: "needs-you", replyable: true };
+    expect(replyView(early).boxShown).toBe(true);
+    expect(replyView({ ...preparing(4), replyable: true }).boxShown).toBe(false);
+  });
+
+  it("keeps the exchanges after the dialog is answered, and is pending while one is open", () => {
+    const asked = { reply: "嗯", outcome: "asked" as const, response: "要允许吗？" };
+    expect(replyView({ ...dialog, exchanges: [asked, { reply: "要" }] }).pending).toBe(true);
+    const pressed = { reply: "要", outcome: "pressed" as const, response: "好" };
+    expect(replyView({ ...dialog, handled: true, exchanges: [asked, pressed] })).toEqual({
+      exchanges: [asked, pressed],
+      boxShown: false,
+      pending: false,
+    });
   });
 });

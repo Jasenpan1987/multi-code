@@ -23,6 +23,8 @@ import { moveInOrder } from "../shared/reorder";
 import { debugTrace } from "./debug-trace";
 import { RunStateTracker, type RunState, type WriteVerdict } from "./run-state";
 import { INSTANCE_ENV, SPAWN_ENV } from "./backends/instance-env";
+import { KEY_GAP_MS } from "./secretary/dialog";
+import type { AnswerPlan } from "./secretary/dialog";
 
 export interface InstanceInfo {
   id: string;
@@ -146,7 +148,35 @@ interface ManagedInstance {
   // See SecretaryEvent. Never set on the manager or on a backend that doesn't keep
   // them; cleared when the builder deals with it, and on exit.
   secretaryEvent?: SecretaryEvent;
+  // Waiting for the agent's own report that its dialog cleared, with the call that
+  // report carried: answerDialog checks a question box's recorded answers with it.
+  // Called with nothing when the process goes.
+  dialogClearWaiters?: ((toolCall?: PromptToolCall) => void)[];
+  // Writes that carried input, from anyone. answerDialog stops when one lands
+  // between its own keys: the builder typed in the terminal, or the phone answered.
+  inputWrites?: number;
 }
+
+// What answerDialog did. `answered`: the event it was asked about isn't the live
+// one any more, so nothing was written. `changed`: a new dialog came up while the
+// keys were going in, and the rest weren't written. `interrupted`: someone else's
+// input landed between its keys, and the rest weren't written. `stopped`: the
+// process went, or the caller called it off.
+export type AnswerOutcome =
+  | { ok: true; recorded?: PromptToolCall }
+  | { ok: false; reason: "answered" | "changed" | "interrupted" | "stopped" };
+
+export interface AnswerTiming {
+  keyGapMs: number;
+  // After the keys, before a denial's reason goes in as a prompt. The CLI is idle
+  // 41 ms after a denial (T-509 spike); the prompt would queue even if it weren't.
+  followUpDelayMs: number;
+  // How long to wait for a question box's PostToolUse, which carries its answers,
+  // counted from the last key.
+  clearWaitMs: number;
+}
+
+const ANSWER_TIMING: AnswerTiming = { keyGapMs: KEY_GAP_MS, followUpDelayMs: 600, clearWaitMs: 5000 };
 
 // Reading context usage parses a transcript that reaches 8MB+, and
 // listInstances() runs on every phone broadcast, so the read is throttled
@@ -308,6 +338,106 @@ export class ProcessManager {
     return this.instances.get(id)?.secretaryEvent;
   }
 
+  backendOf(id: string): BackendName | undefined {
+    return this.instances.get(id)?.backend;
+  }
+
+  // Write the keys of the secretary's answer to a dialog (voice-secretary T-509),
+  // only while `seq` is still the instance's live needs-you: the builder may have
+  // answered in the terminal or on the phone while the reply was being read. Keys go
+  // in one at a time, `keyGapMs` apart, the way they were measured, and stop if a new
+  // dialog comes up in between. A plan's `followUp` goes in as an ordinary prompt
+  // once the dialog is gone. For a question box, resolves with the call the CLI
+  // reported when the box cleared, which holds its record of the answers. Aborting
+  // `signal` (the brief was replaced, or Secretary Mode went off) stops the rest.
+  async answerDialog(
+    id: string,
+    seq: number,
+    plan: AnswerPlan,
+    signal?: AbortSignal,
+    timing: AnswerTiming = ANSWER_TIMING
+  ): Promise<AnswerOutcome> {
+    const instance = this.instances.get(id);
+    const ptyProcess = instance?.ptyProcess;
+    if (!instance || !ptyProcess || signal?.aborted) return { ok: false, reason: "stopped" };
+    const event = instance.secretaryEvent;
+    if (event?.kind !== "needs-you" || event.seq !== seq) return { ok: false, reason: "answered" };
+
+    const same = () => this.instances.get(id) === instance && instance.ptyProcess === ptyProcess;
+    // Registered before the first key, so a box that clears at once isn't missed.
+    const record = plan.expect ? this.waitForAnswerRecord(instance) : undefined;
+    let mine = 0;
+    // Before each key after the first, and before a follow-up. Our own first key
+    // clears the event, so any needs-you after it is a new dialog.
+    const stillOurs = (): AnswerOutcome | null => {
+      if (!same() || signal?.aborted) return { ok: false, reason: "stopped" };
+      if (instance.secretaryEvent?.kind === "needs-you") return { ok: false, reason: "changed" };
+      if ((instance.inputWrites ?? 0) !== mine) return { ok: false, reason: "interrupted" };
+      return null;
+    };
+
+    for (const [i, key] of plan.keys.entries()) {
+      if (i > 0) {
+        await delay(timing.keyGapMs);
+        const stop = stillOurs();
+        if (stop) {
+          record?.cancel();
+          return stop;
+        }
+      }
+      this.noteWrite(instance, key);
+      ptyProcess.write(key);
+      mine = instance.inputWrites ?? 0;
+    }
+    remoteServer.clearActivity(id);
+
+    if (plan.followUp) {
+      await delay(timing.followUpDelayMs);
+      const stop = stillOurs();
+      if (stop) return stop;
+      this.sendPrompt(id, plan.followUp);
+    }
+    if (!record) return { ok: true };
+    const recorded = await record.wait(timing.clearWaitMs);
+    if (!same()) return { ok: false, reason: "stopped" };
+    return { ok: true, recorded };
+  }
+
+  // The agent's report that a question box cleared with its answers: a clearing whose
+  // call has `answers`, so an unrelated tool finishing meanwhile (a subagent's Bash)
+  // isn't taken for it. The timer starts only once every key is in; the process
+  // going ends the wait at once.
+  private waitForAnswerRecord(instance: ManagedInstance): {
+    wait(timeoutMs: number): Promise<PromptToolCall | undefined>;
+    cancel(): void;
+  } {
+    const waiters = (instance.dialogClearWaiters ??= []);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let settle: (call?: PromptToolCall) => void = () => {};
+    const settled = new Promise<PromptToolCall | undefined>((resolve) => {
+      settle = resolve;
+    });
+    const finish = (call?: PromptToolCall) => {
+      if (timer) clearTimeout(timer);
+      const i = waiters.indexOf(onClear);
+      if (i >= 0) waiters.splice(i, 1);
+      settle(call);
+    };
+    const onClear = (call?: PromptToolCall) => {
+      if (!call) return finish(undefined);
+      const input = call.toolInput as { answers?: unknown } | null | undefined;
+      if (typeof input?.answers === "object" && input.answers !== null) finish(call);
+    };
+    waiters.push(onClear);
+    return {
+      wait(timeoutMs) {
+        timer = setTimeout(() => finish(undefined), timeoutMs);
+        return settled;
+      },
+      cancel: () => finish(undefined),
+    };
+  }
+
   // What the secretary's brief writer reads for an instance: the name the builder
   // knows it by, the backend whose session it reads, and the session it is on now. The live session is re-checked
   // first rather than waiting for the next poll, so a turn that ends within
@@ -412,9 +542,20 @@ export class ProcessManager {
   // the CLI reports nothing at all when a dialog is denied (fixtures
   // permission-denied-no, permission-denied-esc), so the keystroke is the only
   // sign. Focus reports alone don't count; see carriesInput.
+  // A delayed return of run_command's: input for the secretary (its event goes, and
+  // an answer it is typing stops), but not again for run state, which heard about
+  // the whole call when it was made.
+  private noteDelayedReturn(instance: ManagedInstance) {
+    this.clearSecretaryEvent(instance);
+    instance.inputWrites = (instance.inputWrites ?? 0) + 1;
+  }
+
   private noteWrite(instance: ManagedInstance, data: string) {
     instance.runState.onWrite();
-    if (carriesInput(data)) this.clearSecretaryEvent(instance);
+    if (carriesInput(data)) {
+      this.clearSecretaryEvent(instance);
+      instance.inputWrites = (instance.inputWrites ?? 0) + 1;
+    }
   }
 
   // The manager is a singleton. Callers check before offering to create one, and
@@ -663,6 +804,7 @@ export class ProcessManager {
       instance.runState.onExit();
       // A dead process has no dialog to answer and no turn to report on.
       this.clearSecretaryEvent(instance);
+      for (const waiter of (instance.dialogClearWaiters ?? []).slice()) waiter(undefined);
       this.teardownObservers(instance);
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send("instance-exit", id, exitCode);
@@ -721,6 +863,12 @@ export class ProcessManager {
     // Before anything else hears of it, so a write made in reaction to this
     // activity clears the event it raised instead of landing before it exists.
     this.updateSecretaryEvent(instance, type, detail, toolCall);
+    // Only with a call: a clearing without one isn't the record anybody waits for,
+    // and a call-less waiter run means the process went.
+    if (type === "prompt-cleared" && toolCall) {
+      // A copy: each waiter removes itself as it runs.
+      for (const waiter of (instance.dialogClearWaiters ?? []).slice()) waiter(toolCall);
+    }
     // "prompt-cleared" exists for paired phones (drop the stale option buttons);
     // the desktop UI has nothing to do with it, so it isn't forwarded to the
     // renderer.
@@ -881,12 +1029,12 @@ export class ProcessManager {
     setTimeout(() => {
       const still = this.instances.get(id);
       if (!still || still.ptyProcess !== ptyProcess) return;
-      this.clearSecretaryEvent(still);
+      this.noteDelayedReturn(still);
       ptyProcess.write("\r");
       setTimeout(() => {
         const alive = this.instances.get(id);
         if (!alive || alive.ptyProcess !== ptyProcess) return;
-        this.clearSecretaryEvent(alive);
+        this.noteDelayedReturn(alive);
         ptyProcess.write("\r");
       }, MENU_SETTLE_MS);
     }, MENU_SETTLE_MS);
@@ -1121,3 +1269,7 @@ export class ProcessManager {
 }
 
 export const processManager = new ProcessManager();
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

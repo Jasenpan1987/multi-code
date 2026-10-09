@@ -1,7 +1,7 @@
 # PRD: Voice Secretary
 
-**Version:** 1.7
-**Last Updated:** 2026-10-09
+**Version:** 1.8
+**Last Updated:** 2026-10-10
 **Status:** approved
 **Owner:** Jasen
 
@@ -167,13 +167,17 @@ docs/timeline/2026-10-07_voice-engine-hosting.md)
 **Acceptance Criteria:**
 - [ ] A Needs-you card has its own reply box. It is not the compose box, which writes straight into the terminal
 - [ ] Whatever the builder types or dictates there, the secretary maps to the dialog: allow, deny, a numbered option, or "Other" followed by their text
-- [ ] It picks "don't ask again" only when the builder clearly asks for it ("以后都可以")
+- [ ] A question box with several questions, or a multi-select one, is answered whole: the builder may answer in one reply or across several, and nothing is pressed until every question has an answer (v1.8)
+- [ ] A "no" that says what to do instead denies the dialog, then sends that as the builder's next message; a plan sent back carries what to change (v1.8)
+- [ ] It picks "don't ask again", or a plan's "accept edits without asking", only when the builder clearly asks for it ("以后都可以"), and only after asking them to confirm that exact choice and hearing a bare yes (v1.8)
 - [ ] After acting, the card shows one line saying what it did ("已经给 MSK 权限了")
 - [ ] When the reply could mean more than one thing ("嗯，再说吧"), it asks back and presses nothing
 - [ ] When the reply is a question rather than an answer ("这个脚本会删什么？"), it answers from what it knows and presses nothing.
-- [ ] If the dialog has gone or changed by the time the builder replies, it says so and presses nothing
+- [ ] If the dialog has gone or changed by the time the builder replies, it says so and presses nothing; likewise if anyone types in the terminal while its keys are going in, it stops (v1.8)
+- [ ] For a question box, it checks the answers the CLI recorded against what it meant, and says so on the card when they differ (v1.8)
 - [ ] If the choice can't be mapped to a key it trusts, it says so and points to the terminal, the same refusal the phone link gives
 - [ ] a Finished card has no reply box in v1; the builder replies in the terminal as today
+- [ ] An OpenCode card answers what the phone link answers: its permission row (without a reason after Reject) and a single single-select question. Anything else on OpenCode says to use the terminal (v1.8)
 
 ---
 
@@ -233,7 +237,7 @@ docs/timeline/2026-10-07_voice-engine-hosting.md)
 - Mid-turn narration, and asking the secretary for progress on demand.
 - Speech recognition inside Multi-Code; the builder uses their own dictation software.
 - Delivery to the phone, SMS or iMessage. The phone keeps the same pull model when it comes.
-- Answering OpenCode dialogs in words (Story 6) until Milestone 2 is planned: its dialogs take arrow keys, not digits, and need their own mapping.
+- Answering OpenCode's multi-select and multi-question boxes, typed answers, and reasons after Reject in words (Story 6): its TUI takes different keys, not yet measured for these.
 - Generating audio on the user's Mac.
 - A designed English female voice; Serena speaks both languages.
 - Use on company projects during the POC.
@@ -264,4 +268,5 @@ and 20 s limits, nothing on disk) were confirmed by the builder on 2026-10-07.
 | 1.4 | 2026-10-08 | The speech request no longer sends `language`: the server detects it (`Auto`), for Chinese briefs full of English terms. Builder's decision, kept after an A/B listen of 11 real briefs spoken both ways |
 | 1.5 | 2026-10-08 | Story 8 narrowed to servers built from `deploy/tts-server/`, since the request names the Serena voice; no voice setting (G-004, builder's decision) |
 | 1.6 | 2026-10-08 | OpenCode sessions get a secretary too (Story 2), brought into Milestone 1 before release. Answering their dialogs in words waits for Milestone 2. Builder's decision |
+| 1.8 | 2026-10-10 | Milestone 2 built as one piece (builder's decision): question boxes with several questions and multi-select answered whole, a denial's reason sent on, the CLI's record of answers checked, keys stopped by input from anyone else, and a confirmation before any wider choice (Story 6). OpenCode answers the phone link's subset. Key flows measured in `docs/timeline/2026-10-10_reply-key-flows-spike.md` |
 | 1.7 | 2026-10-09 | After a day of use: the session on screen briefs without a click (Story 3); a brief is kept after its event clears and can be reopened from the session header (Stories 2 and 3); briefs follow Simplified Technical English at about 80% strictness (Story 4). Builder's feedback, `docs/timeline/2026-10-09_secretary-first-day.md` |

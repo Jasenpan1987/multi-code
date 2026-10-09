@@ -248,9 +248,16 @@ describe("the tool call behind a prompt", () => {
     expect(replay("mcp-elicitation").raised[0].toolCall).toBeUndefined();
   });
 
-  it("nothing but a prompt carries one", () => {
+  it("a finish carries none", () => {
     const { raised } = replay("permission-approved");
-    expect(raised.filter((r) => r.type !== "prompt").every((r) => !r.toolCall)).toBe(true);
+    expect(raised.filter((r) => r.type === "waiting").every((r) => !r.toolCall)).toBe(true);
+  });
+
+  // The secretary checks the keys it pressed against the CLI's own record (T-509).
+  it("a clearing carries the call that cleared it: AskUserQuestion's with its answers", () => {
+    const cleared = replay("ask-question").raised.find((r) => r.type === "prompt-cleared");
+    expect(cleared?.toolCall?.toolName).toBe("AskUserQuestion");
+    expect(cleared?.toolCall?.toolInput).toMatchObject({ answers: expect.any(Object) });
   });
 });
 
@@ -527,5 +534,37 @@ describe("found in cross-model review", () => {
     status = "idle";
     timers.advanceTo(5_500);
     expect(raised.map((r) => r.type)).toEqual(["waiting"]);
+  });
+});
+
+// Another tool finishing while a dialog is up, a background subagent's Bash say, is
+// not the dialog's answer: it used to clear the prompt, so the dialog's own PostToolUse
+// (with the answers the secretary checks) then cleared nothing (T-509 review).
+describe("a dialog clears on its own tool's finish", () => {
+  const base = { session_id: "s", transcript_path: "/t.jsonl", cwd: "/w" };
+  const ask = { questions: [{ question: "Which color?", header: "Color", options: [{ label: "Red" }, { label: "Blue" }], multiSelect: false }] };
+
+  it("ignores a subagent's Bash finishing, then clears with the question's answers", () => {
+    const { raised, attention } = harness(() => "waiting");
+    attention.handle(delivery({ ...base, hook_event_name: "PermissionRequest", tool_name: "AskUserQuestion", tool_input: ask }));
+    attention.handle(
+      delivery({ ...base, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: "ls" }, agent_id: "a1", agent_type: "general-purpose" })
+    );
+    attention.handle(delivery({ ...base, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: "ls" } }));
+    expect(raised.map((r) => r.type)).toEqual(["prompt"]);
+    const answered = { ...ask, answers: { "Which color?": "Blue" } };
+    attention.handle(delivery({ ...base, hook_event_name: "PostToolUse", tool_name: "AskUserQuestion", tool_input: answered }));
+    expect(raised.map((r) => r.type)).toEqual(["prompt", "prompt-cleared"]);
+    expect(raised[1].toolCall).toEqual({ toolName: "AskUserQuestion", toolInput: answered });
+  });
+
+  it("a subagent's dialog clears on that subagent's finish", () => {
+    const { raised, attention } = harness(() => "waiting");
+    const sub = { agent_id: "a1", agent_type: "general-purpose" };
+    attention.handle(delivery({ ...base, ...sub, hook_event_name: "PermissionRequest", tool_name: "Bash", tool_input: { command: "touch a" } }));
+    attention.handle(delivery({ ...base, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: "ls" } }));
+    expect(raised.map((r) => r.type)).toEqual(["prompt"]);
+    attention.handle(delivery({ ...base, ...sub, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: "touch a" } }));
+    expect(raised.map((r) => r.type)).toEqual(["prompt", "prompt-cleared"]);
   });
 });

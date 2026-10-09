@@ -56,6 +56,10 @@ export type SpeechTestResult =
 //
 // `handled`: the event has cleared (the builder typed in the session or answered
 // the dialog, or the session exited). Work in flight still finishes.
+//
+// `replyable`: a Needs-you whose dialog the secretary can answer in words (T-509);
+// the card offers its reply box until the brief is handled. `exchanges`: what the
+// builder said on the card and what the secretary did, oldest first.
 export type SecretaryBriefState = (
   | { seq: number; kind: SecretaryEventKind; status: "preparing" }
   | {
@@ -68,7 +72,19 @@ export type SecretaryBriefState = (
       voiceReason?: string;
     }
   | { seq: number; kind: SecretaryEventKind; status: "failed"; reason: string }
-) & { handled?: true };
+) & { handled?: true; replyable?: true; exchanges?: SecretaryExchange[] };
+
+// One reply on a Needs-you card. `response` and `outcome` are absent while the
+// secretary works on it. pressed: it answered the dialog; asked: it asked back;
+// answered: it answered the builder's question; refused: it pressed nothing, and
+// says why; failed: the reply couldn't be read.
+export interface SecretaryExchange {
+  reply: string;
+  response?: string;
+  outcome?: "pressed" | "asked" | "answered" | "refused" | "failed";
+  // Main's reason when the reply couldn't be read, shown on hover like a brief's.
+  detail?: string;
+}
 
 export type SecretaryEventKind = "finished" | "needs-you";
 
@@ -333,6 +349,9 @@ export interface ElectronAPI {
   // The wav of that instance's brief, or null when `seq` is no longer its brief
   // or its audio isn't ready (pending, unavailable, or the brief was dropped).
   getSecretaryAudio: (instanceId: string, seq: number) => Promise<Uint8Array | null>;
+  // A reply typed or dictated on the card of that brief. What the secretary makes of
+  // it arrives on "secretary-brief", in the brief's `exchanges`.
+  replyToSecretary: (instanceId: string, seq: number, text: string) => Promise<void>;
 
   // Manager activity feed
   getManagerActivity: () => Promise<ManagerActivityEntry[]>;

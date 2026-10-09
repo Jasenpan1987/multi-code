@@ -499,6 +499,16 @@ export function registerIpcHandlers() {
       : null
   );
 
+  // A reply on a Needs-you card (T-509). Resolves once the secretary has acted or
+  // answered; its exchanges reach the renderer on "secretary-brief" as they go.
+  ipcMain.handle(
+    "secretary:reply",
+    (_event, instanceId: unknown, seq: unknown, text: unknown) =>
+      typeof instanceId === "string" && typeof seq === "number" && typeof text === "string"
+        ? secretary.reply(instanceId, seq, text)
+        : undefined
+  );
+
   ipcMain.handle(
     "secretary:set-server",
     (_event, url: string, key: SpeechKeyChange) => setSpeechServer(url, key)

@@ -4,7 +4,7 @@
 **Source:** `docs/specs/voice-secretary/prd.md` v1.2 · `docs/specs/voice-secretary/gaps.md` (nothing open)
 **Evidence:** `docs/timeline/2026-10-07_voice-secretary-ideation.md` · `docs/timeline/2026-10-07_voice-engine-hosting.md`
 **Speech server:** `deploy/tts-server/README.md`
-**Total Tasks:** 28 (T-501..T-514, follow-ups T-515..T-519, OpenCode T-520..T-523, T-524, T-525, after a day of use T-526..T-528)
+**Total Tasks:** 31 (T-501..T-514, follow-ups T-515..T-519, OpenCode T-520..T-523, T-524, T-525, after a day of use T-526..T-528, after M2 T-529..T-531)
 **Milestones:** M1 (hear the brief) · M2 (answer in words) · M3 (originals when words aren't enough)
 
 Task ids start at T-501, after attention-alerts' T-4xx. Only M1 is committed; M2 and M3 are
@@ -217,7 +217,8 @@ Found in T-508 and along the way (`.omt/voice-secretary-decisions.md`). None blo
 
 ### T-519: Several questions in one AskUserQuestion
 
-- **Type:** bug (low, for M2) · **Status:** backlog · **Blocked by:** none
+- **Type:** bug (low, phone only now) · **Status:** backlog · **Blocked by:** none
+- **2026-10-10:** the secretary no longer needs this: T-509 reads every question from the raw tool input. What's left is the phone, which still shows and answers only the first question.
 - **Code:** `workspace/app/src/main/remote/promptExtract.ts`
 - **Description:** Real dialogs carry two or three questions, but `extractPromptDetail` keeps only the first (T-501). The brief already covers all of them from the raw tool input; T-509's reply mapping will need all of them. Fold into T-509 or do first.
 
@@ -305,6 +306,25 @@ The builder's feedback after the first full day with Secretary Mode, 2026-10-09
 - **Description:** Write briefs to the ASD-STE100 writing rules at about 80% strictness, in both languages: one idea per sentence, short sentences, common words, active voice, no idioms. Strict on the rules, not limited to STE's dictionary, and still spoken like a person.
 - **Done 2026-10-09:** prompt v9 (spike record, T-528 addendum). On the six Claude samples, sentences went from 22–32 to 15–18 units on average in Chinese and from 12–16 to 9–11 words in English, with nearly none over the limits. English briefs run a little longer, 100–138 words against 90–127. The OpenCode samples weren't rebuilt.
 
+## After Milestone 2: follow-ups
+
+### T-529: The brief writer doesn't see what was said on the card
+
+- **Type:** prompt (low) · **Status:** backlog · **Blocked by:** none
+- **Code:** `workspace/app/src/main/secretary/briefWriter.ts` (`buildBriefInput`), `workspace/app/src/main/secretary/index.ts`
+- **Description:** Seen in T-511: the builder sent a plan back from the card ("文件名改成 hi.txt"); that text goes into the dialog's own field, so the session's transcript has no new message from the builder, and the next plan's brief said "计划里的文件名和你说的 hello.txt 不一样". Pass the last card exchange of the instance's previous event to the brief writer as the builder's latest word.
+
+### T-530: Speak the secretary's answers on the card
+
+- **Type:** feature · **Status:** backlog · **Blocked by:** none
+- **Description:** A question back or an answer shows as text only. With wet hands, the builder would want to hear "只允许这一次，还是以后都不再问？" too. Synthesize short responses with the brief's voice and play them through the same player; open: whether "已经允许" lines should speak as well.
+
+### T-531: Two of the same tool at once still share a dialog's clearing
+
+- **Type:** bug (pre-existing, low) · **Status:** backlog · **Blocked by:** none
+- **Code:** `workspace/app/src/main/backends/claudeHooks.ts`
+- **Description:** A dialog now clears only on its own tool's finish from the same agent (T-509). Two calls of the same tool from the main agent at once, one auto-allowed and one on a dialog, still look alike: the first one's PostToolUse clears the second one's dialog. `PreToolUse` carries `tool_use_id` and precedes the `PermissionRequest` by 25–100 ms with the same input; matching them would make the clearing exact.
+
 ## Milestone 2: Answer in words
 
 **Goal:** the builder answers a permission or a question by dictating into the card, and the
@@ -321,32 +341,36 @@ secretary presses the right option or asks back.
 ### T-509: Reply interpreter and safe choose
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Requirement:** `docs/specs/voice-secretary/prd.md#story-6-answer-a-dialog-in-words`
 - **Knowledge:** `workspace/app/src/main/remote/promptExtract.ts` (header: why answering is fragile)
 - **Code:** new `workspace/app/src/main/secretary/replyInterpreter.ts`, `workspace/app/src/main/process-manager.ts` (`keystrokeForChoice`), `workspace/app/src/main/remote/ws-server.ts` (`choose`, the refusal to copy)
 - **Description:** `secretary:reply(instanceId, text)`. Refuse with "already answered" unless the instance still has a needs-you event with the same `seq` the card was opened for. Otherwise ask the brief writer (same CLI as T-504, a second prompt) to map the reply onto the event's options and return one of `{ action: "choose", optionIndex }`, `{ action: "other", text }`, `{ action: "ask", message }`, `{ action: "answer", message }`. Pick "don't ask again" only when the reply clearly asks for it; enforce that in code too, by the option's label. For choose and other, re-check `seq`, get keys from `keystrokeForChoice` and write them; if it returns null, refuse like the phone does and point to the terminal. For other, type the text after choosing Other. Return the line the card shows ("已经给 MSK 权限了").
 - **Acceptance:** Unit tests with the model faked for each action; don't-ask-again is never picked from an ambiguous reply even if the model says so; a stale `seq` or a cleared prompt presses nothing; a null keystroke refuses. A live test on a real Bash permission and a real AskUserQuestion.
 - **Blocks:** T-510 · **Blocked by:** T-503, T-505, T-508
+- **Done 2026-10-10:** built with every question of a box, not only the first (T-519's need, read from the raw tool input). Key flows measured first on CLI 2.1.295: `docs/timeline/2026-10-10_reply-key-flows-spike.md`. `secretary/dialog.ts`: `dialogOf` (Claude permission, plan, question box; OpenCode permission row and one single-select question), `checkChoice` (the model's effect or option numbers held to the dialog, planned as keys), `answerMismatches`. `secretary/replyInterpreter.ts`: `REPLY_PROMPT`, strict `parseInterpretation`. `ProcessManager.answerDialog`: keys 150 ms apart only while that `seq` is live, stopped by a new dialog, by anyone else's input (`inputWrites`, run_command's delayed returns included), by the job's abort, or by exit; a denial's reason pasted as a prompt 600 ms after; a question box's record (`PostToolUse` `answers`, now carried on `prompt-cleared`) awaited 5 s from the last key. `ClaudeHookAttention` now clears a dialog only on its own tool's finish from the same agent, so a background subagent's Bash no longer clears a question box (checked against all 16 recorded PermissionRequests). Wider choices (don't ask again, auto-accept) are asked to confirm and pressed only on a bare yes (decisions.md, 2026-10-10). Live: 16 of 16 interpreter cases, three runs. Cross-model review (GPT-6.1 Sol), four rounds on the area diffs and then on each round's fixes: every finding was real and fixed; the third and fourth showed a check on the builder's free text can't be made safe, so the keyword guard became the confirmation. Also fixed: `PLAN_OPTIONS` had the first two plan options swapped, so the phone's "Yes" picked auto-accept. 1099 tests green.
 
 ### T-510: Reply box on the Needs-you card
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Requirement:** `docs/specs/voice-secretary/prd.md#story-6-answer-a-dialog-in-words`
 - **Code:** `workspace/app/src/renderer/components/SecretaryCard.tsx`
 - **Description:** A Needs-you card gets its own text box and send button (not the compose box): send calls `secretary:reply` and shows the returned line under the brief. Asks and answers stay on the card so the builder can reply again. A Finished card has no box.
 - **Acceptance:** M2's "done when" list on the running app.
 - **Blocks:** T-511 · **Blocked by:** T-509, T-507
+- **Done 2026-10-10:** `SecretaryCard.tsx` reply box under the brief while `replyable` and not handled, from the first "preparing" push (the dialog is on screen already); Enter sends, Shift+Enter is a new line, never during IME composition; one reply at a time, held locally until the IPC call settles. Exchanges in main (`SecretaryBriefState.exchanges`), so a reopened card shows them; a failed reading shows main's reason on hover. `cardOnArrival` now takes the last seq seen per contact, so a reply's update can't reopen a closed card.
 
 ### T-511: M2 QA pass
 
 - **Type:** qa
-- **Status:** backlog
+- **Status:** done
 - **Requirement:** `docs/specs/voice-secretary/prd.md#story-6-answer-a-dialog-in-words`
 - **Description:** M2's "done when" list on a real build, including a plan approval (`ExitPlanMode`) and a dialog answered on the phone first. Results into `test-plan.md`.
 - **Acceptance:** Every M2 item passes, or has a bug task filed.
 - **Blocks:** T-512 · **Blocked by:** T-510
+- **Done 2026-10-10:** `test-plan.md`, "Milestone 2 QA pass". Every M2 item passes on a dev build with its own userData; the plan approval included. **Milestone 2 complete.** A dialog answered on the phone first was not run (no phone paired); the same path as the terminal one, which passed.
+
 
 ---
 

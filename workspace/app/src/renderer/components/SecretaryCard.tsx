@@ -10,9 +10,15 @@
 // the terminal area and never takes focus, so the terminal below stays usable;
 // typing there marks the brief handled in main but leaves this card, its text and
 // its replay as they are (T-527).
+//
+// A Needs-you card the secretary can answer has its own reply box (T-510), not the
+// compose box: what the builder types or dictates goes to the secretary, which
+// answers the dialog, asks back, or answers their question (T-509). The box takes
+// focus only when clicked, and goes once the dialog is dealt with; the exchanges
+// stay on the card.
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import type { MouseEvent } from "react";
+import type { FormEvent, KeyboardEvent, MouseEvent } from "react";
 import type { SecretaryBriefState } from "../../shared/types";
 import {
   briefPlaybackFailed,
@@ -23,7 +29,7 @@ import {
   stopBrief,
   subscribeBriefPlayback,
 } from "../audio/briefPlayer";
-import { briefCardView, briefLang } from "./secretaryBrief";
+import { briefCardView, briefLang, replyView } from "./secretaryBrief";
 import type { CardNote } from "./secretaryBrief";
 
 interface SecretaryCardProps {
@@ -48,6 +54,35 @@ export function SecretaryCard({
   const { seq } = brief;
   const key = `${instanceId}#${seq}`;
   const view = briefCardView(brief);
+  const replies = replyView(brief);
+  const [draft, setDraft] = useState("");
+  // Sent and not yet answered, as far as this card knows: main's pending exchange
+  // takes a round trip to arrive, and a second reply meanwhile would be refused.
+  const [sending, setSending] = useState(false);
+  const busy = sending || replies.pending;
+  const exchangesEnd = useRef<HTMLDivElement>(null);
+  const exchangeCount = replies.exchanges.length;
+  useEffect(() => {
+    exchangesEnd.current?.scrollIntoView({ block: "nearest" });
+  }, [exchangeCount, replies.pending]);
+
+  const send = (e?: FormEvent) => {
+    e?.preventDefault();
+    const text = draft.trim();
+    if (!text || busy) return;
+    setDraft("");
+    setSending(true);
+    void window.electronAPI
+      .replyToSecretary(instanceId, seq, text)
+      .finally(() => setSending(false));
+  };
+  // Enter sends; Shift+Enter is a new line. Not while an input method is composing,
+  // where Enter picks the characters (Chinese pinyin, Japanese kana).
+  const onReplyKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
+    e.preventDefault();
+    send();
+  };
   const playing = useSyncExternalStore(subscribeBriefPlayback, () => isBriefPlaying(key));
   const playFailed = useSyncExternalStore(subscribeBriefPlayback, () =>
     briefPlaybackFailed(key)
@@ -157,6 +192,48 @@ export function SecretaryCard({
         <div className="secretary-card-text" lang={briefLang(view.language)}>
           {view.text}
         </div>
+      ) : null}
+      {exchangeCount > 0 ? (
+        <div className="secretary-card-exchanges">
+          {replies.exchanges.map((x, i) => (
+            <div key={i} className="secretary-card-exchange">
+              <div className="secretary-card-reply">{x.reply}</div>
+              <div
+                className="secretary-card-response"
+                data-outcome={x.outcome ?? "pending"}
+                title={x.detail}
+              >
+                {x.response ?? (brief.status === "ready" && brief.language === "Chinese" ? "想一下…" : "Working on it…")}
+              </div>
+            </div>
+          ))}
+          <div ref={exchangesEnd} />
+        </div>
+      ) : null}
+      {replies.boxShown ? (
+        <form className="secretary-card-replybox" onSubmit={send}>
+          <textarea
+            className="secretary-card-input"
+            rows={1}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={onReplyKey}
+            placeholder={
+              brief.status === "ready" && brief.language === "Chinese"
+                ? "回复秘书：可以、不行、以后都可以……"
+                : "Reply to the secretary: yes, no, always…"
+            }
+            aria-label="Reply to the secretary"
+          />
+          <button
+            type="submit"
+            className="secretary-card-btn"
+            onMouseDown={keepFocus}
+            disabled={busy || !draft.trim()}
+          >
+            Send
+          </button>
+        </form>
       ) : null}
       {note ? (
         <div

@@ -26,10 +26,13 @@ const PERMISSION_OPTIONS: PromptOption[] = [
   { label: "No", description: "Reject and tell the agent what to do instead" },
 ];
 
+// In the CLI's order, which puts auto-accept first (in auto mode it reads "Yes, and
+// use auto mode"): docs/timeline/2026-10-10_reply-key-flows-spike.md. This list had
+// the first two the other way round, so the phone's plain "Yes" picked auto-accept.
 const PLAN_OPTIONS: PromptOption[] = [
-  { label: "Yes", description: "Approve the plan and start working" },
-  { label: "Yes, with auto-accept edits", description: "Approve and skip edit prompts" },
-  { label: "No", description: "Keep planning" },
+  { label: "Yes, auto-accept edits", description: "Approve and skip edit prompts" },
+  { label: "Yes, manually approve edits", description: "Approve and ask before each edit" },
+  { label: "No", description: "Keep planning and say what to change" },
 ];
 
 function asRecord(value: unknown): Record<string, unknown> | null {

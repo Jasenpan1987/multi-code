@@ -164,10 +164,13 @@ export function App() {
     let live = true;
     let modePushed = false;
     const touched = new Set<string>();
+    // The last seq seen per instance, so only a new event's first push opens a card.
+    const seenSeq = new Map<string, number>();
     const offBrief = window.electronAPI.onSecretaryBrief((id, state) => {
       touched.add(id);
       setBriefs((prev) => applyBriefUpdate(prev, id, state));
-      const opened = cardOnArrival(id, state, selectedIdRef.current);
+      const opened = cardOnArrival(id, state, selectedIdRef.current, seenSeq.get(id));
+      if (state) seenSeq.set(id, state.seq);
       if (opened) setCard(opened);
     });
     const offMode = window.electronAPI.onSecretaryMode((enabled) => {
@@ -178,7 +181,11 @@ export function App() {
       if (live && !modePushed) setSecretaryMode(settings.secretaryMode);
     });
     void window.electronAPI.getSecretaryBriefs().then((snapshot) => {
-      if (live) setBriefs((prev) => mergeBriefSnapshot(prev, snapshot, touched));
+      if (!live) return;
+      for (const [id, state] of Object.entries(snapshot)) {
+        if (!seenSeq.has(id)) seenSeq.set(id, state.seq);
+      }
+      setBriefs((prev) => mergeBriefSnapshot(prev, snapshot, touched));
     });
     return () => {
       live = false;

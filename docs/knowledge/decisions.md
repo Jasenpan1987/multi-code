@@ -4,6 +4,17 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-10-10 — A wider choice is confirmed with a bare yes before the secretary presses it
+
+**Decision:** When the reply interpreter decides the builder wants "don't ask again" on a permission, or "accept edits without asking" on a plan, the secretary presses nothing. It asks a fixed question naming that exact choice, and presses only if the very next reply is a bare yes ("是", "对", "yes", punctuation aside). Any other reply is read afresh. The model never picks keys: it names an effect or option numbers, and `secretary/dialog.ts` turns them into the key sequences measured on the CLI.
+
+**Why:** Four rounds of cross-model review on 2026-10-10 found a way past each version of a check on the builder's own words: keywords ("automation" matched "auto"), then negation lists ("do not use auto mode", curly apostrophes), then a yes followed by a correction ("Yes, only this once"). Widening a permission is the one mistake that outlives the dialog, so it costs one extra "是".
+
+**Source:** docs/timeline/2026-10-10_reply-key-flows-spike.md; review notes in the T-509 entry of docs/specs/voice-secretary/kanban.md
+**Affects:** PRD Story 6 (v1.8); `secretary/dialog.ts` (`checkChoice`, `isPlainYes`), `secretary/index.ts` (`reply`).
+
+---
+
 ## 2026-10-09 — The shown session's secretary speaks on its own, and briefs are kept
 
 **Decision:** With Secretary Mode on, a new event on the session on screen opens its card and plays the brief without a click. Every other session still waits for its red-dot click. A brief is no longer dropped when its event clears (the builder typed or answered); it stays, marked handled, and the session header's Secretary button brings it back for reading and replay. Briefs are written to ASD-STE100 Simplified Technical English's rules at about 80% strictness.

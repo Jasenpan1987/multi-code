@@ -116,6 +116,12 @@ export class ClaudeHookAttention {
   private pending: Pending = { kind: "none" };
   private timer: unknown = null;
   private promptOutstanding = false;
+  // Whose dialog is up: the tool it asks about and the subagent it came from (none
+  // for the main agent). Its own PostToolUse is what answers it; another tool's
+  // finishing meanwhile, a background subagent's Bash say, doesn't. Undefined tool
+  // for an elicitation, which any of them clears as before.
+  private outstandingTool: string | undefined;
+  private outstandingAgent: string | undefined;
   private stopped = false;
   // Virtual time spent waiting on the current pending check, in scheduled ms.
   private elapsed = 0;
@@ -220,10 +226,11 @@ export class ClaudeHookAttention {
         // alone: its registry read sees `waiting` and stands down by itself, and a
         // hold must survive a subagent's dialog. The tool call itself travels too:
         // the detail only summarizes it, and the secretary needs the whole thing.
-        this.raisePrompt(permissionDetail(delivery), {
-          toolName: delivery.toolName ?? "",
-          toolInput: delivery.toolInput,
-        });
+        this.raisePrompt(
+          permissionDetail(delivery),
+          { toolName: delivery.toolName ?? "", toolInput: delivery.toolInput },
+          delivery.agentId
+        );
         return;
 
       case "Elicitation":
@@ -234,10 +241,25 @@ export class ClaudeHookAttention {
 
       case "PostToolUse":
       case "PostToolUseFailure":
+        // Only the dialog's own tool, from the same agent: anything else finishing
+        // meanwhile leaves it up.
+        if (
+          this.outstandingTool !== undefined &&
+          (delivery.toolName !== this.outstandingTool || delivery.agentId !== this.outstandingAgent)
+        ) {
+          return;
+        }
+        // The dialog was answered and the tool went on. A denial sends none of
+        // these; the next turn or the PTY write is what shows it. The call goes
+        // along: for AskUserQuestion its input holds the CLI's own record of the
+        // answers, which the secretary checks its keys against.
+        this.clearPrompt(
+          delivery.toolName ? { toolName: delivery.toolName, toolInput: delivery.toolInput } : undefined
+        );
+        return;
+
       case "ElicitationResult":
       case "PermissionDenied":
-        // The dialog was answered and the tool went on. A denial sends none of
-        // these; the next turn or the PTY write is what shows it.
         this.clearPrompt();
         return;
 
@@ -294,15 +316,21 @@ export class ClaudeHookAttention {
     }
   }
 
-  private raisePrompt(detail: PromptDetail | undefined, toolCall?: PromptToolCall) {
+  private raisePrompt(
+    detail: PromptDetail | undefined,
+    toolCall?: PromptToolCall,
+    agentId?: string
+  ) {
     this.promptOutstanding = true;
+    this.outstandingTool = toolCall?.toolName || undefined;
+    this.outstandingAgent = agentId;
     this.onActivity("prompt", detail, toolCall);
   }
 
-  private clearPrompt() {
+  private clearPrompt(toolCall?: PromptToolCall) {
     if (!this.promptOutstanding) return;
     this.promptOutstanding = false;
-    this.onActivity("prompt-cleared");
+    this.onActivity("prompt-cleared", undefined, toolCall);
   }
 
   private finish() {

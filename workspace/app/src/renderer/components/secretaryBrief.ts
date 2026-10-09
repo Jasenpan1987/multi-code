@@ -14,7 +14,11 @@
 // or a newer event replacing the brief close it; for the shown contact the newer
 // event opens its own card.
 
-import type { BriefLanguage, SecretaryBriefState } from "../../shared/types";
+import type {
+  BriefLanguage,
+  SecretaryBriefState,
+  SecretaryExchange,
+} from "../../shared/types";
 
 export type BriefMap = Record<string, SecretaryBriefState>;
 
@@ -48,15 +52,17 @@ export function cardOnSelect(
 }
 
 // The card a push from main opens on its own, or null: a new event's brief for the
-// contact on screen. Every event's first push is its "preparing", so a later push
-// for the same event never reopens a card the builder closed. Main pushes briefs
-// only while Secretary Mode is on.
+// contact on screen. New means a `seq` this contact hasn't had before
+// (`previousSeq`, the last one seen for it), so a later push for the same event (its
+// text, its voice, a reply on its card) never reopens a card the builder closed.
+// Main pushes briefs only while Secretary Mode is on.
 export function cardOnArrival(
   instanceId: string,
   state: SecretaryBriefState | null,
-  selectedId: string | null
+  selectedId: string | null,
+  previousSeq: number | undefined
 ): OpenCard | null {
-  if (instanceId !== selectedId || !state) return null;
+  if (instanceId !== selectedId || !state || state.seq === previousSeq) return null;
   if (state.status !== "preparing" || state.handled) return null;
   return { instanceId, seq: state.seq, play: true };
 }
@@ -172,6 +178,25 @@ export function briefCardView(state: SecretaryBriefState): BriefCardView {
       };
     }
   }
+}
+
+// The card's reply box (T-510): on a Needs-you whose dialog the secretary can
+// answer in words, until the dialog is dealt with. Gone once it is handled, by the
+// secretary's own keys or anyone else's; the exchanges stay.
+export interface ReplyView {
+  exchanges: SecretaryExchange[];
+  boxShown: boolean;
+  // A reply is still being read or acted on: one at a time.
+  pending: boolean;
+}
+
+export function replyView(state: SecretaryBriefState): ReplyView {
+  const exchanges = state.exchanges ?? [];
+  return {
+    exchanges,
+    boxShown: state.kind === "needs-you" && state.replyable === true && !state.handled,
+    pending: exchanges.some((e) => !e.outcome),
+  };
 }
 
 // The `lang` the brief text is marked with, so the font fallback picks CJK glyphs

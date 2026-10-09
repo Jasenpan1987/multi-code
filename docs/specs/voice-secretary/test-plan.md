@@ -1,6 +1,55 @@
 # Test plan: Voice Secretary
 
-**Epic:** `docs/specs/voice-secretary/prd.md` v1.3 (T-508), v1.6 (T-523) · **Tasks:** `docs/specs/voice-secretary/kanban.md`
+**Epic:** `docs/specs/voice-secretary/prd.md` v1.3 (T-508), v1.6 (T-523), v1.8 (T-511) · **Tasks:** `docs/specs/voice-secretary/kanban.md`
+
+## Milestone 2 QA pass (T-511)
+
+**Result: every M2 "done when" item passes.** Follow-ups T-529..T-531, none blocking.
+
+### Build, launch, sessions
+
+- **Build:** `master` at `10e547c` plus the uncommitted T-526..T-528 and M2 work, `pnpm build`,
+  run as a dev build: `npx electron . --user-data-dir=/tmp/t526/userdata
+  --remote-debugging-port=9526`, driven over CDP (`.omt/probes/voice-secretary/t526/step.mjs`:
+  `card`, `reply` types into the card's box the way React sees typing and presses Send;
+  `prompt.sh` types a prompt into the session). The builder's installed Multi-Code ran
+  throughout, untouched.
+- **Session:** one Claude Code instance (2.1.295, Opus 5.5, the builder's own settings, so
+  auto mode and `Bash(*)` allowed) in `/tmp/t526-proj-a`, whose `.claude/settings.json` adds
+  `ask: ["Bash(curl:*)"]` so curl raises a Yes / No dialog. Text only: no speech server, as
+  it ran past midnight.
+- **Key flows** were measured beforehand on the bare CLI, key by key
+  (`docs/timeline/2026-10-10_reply-key-flows-spike.md`), including a Bash box with all three
+  options, which the builder's own settings never raise.
+- **Interpreter:** `replyInterpreter.live.test.ts`, 16 cases in Chinese and English against
+  dialogs shaped as the CLI raises them, 16 of 16 in each of three runs.
+
+### Results
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Three questions in one box, one multi-select; one answered, the rest asked back | **pass**: "Vue 吧" → "好，框架选 Vue。还有两个没答。要哪些功能：登录、搜索、支付？部署在哪：AWS 还是 Fly？", nothing pressed |
+| 2 | The rest in a second reply; what the CLI recorded | **pass**: "登录和支付，部署用 Fly" → pressed; the transcript's tool result: `"用哪个框架?"="Vue", "要哪些功能?"="登录, 支付", "部署在哪?"="Fly"`. The session finished and the shown session's Finished card opened on its own |
+| 3 | A question about the dialog gets an answer and presses nothing | **pass**: "这个命令会访问哪里？会改动什么吗？" → "它只会访问 https://example.com 这一个网站。……这一步还在等你决定：允许还是不允许。" |
+| 4 | No, with what to do instead | **pass**: "不行，别用 curl，改用 python 的 urllib 去取" → denied, then the session got "不要用 curl，改用 python 的 urllib 去取。" as a message and ran `python3 -c "import urllib.request …"`; the box went, the exchanges stayed |
+| 5 | Plan sent back with a change | **pass**: "文件名改成 hi.txt" → "好，已经把计划退回。它会把文件名改成 hi.txt。"; a new plan arrived with hi.txt and its card opened on its own |
+| 6 | Plan approved | **pass**: "可以，开始吧" → approved with manual edits; `hi.txt` created with `hi` |
+| 7 | Answered in the terminal while the reply was being read | **pass**: "是的" on the card, then `2` (No) in the terminal 0.5 s later → "我在想的时候，对话框已经答了。我什么都没按。"; the transcript shows the denial |
+| 8 | "以后都可以" picks don't-ask-again, and nothing else does | **pass** in the interpreter cases and unit tests, not on the app: the builder's settings raise no three-option box. It now asks to confirm and presses only on a bare yes |
+| 9 | "嗯，再说吧" asks back | **pass** in the interpreter cases |
+
+**Re-run after the review fixes** (the hook clearing, the input counter and the confirmation
+changed every dialog's path): three questions answered in one reply, a multi-select with two
+picks and the builder's own "评论功能" recorded as `"搜索, 支付, 评论功能"`; a denial with a
+reason, sent on and followed; "批准，自动接受改动" asked to confirm, then a bare "是" approved
+the plan with auto-accept and the file was written. All pass.
+
+**Seen once, not reproduced:** the very first reply of the session ("Vue 吧") came back
+"failed" (the interpreter call failed), then worked on the same dialog after a restart. The
+reason wasn't shown then; it now is, on hover over the line, so a repeat can be read.
+
+**Not run:** a dialog answered on the phone first (no phone paired); it reaches main
+through the same write path as the terminal, which passed in check 7.
 
 ## OpenCode in Milestone 1 (T-523)
 

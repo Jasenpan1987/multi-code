@@ -538,3 +538,180 @@ describe("the subscription", () => {
     ]);
   });
 });
+
+describe("answering a dialog for the secretary (T-509)", () => {
+  const ASK = {
+    detail: { tool: "AskUserQuestion", question: "Which color?", options: [{ label: "Red" }] },
+    toolCall: { toolName: "AskUserQuestion", toolInput: { questions: [{ question: "Which color?" }] } },
+  };
+  const timing = { keyGapMs: 150, followUpDelayMs: 600, clearWaitMs: 5000 };
+
+  function raised(manager: Manager) {
+    const id = create(manager);
+    latestSpawn(id).report("prompt", ASK.detail, ASK.toolCall);
+    const seq = manager.secretaryEventOf(id)!.seq;
+    return { id, seq, spawn: latestSpawn(id) };
+  }
+
+  it("writes the keys one at a time, the gap apart, for the live dialog only", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raised(manager);
+    const done = manager.answerDialog(id, seq, { keys: ["2", "1", "\x1b[B", "\r"] }, undefined, timing);
+
+    expect(spawn.written).toEqual(["2"]);
+    await vi.advanceTimersByTimeAsync(149);
+    expect(spawn.written).toEqual(["2"]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(spawn.written).toEqual(["2", "1"]);
+    await vi.advanceTimersByTimeAsync(300);
+    await expect(done).resolves.toEqual({ ok: true });
+    expect(spawn.written).toEqual(["2", "1", "\x1b[B", "\r"]);
+    // Its own first key dealt with the event.
+    expect(manager.secretaryEventOf(id)).toBeUndefined();
+  });
+
+  it("writes nothing when the dialog was answered first, or another one is up", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raised(manager);
+    await expect(manager.answerDialog(id, seq - 1, { keys: ["1"] }, undefined, timing)).resolves.toEqual({
+      ok: false,
+      reason: "answered",
+    });
+    manager.writeToInstance(id, "x");
+    await expect(manager.answerDialog(id, seq, { keys: ["1"] }, undefined, timing)).resolves.toEqual({
+      ok: false,
+      reason: "answered",
+    });
+    expect(spawn.written).toEqual(["x"]);
+  });
+
+  it("stops when a new dialog comes up between keys", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raised(manager);
+    const done = manager.answerDialog(id, seq, { keys: ["1", "2", "3"] }, undefined, timing);
+    spawn.report("prompt", ASK.detail, ASK.toolCall);
+    await vi.advanceTimersByTimeAsync(500);
+    await expect(done).resolves.toEqual({ ok: false, reason: "changed" });
+    expect(spawn.written).toEqual(["1"]);
+  });
+
+  it("stops when the process exits between keys", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raised(manager);
+    const done = manager.answerDialog(id, seq, { keys: ["1", "2"] }, undefined, timing);
+    spawn.exit({ exitCode: 0 });
+    await vi.advanceTimersByTimeAsync(500);
+    await expect(done).resolves.toEqual({ ok: false, reason: "stopped" });
+    expect(spawn.written).toEqual(["1"]);
+  });
+
+  it("sends a denial's reason as a pasted prompt once the dialog is gone", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raised(manager);
+    const done = manager.answerDialog(id, seq, { keys: ["3"], followUp: "use wget" }, undefined, timing);
+    await vi.advanceTimersByTimeAsync(599);
+    expect(spawn.written).toEqual(["3"]);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(done).resolves.toEqual({ ok: true });
+    expect(spawn.written).toEqual(["3", "\x1b[200~use wget\x1b[201~", "\r"]);
+  });
+
+  it("hands back what the CLI recorded when a question box clears", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raised(manager);
+    const done = manager.answerDialog(id, seq, { keys: ["1"], expect: { "Which color?": "Red" } }, undefined, timing);
+    const recorded = {
+      toolName: "AskUserQuestion",
+      toolInput: { questions: [], answers: { "Which color?": "Red" } },
+    };
+    await vi.advanceTimersByTimeAsync(40);
+    spawn.report("prompt-cleared", undefined, recorded);
+    await expect(done).resolves.toEqual({ ok: true, recorded });
+  });
+
+  it("stops when the builder types in the terminal between its keys", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raised(manager);
+    const done = manager.answerDialog(id, seq, { keys: ["3", "Green", "\r"] }, undefined, timing);
+    manager.writeToInstance(id, "\x1b");
+    await vi.advanceTimersByTimeAsync(500);
+    await expect(done).resolves.toEqual({ ok: false, reason: "interrupted" });
+    expect(spawn.written).toEqual(["3", "\x1b"]);
+  });
+
+  it("stops when run_command's delayed returns land between its keys", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raised(manager);
+    // Not waiting for the gate: the returns are what's under test.
+    vi.spyOn(manager, "canAcceptWrite").mockReturnValue({ ok: true });
+    manager.tryRunCommand(id, "/compact");
+    latestSpawn(id).report("prompt", ASK.detail, ASK.toolCall);
+    const live = manager.secretaryEventOf(id)!.seq;
+    const done = manager.answerDialog(id, live, { keys: ["3", "Green", "\r"] }, undefined, timing);
+    await vi.advanceTimersByTimeAsync(500);
+    await expect(done).resolves.toEqual({ ok: false, reason: "interrupted" });
+    expect(spawn.written.filter((w) => w === "Green")).toEqual([]);
+    expect(seq).toBeLessThan(live);
+  });
+
+  it("carries on through mouse motion and focus reports, which aren't input", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raised(manager);
+    const done = manager.answerDialog(id, seq, { keys: ["1", "2"] }, undefined, timing);
+    manager.writeToInstance(id, "\x1b[<35;10;5M");
+    manager.writeToInstance(id, "\x1b[I");
+    await vi.advanceTimersByTimeAsync(200);
+    await expect(done).resolves.toEqual({ ok: true });
+    expect(spawn.written.filter((w) => w === "1" || w === "2")).toEqual(["1", "2"]);
+  });
+
+  it("stops when its caller calls it off: the brief replaced, or the mode off", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raised(manager);
+    const abort = new AbortController();
+    const done = manager.answerDialog(id, seq, { keys: ["3", "change it", "\r"] }, abort.signal, timing);
+    abort.abort();
+    await vi.advanceTimersByTimeAsync(500);
+    await expect(done).resolves.toEqual({ ok: false, reason: "stopped" });
+    expect(spawn.written).toEqual(["3"]);
+  });
+
+  it("doesn't take another tool's finish for the question box's record", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raised(manager);
+    const done = manager.answerDialog(id, seq, { keys: ["1"], expect: { "Which color?": "Red" } }, undefined, timing);
+    spawn.report("prompt-cleared", undefined, { toolName: "Bash", toolInput: { command: "ls" } });
+    const recorded = { toolName: "AskUserQuestion", toolInput: { answers: { "Which color?": "Red" } } };
+    spawn.report("prompt-cleared", undefined, recorded);
+    await expect(done).resolves.toEqual({ ok: true, recorded });
+  });
+
+  it("counts the wait for the record from the last key, however many keys there are", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raised(manager);
+    const keys = Array.from({ length: 41 }, (_, i) => String((i % 4) + 1));
+    const done = manager.answerDialog(id, seq, { keys, expect: { q: "a" } }, undefined, timing);
+    await vi.advanceTimersByTimeAsync(40 * 150 + 1000);
+    const recorded = { toolName: "AskUserQuestion", toolInput: { answers: { q: "a" } } };
+    spawn.report("prompt-cleared", undefined, recorded);
+    await expect(done).resolves.toEqual({ ok: true, recorded });
+  });
+
+  it("ends the wait for the record at once when the process exits, and says it stopped", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raised(manager);
+    const done = manager.answerDialog(id, seq, { keys: ["1"], expect: { q: "a" } }, undefined, timing);
+    await vi.advanceTimersByTimeAsync(10);
+    spawn.exit({ exitCode: 0 });
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(done).resolves.toEqual({ ok: false, reason: "stopped" });
+  });
+
+  it("gives up waiting for the record after a while, having pressed the keys", async () => {
+    const manager = new ProcessManager();
+    const { id, seq } = raised(manager);
+    const done = manager.answerDialog(id, seq, { keys: ["1"], expect: { q: "a" } }, undefined, timing);
+    await vi.advanceTimersByTimeAsync(5000);
+    await expect(done).resolves.toEqual({ ok: true, recorded: undefined });
+  });
+});
