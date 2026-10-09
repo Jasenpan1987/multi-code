@@ -217,6 +217,47 @@ describe("an inherited instance id", () => {
   });
 });
 
+describe("the spawn locale", () => {
+  // A Dock launch has no locale, and Claude Code's `pbcopy` then puts mojibake on
+  // the clipboard.
+  const keys = ["LANG", "LC_ALL", "LC_CTYPE"] as const;
+  function withLocale(values: Partial<Record<(typeof keys)[number], string>>, check: () => void) {
+    const before = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+    for (const k of keys) {
+      if (values[k] === undefined) delete process.env[k];
+      else process.env[k] = values[k];
+    }
+    try {
+      check();
+    } finally {
+      for (const k of keys) {
+        if (before[k] === undefined) delete process.env[k];
+        else process.env[k] = before[k];
+      }
+    }
+  }
+
+  it("is UTF-8 when the app was given none", () => {
+    withLocale({}, () => {
+      for (const backend of [claudeBackend, opencodeBackend]) {
+        const { env } = backend.spawn(freshCwd);
+        expect(env.LC_CTYPE).toBe("UTF-8");
+        expect(env.LANG).toBeUndefined();
+      }
+    });
+  });
+
+  it("is left alone when the user set one", () => {
+    withLocale({ LANG: "zh_CN.UTF-8" }, () => {
+      for (const backend of [claudeBackend, opencodeBackend]) {
+        const { env } = backend.spawn(freshCwd);
+        expect(env.LANG).toBe("zh_CN.UTF-8");
+        expect(env.LC_CTYPE).toBeUndefined();
+      }
+    });
+  });
+});
+
 describe("claude spawn with session options", () => {
   it("passes the alert settings file, and nothing of the manager's", () => {
     const { args } = claudeBackend.spawn(freshCwd, { settingsPath: "/tmp/alert-settings.json" });

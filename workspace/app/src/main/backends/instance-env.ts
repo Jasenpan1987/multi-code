@@ -18,3 +18,13 @@ export const SPAWN_ENV = "MULTICODE_SPAWN_ID";
 // travels by env, the token never does. Set only on an OpenCode spawn that loads the
 // plugin, and stripped from OpenCode's inherited env otherwise.
 export const ALERT_FILE_ENV = "MULTICODE_ALERT_FILE";
+
+// An app opened from the Dock gets no locale at all, and passes none on. Claude Code
+// copies a selection by piping it to `pbcopy`, which then reads the UTF-8 as Mac Roman
+// and puts mojibake on the clipboard ("是" becomes "Êò"). Fills in the character
+// encoding only, and only when nothing says otherwise, so a locale the user did set
+// wins and no tool's messages change language.
+export function withUtf8Locale(env: Record<string, string>): Record<string, string> {
+  if (env.LC_ALL || env.LC_CTYPE || env.LANG) return env;
+  return { ...env, LC_CTYPE: "UTF-8" };
+}

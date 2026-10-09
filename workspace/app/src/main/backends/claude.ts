@@ -12,7 +12,7 @@ import type { TranscriptEntry } from "../../shared/remote-protocol";
 import { claudeTranscriptEntries, readBuilderTurn } from "./claudeTranscript";
 import type { ContextUsage } from "../../shared/types";
 import { resolvePath } from "./resolvePath";
-import { INSTANCE_ENV, SPAWN_ENV } from "./instance-env";
+import { INSTANCE_ENV, SPAWN_ENV, withUtf8Locale } from "./instance-env";
 
 const HOME = process.env.HOME || "";
 const SESSIONS_DIR = path.join(HOME, ".claude/sessions");
@@ -224,7 +224,7 @@ function buildEnv(): Record<string, string> {
   for (const key of INHERITED_CLI_MARKERS) delete env[key];
   delete env[INSTANCE_ENV];
   delete env[SPAWN_ENV];
-  return {
+  return withUtf8Locale({
     ...env,
     PATH: [
       path.join(HOME, ".local/bin"),
@@ -232,7 +232,7 @@ function buildEnv(): Record<string, string> {
       "/usr/local/bin",
       process.env.PATH || "",
     ].join(":"),
-  };
+  });
 }
 
 // The binary and env an instance is spawned with, for the one-shot `claude -p`

@@ -22,7 +22,7 @@ import type { TranscriptEntry } from "../../shared/remote-protocol";
 import type { ContextUsage } from "../../shared/types";
 import { resolvePath } from "./resolvePath";
 import { debugTrace } from "../debug-trace";
-import { ALERT_FILE_ENV, INSTANCE_ENV, SPAWN_ENV } from "./instance-env";
+import { ALERT_FILE_ENV, INSTANCE_ENV, SPAWN_ENV, withUtf8Locale } from "./instance-env";
 import { withMulticodePlugin } from "./opencodePlugin";
 
 const HOME = process.env.HOME || "";
@@ -73,7 +73,7 @@ function buildEnv(): Record<string, string> {
   delete env[INSTANCE_ENV];
   delete env[SPAWN_ENV];
   delete env[ALERT_FILE_ENV];
-  return env;
+  return withUtf8Locale(env);
 }
 
 // Points this spawn at Multi-Code's plugin, or leaves the env as built when the

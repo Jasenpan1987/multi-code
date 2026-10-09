@@ -1,7 +1,7 @@
 import * as pty from "node-pty";
 import { BrowserWindow } from "electron";
 import path from "path";
-import { INSTANCE_ENV, SPAWN_ENV } from "./backends/instance-env";
+import { INSTANCE_ENV, SPAWN_ENV, withUtf8Locale } from "./backends/instance-env";
 
 interface Shell {
   id: string;
@@ -44,7 +44,7 @@ export class ShellManager {
       cols: 80,
       rows: 24,
       cwd,
-      env,
+      env: withUtf8Locale(env),
     });
 
     const shell: Shell = { id: instanceId, cwd, ptyProcess };
