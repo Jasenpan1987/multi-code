@@ -4,11 +4,11 @@
 
 A desktop application for managing multiple terminal-based coding-agent sessions from a single interface. It supports two backends — **Claude Code** and **OpenCode** — and you can mix both. Each agent session appears as an entry in a sidebar, with full terminal fidelity and notification support.
 
-**Zero residue:** Multi-Code spawns the real `claude` / `opencode` CLI directly and never writes into their config or session directories. Uninstalling the app leaves no trace in `~/.claude/`, `~/.config/opencode/`, or your projects. It only keeps its own tiny contact list (see [Data persistence](#data-persistence)).
+**Zero residue:** Multi-Code spawns the real `claude` / `opencode` CLI directly and never writes into their config or session directories. Uninstalling the app leaves no trace in `~/.claude/`, `~/.config/opencode/`, or your projects. It only keeps a few small files of its own, in its own data folder (see [Data persistence](#data-persistence)).
 
 ## Why
 
-When working with multiple coding-agent sessions across different projects simultaneously, you run into context contamination and missed notifications. Multi-Code solves this by giving each session its own isolated terminal view while providing unified notification management — regardless of whether the session is Claude Code or OpenCode. When even that is too many terminals to watch, a **Manager** agent can do the watching and dispatching for you (see [Manager Agent](#manager-agent-1)).
+When working with multiple coding-agent sessions across different projects simultaneously, you run into context contamination and missed notifications. Multi-Code solves this by giving each session its own isolated terminal view while providing unified notification management — regardless of whether the session is Claude Code or OpenCode. When even that is too many terminals to watch, a **Manager** agent can do the watching and dispatching for you (see [Manager Agent](#manager-agent-1)). And when you step away from the screen, a **secretary** tells you out loud what each session did or is asking, and takes your answer in plain words (see [Voice Secretary](#voice-secretary-1)).
 
 ## Features
 
@@ -43,6 +43,7 @@ When working with multiple coding-agent sessions across different projects simul
 - **Terminal section** — Embedded real shell (your default `$SHELL`) running in the project's directory. Persists in background across collapses and instance switches
 - **View section** — Render a Markdown file inline: paste a `.md` path (or click a `.md` path in the terminal output, or the "View" affordance on a changed `.md` in the Git section). Supports GitHub-flavored Markdown, math (KaTeX), Mermaid diagrams, and local/remote images
 - **Phone section** — Pair a phone and watch/steer your agents from it (see [Phone Link](#phone-link) below)
+- **Secretary section** — The Secretary Mode switch and the speech server settings (see [Voice Secretary](#voice-secretary-1) below)
 - **Manager section** — Live feed of every call the manager agent makes, newest first, with the full arguments and result one click away
 
 ### Phone Link
@@ -54,6 +55,14 @@ When working with multiple coding-agent sessions across different projects simul
 - **Type to answer** — A compose box for open questions, sending the same way the desktop's `Cmd+L` box does
 - **End-to-end encrypted** — NaCl box (Curve25519 + XSalsa20-Poly1305). Your phone pins the desktop's public key at pairing, so nothing at that address can impersonate it
 - **Revocable** — Each paired phone has its own token; revoking one disconnects it immediately
+
+### Voice Secretary
+- **A brief, not a readout** — When a session finishes or needs you, a secretary retells what happened in its own words: what was asked, what was done, whether it worked. For a dialog, it says what the operation does and why, then asks the question
+- **Hear it without looking** — With Secretary Mode on, the session on screen plays its brief the moment it has news. Any other session plays its brief when you click its red dot, so two sessions never talk over each other
+- **Answer in words** — A card for a dialog has its own reply box. Type or dictate "yes", "no, do X instead" or "always", and the secretary presses the right option. A reply it can't read for sure gets a question back, and nothing is pressed
+- **Your language** — Each brief follows the language of your latest message in that session: English, or Chinese with English technical terms kept as they are
+- **Voice optional** — The voice comes from a speech server you point it at. With none, or one that is down, the card shows the brief as text and nothing else changes
+- **Both backends** — Claude Code and OpenCode sessions both get a secretary
 
 ### Visual / UX
 - **Compact layout** — Dense sidebar, small avatars, and blue gradient chrome, so many sessions fit on one screen
@@ -95,12 +104,13 @@ multi-code/
 │       │   │   ├── manager-mcp/       # Local MCP server + tools for the manager agent
 │       │   │   ├── manager-workspace.ts # Seeds the manager's own folder and guidance
 │       │   │   ├── remote/            # Phone Link: WebSocket server, crypto, paired devices
+│       │   │   ├── secretary/         # Voice secretary: brief writer, speech client, reply interpreter
 │       │   │   ├── shell-manager.ts  # Spawns & manages shell PTYs (toolbox Terminal)
 │       │   │   ├── git-status.ts     # Git status reader (used by toolbox)
 │       │   │   ├── git-diff.ts       # Reads a file's diff as aligned old/new rows
 │       │   │   ├── ipc-handlers.ts    # IPC endpoint registration
 │       │   │   ├── preload.ts         # Context bridge (electronAPI)
-│       │   │   ├── settings-store.ts  # settings.json (theme, phone link)
+│       │   │   ├── settings-store.ts  # settings.json (theme, phone link, secretary) and the speech key
 │       │   │   └── store.ts           # contacts.json (in Electron's userData folder)
 │       │   ├── renderer/       # React UI
 │       │   │   ├── App.tsx
@@ -228,6 +238,7 @@ Multi-Code positions itself as a **lightweight agent orchestration hub**: run mu
 │  + Manager   │                     │  ▸ Terminal         │
 │              │                     │  ▸ View             │
 │              │                     │  ▸ Phone            │
+│              │                     │  ▸ Secretary        │
 │              │                     │  ▸ Manager          │
 └──────────────┴─────────────────────┴─────────────────────┘
 ```
@@ -394,15 +405,101 @@ accept number keys. If a CLI update changes that, the buttons may stop working
 while everything else keeps going — the terminal view is always there as a
 fallback.
 
+### Voice Secretary
+
+For when you step away from the screen. Each session gets a secretary that briefs
+you out loud when the session finishes or needs you, the way a secretary briefs a
+boss: a retold account with the details, not the screen read aloud.
+
+**What it needs:**
+
+- **For the briefs:** Claude Code set up for Amazon Bedrock, with access to
+  `global.anthropic.claude-sonnet-5-5`. The secretary runs the `claude` CLI already
+  on your machine, with the Bedrock setup in your `~/.claude/settings.json`, and asks
+  for no keys of its own. Each call is one-shot: no tools, and nothing saved to your
+  session history
+- **For the voice (optional):** a speech server built from `deploy/tts-server/`
+  (Qwen3-TTS, voice Serena). Other engines with the same OpenAI speech API won't pass
+  **Test**, because the request names the Serena voice. With no server, every brief
+  is text only
+
+**Setup:**
+
+1. Toolbox → **Secretary**. To have a voice, fill in the speech server's
+   **Address** and **Key**, click **Save**, then **Test**. Test tells you whether the
+   server answers, whether the key is accepted, and whether a sample comes back.
+   Leave both empty for text only
+2. Click **Secretary Mode: OFF** to turn it on. It applies to every session and
+   stays on across restarts. Sessions that already have a red dot get their brief
+   prepared straight away
+
+**Using it:**
+
+- Chimes, red dots and the Dock bounce work exactly as before. The secretary only
+  adds a brief at the same moments
+- The session on screen opens its card and plays its brief on its own, once the
+  voice is ready
+- Any other session waits for you: click its red dot and its card opens and plays.
+  Clicking a contact with no red dot plays nothing
+- Only one brief plays at a time. The card has **▶ Replay**, **■ Stop** and **×**
+  to close
+- The card stays after you type in the session or answer the dialog. Once closed,
+  the **Secretary** button in the session header brings the latest brief back,
+  silent until you press Replay
+- Turning Secretary Mode off stops the audio and closes the card
+
+**Answering a dialog in words:**
+
+A card for a permission prompt, a question or a plan approval has a reply box. It is
+not the Compose Box: nothing you type there goes into the terminal as text.
+
+- Say "yes", "no", pick an option by name or number, or give your own answer for
+  "Other"
+- "No, do X instead" denies the dialog, then sends "do X" as your next message. A
+  plan sent back carries what you want changed
+- A question box with several questions, or a multi-select one, is answered whole.
+  You can answer in one reply or across several; nothing is pressed until every
+  question has an answer
+- "Don't ask again" and "accept edits without asking" are picked only when you
+  clearly ask for them, and only after the secretary asks you to confirm and you say
+  yes
+- A reply that could mean two things gets a question back. A question ("what does
+  this script delete?") gets an answer. Neither presses anything
+- After acting, the card shows one line saying what it did
+- If the dialog has gone or changed by the time you reply, or someone types in the
+  terminal while its keys go in, it stops and says so
+- For OpenCode, it answers what the phone can: the permission prompt (without a
+  reason after Reject) and a single question with one choice. Anything else points
+  you to the terminal
+- A card for a finished turn has no reply box; reply in the terminal as usual. The
+  manager has no secretary
+
+**Privacy:**
+
+- Transcript excerpts go only to the model that writes the brief. The brief text
+  goes only to your speech server
+- Briefs and audio are kept in memory and never written to disk
+- The speech key lives alone in a `0600` file in Multi-Code's data folder. It is
+  never shown after you save it, never logged, and never sent to the window
+- With Secretary Mode off, nothing is called and nothing costs anything
+
+**Same limitation as the phone:** answering presses the CLI's option keys, which is a
+UI convention, not an API. When the secretary can't map your answer to a key it
+trusts, it says so and points you to the terminal.
+
 ### Data persistence
 
-Everything Multi-Code keeps lives in Electron's user-data folder. On macOS that is `~/Library/Application Support/Multi-Code/` for the installed app, and `~/Library/Application Support/multi-code/` when running from source (so the two never share state).
+Everything Multi-Code keeps lives in Electron's user-data folder. On macOS that is `~/Library/Application Support/Multi-Code/` for the installed app, and `~/Library/Application Support/multi-code/` when running from source. On a standard macOS disk, file names ignore case, so these are the same folder: a dev build and the installed app share one contact list, and running both at once makes them overwrite each other's files.
 
 - `contacts.json` — instance list (directory + alias + backend), in sidebar order
-- `settings.json` — theme and whether Phone Link is on
+- `settings.json` — theme, whether Phone Link is on, Secretary Mode, and the speech server address
+- `speech-key` — the secretary's speech server key, alone in a `0600` file. Never in `settings.json`, never logged; kept across runs
 - `remote-identity.json`, `remote-devices.json` — Phone Link keys and paired phones
 - `manager/` — the manager agent's working folder and its `CLAUDE.md`
 - `manager-mcp.json` — the manager's MCP config, written `0600` because it holds a bearer token; removed on shutdown
+- `manager-settings.json`, `manager-hook.curl` — the manager's `--settings` (its activity hooks plus the alert hooks) and the curl config holding its hook token; `0600`, removed on shutdown
+- `alert-settings.json`, `alert-hook.curl` — every other Claude instance's `--settings` (alert hooks only) and the curl config holding the `/alert` token; `0600`, removed on shutdown
+- `opencode/multicode-plugin.js`, `opencode/alert.json` — the report-only plugin every OpenCode instance loads, and the `/alert` address and token it reads; `0600`, removed on shutdown
 - On app restart, the contact list is restored (all entries start as stopped — relaunch manually)
 - Session content itself is managed by the backend CLI (Claude Code under `~/.claude/`, OpenCode under `~/.local/share/opencode/`); Multi-Code does not store any conversation data and never writes into those directories
 
@@ -419,6 +516,7 @@ Everything Multi-Code keeps lives in Electron's user-data folder. On macOS that 
 7. Instances persist to `contacts.json` in Electron's user-data folder
 8. The main process runs a small HTTP server on `127.0.0.1` for as long as the app is open (OS-assigned port, bearer-token auth). It serves the manager's MCP tools: a manager's `claude` is spawned with `--mcp-config` pointing at it, plus hooks that report its own tool calls back to the activity feed. It also has an `/alert` path, behind a separate token, for agents to report their own state
 9. When Phone Link is on, the main process also runs a WebSocket server on port 6768 that serves the mobile client and streams the same PTY bytes plus decoded prompts to paired phones. Frames are sealed with NaCl box; the phone reaches the desktop directly over LAN or Tailscale, with no relay involved
+10. When Secretary Mode is on, each finished or needs-you event goes to a one-shot `claude -p --bare --no-session-persistence` call that writes the brief, then to the speech server for audio. A reply on the card goes through a second such call, which decides what to press; the keys go in only while that same dialog is still showing
 
 ## License
 

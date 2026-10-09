@@ -4,11 +4,11 @@
 
 一个桌面应用,用单一界面管理多个终端型编码 agent 会话。支持两种后端:**Claude Code** 和 **OpenCode**,而且可以混着用。每个 agent 会话在侧边栏里占一行,保留完整的终端能力和通知。
 
-**零残留:** Multi-Code 直接 spawn 真实的 `claude` / `opencode` CLI,从不往它们的配置或 session 目录里写东西。卸载这个 app 不会在 `~/.claude/`、`~/.config/opencode/` 或你的项目里留下任何痕迹,它只保存自己那份很小的联系人列表(见[数据持久化](#数据持久化))。
+**零残留:** Multi-Code 直接 spawn 真实的 `claude` / `opencode` CLI,从不往它们的配置或 session 目录里写东西。卸载这个 app 不会在 `~/.claude/`、`~/.config/opencode/` 或你的项目里留下任何痕迹,它只在自己的数据目录里存几个小文件(见[数据持久化](#数据持久化))。
 
 ## 为什么做这个
 
-当你同时跑多个编码 agent 会话(不同项目),会遇到 context 串扰和漏看回复的问题。Multi-Code 给每个会话独立的终端视图,并提供统一的通知管理,不管这个会话是 Claude Code 还是 OpenCode。终端多到看不过来的时候,还可以让一个 **Manager** agent 替你盯着、替你派活(见[Manager Agent](#manager-agent-1))。
+当你同时跑多个编码 agent 会话(不同项目),会遇到 context 串扰和漏看回复的问题。Multi-Code 给每个会话独立的终端视图,并提供统一的通知管理,不管这个会话是 Claude Code 还是 OpenCode。终端多到看不过来的时候,还可以让一个 **Manager** agent 替你盯着、替你派活(见[Manager Agent](#manager-agent-1))。人离开屏幕的时候,还有一个**秘书**把每个会话做了什么、在问什么念给你听,你用大白话回答它就行(见[语音秘书](#语音秘书-1))。
 
 ## 功能
 
@@ -43,6 +43,7 @@
 - **Terminal section** — 嵌入式真实 shell(用你的默认 `$SHELL`),在项目目录下运行。后台保活,折叠或切实例都不杀进程
 - **View section** — 内联渲染 Markdown 文件:粘贴一个 `.md` 路径(或点终端输出里的 `.md` 路径,或点 Git section 里某个变更 `.md` 旁边的 MD 标签)。支持 GitHub 风格 Markdown、数学公式(KaTeX)、Mermaid 图、本地和远程图片
 - **Phone section** — 配对手机,在手机上看和操作 agent(见下面的[手机互联](#手机互联))
+- **Secretary section** — 秘书模式开关和语音服务器设置(见下面的[语音秘书](#语音秘书-1))
 - **Manager section** — Manager agent 每一次调用的实时记录,最新的在上面,点一下能看完整参数和结果
 
 ### 手机互联
@@ -54,6 +55,14 @@
 - **也能打字回答** — 开放式问题用输入框回,发送机制跟电脑端 `Cmd+L` 那个框一样
 - **端到端加密** — NaCl box(Curve25519 + XSalsa20-Poly1305)。配对时手机会 pin 住电脑的公钥,同一个地址上的冒充者过不了这一关
 - **可吊销** — 每台配对的手机有自己的 token,吊销一台立刻断开,不影响别的
+
+### 语音秘书
+- **是汇报,不是念屏幕** — 会话做完或需要你的时候,秘书用自己的话把事情讲一遍:你让它干什么、它干了什么、成没成。遇到确认框,先讲这个操作是干什么的、为什么要做,再问你
+- **不用看屏幕也能听** — 打开秘书模式后,屏幕上正显示的那个会话一有消息就自己播报。别的会话要等你点它的红点才播,所以两个会话不会同时说话
+- **用话回答** — 确认框的卡片上有自己的回复框。打字或语音输入"可以""不行,改成 X""以后都可以",秘书替你按对的选项。拿不准你的意思就反问你,什么都不按
+- **跟你的语言走** — 每条汇报跟着你在那个会话里最近一句话的语言:英文就用英文,中文就用中文,英文技术名词原样保留
+- **语音可选** — 声音来自你配置的语音服务器。没配,或者服务器挂了,卡片上照样显示文字,其他功能不受影响
+- **两种后端都有** — Claude Code 和 OpenCode 的会话都有秘书
 
 ### 视觉 / 体验
 - **紧凑布局** — 侧边栏排得密、头像小、蓝色渐变外框,一屏能放下很多会话
@@ -95,12 +104,13 @@ multi-code/
 │       │   │   ├── manager-mcp/       # 给 Manager agent 用的本地 MCP server 和工具
 │       │   │   ├── manager-workspace.ts # 初始化 Manager 自己的目录和 guidance
 │       │   │   ├── remote/            # 手机互联:WebSocket server、加密、已配对设备
+│       │   │   ├── secretary/         # 语音秘书:写汇报、语音客户端、理解回复
 │       │   │   ├── shell-manager.ts  # spawn 和管理 shell PTY(工具箱 Terminal)
 │       │   │   ├── git-status.ts     # Git 状态读取(工具箱用)
 │       │   │   ├── git-diff.ts       # 把文件 diff 读成新旧对齐的行
 │       │   │   ├── ipc-handlers.ts    # IPC 端点注册
 │       │   │   ├── preload.ts         # context bridge(electronAPI)
-│       │   │   ├── settings-store.ts  # settings.json(主题、手机互联开关)
+│       │   │   ├── settings-store.ts  # settings.json(主题、手机互联、秘书)和语音密钥
 │       │   │   └── store.ts           # contacts.json(在 Electron 的 userData 目录里)
 │       │   ├── renderer/       # React UI
 │       │   │   ├── App.tsx
@@ -228,6 +238,7 @@ Multi-Code 的核心定位是**轻量级 agent 调度中心**:你可以并行管
 │  + Manager   │                     │  ▸ Terminal         │
 │              │                     │  ▸ View             │
 │              │                     │  ▸ Phone            │
+│              │                     │  ▸ Secretary        │
 │              │                     │  ▸ Manager          │
 └──────────────┴─────────────────────┴─────────────────────┘
 ```
@@ -381,15 +392,65 @@ Manager 的角色 guidance 放在它文件夹里的 `CLAUDE.md`。你可以改;�
 
 **有个限制值得知道:** 读取问题是可靠的(直接解析 CLI 自己写的 session 文件),但**用按钮回答**依赖 CLI 的选项框接受数字键。哪天 CLI 改了这个行为,按钮可能失效,其他功能照常 —— 终端视图一直在那儿兜底。
 
+### 语音秘书
+
+给你离开屏幕的时候用。每个会话配一个秘书,会话做完或需要你的时候,它把事情念给你听,就像秘书给老板汇报:是带细节的转述,不是照着屏幕念。
+
+**需要什么:**
+
+- **写汇报:** Claude Code 要配好 Amazon Bedrock,并且能用 `global.anthropic.claude-sonnet-5-5`。秘书用的是你电脑上现成的 `claude` CLI,走你 `~/.claude/settings.json` 里的 Bedrock 配置,不需要另外的密钥。每次都是一次性调用:不带任何工具,也不会存进你的会话历史
+- **语音(可选):** 一台用 `deploy/tts-server/` 搭起来的语音服务器(Qwen3-TTS,声音是 Serena)。其他同样是 OpenAI 语音接口的引擎过不了 **Test**,因为请求里点名要 Serena 这个声音。没有服务器的话,每条汇报都只有文字
+
+**设置:**
+
+1. 工具箱 → **Secretary**。想要声音的话,在 **Speech server** 下填好 **Address** 和 **Key**,点 **Save**,再点 **Test**。Test 会告诉你服务器通不通、密钥认不认、能不能拿回一段试听。两个都留空就是只要文字
+2. 点 **Secretary Mode: OFF** 打开。对所有会话生效,重启后还是开着。已经亮着红点的会话会马上开始准备汇报
+
+**用法:**
+
+- 提示音、红点、Dock 弹跳都跟以前一模一样,秘书只是在同样的时刻多加一条汇报
+- 屏幕上正显示的那个会话,语音准备好后自己打开卡片开始播
+- 别的会话等你:点它的红点,卡片打开并开始播。点没有红点的联系人什么都不播
+- 同一时间只播一条。卡片上有 **▶ Replay**(重播)、**■ Stop**(停止)和 **×**(关闭)
+- 你在会话里打字或回答了确认框,卡片也还在。关掉之后,会话标题栏上的 **Secretary** 按钮能把最近一条汇报找回来,不会自己播,按 Replay 才播
+- 关掉秘书模式会停止播放并关掉卡片
+
+**用话回答确认框:**
+
+权限确认、提问、计划审批的卡片上有一个回复框。它不是消息编辑框,你在这里打的字不会当成文字敲进终端。
+
+- 可以说"可以""不行",按名字或编号选一个选项,或者给"Other"写你自己的答案
+- "不行,改成 X"会先拒绝,再把"改成 X"当成你的下一条消息发出去。打回的计划会带上你想改的地方
+- 有好几个问题的提问框,或者多选的,要整个答完。可以一次说完,也可以分几次说;每个问题都有答案之前什么都不按
+- "以后不再询问"和计划的"自动接受修改",只有你明确要求时才会选,而且秘书会先跟你确认,你说"是"才按
+- 回复有两种理解就反问你。问的是问题(比如"这个脚本会删什么?")就回答你。两种情况都不按任何键
+- 按完之后,卡片上会有一行字说它做了什么
+- 你回复的时候确认框已经没了或者变了,或者它按键的时候有人在终端里打字,它会停下来并告诉你
+- OpenCode 的话,能回答的跟手机一样:权限确认(Reject 后面不能带理由)和只有一个单选问题的提问框。其他的会让你去终端操作
+- 做完一轮的卡片没有回复框,照常在终端里回复。Manager 没有秘书
+
+**隐私:**
+
+- 会话记录的片段只发给写汇报的那个模型,汇报的文字只发给你的语音服务器
+- 汇报和音频只放在内存里,不写盘
+- 语音密钥单独放在 Multi-Code 数据目录里一个权限 `0600` 的文件里。保存后不再显示,不写日志,也不会发给界面
+- 秘书模式关着的时候,什么都不调用,不花一分钱
+
+**跟手机一样的限制:** 回答靠的是按 CLI 的选项键,这是界面上的习惯,不是 API。秘书没法把你的回答对应到一个它信得过的按键时,会直说,并让你去终端操作。
+
 ### 数据持久化
 
-Multi-Code 自己存的东西都在 Electron 的 userData 目录里。macOS 上安装版是 `~/Library/Application Support/Multi-Code/`,从源码跑是 `~/Library/Application Support/multi-code/`(所以两者互不影响)。
+Multi-Code 自己存的东西都在 Electron 的 userData 目录里。macOS 上安装版是 `~/Library/Application Support/Multi-Code/`,从源码跑是 `~/Library/Application Support/multi-code/`。macOS 默认的磁盘格式文件名不分大小写,所以这其实是同一个文件夹:开发版和安装版共用一份联系人列表,两个同时开会互相覆盖对方的文件。
 
 - `contacts.json`:实例列表(目录 + alias + 后端),按侧边栏顺序
-- `settings.json`:主题、手机互联开没开
+- `settings.json`:主题、手机互联开没开、秘书模式、语音服务器地址
+- `speech-key`:秘书的语音服务器密钥,单独一个 `0600` 文件。不放进 `settings.json`,不写日志,重启后保留
 - `remote-identity.json`、`remote-devices.json`:手机互联的密钥和已配对手机
 - `manager/`:Manager agent 的工作目录和它的 `CLAUDE.md`
 - `manager-mcp.json`:Manager 的 MCP 配置,因为里面有 bearer token 所以权限是 `0600`,退出时删除
+- `manager-settings.json`、`manager-hook.curl`:Manager 的 `--settings`(它自己的活动 hooks 加上提醒 hooks)和存 hook token 的 curl 配置;`0600`,退出时删除
+- `alert-settings.json`、`alert-hook.curl`:其他每个 Claude 实例的 `--settings`(只有提醒 hooks)和存 `/alert` token 的 curl 配置;`0600`,退出时删除
+- `opencode/multicode-plugin.js`、`opencode/alert.json`:每个 OpenCode 实例加载的只上报插件,以及它读取的 `/alert` 地址和 token;`0600`,退出时删除
 - App 重启后自动恢复联系人列表(状态都是 stopped,需手动启动)
 - Session 内容由后端 CLI 自己管(Claude Code 在 `~/.claude/`,OpenCode 在 `~/.local/share/opencode/`),Multi-Code 不存任何对话内容,也从不往这些目录里写
 
@@ -406,6 +467,7 @@ Multi-Code 自己存的东西都在 Electron 的 userData 目录里。macOS 上�
 7. 实例信息持久化到 userData 目录里的 `contacts.json`
 8. 主进程在 app 打开期间一直在 `127.0.0.1` 上跑一个小 HTTP server(端口由系统分配,bearer token 鉴权)。它给 Manager 提供 MCP 工具:Manager 的 `claude` 启动时带 `--mcp-config` 指向它,另外挂了 hooks,把它自己的工具调用报回活动记录。它还有一个 `/alert` 路径,用单独的 token,给 agent 上报自己的状态
 9. 手机互联打开时,主进程还会在 6768 端口起一个 WebSocket server,既托管手机网页,又把同一份 PTY 字节流和解析出来的 prompt 推给已配对的手机。每一帧用 NaCl box 封装;手机通过局域网或 Tailscale 直连电脑,中间没有任何 relay
+10. 秘书模式打开时,每次做完或等你的事件都交给一次性的 `claude -p --bare --no-session-persistence` 调用来写汇报,再交给语音服务器出音频。卡片上的回复走第二次这样的调用,由它决定按什么;只有同一个确认框还显示着的时候才会按键
 
 ## 许可
 
