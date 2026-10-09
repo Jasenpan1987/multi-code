@@ -42,16 +42,21 @@ export type SpeechTestResult =
   | { ok: true; ms: number }
   | { ok: false; step: "address" | "health" | "speech"; reason: string };
 
-// One instance's brief for its live event, as main pushes it on `secretary-brief`
-// (and returns from getSecretaryBriefs). Exists only while Secretary Mode is on and
-// the event is live; it goes away (null) when the event clears.
+// One instance's latest brief, as main pushes it on `secretary-brief` (and returns
+// from getSecretaryBriefs). Exists only while Secretary Mode is on. It goes away
+// (null) when a newer event replaces it, the mode goes off or the instance is
+// removed, not when its event clears: then it stays, `handled`, so the builder can
+// still read and replay it.
 //
 // `seq` is the event's: ask for the audio with it, and treat a state with a new
 // `seq` as a different brief. The text is there from "ready" on, while the audio
 // may still be coming: "pending" until the speech server answers, then "ready"
 // (fetch it with getSecretaryAudio) or "unavailable" with the reason (no server
 // set, or it failed). The wav itself never rides this update.
-export type SecretaryBriefState =
+//
+// `handled`: the event has cleared (the builder typed in the session or answered
+// the dialog, or the session exited). Work in flight still finishes.
+export type SecretaryBriefState = (
   | { seq: number; kind: SecretaryEventKind; status: "preparing" }
   | {
       seq: number;
@@ -62,7 +67,8 @@ export type SecretaryBriefState =
       audio: "pending" | "ready" | "unavailable";
       voiceReason?: string;
     }
-  | { seq: number; kind: SecretaryEventKind; status: "failed"; reason: string };
+  | { seq: number; kind: SecretaryEventKind; status: "failed"; reason: string }
+) & { handled?: true };
 
 export type SecretaryEventKind = "finished" | "needs-you";
 
@@ -321,7 +327,7 @@ export interface ElectronAPI {
     key: SpeechKeyChange
   ) => Promise<SecretarySettings>;
   testSpeechServer: () => Promise<SpeechTestResult>;
-  // Every live brief by instance id: for a renderer that mounts or reloads after
+  // Each instance's latest brief, by id: for a renderer that mounts or reloads after
   // briefs were prepared. Empty while Secretary Mode is off.
   getSecretaryBriefs: () => Promise<Record<string, SecretaryBriefState>>;
   // The wav of that instance's brief, or null when `seq` is no longer its brief

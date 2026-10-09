@@ -446,3 +446,43 @@ delete a temp clone ("The delete is permanent, but it only touches a temporary c
 folder … Your own repo isn't touched. Do you want to allow it?"), and a two-question box read
 question by question with its options and the recommended one, without "Type your own answer".
 
+## T-528 addendum: Simplified Technical English (prompt v9, 2026-10-09)
+
+The builder asked for briefs in the style of ASD-STE100 Simplified Technical English at
+about 80% strictness (`docs/timeline/2026-10-09_secretary-first-day.md`). v9
+(`.omt/probes/voice-secretary/t501/system-prompt-v9.txt`, diff against v8) adds a "Simple
+words, short sentences" section before "Length": STE's writing rules, kept firmly in both
+languages, but not limited to its dictionary. The section covers one idea per sentence,
+most sentences at 15 words or fewer and never over 20 (in Chinese 20 and 30 characters, no
+comma-joined run-ons), common words, one word for one thing, the active voice (no 被),
+simple tenses, a condition before its result, no idioms (no 成语), and no stacked
+modifiers. Three other edits: "at most six sentences" became "at most ten short
+sentences", with "the total stays the same"; a longer brief may use two or three
+paragraphs (the card keeps them, `white-space: pre-wrap`); the final reread splits long
+sentences first and checks spoken spelling last. sha256 `11ef4809…6c6ac8a6`.
+
+The first v9 draft put the new section before "Written for the ear", with the split check
+after the spelling check in the reread. s1 then wrote "m2-ui" and "m3-ai" as written in
+three of three runs, where v8 said "M2 UI worktree". Moving the section after the ear rules
+and the spelling check to the end of the reread fixed it: none in the next two runs, one
+"hdiutil", which v8 also produced.
+
+Measured on the six Claude samples (`briefWriter.live.test.ts`, rebuilt with
+`build_inputs.cjs` after pointing its two `require` paths at this checkout's `dist/`). Units
+are words in English; in Chinese, a CJK character or a Latin word. "Over" means sentences
+over 20 words or 30 units.
+
+| Sample | v8 total / avg / max / over | v9 total / avg / max / over (two runs) |
+|---|---|---|
+| s1-finish-zh | 227 / 32.4 / 41 / 5 | 216–243 / 16.6–17.4 / 31–33 / 1 |
+| s2-finish-en | 127 / 15.9 / 30 / 2 | 136–137 / 9.1–10.5 / 19–23 / 0–1 |
+| s3-bash-zh | 164 / 23.4 / 53 / 3 | 127–135 / 15.0–18.1 / 31–33 / 1 |
+| s4-bash-en | 90 / 15.0 / 25 / 2 | 100–101 / 10.0–11.2 / 15–19 / 0 |
+| s5-ask-zh | 152 / 21.7 / 34 / 1 | 190–193 / 15.8–17.5 / 28–33 / 0–3 |
+| s6-ask-en | 120 / 12.0 / 18 / 0 | 130–138 / 8.6–10.0 / 14–16 / 0 |
+
+All six passed in both runs: the right language, opening with the session's name, 4.7–8.9
+s each. The trade-off is length in English: short sentences need more words, and s2 and s6
+ended at 130–138 words, at or just over the 130-word cap, about 55 s spoken. The OpenCode
+samples (oc-*) weren't rebuilt.
+

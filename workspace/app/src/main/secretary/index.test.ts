@@ -402,25 +402,38 @@ describe("a newer event", () => {
 });
 
 describe("a clear", () => {
-  it("aborts the brief and drops it", async () => {
+  it("keeps the brief, marked handled, and lets the work in flight finish", async () => {
     const h = harness();
     h.secretary.start(true);
     h.fire("a", ev(4, "needs-you"));
     const write = h.writes[0];
 
     h.fire("a", null);
-    expect(write.signal.aborted).toBe(true);
-    expect(h.pushes("a").at(-1)).toBeNull();
-    expect(h.secretary.briefs()).toEqual({});
+    expect(write.signal.aborted).toBe(false);
+    expect(h.pushes("a").at(-1)).toEqual({
+      seq: 4,
+      kind: "needs-you",
+      status: "preparing",
+      handled: true,
+    });
 
-    const before = h.sentCount();
     write.settle(brief("answered already"));
     await flush();
-    expect(h.sentCount()).toBe(before);
-    expect(h.deps.synthesize).not.toHaveBeenCalled();
+    h.speaks[0].settle({ ok: true, wav: WAV });
+    await flush();
+    expect(h.pushes("a").at(-1)).toEqual({
+      seq: 4,
+      kind: "needs-you",
+      status: "ready",
+      text: "answered already",
+      language: "Chinese",
+      audio: "ready",
+      handled: true,
+    });
+    expect(h.secretary.audioFor("a", 4)).not.toBeNull();
   });
 
-  it("drops a ready brief and its audio", async () => {
+  it("keeps a ready brief and its audio for a replay", async () => {
     const h = harness();
     h.secretary.start(true);
     h.fire("a", ev(1));
@@ -428,11 +441,22 @@ describe("a clear", () => {
     await flush();
     h.speaks[0].settle({ ok: true, wav: WAV });
     await flush();
-    expect(h.secretary.audioFor("a", 1)).toBe(WAV);
+    const audio = h.secretary.audioFor("a", 1);
+    expect(audio).not.toBeNull();
 
     h.fire("a", null);
-    expect(h.secretary.audioFor("a", 1)).toBeNull();
-    expect(h.secretary.briefs()).toEqual({});
+    expect(h.secretary.audioFor("a", 1)).toBe(audio);
+    expect(h.secretary.briefs().a).toMatchObject({ seq: 1, status: "ready", handled: true });
+  });
+
+  it("is told once: a second clear sends nothing", () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.fire("a", null);
+    const before = h.sentCount();
+    h.fire("a", null);
+    expect(h.sentCount()).toBe(before);
   });
 
   it("for an instance with no brief sends nothing", () => {
@@ -441,6 +465,29 @@ describe("a clear", () => {
     const before = h.sentCount();
     h.fire("a", null);
     expect(h.sentCount()).toBe(before);
+  });
+
+  it("then a newer event replaces the handled brief with a live one", () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.fire("a", null);
+    h.fire("a", ev(2));
+    expect(h.writes[0].signal.aborted).toBe(true);
+    expect(h.pushes("a").at(-1)).toEqual({ seq: 2, kind: "finished", status: "preparing" });
+  });
+});
+
+describe("forget", () => {
+  it("drops the removed instance's brief and aborts its work", () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.fire("a", null);
+    h.secretary.forget("a");
+    expect(h.writes[0].signal.aborted).toBe(true);
+    expect(h.pushes("a").at(-1)).toBeNull();
+    expect(h.secretary.briefs()).toEqual({});
   });
 });
 

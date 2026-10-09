@@ -11,7 +11,9 @@ import { ComposeBox } from "./components/ComposeBox";
 import { SecretaryCard } from "./components/SecretaryCard";
 import {
   applyBriefUpdate,
+  cardOnArrival,
   cardOnSelect,
+  cardToReopen,
   mergeBriefSnapshot,
   openCardBrief,
 } from "./components/secretaryBrief";
@@ -83,6 +85,9 @@ export function App() {
   const [secretaryMode, setSecretaryMode] = useState(false);
   const [briefs, setBriefs] = useState<BriefMap>({});
   const [card, setCard] = useState<OpenCard | null>(null);
+  // The shown instance, for listeners subscribed once.
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
 
   const { notify, markRead } = useNotifications();
   // Per-instance timestamp of the last audible alert, for the
@@ -154,7 +159,7 @@ export function App() {
 
   // Subscribed before the initial values are fetched, so a push in between isn't
   // lost; for an instance a push has already touched, the push wins over the
-  // snapshot.
+  // snapshot. A new event on the shown instance opens its card here (T-526).
   useEffect(() => {
     let live = true;
     let modePushed = false;
@@ -162,6 +167,8 @@ export function App() {
     const offBrief = window.electronAPI.onSecretaryBrief((id, state) => {
       touched.add(id);
       setBriefs((prev) => applyBriefUpdate(prev, id, state));
+      const opened = cardOnArrival(id, state, selectedIdRef.current);
+      if (opened) setCard(opened);
     });
     const offMode = window.electronAPI.onSecretaryMode((enabled) => {
       modePushed = true;
@@ -181,9 +188,12 @@ export function App() {
   }, []);
 
   // The card belongs to one brief of the shown contact. Switching contacts, the
-  // mode going off, the brief dropped (answered in the terminal) or replaced by a
-  // newer event's: each closes it, and closing it stops its audio.
-  const cardBrief = openCardBrief(card, { modeOn: secretaryMode, selectedId, briefs });
+  // mode going off, or the brief replaced by a newer event's or dropped: each
+  // closes it, and closing it stops its audio. Once closed, the header's Secretary
+  // button brings the shown contact's latest brief back.
+  const secretaryView = { modeOn: secretaryMode, selectedId, briefs };
+  const cardBrief = openCardBrief(card, secretaryView);
+  const reopenCard = cardToReopen(card, secretaryView);
   useEffect(() => {
     if (card && !cardBrief) setCard(null);
   }, [card, cardBrief]);
@@ -235,8 +245,6 @@ export function App() {
   //
   // Capture phase, because xterm handles keys on its own hidden textarea and some
   // components stop propagation, so a bubble-phase listener would miss input.
-  const selectedIdRef = useRef(selectedId);
-  selectedIdRef.current = selectedId;
   useEffect(() => {
     const acknowledge = (e: Event) => {
       const id = selectedIdRef.current;
@@ -368,8 +376,8 @@ export function App() {
 
   // Selecting a contact acknowledges that contact, never the one being left. With
   // Secretary Mode on, a contact that showed a red dot at the moment of the click
-  // and has a brief also opens its card, which plays the brief. Read from refs,
-  // as rendered, before markRead clears the dot.
+  // and has a live brief also opens its card, which plays the brief. Read from
+  // refs, as rendered, before markRead clears the dot.
   const secretaryRef = useRef({ modeOn: secretaryMode, unreadIds, briefs });
   secretaryRef.current = { modeOn: secretaryMode, unreadIds, briefs };
   const handleSelect = useCallback(
@@ -596,6 +604,18 @@ export function App() {
                 ? "OpenCode"
                 : "Claude Code"}
             </span>
+            {reopenCard ? (
+              <button
+                type="button"
+                className="content-header-brief"
+                // Keeps focus in the terminal, like the card's own buttons.
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setCard(reopenCard)}
+                title="Show the secretary's latest brief for this session"
+              >
+                Secretary
+              </button>
+            ) : null}
             <span className="content-header-status">
               {selectedInstance.status === "running" ? "Online" : "Offline"}
             </span>
@@ -683,6 +703,7 @@ export function App() {
               instanceId={card.instanceId}
               name={selectedInstance.name}
               brief={cardBrief}
+              autoplay={card.play}
               onClose={() => setCard(null)}
             />
           ) : null}

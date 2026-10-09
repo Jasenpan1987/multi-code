@@ -3,9 +3,11 @@
 // a speech server is set, that brief's audio (T-502), prepared the moment the
 // alert fires so it is ready before the click (PRD Story 2).
 //
-// One entry per instance with a live event, in memory only: the text, the wav and
-// the state go when the event clears, when a newer event replaces it, or when
-// Secretary Mode goes off. Nothing here writes to disk (PRD, Privacy).
+// One entry per instance, its latest brief, in memory only: the text, the wav and
+// the state go when a newer event replaces it, when Secretary Mode goes off, or
+// when the instance is removed. When its event clears (the builder typed in the
+// session or answered the dialog), the brief stays, marked handled, so it can still
+// be read and replayed (PRD v1.7, T-527). Nothing here writes to disk (PRD, Privacy).
 //
 // Per event, text first, then audio:
 //
@@ -15,10 +17,12 @@
 //
 // With no server set, "ready" goes straight to audio unavailable. One brief and at
 // most one speech request per event, never retried (Story 7). A newer event for
-// the same instance, a clear, or the mode going off aborts the work in flight (the
+// the same instance, the mode going off or a removal aborts the work in flight (the
 // brief writer kills its CLI, the speech request is cancelled), and anything that
-// still comes back for it is discarded. While the mode is off nothing is spawned or
-// called; turning it on prepares every event still live (Story 1).
+// still comes back for it is discarded. A clear doesn't: the shown session's card
+// opens as the event arrives, and a click into its terminal is a write, so aborting
+// would close that card before it said anything. While the mode is off nothing is
+// spawned or called; turning it on prepares every event still live (Story 1).
 //
 // The renderer hears every change on `secretary-brief` (instanceId, state | null)
 // and the mode on `secretary-mode`; it fetches a ready wav by instance and seq, so
@@ -61,11 +65,13 @@ export interface Secretary {
   start(enabled: boolean): void;
   setMode(enabled: boolean): void;
   isOn(): boolean;
-  // Every live brief, by instance id.
+  // Every instance's latest brief, by instance id.
   briefs(): Record<string, SecretaryBriefState>;
   // The wav of the instance's brief for event `seq`, or null when that is no
   // longer its brief or its audio isn't ready.
   audioFor(instanceId: string, seq: number): Buffer | null;
+  // Drop the instance's brief, when the instance is removed.
+  forget(instanceId: string): void;
   // Unsubscribe and abort everything in flight. At quit.
   stop(): void;
 }
@@ -80,6 +86,7 @@ interface Job {
   state: SecretaryBriefState;
   abort: AbortController;
   wav?: Buffer;
+  handled?: boolean;
 }
 
 export function createSecretary(deps: SecretaryDeps): Secretary {
@@ -89,9 +96,17 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
 
   const isCurrent = (instanceId: string, job: Job) => jobs.get(instanceId) === job;
 
+  // Every state after a clear carries `handled`, whichever step it comes from.
   const publish = (instanceId: string, job: Job, state: SecretaryBriefState) => {
-    job.state = state;
-    deps.send(BRIEF_CHANNEL, instanceId, state);
+    job.state = job.handled ? { ...state, handled: true } : state;
+    deps.send(BRIEF_CHANNEL, instanceId, job.state);
+  };
+
+  const markHandled = (instanceId: string) => {
+    const job = jobs.get(instanceId);
+    if (!job || job.handled) return;
+    job.handled = true;
+    publish(instanceId, job, job.state);
   };
 
   const drop = (instanceId: string) => {
@@ -170,7 +185,7 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
   const onEvent: SecretaryEventListener = (instanceId, event) => {
     if (!on) return;
     if (event) prepare(instanceId, event);
-    else drop(instanceId);
+    else markHandled(instanceId);
   };
 
   const setMode = (enabled: boolean) => {
@@ -204,6 +219,7 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
       if (!job || job.event.seq !== seq) return null;
       return job.wav ?? null;
     },
+    forget: drop,
     stop() {
       unsubscribe?.();
       unsubscribe = null;

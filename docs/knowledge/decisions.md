@@ -4,6 +4,18 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-10-09 — The shown session's secretary speaks on its own, and briefs are kept
+
+**Decision:** With Secretary Mode on, a new event on the session on screen opens its card and plays the brief without a click. Every other session still waits for its red-dot click. A brief is no longer dropped when its event clears (the builder typed or answered); it stays, marked handled, and the session header's Secretary button brings it back for reading and replay. Briefs are written to ASD-STE100 Simplified Technical English's rules at about 80% strictness.
+
+**Why:** After a day of use, the builder found the session they were watching never briefed them (any key press cleared its red dot, and only a red-dot click opened a card), and a brief they had heard was gone the moment they typed. Limiting unasked speech to the shown session keeps the original point of the pull model: two secretaries never talk at once.
+
+**Supersedes:** part of 2026-10-07, "speaks only when clicked": that still holds for every session except the one on screen.
+**Source:** docs/timeline/2026-10-09_secretary-first-day.md
+**Affects:** PRD Stories 2, 3 and 4 (v1.7); `secretary/index.ts` (keeps briefs), `App.tsx` and `secretaryBrief.ts` (when a card opens), the brief prompt (v9).
+
+---
+
 ## 2026-10-08 — The speech server detects the brief's language itself
 
 **Decision:** The secretary's speech request no longer sends `language`; Qwen3-TTS uses its default, `Auto`, and detects the language from the text. The brief writer still chooses the brief's language (it follows the builder's latest message), and that choice still picks the tone instruction sent with the text.

@@ -1,13 +1,18 @@
 // The secretary card's rules (epic voice-secretary, PRD Stories 3 and 7), kept out
 // of App and SecretaryCard so they are plain functions with tests.
 //
-// A card belongs to one brief: one contact and one event `seq`. It opens only from
-// a click on a contact that showed a red dot at that moment and has a brief, while
-// Secretary Mode is on. It stays open only while that is still the shown contact's
-// brief: switching contacts, the mode going off, the brief being dropped (the
-// builder answered in the terminal, which clears the event in main) or replaced by
-// a newer event's all close it. A newer event raises its own red dot and chime, so
-// clicking the contact again opens the new brief; nothing ever plays on its own.
+// A card belongs to one brief: one contact and one event `seq`. While Secretary Mode
+// is on it opens three ways: on its own when a new event arrives for the contact on
+// screen (T-526); from a click on a contact that showed a red dot at that moment and
+// has a live brief; or from the header's Secretary button, which brings back the
+// shown contact's latest brief, live or handled (T-527). The first two play the
+// brief once the voice is ready; the button doesn't. So only the shown contact ever
+// speaks unasked, and two sessions never talk over each other.
+//
+// It stays open while that is still the shown contact's brief, handled or not: the
+// builder typing in the terminal keeps it. Switching contacts, the mode going off,
+// or a newer event replacing the brief close it; for the shown contact the newer
+// event opens its own card.
 
 import type { BriefLanguage, SecretaryBriefState } from "../../shared/types";
 
@@ -16,6 +21,8 @@ export type BriefMap = Record<string, SecretaryBriefState>;
 export interface OpenCard {
   instanceId: string;
   seq: number;
+  // Play the brief once its voice is ready.
+  play: boolean;
 }
 
 export interface SecretaryView {
@@ -25,10 +32,10 @@ export interface SecretaryView {
 }
 
 // The card a click on `instanceId` opens, or null. `unreadIds` must be read before
-// the click clears the contact's red dot. A red dot with no brief opens nothing: the
-// event was already dealt with (a manager dispatch writes to the session, which
-// clears it in main but leaves the dot), or the contact gets no secretary at all
-// (OpenCode, the manager).
+// the click clears the contact's red dot. A red dot with no brief, or only a handled
+// one, opens nothing: the event was already dealt with (a manager dispatch writes to
+// the session, which clears it in main but leaves the dot), or the contact gets no
+// secretary at all (the manager).
 export function cardOnSelect(
   instanceId: string,
   modeOn: boolean,
@@ -37,7 +44,29 @@ export function cardOnSelect(
 ): OpenCard | null {
   if (!modeOn || !unreadIds.has(instanceId)) return null;
   const brief = briefs[instanceId];
-  return brief ? { instanceId, seq: brief.seq } : null;
+  return brief && !brief.handled ? { instanceId, seq: brief.seq, play: true } : null;
+}
+
+// The card a push from main opens on its own, or null: a new event's brief for the
+// contact on screen. Every event's first push is its "preparing", so a later push
+// for the same event never reopens a card the builder closed. Main pushes briefs
+// only while Secretary Mode is on.
+export function cardOnArrival(
+  instanceId: string,
+  state: SecretaryBriefState | null,
+  selectedId: string | null
+): OpenCard | null {
+  if (instanceId !== selectedId || !state) return null;
+  if (state.status !== "preparing" || state.handled) return null;
+  return { instanceId, seq: state.seq, play: true };
+}
+
+// What the header's Secretary button opens, or null when it has nothing to show:
+// the shown contact's latest brief, when no card is open over it.
+export function cardToReopen(card: OpenCard | null, view: SecretaryView): OpenCard | null {
+  if (!view.modeOn || !view.selectedId || openCardBrief(card, view)) return null;
+  const brief = view.briefs[view.selectedId];
+  return brief ? { instanceId: view.selectedId, seq: brief.seq, play: false } : null;
 }
 
 // The brief an open card shows, or null when the card should be closed.

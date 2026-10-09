@@ -104,11 +104,12 @@ beforeEach(() => {
 });
 
 describe("the prompt", () => {
-  it("is the spike's final prompt (v7) plus OpenCode's dialogs (v8), byte for byte", () => {
-    // docs/timeline/2026-10-08_brief-writer-spike.md, "Final system prompt" and its
-    // T-522 addendum. A deliberate change gets a new hash here and a line there.
+  it("is the spike's prompt as of v9 (Simplified Technical English), byte for byte", () => {
+    // docs/timeline/2026-10-08_brief-writer-spike.md, "Final system prompt" (v7), its
+    // T-522 addendum (v8) and its T-528 addendum (v9). A deliberate change gets a new
+    // hash here and a line there.
     expect(crypto.createHash("sha256").update(SYSTEM_PROMPT).digest("hex")).toBe(
-      "9ebd3266fe18af1593197cb63fa8a9acf637100dc214036e06bd9582e70b1ce5"
+      "11ef4809dbafc8c44a73105991d8489462db1b4dc0eed02a884692306c6ac8a6"
     );
   });
 });

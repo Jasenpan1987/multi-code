@@ -4,7 +4,9 @@ import {
   applyBriefUpdate,
   briefCardView,
   briefLang,
+  cardOnArrival,
   cardOnSelect,
+  cardToReopen,
   mergeBriefSnapshot,
   openCardBrief,
 } from "./secretaryBrief";
@@ -30,6 +32,11 @@ const ready = (
   voiceReason,
 });
 
+const handled = (state: SecretaryBriefState): SecretaryBriefState => ({
+  ...state,
+  handled: true,
+});
+
 const failed = (seq: number): SecretaryBriefState => ({
   seq,
   kind: "finished",
@@ -41,10 +48,15 @@ describe("cardOnSelect", () => {
   const briefs: BriefMap = { a: preparing(3), b: ready(4, "ready") };
 
   it("opens the card for the brief's event when the contact showed a red dot", () => {
-    expect(cardOnSelect("a", true, new Set(["a"]), briefs)).toEqual({ instanceId: "a", seq: 3 });
+    expect(cardOnSelect("a", true, new Set(["a"]), briefs)).toEqual({
+      instanceId: "a",
+      seq: 3,
+      play: true,
+    });
     expect(cardOnSelect("b", true, new Set(["a", "b"]), briefs)).toEqual({
       instanceId: "b",
       seq: 4,
+      play: true,
     });
   });
 
@@ -60,10 +72,65 @@ describe("cardOnSelect", () => {
   it("opens nothing for a red dot with no brief: the event was already dealt with", () => {
     expect(cardOnSelect("c", true, new Set(["c"]), briefs)).toBeNull();
   });
+
+  it("opens nothing for a red dot whose brief is handled: answered before the click", () => {
+    const kept = { a: handled(ready(3, "ready")) };
+    expect(cardOnSelect("a", true, new Set(["a"]), kept)).toBeNull();
+  });
+});
+
+describe("cardOnArrival", () => {
+  it("opens a new event's card for the contact on screen, to play", () => {
+    expect(cardOnArrival("a", preparing(5), "a")).toEqual({ instanceId: "a", seq: 5, play: true });
+  });
+
+  it("opens nothing for a contact that isn't shown: it waits for a red-dot click", () => {
+    expect(cardOnArrival("a", preparing(5), "b")).toBeNull();
+    expect(cardOnArrival("a", preparing(5), null)).toBeNull();
+  });
+
+  it("opens nothing for a later push of the same event, so a closed card stays closed", () => {
+    expect(cardOnArrival("a", ready(5, "pending"), "a")).toBeNull();
+    expect(cardOnArrival("a", ready(5, "ready"), "a")).toBeNull();
+    expect(cardOnArrival("a", failed(5), "a")).toBeNull();
+    expect(cardOnArrival("a", handled(preparing(5)), "a")).toBeNull();
+  });
+
+  it("opens nothing for a drop", () => {
+    expect(cardOnArrival("a", null, "a")).toBeNull();
+  });
+});
+
+describe("cardToReopen", () => {
+  const view = { modeOn: true, selectedId: "a", briefs: { a: handled(ready(3, "ready")) } };
+
+  it("brings back the shown contact's latest brief, handled or live, without playing it", () => {
+    expect(cardToReopen(null, view)).toEqual({ instanceId: "a", seq: 3, play: false });
+    expect(cardToReopen(null, { ...view, briefs: { a: preparing(4) } })).toEqual({
+      instanceId: "a",
+      seq: 4,
+      play: false,
+    });
+  });
+
+  it("has nothing while that brief's card is open", () => {
+    expect(cardToReopen({ instanceId: "a", seq: 3, play: true }, view)).toBeNull();
+  });
+
+  it("offers the newer brief when the open card is for an older one", () => {
+    const older = { instanceId: "a", seq: 2, play: true };
+    expect(cardToReopen(older, view)).toEqual({ instanceId: "a", seq: 3, play: false });
+  });
+
+  it("has nothing with no brief, no contact shown, or the mode off", () => {
+    expect(cardToReopen(null, { ...view, briefs: {} })).toBeNull();
+    expect(cardToReopen(null, { ...view, selectedId: null })).toBeNull();
+    expect(cardToReopen(null, { ...view, modeOn: false })).toBeNull();
+  });
 });
 
 describe("openCardBrief", () => {
-  const card = { instanceId: "a", seq: 3 };
+  const card = { instanceId: "a", seq: 3, play: true };
   const view = { modeOn: true, selectedId: "a", briefs: { a: ready(3, "pending") } };
 
   it("shows the brief the card was opened for, as it progresses", () => {
@@ -82,11 +149,16 @@ describe("openCardBrief", () => {
     expect(openCardBrief(card, { ...view, modeOn: false })).toBeNull();
   });
 
-  it("closes when the brief is dropped (answered in the terminal)", () => {
+  it("stays open when the event clears: the builder typing in the terminal keeps the text", () => {
+    const kept = handled(ready(3, "ready"));
+    expect(openCardBrief(card, { ...view, briefs: { a: kept } })).toEqual(kept);
+  });
+
+  it("closes when the brief is dropped (the contact was removed)", () => {
     expect(openCardBrief(card, { ...view, briefs: {} })).toBeNull();
   });
 
-  it("closes when a newer event replaces the brief, rather than playing it unasked", () => {
+  it("closes when a newer event replaces the brief, which opens a card of its own", () => {
     expect(openCardBrief(card, { ...view, briefs: { a: preparing(7) } })).toBeNull();
   });
 

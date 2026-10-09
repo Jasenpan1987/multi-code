@@ -4,7 +4,7 @@
 **Source:** `docs/specs/voice-secretary/prd.md` v1.2 · `docs/specs/voice-secretary/gaps.md` (nothing open)
 **Evidence:** `docs/timeline/2026-10-07_voice-secretary-ideation.md` · `docs/timeline/2026-10-07_voice-engine-hosting.md`
 **Speech server:** `deploy/tts-server/README.md`
-**Total Tasks:** 25 (T-501..T-514, follow-ups T-515..T-519, OpenCode T-520..T-523, T-524, T-525)
+**Total Tasks:** 28 (T-501..T-514, follow-ups T-515..T-519, OpenCode T-520..T-523, T-524, T-525, after a day of use T-526..T-528)
 **Milestones:** M1 (hear the brief) · M2 (answer in words) · M3 (originals when words aren't enough)
 
 Task ids start at T-501, after attention-alerts' T-4xx. Only M1 is committed; M2 and M3 are
@@ -274,6 +274,36 @@ next steps…") is marked `synthetic: true`. Order: T-520 → T-521 → T-522 �
 - **Code:** `workspace/app/src/renderer/App.tsx` (the capture-phase `acknowledge` listener), `workspace/app/src/renderer/audio/attentionPolicy.ts`
 - **Description:** Found 2026-10-09 by the builder on the dev build, Secretary Mode on, no speech server: on the session they were watching, the red dot came and went and no card opened. Any keydown or pointerdown in the shown session's page acknowledges it (attention-alerts Story 4), and the card opens only from a red-dot click, so the brief stays in main with no way to reach it. That much is by design: the builder at the screen saw it happen. But a bare Cmd, Shift, Option or Ctrl counts too, and macOS shortcuts the page never sees whole (Cmd+Shift+4 for a screenshot, Cmd+Tab away) still deliver the modifier's keydown first. Ignore keydowns whose `key` is only a modifier.
 - **Alternative the builder may want instead:** with Secretary Mode on, open the card on its own when the shown session's event arrives, rather than waiting for a red-dot click. That changes PRD Story 3's trigger, so it is the builder's call; it would also speak while they watch.
+- **2026-10-09:** the builder chose the alternative (T-526). The card no longer depends on the shown session's red dot; the modifier-key fix still applies to the red dot itself.
+
+## After a day of use (PRD v1.7)
+
+The builder's feedback after the first full day with Secretary Mode, 2026-10-09
+(`docs/timeline/2026-10-09_secretary-first-day.md`).
+
+### T-526: The shown session briefs on its own
+
+- **Type:** feature · **Status:** done · **Blocked by:** none
+- **Requirement:** `docs/specs/voice-secretary/prd.md#story-3-click-a-red-dot-hear-the-brief`
+- **Code:** `workspace/app/src/renderer/App.tsx` (the `onSecretaryBrief` push), `workspace/app/src/renderer/components/secretaryBrief.ts`
+- **Description:** With Secretary Mode on, a new event on the session on screen opens its card at once and plays the brief when the voice is ready, with no click. Other sessions keep the red-dot click, so only the shown one ever speaks unasked.
+- **Done 2026-10-09:** `cardOnArrival` opens a card on an event's first push, its "preparing", for the contact on screen; a later push for the same event never reopens a card the builder closed. The `OpenCard` gained `play`. Live on a dev build with its own userData and the real writer and speech server (`.omt/probes/voice-secretary/t526/step.mjs`): the shown session's finish opened the card unclicked, text after about 2 s, voice playing about 14 s after the event; a second session finishing meanwhile raised only its red dot, and clicking it played its brief.
+
+### T-527: Briefs stay after the event clears, and can be reopened
+
+- **Type:** feature · **Status:** done · **Blocked by:** none
+- **Requirement:** `docs/specs/voice-secretary/prd.md#story-2-the-brief-is-ready-before-the-click`
+- **Code:** `workspace/app/src/main/secretary/index.ts`, `workspace/app/src/shared/types.ts` (`SecretaryBriefState`), `workspace/app/src/renderer/App.tsx` (content header), `workspace/app/src/renderer/components/SecretaryCard.tsx`
+- **Description:** Typing in the session, answering the dialog or the session exiting marks the brief handled instead of dropping it: its text and audio stay in memory until a newer event replaces it, the mode goes off, or the session is removed. An open card stays open. A closed one comes back from a Secretary button in the content header, without playing on its own. A red-dot click still opens only a brief whose event is live.
+- **Done 2026-10-09:** `SecretaryBriefState` gained `handled`; a clear marks it and no longer aborts the work in flight, since a click into the shown terminal is a write and would otherwise close the card that just opened. `secretary.forget(id)` drops a removed contact's brief (from `remove-instance`). `cardToReopen` drives the header button; a reopened card waits for Replay. For T-510: a handled Needs-you card must refuse a reply. Live: typing in the terminal left the card and its text up (brief `handled`), × showed the header button, the button brought the card back silent, Replay played it. 1036 tests green.
+
+### T-528: Briefs in Simplified Technical English style
+
+- **Type:** prompt · **Status:** done · **Blocked by:** none
+- **Requirement:** `docs/specs/voice-secretary/prd.md#story-4-what-the-secretary-says`
+- **Code:** `workspace/app/src/main/secretary/briefWriter.ts` (`SYSTEM_PROMPT`, its hash test, the live test)
+- **Description:** Write briefs to the ASD-STE100 writing rules at about 80% strictness, in both languages: one idea per sentence, short sentences, common words, active voice, no idioms. Strict on the rules, not limited to STE's dictionary, and still spoken like a person.
+- **Done 2026-10-09:** prompt v9 (spike record, T-528 addendum). On the six Claude samples, sentences went from 22–32 to 15–18 units on average in Chinese and from 12–16 to 9–11 words in English, with nearly none over the limits. English briefs run a little longer, 100–138 words against 90–127. The OpenCode samples weren't rebuilt.
 
 ## Milestone 2: Answer in words
 

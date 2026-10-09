@@ -1,7 +1,7 @@
 # PRD: Voice Secretary
 
-**Version:** 1.6
-**Last Updated:** 2026-10-08
+**Version:** 1.7
+**Last Updated:** 2026-10-09
 **Status:** approved
 **Owner:** Jasen
 
@@ -10,7 +10,7 @@
 The builder wants agents to keep working while they are away from the screen, washing dishes
 or doing other chores. Each Claude Code and OpenCode session gets a secretary. When the session finishes
 or needs the builder, the usual chime and red dot fire; with Secretary Mode on, clicking the
-contact has the secretary brief the builder out loud, the way a secretary briefs a CEO: a
+contact, or just having that session on screen, has the secretary brief the builder out loud, the way a secretary briefs a CEO: a
 retold account with the details, not the screen read aloud. When words aren't enough, a
 card shows the original material, and the builder can answer a dialog in plain words, which
 the secretary turns into the right choice.
@@ -62,7 +62,7 @@ docs/timeline/2026-10-07_voice-engine-hosting.md)
 | Term | Meaning |
 |---|---|
 | Secretary | The per-session role that writes a brief for one event and acts on the builder's answer to it |
-| Secretary Mode | A global toolbox switch. On: clicking a red-dot contact plays its brief. Off: today's behaviour |
+| Secretary Mode | A global toolbox switch. On: a new event on the session on screen plays its brief at once, and clicking a red-dot contact plays its brief. Off: today's behaviour |
 | Brief | The secretary's retelling of one event, in text and, when a speech server is available, audio |
 | Card | The panel that opens with a brief: the brief text, the attachments, and for a dialog, a reply box |
 | Attachment | Original material on the card: never rewritten |
@@ -95,7 +95,7 @@ docs/timeline/2026-10-07_voice-engine-hosting.md)
 **Acceptance Criteria:**
 - [ ] While Secretary Mode is on, every Finished or Needs-you event from a Claude Code or OpenCode instance starts that session's brief right away, text first, then audio
 - [ ] One brief per event. A newer event for the same session replaces the older brief
-- [ ] If the alert clears before the builder clicks (they answered in the terminal or on the phone), the brief is dropped and never plays
+- [ ] If the alert clears before the builder clicks (they answered in the terminal or on the phone), a red-dot click no longer plays the brief. The brief itself is kept, marked handled, until a newer event replaces it, the mode goes off or the session is removed (v1.7; it used to be dropped)
 - [ ] An OpenCode instance is briefed the same way: its permission dialogs say what the command or edit will do, and its question dialogs read their questions and options (added v1.6)
 - [ ] the manager instance gets no secretary in v1
 - [ ] If writing the brief fails, the card still opens with its attachments and one line saying no brief could be written
@@ -105,16 +105,19 @@ docs/timeline/2026-10-07_voice-engine-hosting.md)
 ### Story 3: Click a red dot, hear the brief
 
 **As a** builder
-**I want** to choose whose brief I hear by clicking, like tapping a message notification
+**I want** to choose whose brief I hear by clicking, like tapping a message notification, and to hear the session I'm watching without clicking
 **So that** several sessions waiting at once never talk over each other
 
 **Acceptance Criteria:**
+- [ ] With Secretary Mode on, a new event on the session on screen opens its card and plays its brief once the voice is ready, with no click (v1.7)
 - [ ] With Secretary Mode on, clicking a red-dot contact switches to it as today, opens its card and starts playing the brief
 - [ ] Clicking a contact without a red dot opens no card and plays nothing
 - [ ] If the brief isn't ready, the card says it is being prepared and starts playing when it is, unless the builder has clicked another contact by then
 - [ ] Only one brief plays at a time. Clicking another red-dot contact stops the current one and starts the new one
 - [ ] the card has replay and stop
-- [ ] Nobody hears anything until they click: the secretary never speaks on its own
+- [ ] Only the session on screen speaks without a click; every other session waits for its red-dot click (v1.7; before, nothing spoke unclicked)
+- [ ] The card stays open, text and replay included, after the builder types in the session or answers the dialog (v1.7)
+- [ ] Once closed, the card comes back from a Secretary button in the session header, which shows that session's latest brief without playing it until Replay (v1.7)
 
 ---
 
@@ -134,6 +137,7 @@ docs/timeline/2026-10-07_voice-engine-hosting.md)
 - [ ] The speech server detects the spoken language itself (its `Auto`); the brief's language only picks the tone instruction sent with it
 - [ ] The voice is Serena in both languages
 - [ ] Written to be heard: no code blocks, tables or long paths; acronyms and symbols written the way they should sound
+- [ ] Written to the rules of ASD-STE100 Simplified Technical English at about 80% strictness, in both languages: one idea per sentence, short sentences, common words, the active voice, no idioms. Not limited to STE's dictionary, and still spoken like a person, not a manual (v1.7)
 - [ ] a brief normally runs under a minute when spoken
 
 ---
@@ -260,3 +264,4 @@ and 20 s limits, nothing on disk) were confirmed by the builder on 2026-10-07.
 | 1.4 | 2026-10-08 | The speech request no longer sends `language`: the server detects it (`Auto`), for Chinese briefs full of English terms. Builder's decision, kept after an A/B listen of 11 real briefs spoken both ways |
 | 1.5 | 2026-10-08 | Story 8 narrowed to servers built from `deploy/tts-server/`, since the request names the Serena voice; no voice setting (G-004, builder's decision) |
 | 1.6 | 2026-10-08 | OpenCode sessions get a secretary too (Story 2), brought into Milestone 1 before release. Answering their dialogs in words waits for Milestone 2. Builder's decision |
+| 1.7 | 2026-10-09 | After a day of use: the session on screen briefs without a click (Story 3); a brief is kept after its event clears and can be reopened from the session header (Stories 2 and 3); briefs follow Simplified Technical English at about 80% strictness (Story 4). Builder's feedback, `docs/timeline/2026-10-09_secretary-first-day.md` |

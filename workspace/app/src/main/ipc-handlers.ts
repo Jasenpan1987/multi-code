@@ -83,6 +83,8 @@ export function registerIpcHandlers() {
 
   ipcMain.handle("remove-instance", (_event, id: string) => {
     processManager.removeInstance(id);
+    // The secretary keeps a brief after its event clears; not for a contact that's gone.
+    secretary.forget(id);
   });
 
   ipcMain.handle("restart-instance", async (_event, id: string) => {

@@ -1,14 +1,15 @@
 // The secretary's card for one brief (epic voice-secretary, PRD Stories 3 and 7):
 // the brief text, marked as the secretary's, with replay, stop and close. App opens
-// it from a red-dot click and closes it when it stops being the shown contact's
-// current brief (see secretaryBrief.ts); it is keyed by instance and seq, so one
-// card only ever shows one brief.
+// it (see secretaryBrief.ts for when) and closes it when it stops being the shown
+// contact's latest brief; it is keyed by instance and seq, so one card only ever
+// shows one brief.
 //
-// It plays the brief once on its own, as soon as the audio is ready: at once when
-// the click finds it ready, or later while the text shows with the voice on its
-// way. Stop before then cancels that. It sits over the top of the terminal area and
-// never takes focus, so the terminal below stays usable; typing into it is the
-// builder dealing with the event, which drops the brief in main and closes this.
+// Opened with `autoplay`, it plays the brief once on its own, as soon as the audio
+// is ready: at once when it opens on a ready brief, or later while the text shows
+// with the voice on its way. Stop before then cancels that. It sits over the top of
+// the terminal area and never takes focus, so the terminal below stays usable;
+// typing there marks the brief handled in main but leaves this card, its text and
+// its replay as they are (T-527).
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { MouseEvent } from "react";
@@ -29,6 +30,7 @@ interface SecretaryCardProps {
   instanceId: string;
   name: string;
   brief: SecretaryBriefState;
+  autoplay: boolean;
   onClose: () => void;
 }
 
@@ -36,7 +38,13 @@ interface SecretaryCardProps {
 // click on the card never pulls focus out of the terminal.
 const keepFocus = (e: MouseEvent) => e.preventDefault();
 
-export function SecretaryCard({ instanceId, name, brief, onClose }: SecretaryCardProps) {
+export function SecretaryCard({
+  instanceId,
+  name,
+  brief,
+  autoplay: playWhenReady,
+  onClose,
+}: SecretaryCardProps) {
   const { seq } = brief;
   const key = `${instanceId}#${seq}`;
   const view = briefCardView(brief);
@@ -45,7 +53,7 @@ export function SecretaryCard({ instanceId, name, brief, onClose }: SecretaryCar
     briefPlaybackFailed(key)
   );
   // Still to play on its own once the audio is ready.
-  const [autoplay, setAutoplay] = useState(true);
+  const [autoplay, setAutoplay] = useState(playWhenReady);
   // Main had no audio for this seq any more: the brief was replaced or dropped, and
   // its update is on the way to close this card.
   const [stale, setStale] = useState(false);
