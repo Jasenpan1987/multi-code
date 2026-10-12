@@ -4,6 +4,28 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-10-12 — Multi-Code writes agent config only when the builder clicks Install
+
+**Decision:** The Skills and MCP section's install may write a project's agent config: `.claude/settings.json`, `.claude/settings.local.json`, `.mcp.json`, the project's entry in `~/.claude.json`, `opencode.json`, and skill folders. It writes only after the builder reads a preview and clicks Install, only into the selected instance's project, and through the official CLI commands where one exists. Nothing else in Multi-Code writes agent config. The report-only hooks and plugin stay in userData.
+
+**Why:** The builder wants one-click install into a project for both backends. The alternative, showing commands for the builder to copy and run, was offered and declined. The preview and the scope question on every install keep each write in the builder's hands.
+
+**Source:** Builder, 2026-10-12, in session; docs/timeline/2026-10-12_skills-mcp-inventory-investigation.md
+**Affects:** CLAUDE.md Architecture; docs/specs/skills-mcp/prd.md Stories 6–9.
+
+---
+
+## 2026-10-12 — OpenCode instances report their skills through Multi-Code's plugin
+
+**Decision:** An OpenCode instance's skill list comes from Multi-Code's report-only OpenCode plugin, sent when the instance starts. Instances are not given `--port`. MCP status comes from `opencode mcp list`, run on each refresh.
+
+**Why:** OpenCode picks among same-name skills at random on each start (five runs of `opencode debug skill`, five different picks), so only the running instance knows its copy. The plugin already runs in every instance and reports. `--port` would add a port and a server password to every spawn and reopen manager-agent Q8 (one PTY path for both backends).
+
+**Source:** Builder, 2026-10-12, in session; docs/timeline/2026-10-12_skills-mcp-inventory-investigation.md
+**Affects:** docs/specs/skills-mcp/prd.md Story 5; `backends/opencodePlugin.ts`. Not yet verified that the plugin can read the list (PRD Open Question 1).
+
+---
+
 ## 2026-10-10 — A wider choice is confirmed with a bare yes before the secretary presses it
 
 **Decision:** When the reply interpreter decides the builder wants "don't ask again" on a permission, or "accept edits without asking" on a plan, the secretary presses nothing. It asks a fixed question naming that exact choice, and presses only if the very next reply is a bare yes ("是", "对", "yes", punctuation aside). Any other reply is read afresh. The model never picks keys: it names an effect or option numbers, and `secretary/dialog.ts` turns them into the key sequences measured on the CLI.
