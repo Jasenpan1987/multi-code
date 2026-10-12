@@ -71,6 +71,8 @@ The toolbox is a per-instance utility panel using an accordion (one section expa
 
 (source: 2026-05-16 toolbox ideation)
 
+**Skills and MCP section (Claude Code, verified 2026-10-13):** shows the MCP servers, skills and plugins a Claude Code session started now in the instance's cwd loads, grouped as This project, Global, This session and Built-in, with overrides, enable switches and duplicate names marked. It works for a stopped instance too, the only toolbox section that does. Read from a short `claude -p` probe that never reaches the model and leaves no session file, refreshed only on expand, Refresh, or switching instance. OpenCode instances come in M2; installing comes in M3 and M4. (source: docs/specs/skills-mcp/prd.md; docs/specs/skills-mcp/test-plan.md, M1 QA)
+
 ## Multi-Backend Architecture (planned 2026-05-18)
 
 Each instance has a `backend` field (`"claude"` or `"opencode"`) chosen at creation. Backend-specific behavior is funneled through a small set of abstractions:

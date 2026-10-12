@@ -73,6 +73,8 @@ e.g. `git worktree add ../multi-code-t601 -b sm/t-601 skills-mcp`.
 
 ## Milestone 1: See what a Claude Code session loads
 
+**Status:** done 2026-10-13 (T-605 QA passed, branch `skills-mcp`). M2 to M4 are to be re-planned now, as the overview says.
+
 **Goal:** the builder opens "Skills and MCP" on a Claude Code instance and sees its MCP
 servers, skills and plugins, this project apart from global, with overrides and duplicates
 marked.
@@ -128,12 +130,13 @@ marked.
 ### T-605: M1 QA pass
 
 - **Type:** qa
-- **Status:** backlog
+- **Status:** done
 - **Requirement:** `docs/specs/skills-mcp/prd.md#phase-1-see-what-an-agent-loads`
 - **Code:** none
 - **Description:** Run `qa` against M1's "Done when" on `multi-code`, `apra-amcos-admin-dolce`, `apra-amcos-admin-hrr` and a manager instance. Check each list against a hand-run probe and `claude plugin list --json` in the same cwd. Count `.jsonl` files before and after ten refreshes. Watch for a chime or red dot during refreshes. Write the plan to `docs/specs/skills-mcp/test-plan.md`.
 - **Acceptance:** Every M1 "Done when" line passes, or fails with a bug task filed.
 - **Blocks:** T-610 · **Blocked by:** T-604 · **Parallel with:** T-606
+- **Done 2026-10-13:** Every M1 "Done when" line passes; no bugs filed. Plan and results: `docs/specs/skills-mcp/test-plan.md#milestone-1-qa-pass-t-605`. Each list matched a hand-run probe and `claude plugin list --json` in `multi-code`, `apra-amcos-admin-dolce` and `apra-amcos-admin-hrr`; the manager showed `multi-code dynamic connected Multi-Code` under This session; 40 refreshes left every `.jsonl` count unchanged with no error, chime or red dot; 120 s open and idle started no probe. `sentry` now reports `connected`, not the `needs-auth` the first line names.
 
 ---
 
