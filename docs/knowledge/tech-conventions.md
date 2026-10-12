@@ -79,10 +79,20 @@ delegation responds to a native `click()`, so:
 
 Two related facts that make self-verification practical:
 
-- **The dev app and a packaged build use different userData directories** (`multi-code`
-  vs `Multi-Code`), so both can run at once without fighting over `contacts.json`. They
-  do share port 6768; that's handled and only disables phone link. Kill the dev one with
-  `pkill -f "node_modules/electron"`, which cannot match `/Applications/Multi-Code.app`.
+- **The dev app and a packaged build share one userData folder** on macOS: `multi-code`
+  and `Multi-Code` are the same folder on a case-insensitive disk (CLAUDE.md, observed
+  2026-10-07), so running both overwrites each other's contacts and spawn files. Give a
+  dev build its own `--user-data-dir` (below). Corrected 2026-10-13; this line used to say
+  the folders differ. They share port 6768; that's handled and only disables phone link.
+- **Stop a dev build by its `--user-data-dir`, never by a broad pattern or a port.**
+  Other worktrees run dev builds too: on 2026-10-13 one from `multi-code-mobile-app-v2` held
+  port 9444, and a CDP script meant for this repo's build talked to it instead.
+  `pkill -f "node_modules/electron"` would stop theirs as well. Check that the
+  debugging port is free before launch (`lsof -nP -iTCP:<port> -sTCP:LISTEN`), and confirm
+  the `/json` page URL is under this repository.
+- **A hidden window throttles the page's own timers** to about one wake-up a minute, so a
+  loop of `setTimeout` inside `Runtime.evaluate` crawls. Pace loops from the Node side and
+  evaluate one step at a time (`.omt/probes/skills-mcp/t605/ten.cjs`).
 - **Compiled main-process modules with no electron import can be required directly** from
   a plain node script — `dist/main/run-state.js`, `dist/main/backends/claude.js` — and
   paired with `node_modules/node-pty` to drive a real CLI. `backends/index.js` and
@@ -281,3 +291,13 @@ are away it's a browser window opening on an empty desk. With the override the c
 once with the credential error, which is the right outcome. It must stay the call's only
 `--settings`, since a second one replaces the first. (source:
 docs/timeline/2026-10-08_brief-writer-spike.md, T-504 addendum)
+
+## Every CLI Multi-Code runs on its own gets stdin closed (added 2026-10-13)
+
+Spawn with `stdio: ["ignore", "pipe", "pipe"]` (or end stdin at once) and a timeout.
+`opencode mcp list` with a terminal on stdin printed its list and then never exited, until
+killed at 60 s; with stdin closed it answered and exited in 2.9 s (measured 2026-10-13,
+OpenCode 1.18.35). The Skills and MCP probe does the same for `claude -p`
+(`skills-mcp/claudeProbe.ts`). A CLI's failure text goes through `clipReason` before it
+reaches the renderer, since stderr can carry a token. (source:
+docs/timeline/2026-10-13_skills-mcp-m1-completed.md)
