@@ -269,6 +269,83 @@ export type ReadFileResult =
   | { ok: true; path: string; content: string }
   | { ok: false; path: string; error: ReadFileError };
 
+// The toolbox's Skills and MCP section (docs/specs/skills-mcp/prd.md): what a Claude
+// Code session started now in an instance's cwd loads. Names, scopes, statuses and
+// versions only. A server's env, headers and every other config value stay in main.
+// Where an item is set, in four groups (PRD Definitions): This project (`local`,
+// `project`), Global (`user`, managed, claude.ai), This session (flags Multi-Code
+// passes at spawn), Built-in. `other` holds a scope the section can't place: a
+// source a later CLI names, or a plugin skill whose plugin's scope is unknown.
+export type SkillsMcpGroup = "project" | "global" | "session" | "builtin" | "other";
+
+// One MCP server the session starts, or another definition of its name that loses.
+export interface SkillsMcpServer {
+  name: string;
+  // As the CLI states it: `connected`, `needs-auth`, `failed`, `pending`, …
+  // Absent on a definition the session doesn't start.
+  status?: string;
+  // The CLI's `source` for the one it starts: `local`, `project`, `user`,
+  // `dynamic`, … The file's scope for one that loses.
+  scope: string;
+  group: SkillsMcpGroup;
+  loaded: boolean;
+  // Added by Multi-Code at spawn: the manager's `--mcp-config` server.
+  multiCode?: boolean;
+  // "overrides user", "overridden by local".
+  note?: string;
+}
+
+// One install record, or a loaded plugin that has none, or a switch with no record.
+export interface SkillsMcpPlugin {
+  // `<plugin>@<marketplace>`, as `claude plugin list --json` names it too.
+  id: string;
+  name: string;
+  // Absent for a built-in plugin and for a switch with no record.
+  version?: string;
+  // The record's scope: `user`, `project`, `local`. Absent with no record.
+  scope?: string;
+  group: SkillsMcpGroup;
+  // Whether this is the copy the session loads.
+  loaded: boolean;
+  // The `enabledPlugins` entry that applies, and the scope of its settings file.
+  enableSwitch?: { on: boolean; scope: "local" | "project" | "user" };
+  // Why it loads or not: "overrides user 3.5.0", "overridden by this project's
+  // 3.4.1", "installed, not enabled", "enabled, not installed", …
+  note?: string;
+}
+
+export interface SkillsMcpSkill {
+  // A plugin's skills carry its prefix, as in `omt:digest`.
+  name: string;
+  // `project` or `user` for a skill folder, the plugin's scope for a plugin's
+  // skill, `built-in` for one that ships with the CLI.
+  scope: string;
+  group: SkillsMcpGroup;
+  // The other skills that load under a related name: `digest` and `omt:digest`.
+  duplicates?: string[];
+  // Set when the agent doesn't say which of several copies it loaded.
+  note?: string;
+}
+
+// One part of the section. `error` is its source's failure, in the source's words;
+// `items` is then empty.
+export interface SkillsMcpPart<T> {
+  items: T[];
+  error?: string;
+}
+
+// What main pushes on `skills-mcp-update` and returns from refreshSkillsMcp.
+// While `running`, the parts still hold the last refresh's answer.
+export interface SkillsMcpSnapshot {
+  instanceId: string;
+  // When the last refresh finished, or failed; null before the first.
+  refreshedAt: number | null;
+  running: boolean;
+  mcp: SkillsMcpPart<SkillsMcpServer>;
+  skills: SkillsMcpPart<SkillsMcpSkill>;
+  plugins: SkillsMcpPart<SkillsMcpPlugin>;
+}
+
 export interface ElectronAPI {
   // Instance management
   createInstance: (
@@ -316,6 +393,10 @@ export interface ElectronAPI {
   ) => Promise<{ ok: boolean; error?: string }>;
   openExternal: (url: string) => Promise<{ ok: boolean; error?: string }>;
   bounceDock: () => void;
+  // Starts a refresh of the Skills and MCP section, or joins the one running for
+  // the instance, and answers at once with the snapshot as it stands. The answer
+  // arrives on onSkillsMcpUpdate. Null for an unknown id or an OpenCode instance.
+  refreshSkillsMcp: (instanceId: string) => Promise<SkillsMcpSnapshot | null>;
 
   // App
   getAppVersion: () => Promise<string>;
@@ -397,6 +478,11 @@ export interface ElectronAPI {
   // Secretary Mode after every change. The value at mount comes from
   // getSecretarySettings().
   onSecretaryMode: (callback: (enabled: boolean) => void) => () => void;
+  // Every change to any instance's Skills and MCP snapshot: a refresh starting,
+  // and its answer.
+  onSkillsMcpUpdate: (
+    callback: (snapshot: SkillsMcpSnapshot) => void
+  ) => () => void;
 }
 
 declare global {

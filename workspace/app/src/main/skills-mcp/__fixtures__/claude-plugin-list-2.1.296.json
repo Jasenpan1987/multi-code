@@ -1,0 +1,206 @@
+[
+  {
+    "id": "agent-evals@apra-amcos-cc-marketplace",
+    "version": "1.0.0",
+    "scope": "user",
+    "enabled": true,
+    "installPath": "/Users/jasenpan/.claude/plugins/cache/apra-amcos-cc-marketplace/agent-evals/1.0.0",
+    "installedAt": "2026-10-08T06:30:04.931Z",
+    "lastUpdated": "2026-10-08T06:30:04.931Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "apra-ai-ba@apra-amcos-cc-marketplace",
+    "version": "1.0.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/jasenpan/.claude/plugins/cache/apra-amcos-cc-marketplace/apra-ai-ba/1.0.0",
+    "installedAt": "2026-04-24T11:36:00.580Z",
+    "lastUpdated": "2026-04-24T11:36:00.580Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "apra-post-release-backward-merge@apra-amcos-cc-marketplace",
+    "version": "1.1.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/jasenpan/.claude/plugins/cache/apra-amcos-cc-marketplace/apra-post-release-backward-merge/1.1.0",
+    "installedAt": "2026-04-01T13:34:33.285Z",
+    "lastUpdated": "2026-07-21T14:05:59.310Z",
+    "projectPath": "/Users/jasenpan/code/apra/apra-amcos-portals-backend",
+    "projectEnabled": false
+  },
+  {
+    "id": "apra-post-release-backward-merge@apra-amcos-cc-marketplace",
+    "version": "1.1.0",
+    "scope": "user",
+    "enabled": true,
+    "installPath": "/Users/jasenpan/.claude/plugins/cache/apra-amcos-cc-marketplace/apra-post-release-backward-merge/1.1.0",
+    "installedAt": "2026-08-09T15:40:00.555Z",
+    "lastUpdated": "2026-08-09T15:40:00.555Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "cross-model-review@apra-amcos-cc-marketplace",
+    "version": "1.2.0",
+    "scope": "user",
+    "enabled": true,
+    "installPath": "/Users/jasenpan/.claude/plugins/cache/apra-amcos-cc-marketplace/cross-model-review/1.2.0",
+    "installedAt": "2026-09-17T18:12:57.252Z",
+    "lastUpdated": "2026-10-09T16:32:12.036Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "epcc-workflow@aws-claude-code-plugins",
+    "version": "2.1.0",
+    "scope": "user",
+    "enabled": true,
+    "installPath": "/Users/jasenpan/.claude/plugins/cache/aws-claude-code-plugins/epcc-workflow/2.1.0",
+    "installedAt": "2026-09-18T04:52:32.351Z",
+    "lastUpdated": "2026-09-18T04:52:32.351Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "omt@apra-amcos-cc-marketplace",
+    "version": "3.5.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/jasenpan/.claude/plugins/cache/apra-amcos-cc-marketplace/omt/3.5.0",
+    "installedAt": "2026-10-12T11:38:02.054Z",
+    "lastUpdated": "2026-10-12T11:38:02.054Z",
+    "projectPath": "/Users/jasenpan/code/apra/apra-amcos-admin-dolce",
+    "projectEnabled": true
+  },
+  {
+    "id": "omt@apra-amcos-cc-marketplace",
+    "version": "3.5.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/jasenpan/.claude/plugins/cache/apra-amcos-cc-marketplace/omt/3.5.0",
+    "installedAt": "2026-07-17T09:34:30.608Z",
+    "lastUpdated": "2026-10-12T00:47:13.723Z",
+    "projectPath": "/Users/jasenpan/code/apra/apra-amcos-admin-hrr",
+    "projectEnabled": true
+  },
+  {
+    "id": "omt@apra-amcos-cc-marketplace",
+    "version": "3.5.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/jasenpan/.claude/plugins/cache/apra-amcos-cc-marketplace/omt/3.5.0",
+    "installedAt": "2026-10-12T11:38:02.267Z",
+    "lastUpdated": "2026-10-12T11:38:02.267Z",
+    "projectPath": "/Users/jasenpan/code/apra/apra-amcos-cc-marketplace",
+    "projectEnabled": true
+  },
+  {
+    "id": "omt@apra-amcos-cc-marketplace",
+    "version": "3.3.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/jasenpan/.claude/plugins/cache/apra-amcos-cc-marketplace/omt/3.3.0",
+    "installedAt": "2026-10-08T05:11:40.602Z",
+    "lastUpdated": "2026-10-08T05:11:40.602Z",
+    "projectPath": "/private/var/folders/m4/10dzffns3dbcrjrgc97jv6x40000gn/T/hrr-eval-empty-id-set-null-zhmRrl",
+    "projectEnabled": true
+  },
+  {
+    "id": "omt@apra-amcos-cc-marketplace",
+    "version": "3.5.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/jasenpan/.claude/plugins/cache/apra-amcos-cc-marketplace/omt/3.5.0",
+    "installedAt": "2026-10-12T11:33:40.091Z",
+    "lastUpdated": "2026-10-12T11:33:40.091Z",
+    "projectPath": "/Users/jasenpan/code/apra/multi-code",
+    "projectEnabled": true
+  },
+  {
+    "id": "omt@apra-amcos-cc-marketplace",
+    "version": "3.5.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/jasenpan/.claude/plugins/cache/apra-amcos-cc-marketplace/omt/3.5.0",
+    "installedAt": "2026-10-12T11:38:02.472Z",
+    "lastUpdated": "2026-10-12T11:38:02.472Z",
+    "projectPath": "/Users/jasenpan/code/apra/apra-amcos-admin-msk",
+    "projectEnabled": true
+  },
+  {
+    "id": "ralph-loop@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "local",
+    "enabled": false,
+    "installPath": "/Users/jasenpan/.claude/plugins/cache/claude-plugins-official/ralph-loop/1.0.0",
+    "installedAt": "2026-05-25T08:47:52.340Z",
+    "lastUpdated": "2026-05-25T08:47:52.340Z",
+    "projectPath": "/Users/jasenpan/code/apra/apra-amcos-admin-dolce",
+    "projectEnabled": false
+  },
+  {
+    "id": "ralph-loop@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "local",
+    "enabled": false,
+    "installPath": "/Users/jasenpan/.claude/plugins/cache/claude-plugins-official/ralph-loop/1.0.0",
+    "installedAt": "2026-08-12T14:37:31.668Z",
+    "lastUpdated": "2026-08-12T14:37:31.668Z",
+    "projectPath": "/Users/jasenpan/code/apra/apra-amcos-admin-dolce/workspace/api/src/modules/jobs/dsr-ingestion-and-matching/matching",
+    "projectEnabled": false
+  },
+  {
+    "id": "ralph-wiggum@claude-code-plugins",
+    "version": "1.0.0",
+    "scope": "local",
+    "enabled": false,
+    "installPath": "/Users/jasenpan/.claude/plugins/cache/claude-code-plugins/ralph-wiggum/1.0.0",
+    "installedAt": "2026-05-25T08:45:04.639Z",
+    "lastUpdated": "2026-05-25T08:45:04.639Z",
+    "projectPath": "/Users/jasenpan/code/apra/apra-amcos-admin-dolce",
+    "projectEnabled": false
+  },
+  {
+    "id": "ralph-wiggum@claude-code-plugins",
+    "version": "1.0.0",
+    "scope": "local",
+    "enabled": false,
+    "installPath": "/Users/jasenpan/.claude/plugins/cache/claude-code-plugins/ralph-wiggum/1.0.0",
+    "installedAt": "2026-08-12T14:37:31.668Z",
+    "lastUpdated": "2026-08-12T14:37:31.668Z",
+    "projectPath": "/Users/jasenpan/code/apra/apra-amcos-admin-dolce/workspace/api/src/modules/jobs/dsr-ingestion-and-matching/matching",
+    "projectEnabled": false
+  },
+  {
+    "id": "running-local-code@apra-amcos-cc-marketplace",
+    "version": "1.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/jasenpan/.claude/plugins/cache/apra-amcos-cc-marketplace/running-local-code/1.1.0",
+    "installedAt": "2026-10-08T10:25:11.453Z",
+    "lastUpdated": "2026-10-08T10:25:11.453Z",
+    "projectPath": "/Users/jasenpan/code/apra/apra-amcos-admin-hrr",
+    "projectEnabled": false
+  },
+  {
+    "id": "superpowers@claude-plugins-official",
+    "version": "6.4.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/jasenpan/.claude/plugins/cache/claude-plugins-official/superpowers/6.4.1",
+    "installedAt": "2026-03-28T05:32:48.578Z",
+    "lastUpdated": "2026-09-23T07:47:02.801Z",
+    "projectPath": "/Users/jasenpan/code/apra/apra-amcos-admin-hrr",
+    "projectEnabled": false
+  },
+  {
+    "id": "typescript-lsp@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/jasenpan/.claude/plugins/cache/claude-plugins-official/typescript-lsp/1.0.0",
+    "installedAt": "2026-03-24T13:06:08.718Z",
+    "lastUpdated": "2026-03-24T13:06:08.718Z",
+    "projectPath": "/Users/jasenpan/code/apra/apra-amcos-admin-msk",
+    "projectEnabled": false
+  }
+]

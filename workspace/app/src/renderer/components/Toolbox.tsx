@@ -1,6 +1,7 @@
 import { ToolboxSection } from "./ToolboxSection";
 import { GitSection } from "./GitSection";
 import { QuickActionsSection } from "./QuickActionsSection";
+import { SkillsMcpSection } from "./SkillsMcpSection";
 import { TerminalSection } from "./TerminalSection";
 import { MarkdownSection } from "./MarkdownSection";
 import { PhoneSection } from "./PhoneSection";
@@ -65,6 +66,19 @@ export function Toolbox({
         <QuickActionsSection
           instance={instance}
           active={isExpanded("quick-actions")}
+        />
+      </ToolboxSection>
+
+      <ToolboxSection
+        id="skills-mcp"
+        title="Skills and MCP"
+        expanded={isExpanded("skills-mcp")}
+        onToggle={onExpandSection}
+      >
+        <SkillsMcpSection
+          instanceId={instance.id}
+          backend={instance.backend}
+          active={isExpanded("skills-mcp")}
         />
       </ToolboxSection>
 

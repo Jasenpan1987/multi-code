@@ -32,6 +32,7 @@ import { setRemoteEnabled } from "./remote";
 import { hasTailscaleEndpoint } from "./remote/endpoints";
 import { ensureManagerMcpStarted, getManagerActivity } from "./manager-mcp";
 import { ensureManagerWorkspace } from "./manager-workspace";
+import { skillsMcp } from "./skills-mcp";
 import QRCode from "qrcode";
 
 // The manager's tools live behind a server that has to be listening before the
@@ -161,6 +162,12 @@ export function registerIpcHandlers() {
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
   });
+
+  // The Skills and MCP section. Returns at once; the probe's answer arrives on
+  // "skills-mcp-update".
+  ipcMain.handle("refresh-skills-mcp", (_event, id: unknown) =>
+    typeof id === "string" ? skillsMcp.refresh(id) : null
+  );
 
   ipcMain.handle("get-git-status", async (_event, id: string) => {
     const instance = processManager

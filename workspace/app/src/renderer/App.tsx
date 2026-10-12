@@ -35,6 +35,9 @@ import type {
 } from "../shared/types";
 
 const DEFAULT_EXPANDED_SECTION = "git";
+// The one section a stopped instance can open: its probe starts a CLI of its own
+// and never needs the instance (docs/specs/skills-mcp/prd.md, Story 1).
+const OFFLINE_SECTION = "skills-mcp";
 
 export function App() {
   const [instances, setInstances] = useState<Instance[]>([]);
@@ -748,6 +751,8 @@ export function App() {
       {(() => {
         if (!selectedInstance) return null;
         const isOffline = selectedInstance.status === "stopped";
+        const expanded =
+          expandedByInstance.get(selectedInstance.id) ?? DEFAULT_EXPANDED_SECTION;
         return (
           <>
             {folded === null && (
@@ -839,12 +844,15 @@ export function App() {
             <Toolbox
               instance={selectedInstance}
               expandedSection={
-                isOffline
-                  ? ""
-                  : (expandedByInstance.get(selectedInstance.id) ??
-                    DEFAULT_EXPANDED_SECTION)
+                isOffline && expanded !== OFFLINE_SECTION ? "" : expanded
               }
-              onExpandSection={isOffline ? () => {} : handleExpandSection}
+              onExpandSection={
+                isOffline
+                  ? (id) => {
+                      if (id === OFFLINE_SECTION) handleExpandSection(id);
+                    }
+                  : handleExpandSection
+              }
               openPath={openPathByInstance.get(selectedInstance.id) ?? ""}
               onOpenPath={isOffline ? () => {} : handleOpenPath}
               onPreviewInView={isOffline ? () => {} : handlePreviewInView}

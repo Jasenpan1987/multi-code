@@ -1171,6 +1171,124 @@ body,
   line-height: 1.4;
 }
 
+/* Skills and MCP section. Muted text by opacity, so every theme's own
+   foreground carries it. */
+.skills-mcp {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.skills-mcp-note,
+.skills-mcp-time,
+.skills-mcp-scope {
+  opacity: 0.65;
+}
+
+.skills-mcp-note {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.skills-mcp-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.skills-mcp-btn {
+  width: auto;
+  padding: 3px 10px;
+}
+
+.skills-mcp-part-title {
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.8;
+  margin-bottom: 2px;
+}
+
+.skills-mcp-count {
+  font-family: "Menlo", "Consolas", monospace;
+}
+
+.skills-mcp-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 1px 4px;
+  font-family: "Menlo", "Consolas", monospace;
+}
+
+.skills-mcp-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skills-mcp-scope,
+.skills-mcp-status {
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.skills-mcp-group {
+  margin: 2px 0 4px;
+}
+
+.skills-mcp-group-title {
+  font-size: 10px;
+  opacity: 0.6;
+  padding: 1px 4px;
+}
+
+.skills-mcp-tag {
+  font-size: 9px;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  opacity: 0.8;
+}
+
+/* An item the session doesn't load: overridden, or missing a switch. */
+.skills-mcp-unloaded {
+  opacity: 0.5;
+}
+
+.skills-mcp-row-note {
+  padding: 0 4px 2px 16px;
+  font-size: 10px;
+  opacity: 0.75;
+}
+
+.skills-mcp-status[data-status="connected"] {
+  color: #2e9e52;
+}
+
+.skills-mcp-status[data-status="failed"] {
+  color: #d64545;
+}
+
+.skills-mcp-status[data-status="needs-auth"],
+.skills-mcp-status[data-status="pending"] {
+  color: #c87a00;
+}
+
+.skills-mcp-error {
+  color: #c62828;
+  font-size: 10px;
+  padding: 4px 6px;
+  background: rgba(198, 40, 40, 0.08);
+  border-radius: 3px;
+  line-height: 1.4;
+}
+
 
 /* Terminal section */
 .terminal-section {

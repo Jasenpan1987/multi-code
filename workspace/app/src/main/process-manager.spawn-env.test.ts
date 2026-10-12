@@ -106,3 +106,42 @@ describe("spawn env", () => {
     expect(spawned[0].env.MULTICODE_INSTANCE_ID).toBeTruthy();
   });
 });
+
+// The Skills and MCP probe's view of the same options: the manager's
+// `--mcp-config` and nothing else. No settings file, so none of the hooks.
+describe("probe target", () => {
+  it("gives only the manager its --mcp-config", () => {
+    const manager = new ProcessManager();
+    manager.setSessionSpawnOptions({ settingsPath: "/ud/alert-settings.json" });
+    manager.setManagerSpawnOptions({
+      mcpConfigPath: "/ud/manager-mcp.json",
+      settingsPath: "/ud/manager-settings.json",
+    });
+    const repo = manager.createInstance("/Users/x/code/repo", "repo");
+    const oc = manager.createInstance("/Users/x/code/repo", "oc", "opencode");
+    const mgr = manager.createInstance("/Users/x/code/mgr", "mgr", "claude", true);
+    expect(manager.probeTargetOf(repo.id)).toEqual({
+      cwd: "/Users/x/code/repo",
+      backend: "claude",
+    });
+    expect(manager.probeTargetOf(oc.id)).toEqual({
+      cwd: "/Users/x/code/repo",
+      backend: "opencode",
+    });
+    expect(manager.probeTargetOf(mgr.id)).toEqual({
+      cwd: "/Users/x/code/mgr",
+      backend: "claude",
+      mcpConfigPath: "/ud/manager-mcp.json",
+    });
+    expect(manager.probeTargetOf("nobody")).toBeNull();
+  });
+
+  it("has no --mcp-config for a manager not spawned this run", () => {
+    const manager = new ProcessManager();
+    const mgr = manager.createInstance("/Users/x/code/mgr", "mgr", "claude", true);
+    expect(manager.probeTargetOf(mgr.id)).toEqual({
+      cwd: "/Users/x/code/mgr",
+      backend: "claude",
+    });
+  });
+});

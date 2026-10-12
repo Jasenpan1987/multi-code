@@ -342,6 +342,24 @@ export class ProcessManager {
     return this.instances.get(id)?.backend;
   }
 
+  // Where the Skills and MCP section probes for an instance (skills-mcp/). Only the
+  // manager carries an `--mcp-config`, and only once it has been spawned this run:
+  // the file is written then and removed at shutdown.
+  probeTargetOf(
+    id: string
+  ): { cwd: string; backend: BackendName; mcpConfigPath?: string } | null {
+    const instance = this.instances.get(id);
+    if (!instance) return null;
+    const mcpConfigPath = instance.isManager
+      ? this.managerSpawnOptions?.mcpConfigPath
+      : undefined;
+    return {
+      cwd: instance.cwd,
+      backend: instance.backend,
+      ...(mcpConfigPath ? { mcpConfigPath } : {}),
+    };
+  }
+
   // Write the keys of the secretary's answer to a dialog (voice-secretary T-509),
   // only while `seq` is still the instance's live needs-you: the builder may have
   // answered in the terminal or on the phone while the reply was being read. Keys go

@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   openInVSCode: (target: string, projectRoot?: string) =>
     ipcRenderer.invoke("open-in-vscode", target, projectRoot),
   openExternal: (url: string) => ipcRenderer.invoke("open-external", url),
+  refreshSkillsMcp: (instanceId: string) =>
+    ipcRenderer.invoke("refresh-skills-mcp", instanceId),
 
   bounceDock: () => ipcRenderer.send("bounce-dock"),
 
@@ -185,6 +187,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("secretary-mode", listener);
     return () => {
       ipcRenderer.removeListener("secretary-mode", listener);
+    };
+  },
+  onSkillsMcpUpdate: (callback: (snapshot: unknown) => void) => {
+    const listener = (_event: unknown, snapshot: unknown) => callback(snapshot);
+    ipcRenderer.on("skills-mcp-update", listener);
+    return () => {
+      ipcRenderer.removeListener("skills-mcp-update", listener);
     };
   },
 });
