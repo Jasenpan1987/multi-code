@@ -8,7 +8,8 @@
 
 Task ids start at T-601, after voice-secretary's T-5xx. Only M1 is committed; M2 to M4 are
 re-planned when the milestone before them ships. Work happens on a `skills-mcp` branch,
-merged into `master` when a milestone passes QA.
+pushed as it goes and merged into `master` only when the whole epic is done (builder,
+2026-10-13).
 
 Every task that spawns `claude -p` passes `--no-session-persistence`. A user-level hook
 denies Bash calls without it, but Multi-Code's own spawns are not Bash calls, so the code
