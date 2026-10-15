@@ -41,7 +41,10 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [trustHintOpen, setTrustHintOpen] = useState(false);
-  const [unreadIds, setUnreadIds] = useState<Set<string>>(new Set());
+  // Unread alerts per contact; a contact with none is absent. See useNotifications.
+  const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(
+    new Map()
+  );
   const [expandedByInstance, setExpandedByInstance] = useState<
     Map<string, string>
   >(new Map());
@@ -209,11 +212,18 @@ export function App() {
   useEffect(() => {
     const handler = (e: Event) => {
       const { unread } = (e as CustomEvent).detail;
-      setUnreadIds(new Set(unread));
+      setUnreadCounts(new Map(unread));
     };
     window.addEventListener("unread-update", handler);
     return () => window.removeEventListener("unread-update", handler);
   }, []);
+
+  // The Dock icon carries the total, the way a chat app shows its unread count.
+  let unreadTotal = 0;
+  for (const n of unreadCounts.values()) unreadTotal += n;
+  useEffect(() => {
+    window.electronAPI.setDockBadge(unreadTotal);
+  }, [unreadTotal]);
 
   // Dispatch PTY output to terminal views (no notification logic here)
   useEffect(() => {
@@ -231,16 +241,13 @@ export function App() {
   }, []);
 
   // Every attention event, "waiting" (finished) or "prompt" (needs you), for any
-  // instance: chime, red dot, Dock bounce. Nothing is suppressed for the instance
-  // being watched, and nothing clears on a timer: the alert stays until the
-  // builder acknowledges it (below). See audio/attentionPolicy.ts.
-  //
-  // bounceDock is app.dock.bounce("critical"), which macOS ignores while the app
-  // is frontmost and otherwise keeps up until the app is brought forward.
+  // instance: chime, and one more on its red badge and the Dock's count. Nothing is
+  // suppressed for the instance being watched, and nothing clears on a timer: the
+  // alert stays until the builder acknowledges it (below). See
+  // audio/attentionPolicy.ts.
   useEffect(() => {
     const cleanup = window.electronAPI.onInstanceActivity((id) => {
       playMessageSound(id);
-      window.electronAPI.bounceDock();
       const inst = instances.find((i) => i.id === id);
       if (inst) notify(id, inst.name);
     });
@@ -385,11 +392,11 @@ export function App() {
   // Secretary Mode on, a contact that showed a red dot at the moment of the click
   // and has a live brief also opens its card, which plays the brief. Read from
   // refs, as rendered, before markRead clears the dot.
-  const secretaryRef = useRef({ modeOn: secretaryMode, unreadIds, briefs });
-  secretaryRef.current = { modeOn: secretaryMode, unreadIds, briefs };
+  const secretaryRef = useRef({ modeOn: secretaryMode, unreadCounts, briefs });
+  secretaryRef.current = { modeOn: secretaryMode, unreadCounts, briefs };
   const handleSelect = useCallback(
     (id: string) => {
-      const { modeOn, unreadIds: unread, briefs: live } = secretaryRef.current;
+      const { modeOn, unreadCounts: unread, briefs: live } = secretaryRef.current;
       const opened = cardOnSelect(id, modeOn, unread, live);
       setSelectedId(id);
       stopMessageSound(id);
@@ -472,10 +479,45 @@ export function App() {
     }
   }, []);
 
+  // Right below the original, and shown, like a contact just made with + New.
+  const handleDuplicate = useCallback(async (id: string) => {
+    try {
+      const instance = await window.electronAPI.duplicateInstance(id);
+      if (!instance) return;
+      setInstances((prev) => {
+        const at = prev.findIndex((inst) => inst.id === id);
+        const next = [...prev];
+        next.splice(at < 0 ? next.length : at + 1, 0, instance);
+        return next;
+      });
+      setSelectedId(instance.id);
+      playCoughSound();
+    } catch (err) {
+      window.alert(
+        err instanceof Error ? err.message : "Could not duplicate the session."
+      );
+    }
+  }, []);
+
+  const handleRename = useCallback(async (id: string, name: string) => {
+    const renamed = await window.electronAPI.setAlias(id, name);
+    if (!renamed) return;
+    setInstances((prev) =>
+      prev.map((inst) =>
+        inst.id === id
+          ? { ...inst, alias: renamed.alias, name: renamed.name }
+          : inst
+      )
+    );
+  }, []);
+
   const handleRemove = useCallback(
     (id: string) => {
       cleanupTerminal(id);
       cleanupShellTerminal(id);
+      // Its count would stay on the Dock with nothing left to clear it.
+      stopMessageSound(id);
+      markRead(id);
       window.electronAPI.removeInstance(id);
       setInstances((prev) => prev.filter((inst) => inst.id !== id));
       setExpandedByInstance((prev) => {
@@ -494,7 +536,7 @@ export function App() {
         setSelectedId(null);
       }
     },
-    [selectedId]
+    [selectedId, markRead]
   );
 
   const handleExpandSection = useCallback(
@@ -585,7 +627,7 @@ export function App() {
       <ContactList
         instances={instances}
         selectedId={selectedId}
-        unreadIds={unreadIds}
+        unreadCounts={unreadCounts}
         onSelect={handleSelect}
         onNew={() => setDialogOpen(true)}
         onNewManager={handleNewManager}
@@ -593,6 +635,8 @@ export function App() {
         onStart={handleStart}
         onRestart={handleRestart}
         onRemove={handleRemove}
+        onDuplicate={handleDuplicate}
+        onRename={handleRename}
         folded={sidebarFolded}
         onToggleFolded={() => setSidebarFolded((f) => !f)}
       />

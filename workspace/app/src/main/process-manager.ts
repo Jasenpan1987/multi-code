@@ -13,6 +13,7 @@ import type {
   HookAttention,
   PromptToolCall,
   SessionDiscovery,
+  SessionStart,
   SpawnOptions,
 } from "./backends";
 import type { PromptDetail } from "./remote/promptExtract";
@@ -135,6 +136,11 @@ interface ManagedInstance {
   // When the lookup ran, so a directory with no history isn't rescanned on every
   // list call. Set even when nothing was found.
   resolvedSessionIdAt?: number;
+  // The session this contact last worked in, saved in contacts.json and opened
+  // again on its next start. Unlike `resolvedSessionId` it is this contact's and
+  // nobody else's, so it counts as a claim (isSessionClaimedBy) even while the
+  // contact is stopped: no other contact in the directory may adopt it.
+  ownSessionId?: string;
   // Whether it is safe to write to this instance right now. See run-state.ts for
   // the hazard this exists to prevent.
   runState: RunStateTracker;
@@ -255,14 +261,15 @@ export class ProcessManager {
   private syncLiveSessionId(instance: ManagedInstance) {
     const ptyProcess = instance.ptyProcess;
     // A stopped instance has no live session to follow; its read paths already
-    // fall back to whatever this directory last worked on.
+    // fall back to its own session, or whatever this directory last worked on.
     if (!ptyProcess) return;
 
     let live: string | null;
     try {
       live = getBackend(instance.backend).findLiveSessionId(
         instance.cwd,
-        ptyProcess.pid
+        ptyProcess.pid,
+        instance.startedAt
       );
     } catch {
       // Registry unreadable or mid-write. Nothing to do but try again next tick.
@@ -280,12 +287,35 @@ export class ProcessManager {
     this.attachSession(instance, live);
   }
 
-  // Whether any *other* instance is already reading this session.
+  // Whether any *other* instance is already reading this session, or has it as
+  // its own to go back to.
   private isSessionClaimedBy(sessionId: string, exceptId: string): boolean {
     for (const other of this.instances.values()) {
-      if (other.id !== exceptId && other.sessionId === sessionId) return true;
+      if (other.id === exceptId) continue;
+      if (other.sessionId === sessionId || other.ownSessionId === sessionId) return true;
     }
     return false;
+  }
+
+  // The conversation a contact's next spawn opens: its own when it has one on
+  // record. Otherwise the directory's most recent, unless that one is another
+  // contact's, as it is for the first start after a contact on the same project
+  // was duplicated. Then a fresh one, or the two would share it.
+  private sessionStartFor(
+    id: string,
+    cwd: string,
+    backend: BackendName,
+    ownSessionId?: string
+  ): SessionStart {
+    if (ownSessionId) return { kind: "own", sessionId: ownSessionId };
+    let latest: string | null = null;
+    try {
+      latest = getBackend(backend).findLatestSessionId(cwd);
+    } catch {
+      // Unreadable: --continue is what every start did before.
+    }
+    if (latest && this.isSessionClaimedBy(latest, id)) return { kind: "fresh" };
+    return { kind: "latest" };
   }
 
   setManagerSpawnOptions(opts: SpawnOptions | null) {
@@ -593,6 +623,7 @@ export class ProcessManager {
           id: contact.id,
           cwd: contact.cwd,
           alias: contact.alias,
+          ownSessionId: contact.sessionId,
           status: "stopped",
           startedAt: 0,
           ptyProcess: null,
@@ -648,6 +679,7 @@ export class ProcessManager {
         cwd: i.cwd,
         alias: i.alias,
         backend: i.backend,
+        sessionId: i.ownSessionId,
         isManager: i.isManager,
       })
     );
@@ -673,11 +705,61 @@ export class ProcessManager {
     }
 
     const id = crypto.randomUUID();
-    const instance = this.spawnProcess(id, cwd, alias, backend, isManager);
+    const instance = this.spawnProcess(
+      id,
+      cwd,
+      alias,
+      backend,
+      isManager,
+      this.sessionStartFor(id, cwd, backend)
+    );
     this.instances.set(id, instance);
     this.persist();
     remoteServer.broadcastInstances();
     return this.toInfo(instance);
+  }
+
+  // A second contact on the same project and backend, running a fresh session of
+  // its own, placed right below the one it came from. Nothing of the original's
+  // conversation comes along. Not for the manager, which is a singleton.
+  duplicateInstance(sourceId: string): InstanceInfo | null {
+    const source = this.instances.get(sourceId);
+    if (!source) return null;
+    if (source.isManager) {
+      throw new Error("The manager can't be duplicated; only one is supported.");
+    }
+
+    const id = crypto.randomUUID();
+    const instance = this.spawnProcess(
+      id,
+      source.cwd,
+      this.duplicateAlias(source),
+      source.backend,
+      false,
+      { kind: "fresh" }
+    );
+    const rebuilt = new Map<string, ManagedInstance>();
+    for (const [key, value] of this.instances) {
+      rebuilt.set(key, value);
+      if (key === sourceId) rebuilt.set(id, instance);
+    }
+    this.instances = rebuilt;
+    this.persist();
+    remoteServer.broadcastInstances();
+    return this.toInfo(instance);
+  }
+
+  // "HRR" gives "HRR 2", then "HRR 3": the first number no contact is named with.
+  // Duplicating "HRR 2" counts on from "HRR", not "HRR 2 2".
+  private duplicateAlias(source: ManagedInstance): string {
+    const name = source.alias || path.basename(source.cwd);
+    const base = name.replace(/ \d+$/, "") || name;
+    const taken = new Set(
+      [...this.instances.values()].map((i) => i.alias || path.basename(i.cwd))
+    );
+    let n = 2;
+    while (taken.has(`${base} ${n}`)) n++;
+    return `${base} ${n}`;
   }
 
   startInstance(id: string): InstanceInfo | null {
@@ -690,9 +772,11 @@ export class ProcessManager {
       instance.cwd,
       instance.alias,
       instance.backend,
-      instance.isManager
+      instance.isManager,
+      this.sessionStartFor(id, instance.cwd, instance.backend, instance.ownSessionId)
     );
     this.instances.set(id, started);
+    if (started.ownSessionId !== instance.ownSessionId) this.persist();
     remoteServer.broadcastInstances();
     const info = this.toInfo(started);
     // Push to the renderer as well as returning, because this is no longer only
@@ -711,7 +795,8 @@ export class ProcessManager {
     cwd: string,
     alias: string | undefined,
     backendName: BackendName,
-    isManager?: boolean
+    isManager: boolean | undefined,
+    session: SessionStart
   ): ManagedInstance {
     const cols = 120;
     const rows = 30;
@@ -728,7 +813,12 @@ export class ProcessManager {
         `[alert-hook] ${id.slice(0, 8)} spawned without alert hooks (server not listening or files unwritable)`
       );
     }
-    const { command, args, env } = backend.spawn(cwd, opts ?? undefined);
+    const {
+      command,
+      args,
+      env,
+      sessionId: openedSessionId,
+    } = backend.spawn(cwd, opts ?? undefined, session);
 
     const spawnId = crypto.randomUUID();
     const ptyProcess = pty.spawn(command, args, {
@@ -757,6 +847,10 @@ export class ProcessManager {
       runState: new RunStateTracker(),
       alertsDegraded: spawnedWithoutAlertHooks || undefined,
       spawnId,
+      // Known up front when the backend resumed it or named it. Otherwise
+      // discovery finds it, and attachSession records it then.
+      sessionId: openedSessionId,
+      ownSessionId: openedSessionId,
     };
 
     // Created at spawn, before any session exists: the hooks report from the
@@ -771,7 +865,9 @@ export class ProcessManager {
     const isSessionClaimed = (candidate: string): boolean =>
       this.isSessionClaimedBy(candidate, id);
 
-    instance.discovery = backend.discoverSessionId(
+    // Nothing to discover when the backend said which session it opened. A guess
+    // here could only be worse: the directory's newest unclaimed transcript.
+    instance.discovery = openedSessionId ? null : backend.discoverSessionId(
       cwd,
       (sessionId) => {
         const tracked = this.instances.get(id);
@@ -828,6 +924,11 @@ export class ProcessManager {
   private attachSession(instance: ManagedInstance, sessionId: string) {
     const id = instance.id;
     instance.sessionId = sessionId;
+    // The one its next start goes back to.
+    if (instance.ownSessionId !== sessionId) {
+      instance.ownSessionId = sessionId;
+      if (this.instances.get(id) === instance) this.persist();
+    }
     // The cached usage belongs to the session we just left, and `/new` resets it
     // to zero. Dropping the timestamp too forces the next read instead of showing
     // the old session's figure for up to the TTL.
@@ -1082,15 +1183,17 @@ export class ProcessManager {
     return !!instance && this.readableSessionId(instance) !== undefined;
   }
 
-  // The session id read paths should use: the live one when there is one, otherwise
-  // whatever this directory last worked on.
+  // The session id read paths should use: the live one when there is one, then the
+  // contact's own, otherwise whatever this directory last worked on.
   //
-  // A stopped contact has no live id at all after an app restart — contacts.json
-  // doesn't store one — which is why every stopped session reported
-  // `context=unknown` and could not be read. The lookup touches the filesystem or
-  // sqlite, so it is cached, including the negative result.
+  // A stopped contact has no live id at all after an app restart, and contacts
+  // saved before contacts.json kept their session have no own one either, which is
+  // why every stopped session reported `context=unknown` and could not be read. The
+  // lookup touches the filesystem or sqlite, so it is cached, including the
+  // negative result.
   private readableSessionId(instance: ManagedInstance): string | undefined {
     if (instance.sessionId) return instance.sessionId;
+    if (instance.ownSessionId) return instance.ownSessionId;
 
     const now = Date.now();
     if (
@@ -1156,9 +1259,11 @@ export class ProcessManager {
       instance.backend,
       // Must be carried through, or restarting the manager silently produces one
       // with no tools — it would look alive and be unable to do anything.
-      instance.isManager
+      instance.isManager,
+      this.sessionStartFor(id, instance.cwd, instance.backend, instance.ownSessionId)
     );
     this.instances.set(id, restarted);
+    if (restarted.ownSessionId !== instance.ownSessionId) this.persist();
     remoteServer.broadcastInstances();
     return this.toInfo(restarted);
   }
@@ -1208,13 +1313,14 @@ export class ProcessManager {
     return false;
   }
 
-  setAlias(id: string, alias: string) {
+  // The name the contact list shows. Blank goes back to the folder name.
+  setAlias(id: string, alias: string): InstanceInfo | null {
     const instance = this.instances.get(id);
-    if (instance) {
-      instance.alias = alias;
-      this.persist();
-      remoteServer.broadcastInstances();
-    }
+    if (!instance) return null;
+    instance.alias = alias.trim() || undefined;
+    this.persist();
+    remoteServer.broadcastInstances();
+    return this.toInfo(instance);
   }
 
   // Instances a quit would cut off mid-task: a turn still running, or a dialog

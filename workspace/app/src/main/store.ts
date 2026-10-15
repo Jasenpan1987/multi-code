@@ -9,6 +9,10 @@ export interface SavedContact {
   cwd: string;
   alias?: string;
   backend?: BackendName;
+  // The session this contact last worked in, which its next start opens again.
+  // Absent on contacts saved before it was kept, and on one whose session isn't
+  // known yet; those open the directory's most recent session.
+  sessionId?: string;
   // The coordinator instance. At most one exists, and it is spawned differently:
   // it gets the manager MCP tools and its cwd is a directory Multi-Code owns
   // rather than one of the user's projects.

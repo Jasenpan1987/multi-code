@@ -87,6 +87,12 @@ export function registerIpcHandlers() {
     secretary.forget(id);
   });
 
+  // The manager is refused in processManager; the renderer doesn't offer it.
+  ipcMain.handle("duplicate-instance", (_event, id: string) => {
+    if (typeof id !== "string") return null;
+    return processManager.duplicateInstance(id);
+  });
+
   ipcMain.handle("restart-instance", async (_event, id: string) => {
     if (isManagerInstance(id)) await prepareManagerSpawn();
     return processManager.restartInstance(id);
@@ -148,7 +154,8 @@ export function registerIpcHandlers() {
   );
 
   ipcMain.handle("set-alias", (_event, id: string, alias: string) => {
-    processManager.setAlias(id, alias);
+    if (typeof id !== "string" || typeof alias !== "string") return null;
+    return processManager.setAlias(id, alias);
   });
 
   ipcMain.handle("select-directory", async () => {
@@ -347,12 +354,12 @@ export function registerIpcHandlers() {
     }
   });
 
-  ipcMain.on("bounce-dock", () => {
-    if (process.platform === "darwin" && app.dock) {
-      // "informational" bounces once briefly. Use "critical" for sustained
-      // bouncing until the user activates the app.
-      app.dock.bounce("critical");
-    }
+  // The number on the Dock icon: unread alerts across every contact, chat-app
+  // style. Zero clears it. It replaced a "critical" bounce that kept the icon
+  // jumping until the app came forward.
+  ipcMain.on("set-dock-badge", (_event, count: unknown) => {
+    if (typeof count !== "number" || !Number.isInteger(count) || count < 0) return;
+    app.setBadgeCount(count);
   });
 
   ipcMain.on("pty-input", (_event, id: string, data: string) => {

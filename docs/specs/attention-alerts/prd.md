@@ -1,6 +1,6 @@
 # PRD: Attention Alerts
 
-**Version:** 1.7
+**Version:** 1.8
 **Last Updated:** 2026-10-07
 **Status:** draft
 **Owner:** Jasen
@@ -8,8 +8,8 @@
 ## Overview
 
 Multi-Code's core promise is that the builder can stop watching terminals: when an agent
-finishes, or gets stuck waiting on a human, Multi-Code chimes, puts a red dot on its
-contact, and bounces the Dock. Today that promise fails both ways. It chimes while agents
+finishes, or gets stuck waiting on a human, Multi-Code chimes, puts an unread count on
+its contact, and adds it to the count on the Dock icon. Today that promise fails both ways. It chimes while agents
 are still working, and it often stays silent when they finish.
 
 This epic makes the alert trustworthy. Claude instances report their own state through
@@ -165,8 +165,8 @@ OpenCode's events keep coming from its existing detector.
 
 **Acceptance Criteria:**
 - [ ] Every attention event, Finished or Needs you, plays the chime once, whichever instance is shown and whether or not the window has focus
-- [ ] Every attention event puts a red dot on the instance's contact
-- [ ] When Multi-Code is not the frontmost app, the Dock icon starts bouncing and keeps bouncing until Multi-Code is brought to the front
+- [ ] Every attention event adds one to the red badge on the instance's contact, which shows the number of unacknowledged events (a burst within the debounce counts once)
+- [ ] The Dock icon shows the total of those numbers across every contact, and nothing when it is zero. It never bounces (builder, 2026-10-15)
 - [ ] Acknowledging an instance stops its chime if it is still playing and clears its red dot
 - [ ] A red dot is never cleared by a timer or by window focus alone; only acknowledging clears it
 - [ ] Acknowledging one instance leaves every other instance's red dot alone
@@ -175,7 +175,8 @@ OpenCode's events keep coming from its existing detector.
 
 **Notes:**
 - Replaces today's suppress-while-watching rule, the urgent override, the 5s cooldown, and the 1.5s auto-clear of the shown instance's red dot.
-- ⚠️ Assumption: bringing the window forward with ⌘Tab, without a click or a keystroke, stops the Dock bounce (macOS does this) but does not clear red dots. Consistent with the builder's rule that typing or clicking clears them.
+- Bringing the window forward with ⌘Tab, without a click or a keystroke, clears nothing: the badges and the Dock count stay until acknowledged. Consistent with the builder's rule that typing or clicking clears them.
+- ⚠️ macOS 27 draws a Dock badge only for an app with notification permission, and Multi-Code has none: Electron 35 cannot ask for it (measured 2026-10-15). Until it can, the Dock shows no number. Electron 42+ asks through User Notifications (electron/electron#47817).
 
 ---
 
@@ -206,7 +207,7 @@ OpenCode's events keep coming from its existing detector.
 - [ ] The bar names the likely causes on hover: `disableAllHooks` in the user's Claude settings, or a managed policy that allows only managed hooks
 - [ ] The bar disappears as soon as a hook delivery from that instance arrives
 - [ ] An instance whose hooks are working never shows it
-- [ ] A degraded instance raises no alerts at all: no chime, red dot or Dock bounce from any other source
+- [ ] A degraded instance raises no alerts at all: no chime, red badge or Dock count from any other source
 - [ ] OpenCode instances show the same bar, worded for the plugin, once Story 7 has moved them onto it: an OpenCode instance whose plugin never reports within 10 seconds of starting shows it (builder, 2026-10-07)
 
 **Notes:**
@@ -290,7 +291,7 @@ For Track 2, measured on OpenCode 1.18.34 (same record). Not yet measured:
 
 - ❌ Alerts for agents started outside Multi-Code (plain terminal). Deliberate, see Story 1
 - ❌ Different sounds for Finished vs Needs you, volume or mute settings, quiet hours
-- ❌ macOS Notification Center banners and Dock badge counts
+- ❌ macOS Notification Center banners
 - ❌ A chime that repeats until acknowledged; the chime plays once per event
 - ❌ The CLI's own `idle_prompt` and delayed `permission_prompt` notifications as alert sources
 
@@ -315,3 +316,4 @@ See `docs/specs/attention-alerts/gaps.md`. G-001 to G-003 are resolved; none are
 - v1.5 (2026-10-07): Folded in the T-401 hook spike (CLI 2.1.291). Story 2: the turn after a background shell exits chimes (G-003, builder decision); a denied dialog raises no event (assumption, as Esc); `/compact` ends at `PostCompact`; automatic compaction mid-turn raises nothing; note that every subagent now runs in the background. Story 3: a denial sends no hook; plan and bypass modes report dialogs too. Story 6: registry `waiting (dialog open)` is a slash-command panel, not Needs you; a momentary `idle` on a background wake-up is not Finished. "To verify before building" replaced with the measured answers; Constraints note that only the last `--settings` applies.
 - v1.6 (2026-10-07): Story 6 replaced (builder decision): when an instance's hooks don't run, a bar on that instance's page says so and alerts stop for it; the registry-driven fallback is dropped.
 - v1.7 (2026-10-07): Story 6's bar extends to OpenCode once Story 7 ships (builder decision): a plugin that never reports shows it.
+- v1.8 (2026-10-15): Story 4 changed (builder decision): the red dot becomes a red badge with the unread count, and the Dock shows the total instead of bouncing, as Teams and Slack do. Dock badge counts leave Out of Scope. Noted that macOS shows the Dock number only with notification permission.

@@ -1,7 +1,8 @@
 // How process-manager decides which session id a *read* should use.
 //
-// A stopped instance has no live session id — contacts.json doesn't store one — so
-// reads fall back to whatever the directory last worked on, found on disk. The
+// A stopped instance has no live session id, and a contact saved before
+// contacts.json kept its own has none on record either, so reads fall back to
+// whatever the directory last worked on, found on disk. The
 // hazard that shapes the design: `spawnProcess`'s `isSessionClaimed` treats any
 // instance holding a session id as that session's owner, so if the disk-resolved id
 // were merged into `sessionId`, a stopped contact would veto discovery for a
@@ -117,6 +118,8 @@ const CWD = "/Users/x/code/msk";
 function stoppedInstance(cwd = CWD) {
   const info = manager.createInstance(cwd, undefined);
   manager.killInstance(info.id);
+  // The spawn looked once to pick the session it opens. Not a read.
+  disk.lookups = 0;
   return info.id;
 }
 
