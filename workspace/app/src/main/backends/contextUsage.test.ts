@@ -6,9 +6,10 @@
 // plausible in a UI and be wrong — the total by a little, the cumulative by two
 // orders of magnitude.
 //
-// better-sqlite3 is mocked rather than loaded, matching opencodeDetect.test.ts:
-// the installed build targets Electron's ABI, so requiring it under plain-node
-// vitest fails. The fake implements only the one statement this reader issues.
+// better-sqlite3 is mocked rather than loaded, so each test sets the rows it reads.
+// (It used to be the only option: before better-sqlite3 13 moved to N-API, the
+// installed build targeted Electron's ABI and wouldn't load under plain-node
+// vitest.) The fake implements only the one statement this reader issues.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";

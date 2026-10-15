@@ -3,8 +3,8 @@
 // The text OpenCode writes itself into a user message is marked `synthetic`; these
 // two kinds were all of it in the builder's own database (2026-10-08 survey).
 //
-// better-sqlite3 is mocked rather than loaded, as in contextUsage.test.ts: the
-// installed build targets Electron's ABI. Only the pure reader is tested here.
+// better-sqlite3 is mocked rather than loaded, as in contextUsage.test.ts. Only the
+// pure reader is tested here.
 
 import { describe, expect, it, vi } from "vitest";
 

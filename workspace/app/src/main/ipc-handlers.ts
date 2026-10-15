@@ -1,4 +1,12 @@
-import { ipcMain, dialog, BrowserWindow, app, clipboard, shell } from "electron";
+import {
+  ipcMain,
+  dialog,
+  BrowserWindow,
+  app,
+  clipboard,
+  nativeImage,
+  shell,
+} from "electron";
 import { spawn } from "child_process";
 import { writeFileSync, rmSync, statSync, readFileSync } from "fs";
 import { tmpdir, homedir } from "os";
@@ -59,8 +67,29 @@ function isManagerInstance(id: string): boolean {
 
 // Per-process counter to disambiguate temp image filenames within the same ms.
 let tempImageCounter = 0;
+// Where the project picker opens next; see select-directory.
+let lastPickedParent: string | undefined;
 // Filenames produced by save-clipboard-image; used to gate delete-temp-image.
 const TEMP_IMAGE_NAME = /^multicode-paste-\d+-\d+\.png$/;
+
+// The clipboard's image as PNG bytes, or null when it holds none. Electron 44 kept
+// only the W3C-style `clipboard.read()`, which hands back each item's bytes as
+// they are; a screenshot is already image/png, and any other image type is
+// converted.
+async function readClipboardPng(): Promise<Buffer | null> {
+  for (const item of await clipboard.read()) {
+    const type = item.types.find((t) => t.startsWith("image/"));
+    if (!type) continue;
+    const blob = await item.getType(type);
+    // Only `electron application/bookmark` resolves to something other than a Blob.
+    if (!("arrayBuffer" in blob)) continue;
+    const bytes = Buffer.from(await blob.arrayBuffer());
+    if (type === "image/png") return bytes.length > 0 ? bytes : null;
+    const image = nativeImage.createFromBuffer(bytes);
+    return image.isEmpty() ? null : image.toPNG();
+  }
+  return null;
+}
 
 export function registerIpcHandlers() {
   ipcMain.handle(
@@ -158,14 +187,24 @@ export function registerIpcHandlers() {
     return processManager.setAlias(id, alias);
   });
 
+  // Since Electron 43 the picker opens in Downloads unless given a folder, and
+  // macOS no longer remembers the last one. So it starts beside the last project
+  // picked, or else beside the newest contact's, where the next project most
+  // likely lives too.
   ipcMain.handle("select-directory", async () => {
     const win = BrowserWindow.getFocusedWindow();
     if (!win) return null;
+    const newest = processManager
+      .listInstances()
+      .filter((i) => !i.isManager)
+      .at(-1);
     const result = await dialog.showOpenDialog(win, {
       properties: ["openDirectory"],
       title: "Select project directory",
+      defaultPath: lastPickedParent ?? (newest ? dirname(newest.cwd) : undefined),
     });
     if (result.canceled || result.filePaths.length === 0) return null;
+    lastPickedParent = dirname(result.filePaths[0]);
     return result.filePaths[0];
   });
 
@@ -534,14 +573,13 @@ export function registerIpcHandlers() {
   // same in-memory PNG buffer — no second disk read.
   ipcMain.handle(
     "save-clipboard-image",
-    (): { path: string; dataUrl: string } | null => {
-      const image = clipboard.readImage();
-      if (image.isEmpty()) return null;
+    async (): Promise<{ path: string; dataUrl: string } | null> => {
+      const png = await readClipboardPng().catch(() => null);
+      if (!png) return null;
       const file = join(
         tmpdir(),
         `multicode-paste-${Date.now()}-${tempImageCounter++}.png`
       );
-      const png = image.toPNG();
       try {
         writeFileSync(file, png);
       } catch {
