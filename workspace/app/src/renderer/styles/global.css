@@ -548,11 +548,19 @@ body,
   background: linear-gradient(180deg, #7bb4e2 0%, #5a9ad4 100%);
 }
 
+/* The unread count, chat-app style: a circle for one digit, a pill for more. */
 .unread-badge {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  box-sizing: border-box;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
   background: #e53935;
+  color: #fff;
+  font-size: 10px;
+  font-weight: bold;
+  line-height: 16px;
+  text-align: center;
   margin-left: auto;
   flex-shrink: 0;
   box-shadow: 0 0 2px rgba(229, 57, 53, 0.5);

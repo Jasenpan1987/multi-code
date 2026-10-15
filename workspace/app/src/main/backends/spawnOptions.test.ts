@@ -12,8 +12,9 @@ import path from "path";
 import { claudeBackend } from "./claude";
 import { opencodeBackend } from "./opencode";
 
-// A directory with no prior claude session, so `--continue` isn't added and the
-// assertions below are about the manager flags alone.
+// A directory with no prior claude session, so the spawn opens a new one under an
+// id of its own (`--session-id <uuid>`) rather than `--continue`, and the
+// assertions below are about the other flags.
 const freshCwd = fs.mkdtempSync(path.join(os.tmpdir(), "multicode-spawn-"));
 
 const managerOpts = {
@@ -179,7 +180,7 @@ describe("opencode spawn with the alert plugin", () => {
 
   it("is ignored by claude", () => {
     const { args, env } = claudeBackend.spawn(freshCwd, { opencodePlugin });
-    expect(args).toEqual([]);
+    expect(args).toEqual(["--session-id", expect.any(String)]);
     expect(env.MULTICODE_ALERT_FILE).toBeUndefined();
   });
 });
@@ -261,6 +262,11 @@ describe("the spawn locale", () => {
 describe("claude spawn with session options", () => {
   it("passes the alert settings file, and nothing of the manager's", () => {
     const { args } = claudeBackend.spawn(freshCwd, { settingsPath: "/tmp/alert-settings.json" });
-    expect(args).toEqual(["--settings", "/tmp/alert-settings.json"]);
+    expect(args).toEqual([
+      "--session-id",
+      expect.any(String),
+      "--settings",
+      "/tmp/alert-settings.json",
+    ]);
   });
 });

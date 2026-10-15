@@ -43,7 +43,8 @@ export interface SecretaryView {
 export function cardOnSelect(
   instanceId: string,
   modeOn: boolean,
-  unreadIds: ReadonlySet<string>,
+  // The set of contacts with a red dot, or their unread counts.
+  unreadIds: { has(id: string): boolean },
   briefs: BriefMap
 ): OpenCard | null {
   if (!modeOn || !unreadIds.has(instanceId)) return null;

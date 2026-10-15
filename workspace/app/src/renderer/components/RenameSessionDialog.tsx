@@ -2,27 +2,39 @@ import { useState } from "react";
 
 interface RenameSessionDialogProps {
   open: boolean;
-  // Backend label ("Claude Code" / "OpenCode") shown in the dialog so it's
-  // clear which agent's session is being renamed.
-  backendLabel: string;
+  title: string;
+  // What is being renamed, e.g. "New name for the Claude Code session", so it's
+  // clear which name changes: the agent's own session, or the contact's.
+  label: string;
+  // Prefilled and selected. The dialog keeps its own copy from mount on, so a
+  // caller that prefills mounts it only while it is open.
+  initialName?: string;
+  placeholder?: string;
+  // Lets a blank name through, for a caller where blank means "back to default".
+  allowBlank?: boolean;
   onClose: () => void;
   onSubmit: (name: string) => void;
 }
 
 export function RenameSessionDialog({
   open,
-  backendLabel,
+  title,
+  label,
+  initialName = "",
+  placeholder = "e.g. auth-refactor",
+  allowBlank = false,
   onClose,
   onSubmit,
 }: RenameSessionDialogProps) {
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName);
 
   if (!open) return null;
 
+  const canSubmit = allowBlank || name.trim() !== "";
+
   const submit = () => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    onSubmit(trimmed);
+    if (!canSubmit) return;
+    onSubmit(name.trim());
     setName("");
   };
 
@@ -34,10 +46,10 @@ export function RenameSessionDialog({
   return (
     <div className="dialog-overlay" onClick={close}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
-        <h3 className="dialog-title">Rename Session</h3>
+        <h3 className="dialog-title">{title}</h3>
 
         <div className="dialog-field">
-          <label>New name for the {backendLabel} session</label>
+          <label>{label}</label>
           <input
             type="text"
             value={name}
@@ -51,7 +63,8 @@ export function RenameSessionDialog({
                 close();
               }
             }}
-            placeholder="e.g. auth-refactor"
+            onFocus={(e) => e.currentTarget.select()}
+            placeholder={placeholder}
             className="dialog-input"
             autoFocus
             spellCheck={false}
@@ -65,7 +78,7 @@ export function RenameSessionDialog({
           <button
             className="dialog-btn primary"
             onClick={submit}
-            disabled={!name.trim()}
+            disabled={!canSubmit}
           >
             Rename
           </button>

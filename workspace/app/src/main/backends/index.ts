@@ -30,4 +30,5 @@ export type {
   HookAttention,
   PromptToolCall,
   SessionDiscovery,
+  SessionStart,
 } from "./types";

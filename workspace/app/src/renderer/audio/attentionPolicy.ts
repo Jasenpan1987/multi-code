@@ -1,7 +1,7 @@
 // The alert rules, chat-app style (docs/specs/attention-alerts/prd.md, Story 4):
-// every attention event chimes, puts a red dot on its contact and bounces the
-// Dock, whichever instance is shown and whether or not the window has focus. The
-// alert clears only when the builder acknowledges it.
+// every attention event chimes and adds one to its contact's unread badge and the
+// Dock's total, whichever instance is shown and whether or not the window has
+// focus. The alert clears only when the builder acknowledges it.
 //
 // This replaced suppress-while-watching, an urgent override and a 5s cooldown,
 // borrowed from Orca. Together they silenced real finishes while the builder was

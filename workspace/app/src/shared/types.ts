@@ -284,6 +284,8 @@ export interface ElectronAPI {
   killInstance: (id: string) => Promise<void>;
   removeInstance: (id: string) => Promise<void>;
   restartInstance: (id: string) => Promise<Instance | null>;
+  // A new contact on the same project, in a fresh session. Rejects for the manager.
+  duplicateInstance: (id: string) => Promise<Instance | null>;
   listInstances: () => Promise<Instance[]>;
   loadContacts: () => Promise<Instance[]>;
   // Drag-to-reorder: one move, applied against the stored order. Returns the list as
@@ -294,7 +296,8 @@ export interface ElectronAPI {
     placeBefore: boolean
   ) => Promise<Instance[]>;
   hasRunningInstanceAt: (cwd: string, backend?: BackendName) => Promise<boolean>;
-  setAlias: (id: string, alias: string) => Promise<void>;
+  // Blank resets the name to the folder's. Resolves to the renamed contact.
+  setAlias: (id: string, alias: string) => Promise<Instance | null>;
   selectDirectory: () => Promise<string | null>;
   isBackendAvailable: (backend: BackendName) => Promise<boolean>;
   getGitStatus: (id: string) => Promise<GitStatus>;
@@ -315,7 +318,8 @@ export interface ElectronAPI {
     projectRoot?: string
   ) => Promise<{ ok: boolean; error?: string }>;
   openExternal: (url: string) => Promise<{ ok: boolean; error?: string }>;
-  bounceDock: () => void;
+  // Total unread alerts, shown on the Dock icon; 0 clears it.
+  setDockBadge: (count: number) => void;
 
   // App
   getAppVersion: () => Promise<string>;

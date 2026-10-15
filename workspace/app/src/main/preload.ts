@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   killInstance: (id: string) => ipcRenderer.invoke("kill-instance", id),
   removeInstance: (id: string) => ipcRenderer.invoke("remove-instance", id),
   restartInstance: (id: string) => ipcRenderer.invoke("restart-instance", id),
+  duplicateInstance: (id: string) => ipcRenderer.invoke("duplicate-instance", id),
   listInstances: () => ipcRenderer.invoke("list-instances"),
   loadContacts: () => ipcRenderer.invoke("load-contacts"),
   moveContact: (dragId: string, targetId: string, placeBefore: boolean) =>
@@ -38,7 +39,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("open-in-vscode", target, projectRoot),
   openExternal: (url: string) => ipcRenderer.invoke("open-external", url),
 
-  bounceDock: () => ipcRenderer.send("bounce-dock"),
+  setDockBadge: (count: number) => ipcRenderer.send("set-dock-badge", count),
 
   // App
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),

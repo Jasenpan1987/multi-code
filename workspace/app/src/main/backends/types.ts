@@ -8,7 +8,30 @@ export interface SpawnConfig {
   command: string;
   args: string[];
   env: Record<string, string>;
+  // The session this spawn opens, when the backend knows it before the process
+  // starts: the one it resumes, or one it named itself. Absent for `--continue` and
+  // for a fresh OpenCode session, whose id only exists once the agent makes it.
+  sessionId?: string;
 }
+
+/**
+ * Which conversation a spawn opens.
+ *
+ *   - "own": the contact's own session, by id. Resumed while its transcript exists;
+ *     once it is gone (or was never written, as when nobody typed in it) a fresh
+ *     session starts instead, under that id where the backend allows it.
+ *   - "fresh": a new, empty session.
+ *   - "latest": the directory's most recent session (`--continue`), for a contact
+ *     with no session of its own on record, as every contact had before
+ *     contacts.json kept one.
+ *
+ * Without "own", two contacts on one project both open the directory's most recent
+ * session after every restart, and then share it.
+ */
+export type SessionStart =
+  | { kind: "own"; sessionId: string }
+  | { kind: "fresh" }
+  | { kind: "latest" };
 
 /**
  * Extra spawn wiring. The manager gets the three Claude fields; every other
@@ -132,9 +155,9 @@ export interface Backend {
    * Build the command line for a new instance. `opts` carries the manager's MCP
    * wiring for the manager, and the alert hooks' settings for every instance; a
    * backend that can't honour it should ignore it rather than fail, and say so in
-   * its implementation.
+   * its implementation. `session` picks the conversation; "latest" when absent.
    */
-  spawn(cwd: string, opts?: SpawnOptions): SpawnConfig;
+  spawn(cwd: string, opts?: SpawnOptions, session?: SessionStart): SpawnConfig;
 
   /**
    * Begin trying to discover the sessionId for an instance running in `cwd`.
@@ -267,10 +290,12 @@ export interface Backend {
    * is only that its context percentage stops moving.
    *
    * `pid` is the pty child's pid, which is what the CLI keys its own registry on.
+   * `startedAt` is when the process started, for a backend with no registry to
+   * tell a session it made from an older one in the same directory.
    * Return null rather than guessing: a wrong id here points every read at
    * another session's transcript.
    */
-  findLiveSessionId(cwd: string, pid: number): string | null;
+  findLiveSessionId(cwd: string, pid: number, startedAt: number): string | null;
 
   buildResumeCommand(sessionId: string): string;
 }

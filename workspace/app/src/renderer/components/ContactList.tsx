@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ContextMenu } from "./ContextMenu";
 import { Avatar } from "./Avatar";
+import { RenameSessionDialog } from "./RenameSessionDialog";
 import { formatContextPercent, formatTokens } from "./formatTokens";
 import { dropsBefore, pinManagerFirst } from "./contactOrder";
 import type { ContextUsage, Instance } from "../../shared/types";
@@ -43,16 +44,26 @@ function fillBand(usage: ContextUsage): string | undefined {
   return "low";
 }
 
+// Two digits at most, so the badge stays a small circle.
+function formatUnread(count: number): string {
+  return count > 99 ? "99+" : String(count);
+}
+
 interface ContactListProps {
   instances: Instance[];
   selectedId: string | null;
-  unreadIds: Set<string>;
+  // Unread alerts per contact; absent means none.
+  unreadCounts: ReadonlyMap<string, number>;
   onSelect: (id: string) => void;
   onNew: () => void;
   onNewManager: () => void;
   onStart: (id: string) => void;
   onRestart: (id: string) => void;
   onRemove: (id: string) => void;
+  // A new contact on the same project, in a fresh session.
+  onDuplicate: (id: string) => void;
+  // The name this list shows; blank goes back to the folder name.
+  onRename: (id: string, name: string) => void;
   // One drag, as an intent: put `dragId` before or after `targetId`.
   onMove: (dragId: string, targetId: string, placeBefore: boolean) => void;
   // Folded to a thin strip that unfolds it again; see the fold rules in App.
@@ -63,13 +74,15 @@ interface ContactListProps {
 export function ContactList({
   instances,
   selectedId,
-  unreadIds,
+  unreadCounts,
   onSelect,
   onNew,
   onNewManager,
   onStart,
   onRestart,
   onRemove,
+  onDuplicate,
+  onRename,
   onMove,
   folded,
   onToggleFolded,
@@ -79,6 +92,7 @@ export function ContactList({
     y: number;
     instanceId: string;
   } | null>(null);
+  const [renameId, setRenameId] = useState<string | null>(null);
   // Which row is being dragged, and where it would land. `drop` drives the insertion
   // line, so the user can see the result before letting go.
   const [dragId, setDragId] = useState<string | null>(null);
@@ -109,7 +123,7 @@ export function ContactList({
           aria-label="Show the session list"
         >
           ›
-          {unreadIds.size > 0 && <span className="fold-strip-dot" />}
+          {unreadCounts.size > 0 && <span className="fold-strip-dot" />}
         </button>
       </aside>
     );
@@ -129,6 +143,9 @@ export function ContactList({
 
   const contextInstance = contextMenu
     ? instances.find((i) => i.id === contextMenu.instanceId)
+    : null;
+  const renameInstance = renameId
+    ? instances.find((i) => i.id === renameId)
     : null;
 
   return (
@@ -151,7 +168,7 @@ export function ContactList({
           ordered.map((inst) => (
             <div
               key={inst.id}
-              className={`contact-item ${selectedId === inst.id ? "selected" : ""} ${inst.status === "stopped" ? "stopped" : ""} ${unreadIds.has(inst.id) ? "unread" : ""} ${inst.isManager ? "manager" : ""}`}
+              className={`contact-item ${selectedId === inst.id ? "selected" : ""} ${inst.status === "stopped" ? "stopped" : ""} ${unreadCounts.has(inst.id) ? "unread" : ""} ${inst.isManager ? "manager" : ""}`}
               onClick={() => onSelect(inst.id)}
               onContextMenu={(e) => handleContextMenu(e, inst.id)}
               onMouseEnter={(e) => {
@@ -214,7 +231,7 @@ export function ContactList({
               <Avatar
                 name={inst.name}
                 online={inst.status === "running"}
-                blink={unreadIds.has(inst.id)}
+                blink={unreadCounts.has(inst.id)}
                 backend={inst.backend}
                 isManager={inst.isManager}
               />
@@ -230,7 +247,11 @@ export function ContactList({
                   {contextLabel(inst.contextUsage)}
                 </span>
               )}
-              {unreadIds.has(inst.id) && <span className="unread-badge" />}
+              {unreadCounts.has(inst.id) && (
+                <span className="unread-badge">
+                  {formatUnread(unreadCounts.get(inst.id) ?? 0)}
+                </span>
+              )}
               {inst.status === "stopped" && (
                 <button
                   className="start-btn"
@@ -281,6 +302,19 @@ export function ContactList({
           onClose={() => setContextMenu(null)}
           items={[
             {
+              label: "Rename…",
+              onClick: () => setRenameId(contextMenu.instanceId),
+            },
+            // The manager is a singleton, so it has no Duplicate.
+            ...(contextInstance.isManager
+              ? []
+              : [
+                  {
+                    label: "Duplicate",
+                    onClick: () => onDuplicate(contextMenu.instanceId),
+                  },
+                ]),
+            {
               label: "Restart",
               onClick: () => onRestart(contextMenu.instanceId),
               disabled: contextInstance.status === "running",
@@ -290,6 +324,23 @@ export function ContactList({
               onClick: () => onRemove(contextMenu.instanceId),
             },
           ]}
+        />
+      )}
+
+      {/* Mounted only while open, so each opening starts from the current name. */}
+      {renameInstance && (
+        <RenameSessionDialog
+          open
+          title="Rename"
+          label="Name in the session list (blank uses the folder name)"
+          initialName={renameInstance.alias ?? ""}
+          placeholder={renameInstance.cwd.split("/").pop() || ""}
+          allowBlank
+          onClose={() => setRenameId(null)}
+          onSubmit={(name) => {
+            onRename(renameInstance.id, name);
+            setRenameId(null);
+          }}
         />
       )}
     </aside>

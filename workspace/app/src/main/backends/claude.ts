@@ -1,8 +1,10 @@
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import type {
   Backend,
   SessionDiscovery,
+  SessionStart,
   SpawnConfig,
   SpawnOptions,
 } from "./types";
@@ -50,6 +52,39 @@ function hasExistingSession(cwd: string): boolean {
   } catch {
     return false;
   }
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// The session flags for one spawn, and the session they open when that is known.
+//
+// A session the CLI has no transcript for can't be resumed (`--resume` fails), but
+// `--session-id` starts a fresh one under that id. A fresh session is always given
+// an id of our own for the same reason: the contact has it on record from the first
+// moment, before anyone types, so a restart before then opens it again rather than
+// falling back to the directory's latest, which may be another contact's.
+function sessionArgs(
+  cwd: string,
+  session: SessionStart
+): { args: string[]; sessionId?: string } {
+  if (session.kind === "own") {
+    const transcript = path.join(
+      PROJECTS_DIR,
+      encodeProjectDir(cwd),
+      `${session.sessionId}.jsonl`
+    );
+    if (fs.existsSync(transcript)) {
+      return { args: ["--resume", session.sessionId], sessionId: session.sessionId };
+    }
+    if (UUID.test(session.sessionId)) {
+      return { args: ["--session-id", session.sessionId], sessionId: session.sessionId };
+    }
+  }
+  if (session.kind === "latest" && hasExistingSession(cwd)) {
+    return { args: ["--continue"] };
+  }
+  const sessionId = crypto.randomUUID();
+  return { args: ["--session-id", sessionId], sessionId };
 }
 
 // The session a running claude is working in *now*, from the CLI's own registry.
@@ -300,8 +335,8 @@ export const claudeBackend: Backend = {
   name: "claude",
   keepsSecretaryEvents: true,
 
-  spawn(cwd: string, opts?: SpawnOptions): SpawnConfig {
-    const args = hasExistingSession(cwd) ? ["--continue"] : [];
+  spawn(cwd: string, opts?: SpawnOptions, session?: SessionStart): SpawnConfig {
+    const { args, sessionId } = sessionArgs(cwd, session ?? { kind: "latest" });
 
     // No --strict-mcp-config: it would hide the user's own MCP servers from the
     // manager, and those are theirs to make use of. Ours is additive.
@@ -323,6 +358,7 @@ export const claudeBackend: Backend = {
       command: claudePath,
       args,
       env: buildEnv(),
+      sessionId,
     };
   },
 

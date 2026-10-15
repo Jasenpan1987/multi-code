@@ -8,6 +8,7 @@ import type {
   BuilderTurn,
   HookAttention,
   SessionDiscovery,
+  SessionStart,
   SpawnConfig,
   SpawnOptions,
 } from "./types";
@@ -137,6 +138,45 @@ export function findLatestSessionForCwd(
     return null;
   } catch {
     return null;
+  } finally {
+    db?.close();
+  }
+}
+
+// The newest session for `cwd` made at or after `since` (ms, like OpenCode's own
+// timestamps), or null.
+export function findSessionCreatedSince(
+  cwd: string,
+  since: number,
+  dbPath?: string
+): string | null {
+  let db: Database.Database | null = null;
+  try {
+    db = dbPath ? openDb(dbPath) : openDb();
+    const row = db
+      .prepare(
+        "SELECT id FROM session WHERE directory IN (?, ?) AND time_created >= ? " +
+          "ORDER BY time_created DESC LIMIT 1"
+      )
+      .get(cwd, resolvePath(cwd), since) as { id: string } | undefined;
+    return row?.id ?? null;
+  } catch {
+    return null;
+  } finally {
+    db?.close();
+  }
+}
+
+// Whether OpenCode still has this session. Unknown (the database unreadable or
+// mid-write) counts as yes: resuming a session that turns out to be gone costs a
+// restart, while starting a fresh one in its place loses the contact's history.
+export function opencodeSessionExists(sessionId: string, dbPath?: string): boolean {
+  let db: Database.Database | null = null;
+  try {
+    db = dbPath ? openDb(dbPath) : openDb();
+    return db.prepare("SELECT 1 FROM session WHERE id = ?").get(sessionId) !== undefined;
+  } catch {
+    return true;
   } finally {
     db?.close();
   }
@@ -528,8 +568,11 @@ export const opencodeBackend: Backend = {
   name: "opencode",
   keepsSecretaryEvents: true,
 
-  spawn(_cwd: string, opts?: SpawnOptions): SpawnConfig {
-    // OpenCode handles "no prior session" gracefully — always pass --continue.
+  spawn(_cwd: string, opts?: SpawnOptions, session?: SessionStart): SpawnConfig {
+    // OpenCode handles "no prior session" gracefully, so "latest" always passes
+    // --continue. It has no way to name a new session up front, so a fresh one
+    // has no id until the agent makes it, and one of the contact's own that has
+    // gone starts fresh too.
     //
     // Of SpawnOptions only `opencodePlugin` applies. The settings file is a Claude
     // `--settings` file, and the rest exists for the manager, which is claude-only
@@ -538,10 +581,16 @@ export const opencodeBackend: Backend = {
     // a permission prompt on every tool call. The create path refuses to make an
     // OpenCode manager rather than silently producing one that can't work.
     const env = buildEnv();
+    const start = session ?? { kind: "latest" };
+    const own =
+      start.kind === "own" && opencodeSessionExists(start.sessionId)
+        ? start.sessionId
+        : undefined;
     return {
       command: opencodePath,
-      args: ["--continue"],
+      args: own ? ["--session", own] : start.kind === "latest" ? ["--continue"] : [],
       env: opts?.opencodePlugin ? withAlertPlugin(env, opts.opencodePlugin) : env,
+      sessionId: own,
     };
   },
 
@@ -580,8 +629,13 @@ export const opencodeBackend: Backend = {
   // for the directory is the best available answer. Weaker than claude's, and the
   // caller's claim check is what stops one instance adopting another's session in
   // a directory with two of them.
-  findLiveSessionId(cwd: string): string | null {
-    return findLatestSessionForCwd(cwd);
+  //
+  // Only sessions made since this process started: a contact resumed by id is
+  // often in an older session than the directory's newest, and that newest one is
+  // somebody else's. A session this process makes itself (`/new`) is newer than
+  // its start. The session it opened is discovery's to find, not this.
+  findLiveSessionId(cwd: string, _pid: number, startedAt: number): string | null {
+    return findSessionCreatedSince(cwd, startedAt);
   },
 
   keystrokeForChoice(tool, index, optionCount): string | null {

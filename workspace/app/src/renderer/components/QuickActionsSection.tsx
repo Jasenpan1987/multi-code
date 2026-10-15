@@ -157,7 +157,8 @@ export function QuickActionsSection({
 
       <RenameSessionDialog
         open={renameOpen}
-        backendLabel={isOpencode ? "OpenCode" : "Claude Code"}
+        title="Rename Session"
+        label={`New name for the ${isOpencode ? "OpenCode" : "Claude Code"} session`}
         onClose={() => setRenameOpen(false)}
         onSubmit={handleRename}
       />
