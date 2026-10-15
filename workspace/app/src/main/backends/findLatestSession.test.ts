@@ -6,9 +6,7 @@
 // it hadn't personally watched run, and every stopped contact showed
 // `context=unknown`.
 //
-// better-sqlite3 is mocked rather than loaded, for the same reason as
-// contextUsage.test.ts: the installed build targets Electron's ABI and won't require
-// under plain-node vitest.
+// better-sqlite3 is mocked rather than loaded, as in contextUsage.test.ts.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
