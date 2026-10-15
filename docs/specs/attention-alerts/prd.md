@@ -176,7 +176,7 @@ OpenCode's events keep coming from its existing detector.
 **Notes:**
 - Replaces today's suppress-while-watching rule, the urgent override, the 5s cooldown, and the 1.5s auto-clear of the shown instance's red dot.
 - Bringing the window forward with ⌘Tab, without a click or a keystroke, clears nothing: the badges and the Dock count stay until acknowledged. Consistent with the builder's rule that typing or clicking clears them.
-- ⚠️ macOS 27 draws a Dock badge only for an app with notification permission, and Multi-Code has none: Electron 35 cannot ask for it (measured 2026-10-15). Until it can, the Dock shows no number. Electron 42+ asks through User Notifications (electron/electron#47817).
+- The Dock count shows only in the packaged app. A dev run (`pnpm start`, the bare Electron.app) sets it, but macOS 27 draws nothing, on Electron 35 and 44 alike; the packaged Multi-Code.app shows it on both, with no notification permission (measured 2026-10-16). Test it in a packaged build.
 
 ---
 
@@ -316,4 +316,4 @@ See `docs/specs/attention-alerts/gaps.md`. G-001 to G-003 are resolved; none are
 - v1.5 (2026-10-07): Folded in the T-401 hook spike (CLI 2.1.291). Story 2: the turn after a background shell exits chimes (G-003, builder decision); a denied dialog raises no event (assumption, as Esc); `/compact` ends at `PostCompact`; automatic compaction mid-turn raises nothing; note that every subagent now runs in the background. Story 3: a denial sends no hook; plan and bypass modes report dialogs too. Story 6: registry `waiting (dialog open)` is a slash-command panel, not Needs you; a momentary `idle` on a background wake-up is not Finished. "To verify before building" replaced with the measured answers; Constraints note that only the last `--settings` applies.
 - v1.6 (2026-10-07): Story 6 replaced (builder decision): when an instance's hooks don't run, a bar on that instance's page says so and alerts stop for it; the registry-driven fallback is dropped.
 - v1.7 (2026-10-07): Story 6's bar extends to OpenCode once Story 7 ships (builder decision): a plugin that never reports shows it.
-- v1.8 (2026-10-15): Story 4 changed (builder decision): the red dot becomes a red badge with the unread count, and the Dock shows the total instead of bouncing, as Teams and Slack do. Dock badge counts leave Out of Scope. Noted that macOS shows the Dock number only with notification permission.
+- v1.8 (2026-10-15): Story 4 changed (builder decision): the red dot becomes a red badge with the unread count, and the Dock shows the total instead of bouncing, as Teams and Slack do. Dock badge counts leave Out of Scope. A note on testing the Dock count (corrected 2026-10-16: it needs no notification permission, only a packaged build).
