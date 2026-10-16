@@ -16,11 +16,13 @@ When working with multiple coding-agent sessions across different projects simul
 - **Multi-Backend** — Each instance runs either **Claude Code** or **OpenCode**. Pick the backend when creating an instance; mix both freely, even in the same project directory
 - **Instance Management** — Spawn, restart, and remove agent sessions per project directory
 - **Full Terminal Fidelity** — Real PTY via node-pty, rendered in xterm.js. No chat abstraction, no message parsing
-- **Session Notifications** — Knows when an agent has finished or is waiting on you (Claude reports it through hooks Multi-Code passes at launch, OpenCode through a plugin Multi-Code loads into it); plays audio, flashes the contact, and bounces the macOS Dock
+- **Session Notifications** — Knows when an agent has finished or is waiting on you (Claude reports it through hooks Multi-Code passes at launch, OpenCode through a plugin Multi-Code loads into it); plays audio, flashes the contact, and counts it on the contact's red badge and the macOS Dock icon
 - **Context usage at a glance** — Each contact row shows how full that session's context window is, as a percentage with a colour tint. Hover for the exact token count, the model, and when it was measured. Where the window size can't be established reliably, the row shows the raw token count instead of guessing a percentage. Stopped sessions show their last known usage too
 - **Follows `/clear` and `/new`** — When a running CLI moves to a fresh session, Multi-Code follows it, so context usage, notifications, and the manager's view keep tracking the live session
 - **Persistence** — Instance list (including each instance's backend) saved to disk, survives app restart
 - **Drag to reorder** — Drag contacts up and down the sidebar; the order is saved and survives a restart
+- **Rename and Duplicate** — Right-click a contact to rename it in the list (blank goes back to the folder name), or to duplicate it: a second contact on the same project, in a fresh session, right below the original. Each contact keeps and resumes its own session
+- **Switch with `Cmd+1`…`Cmd+9`** — Hold `Cmd` and the first nine projects in the list show their digit; `Cmd` plus the digit switches to that project and puts the cursor in its terminal. The manager has no digit, so `Cmd+1` is always the first project
 - **Compose Box** — `Cmd+L` summons an editor over the terminal: multi-line input, mouse editing, `Enter` to send / `Shift+Enter` for a newline, and image paste (with a thumbnail preview) sent as an `@<path>` attachment. For long messages the folded TUI input makes awkward. Works for both backends
 - **Side-by-side diff** — Open any changed file from the Git section in a movable, resizable diff window. Select lines and hit **Ask agent** to drop an `@path:start-end` reference into the Compose Box
 - **Three-Column Layout** — Contact list | terminal | toolbox, with a draggable splitter between terminal and toolbox
@@ -71,9 +73,9 @@ When working with multiple coding-agent sessions across different projects simul
 - **Pinned manager** — The manager row always sits at the top of the list, styled apart from the projects
 - **Long names in a bubble** — A name too long for the sidebar shows in full in a bubble beside its row when you hover it
 - **Fold any pane** — The small arrow tabs on the pane edges fold the session list, the terminal or the toolbox to a thin strip; click the strip to bring it back. Fold the terminal and the toolbox fills the window, for reading a Markdown file at full width
-- **Version badge** — The current build version shows in the top-right of the window (next to the theme toggle), so you can always tell which build is running. A dev build adds a **DEV** chip and amber stripes across the titlebar, so it can't be mistaken for the installed app
+- **Version badge** — The current build version shows in the top-right of the window (next to the theme toggle), so you can always tell which build is running. A dev build adds a **DEV** chip and amber stripes across the titlebar, and an orange **DEV** sash across its Dock icon, so it can't be mistaken for the installed app
 - **Mac-style shortcuts** — In the agent terminal, `Cmd+Backspace` clears the input line and `Cmd+Left` / `Cmd+Right` jump to its start / end. `Cmd+R` is disabled so it can't reload the window by accident
-- **Dock Bounce** — macOS Dock icon bounces when an agent finishes while the app is in the background
+- **Dock count** — The macOS Dock icon shows the total of unread alerts across all sessions, chat-app style. Only the installed app shows it; a dev run never does
 
 ## Tech Stack
 
@@ -98,6 +100,7 @@ multi-code/
 │       ├── src/
 │       │   ├── main/           # Electron main process
 │       │   │   ├── index.ts          # Entry point, window creation, dock icon, mdimg:// protocol
+│       │   │   ├── dev-icon.ts       # Paints the DEV sash on a dev run's Dock icon
 │       │   │   ├── process-manager.ts # Spawns & manages agent CLI processes (backend-agnostic)
 │       │   │   ├── backends/          # Backend abstraction: claude.ts, opencode.ts, registry
 │       │   │   ├── run-state.ts       # Write-safety gate (idle / busy / blocked per instance)
@@ -243,7 +246,7 @@ Multi-Code positions itself as a **lightweight agent orchestration hub**: run mu
 └──────────────┴─────────────────────┴─────────────────────┘
 ```
 
-- **Left** — Instance list. Green avatar = running, gray = stopped. Each row shows context usage. Drag rows to reorder (the manager stays pinned on top). Right-click for Restart / Remove. Stopped instances show a ▶ button to restart.
+- **Left** — Instance list. Green avatar = running, gray = stopped. Each row shows context usage. Drag rows to reorder (the manager stays pinned on top). Right-click for Rename… / Duplicate / Restart / Remove. Hold `Cmd` to see each project's `Cmd+1`…`Cmd+9` digit. Stopped instances show a ▶ button to restart.
 - **Middle** — The main agent chat (real terminal — Claude Code or OpenCode's TUI). Light Aqua-blue background tuned for ANSI diff blocks.
 - **Right** — Toolbox, accordion-style: only one section is expanded at a time and fills the available vertical space. Git is expanded by default.
 - **Between middle and right** — A **draggable splitter**. Drag to resize. Each side has a 280px minimum.
@@ -341,9 +344,9 @@ The manager's role guidance lives in a `CLAUDE.md` in its folder. You can edit i
 Notifications work identically for both backends — only the source differs. Claude Code reports its own state through hooks: every `claude` Multi-Code starts gets a `--settings` file from Multi-Code's data folder whose hooks post to the app's local `/alert` endpoint. Nothing is written to your own Claude settings, so `claude` run in an ordinary terminal is unaffected. OpenCode does the same through a report-only plugin: every `opencode` Multi-Code starts loads it from Multi-Code's data folder, named in that process's `OPENCODE_CONFIG_CONTENT` on top of your own config, and nothing is written to `~/.config/opencode/` or a project's `.opencode/`.
 
 - Agent finishes, or stops to wait on you (a permission prompt, a question, a plan approval) → plays the "ding" once, for every instance, including the one you're looking at
-- Avatar blinks + red dot badge appears
-- macOS Dock icon bounces when Multi-Code isn't in front (`critical` mode — keeps bouncing until you bring the app to the front)
-- Typing, or clicking anywhere in a session's page, stops its chime and clears its red dot. Clicking a contact in the list does the same for that contact. Nothing clears on a timer or on window focus alone
+- Avatar blinks, and the contact's red badge counts one more
+- The macOS Dock icon shows the total across all sessions (installed app only)
+- Typing, or clicking anywhere in a session's page, stops its chime and clears its red dot. Clicking a contact in the list does the same for that contact, and so does switching to it with `Cmd+1`…`Cmd+9`; the session you leave keeps its badge. Nothing clears on a timer or on window focus alone
 - A turn you interrupt with Esc, or a dialog you deny, doesn't chime
 - If a session's hooks or plugin never report (for example `"disableAllHooks": true` in your Claude settings), a bar on its page says Multi-Code can't tell when it finishes, instead of going quiet
 
@@ -435,7 +438,7 @@ boss: a retold account with the details, not the screen read aloud.
 
 **Using it:**
 
-- Chimes, red dots and the Dock bounce work exactly as before. The secretary only
+- Chimes, red badges and the Dock count work exactly as before. The secretary only
   adds a brief at the same moments
 - The session on screen opens its card and plays its brief on its own, once the
   voice is ready
@@ -509,7 +512,7 @@ Everything Multi-Code keeps lives in Electron's user-data folder. On macOS that 
 2. App spawns the backend CLI (`claude` / `opencode`, resuming a prior session if one exists) via node-pty in that directory. Backends are pluggable behind a small `Backend` interface in `src/main/backends/`
 3. PTY stdout is piped in real-time to an xterm.js terminal in the renderer
 4. Each agent's state comes from the agent: Claude Code reports it through report-only hooks passed with `--settings` at launch (finished, waiting on a permission prompt or question), OpenCode through a report-only plugin named in its `OPENCODE_CONFIG_CONTENT`. Neither writes anything into the user's own config
-5. On a finish or a needs-you: audio + flash + Dock bounce, for every instance. The red dot stays until you type or click in that session, or select it
+5. On a finish or a needs-you: audio + flash + one more on the red badge and the Dock count, for every instance. The red dot stays until you type or click in that session, or select it
 6. Toolbox sections each manage their own lifecycle:
    - Git: shells out to `git` every 5s while expanded
    - Terminal: lazy-spawns a shell PTY on first expand, persists across collapses
