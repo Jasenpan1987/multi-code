@@ -11,7 +11,11 @@
 // instance: a key press, or a click anywhere in its page (terminal, compose box,
 // toolbox). Not a click in the contact list, which selects (and so acknowledges)
 // the contact clicked rather than the one being left, and not input to a dialog
-// layered over the page, which is about something else.
+// layered over the page, which is about something else. Not Cmd alone or Cmd plus
+// a digit either: those are the list's switch keys (components/contactHotkeys),
+// so they count like a click in the list.
+
+import { hotkeyDigit } from "../components/contactHotkeys";
 
 const NOT_THE_PAGE = ".sidebar, .dialog-overlay";
 
@@ -27,4 +31,16 @@ export function acknowledgesShownInstance(target: unknown): boolean {
   // A text node or the window itself: not inside the sidebar or a dialog.
   if (typeof closest !== "function") return true;
   return closest.call(target, NOT_THE_PAGE) === null;
+}
+
+// The key half: false for the contact list's switch keys.
+export function keyAcknowledgesShownInstance(e: {
+  key: string;
+  code: string;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  shiftKey: boolean;
+}): boolean {
+  return e.key !== "Meta" && hotkeyDigit(e) === null;
 }
