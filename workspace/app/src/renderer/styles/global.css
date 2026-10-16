@@ -440,6 +440,26 @@ body,
   min-width: 0;
 }
 
+/* While Cmd is held, the digit that shows this project with Cmd (contactHotkeys).
+   A key cap rather than a circle, so it doesn't read as an unread count. Not
+   bold on an unread row, for the same reason as .contact-context below. */
+.contact-hotkey {
+  box-sizing: border-box;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border: 1px solid #7b9cc7;
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 1px 0 #7b9cc7;
+  color: #2d5a8a;
+  font-size: 10px;
+  font-weight: normal;
+  line-height: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
 /* The full name of a row whose name the sidebar cuts short, in a bubble beside
    the row while the pointer is on it. ContactList sets left/top to the row's
    right edge and middle. Fixed rather than absolute, because the list's

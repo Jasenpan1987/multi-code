@@ -1,4 +1,10 @@
-import { app, BrowserWindow, dialog, type MessageBoxOptions } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  nativeImage,
+  type MessageBoxOptions,
+} from "electron";
 import path from "path";
 import { processManager } from "./process-manager";
 import { shellManager } from "./shell-manager";
@@ -15,12 +21,28 @@ import {
 } from "./manager-mcp";
 import { secretary } from "./secretary";
 import { loadSettings } from "./settings-store";
+import { paintDevSash } from "./dev-icon";
 
 // Must run before app 'ready' — privileged scheme registration is only honored
 // pre-ready. The handler itself is installed after ready (in whenReady).
 registerMdimgSchemePrivileged();
 
 const iconPath = path.join(__dirname, "../renderer/assets/gaming.png");
+
+// A dev run's Dock icon carries an orange DEV sash, so it isn't mistaken for the
+// installed app next to it. See dev-icon.ts.
+function dockIcon() {
+  if (app.isPackaged) return iconPath;
+  // Twice the file's 128px, which is what the Dock draws on a Retina screen
+  // anyway, so the letters come out sharp rather than scaled up with the rest.
+  const icon = nativeImage
+    .createFromPath(iconPath)
+    .resize({ width: 256, height: 256, quality: "best" });
+  const { width, height } = icon.getSize();
+  const bitmap = icon.toBitmap();
+  paintDevSash(bitmap, width, height);
+  return nativeImage.createFromBitmap(bitmap, { width, height });
+}
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -56,7 +78,7 @@ function createWindow() {
 app.whenReady().then(async () => {
   if (process.platform === "darwin" && app.dock) {
     try {
-      app.dock.setIcon(iconPath);
+      app.dock.setIcon(dockIcon());
     } catch {
       // ignore — icon may not be loadable in dev
     }

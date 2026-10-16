@@ -26,7 +26,10 @@ import { VersionBadge } from "./components/VersionBadge";
 import { useNotifications } from "./hooks/useNotifications";
 import { ThemeContext } from "./hooks/useTheme";
 import { playMessageSound, playCoughSound, stopMessageSound } from "./audio/sounds";
-import { acknowledgesShownInstance } from "./audio/attentionPolicy";
+import {
+  acknowledgesShownInstance,
+  keyAcknowledgesShownInstance,
+} from "./audio/attentionPolicy";
 import type {
   Instance,
   BackendName,
@@ -263,6 +266,7 @@ export function App() {
     const acknowledge = (e: Event) => {
       const id = selectedIdRef.current;
       if (!id || !acknowledgesShownInstance(e.target)) return;
+      if (e instanceof KeyboardEvent && !keyAcknowledgesShownInstance(e)) return;
       stopMessageSound(id);
       markRead(id);
     };

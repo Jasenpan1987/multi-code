@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { acknowledgesShownInstance } from "./attentionPolicy";
+import {
+  acknowledgesShownInstance,
+  keyAcknowledgesShownInstance,
+} from "./attentionPolicy";
 
 // Stands in for an element: `closest` answers whether the element sits inside
 // one of the containers named.
@@ -27,5 +30,27 @@ describe("acknowledgesShownInstance", () => {
   it("counts a target with nowhere to look, such as the window", () => {
     expect(acknowledgesShownInstance(null)).toBe(true);
     expect(acknowledgesShownInstance({})).toBe(true);
+  });
+});
+
+describe("keyAcknowledgesShownInstance", () => {
+  const key = (k: string, code: string, metaKey: boolean) => ({
+    key: k,
+    code,
+    metaKey,
+    ctrlKey: false,
+    altKey: false,
+    shiftKey: false,
+  });
+
+  it("counts typing and other Cmd shortcuts", () => {
+    expect(keyAcknowledgesShownInstance(key("a", "KeyA", false))).toBe(true);
+    expect(keyAcknowledgesShownInstance(key("1", "Digit1", false))).toBe(true);
+    expect(keyAcknowledgesShownInstance(key("c", "KeyC", true))).toBe(true);
+  });
+
+  it("does not count the switch keys, which act like a click in the contact list", () => {
+    expect(keyAcknowledgesShownInstance(key("Meta", "MetaLeft", true))).toBe(false);
+    expect(keyAcknowledgesShownInstance(key("2", "Digit2", true))).toBe(false);
   });
 });

@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ContextMenu } from "./ContextMenu";
 import { Avatar } from "./Avatar";
 import { RenameSessionDialog } from "./RenameSessionDialog";
+import { getTerminal } from "./TerminalView";
 import { formatContextPercent, formatTokens } from "./formatTokens";
 import { dropsBefore, pinManagerFirst } from "./contactOrder";
+import { hotkeyTargets, listenForContactHotkeys } from "./contactHotkeys";
 import type { ContextUsage, Instance } from "../../shared/types";
 
 // The row shows an abbreviated count, plus a percentage **only when the window size
@@ -104,6 +106,34 @@ export function ContactList({
     left: number;
     top: number;
   } | null>(null);
+
+  // Cmd+1…9 and the digits shown while Cmd is held; see contactHotkeys.
+  const [showHotkeys, setShowHotkeys] = useState(false);
+  const hotkeyIds = hotkeyTargets(instances);
+  // For the key listener, subscribed once.
+  const hotkeyRef = useRef({ hotkeyIds, onSelect });
+  hotkeyRef.current = { hotkeyIds, onSelect };
+
+  // Before the folded return: the keys still switch with the list folded away.
+  useEffect(
+    () =>
+      listenForContactHotkeys(window, {
+        targets: () => hotkeyRef.current.hotkeyIds,
+        select: (id) => {
+          hotkeyRef.current.onSelect(id);
+          // A click on a row takes focus out of the terminal, a key doesn't: the
+          // hidden terminal of the contact being left would get what is typed
+          // next. So the shown one takes focus, once React has drawn it.
+          if (document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
+          }
+          requestAnimationFrame(() => getTerminal(id)?.focus());
+        },
+        showHints: setShowHotkeys,
+        paused: () => document.querySelector(".dialog-overlay") !== null,
+      }),
+    []
+  );
 
   const endDrag = () => {
     setDragId(null);
@@ -236,6 +266,11 @@ export function ContactList({
                 isManager={inst.isManager}
               />
               <span className="contact-name">{inst.name}</span>
+              {showHotkeys && hotkeyIds.includes(inst.id) && (
+                <span className="contact-hotkey">
+                  {hotkeyIds.indexOf(inst.id) + 1}
+                </span>
+              )}
               {inst.contextUsage && (
                 <span
                   className="contact-context"
