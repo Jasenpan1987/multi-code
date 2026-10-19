@@ -8,8 +8,10 @@ import { shellManager } from "./shell-manager";
 import { getBackend } from "./backends";
 import type {
   AlertDelivery,
+  AlertsDegradedReason,
   Backend,
   BackendName,
+  DialogRef,
   HookAttention,
   PromptToolCall,
   SessionDiscovery,
@@ -44,6 +46,9 @@ export interface InstanceInfo {
   // This instance's hooks aren't reaching Multi-Code, so it raises no alerts (PRD
   // Story 6). The renderer shows a bar on its page.
   alertsDegraded?: boolean;
+  alertsDegradedReason?: AlertsDegradedReason;
+  // Why the last start launched nothing (SpawnConfig.refusal).
+  startError?: string;
 }
 
 /**
@@ -61,7 +66,8 @@ export interface SecretaryEvent {
   kind: "finished" | "needs-you";
   seq: number;
   at: number;
-  prompt?: { detail: PromptDetail; toolName: string; toolInput: unknown };
+  // `dialog` when the backend answers this dialog through its API (OpenCode).
+  prompt?: { detail: PromptDetail; toolName: string; toolInput: unknown; dialog?: DialogRef };
 }
 
 // `event` is the instance's new live event, or null when it was cleared.
@@ -147,6 +153,9 @@ interface ManagedInstance {
   // Its hooks don't run, so nothing will alert for it. Per process: a restart
   // builds a fresh instance and starts out trusting its hooks again.
   alertsDegraded?: boolean;
+  alertsDegradedReason?: AlertsDegradedReason;
+  // See InstanceInfo.startError.
+  startError?: string;
   // Minted per spawn and handed to the agent's hooks (SPAWN_ENV), so a late
   // delivery from the process a restart replaced can be told apart. Absent on a
   // contact that has never been spawned in this run.
@@ -537,6 +546,7 @@ export class ProcessManager {
                     detail,
                     toolName: toolCall.toolName,
                     toolInput: toolCall.toolInput,
+                    ...(toolCall.dialog ? { dialog: toolCall.dialog } : {}),
                   },
                 }
               : {}),
@@ -846,6 +856,9 @@ export class ProcessManager {
       isManager,
       runState: new RunStateTracker(),
       alertsDegraded: spawnedWithoutAlertHooks || undefined,
+      alertsDegradedReason: spawnedWithoutAlertHooks
+        ? backendName === "claude" ? "hooks" : "plugin"
+        : undefined,
       spawnId,
       // Known up front when the backend resumed it or named it. Otherwise
       // discovery finds it, and attachSession records it then.
@@ -855,15 +868,30 @@ export class ProcessManager {
 
     // Created at spawn, before any session exists: the hooks report from the
     // process's first moment, and keep reporting across /clear.
+    const isSessionClaimed = (candidate: string): boolean =>
+      this.isSessionClaimedBy(candidate, id);
+
     instance.hookAttention = backend.createHookAttention(
       ptyProcess.pid,
       (type, detail, toolCall) =>
         this.reportActivity(instance, type, detail, toolCall),
-      (ok) => this.setAlertsDegraded(instance, !ok)
+      (ok, reason) => this.setAlertsDegraded(instance, !ok, reason),
+      {
+        instanceId: id,
+        sessionId: openedSessionId,
+        // The terminal moved to another session (`/new`, `/sessions`). Only while
+        // this record is the contact's current one, and never onto a session another
+        // contact holds.
+        onSessionShown: (sessionId) => {
+          if (this.instances.get(id) !== instance) return;
+          if (sessionId === instance.sessionId || isSessionClaimed(sessionId)) return;
+          debugTrace(
+            `[session-moved] ${id.slice(0, 8)} ${instance.sessionId ?? "none"} -> ${sessionId} (shown) at ${new Date().toISOString()}`
+          );
+          this.attachSession(instance, sessionId);
+        },
+      }
     );
-
-    const isSessionClaimed = (candidate: string): boolean =>
-      this.isSessionClaimedBy(candidate, id);
 
     // Nothing to discover when the backend said which session it opened. A guess
     // here could only be worse: the directory's newest unclaimed transcript.
@@ -980,14 +1008,27 @@ export class ProcessManager {
     this.emitActivity(id, type);
   }
 
-  private setAlertsDegraded(instance: ManagedInstance, degraded: boolean) {
-    if (!!instance.alertsDegraded === degraded) return;
+  private setAlertsDegraded(
+    instance: ManagedInstance,
+    degraded: boolean,
+    reason?: AlertsDegradedReason
+  ) {
+    const nextReason = degraded ? reason ?? "hooks" : undefined;
+    if (!!instance.alertsDegraded === degraded && instance.alertsDegradedReason === nextReason) {
+      return;
+    }
     instance.alertsDegraded = degraded || undefined;
+    instance.alertsDegradedReason = nextReason;
     debugTrace(
-      `[alert-hook] ${instance.id.slice(0, 8)} hooks ${degraded ? "not running: alerts off" : "running again"} at ${new Date().toISOString()}`
+      `[alert-hook] ${instance.id.slice(0, 8)} ${degraded ? `alerts off (${nextReason})` : "alerts on again"} at ${new Date().toISOString()}`
     );
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send("instance-alerts-degraded", instance.id, degraded);
+      this.mainWindow.webContents.send(
+        "instance-alerts-degraded",
+        instance.id,
+        degraded,
+        nextReason
+      );
     }
   }
 
@@ -1370,6 +1411,8 @@ export class ProcessManager {
       isManager: instance.isManager,
       runState: instance.ptyProcess ? instance.runState.state() : undefined,
       alertsDegraded: instance.ptyProcess ? instance.alertsDegraded : undefined,
+      alertsDegradedReason: instance.ptyProcess ? instance.alertsDegradedReason : undefined,
+      startError: instance.startError,
     };
   }
 }

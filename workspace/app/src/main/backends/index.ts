@@ -1,6 +1,6 @@
-import type { Backend, BackendName } from "./types";
+import type { Backend, BackendAvailability, BackendName } from "./types";
 import { claudeBackend } from "./claude";
-import { opencodeBackend, isOpencodeAvailable } from "./opencode";
+import { opencodeBackend, isOpencodeAvailable, opencodeAvailability } from "./opencode";
 
 const registry = new Map<BackendName, Backend>([
   ["claude", claudeBackend],
@@ -21,10 +21,23 @@ export function isBackendAvailable(name: BackendName): boolean {
   return true;
 }
 
+// Like isBackendAvailable, with the reason when it isn't: missing, or a version
+// Multi-Code doesn't support.
+export function backendAvailability(name: BackendName): BackendAvailability {
+  if (name === "opencode") return opencodeAvailability();
+  return { ok: true };
+}
+
 export type {
   AlertDelivery,
+  AlertsDegradedReason,
+  AnswerResult,
+  AttentionContext,
   Backend,
+  BackendAvailability,
   BackendName,
+  DialogAnswer,
+  DialogRef,
   SpawnConfig,
   SpawnOptions,
   HookAttention,

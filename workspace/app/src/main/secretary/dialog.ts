@@ -11,6 +11,7 @@
 
 import type { SecretaryEvent } from "../process-manager";
 import type { BackendName } from "../../shared/types";
+import type { DialogAnswer } from "../backends/types";
 import {
   PERMISSION_TOOL,
   QUESTION_TOOL_LABEL,
@@ -62,10 +63,14 @@ export type Choice =
 // What gets written: keys one at a time, KEY_GAP_MS apart, then, once the dialog is
 // gone, an ordinary prompt (a denial's reason). `expect` is what the CLI should record
 // for a question box, by question text, to compare with its PostToolUse answers.
+// `answer`, for a backend that answers through its API (OpenCode), replaces the keys:
+// `keys` is then empty and the answer goes to the dialog the event's DialogRef names
+// (opencode-v2 T-607).
 export interface AnswerPlan {
   keys: string[];
   followUp?: string;
   expect?: Record<string, string>;
+  answer?: DialogAnswer;
 }
 
 // 150 ms between keys: a three-question box was answered right at 40 ms.

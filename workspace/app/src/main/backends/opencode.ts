@@ -5,6 +5,7 @@ import { execSync } from "child_process";
 import Database from "better-sqlite3";
 import type {
   Backend,
+  BackendAvailability,
   BuilderTurn,
   HookAttention,
   SessionDiscovery,
@@ -662,6 +663,12 @@ export const opencodeBackend: Backend = {
     return `opencode tui --session ${sessionId}`;
   },
 };
+
+// Whether OpenCode can be started, and why not. T-605 adds the version check that
+// refuses 1.x; until then only a missing binary is reported.
+export function opencodeAvailability(): BackendAvailability {
+  return isOpencodeAvailable() ? { ok: true } : { ok: false, reason: "missing" };
+}
 
 export function isOpencodeAvailable(): boolean {
   // Re-check at call time (PATH may differ from spawn time).
