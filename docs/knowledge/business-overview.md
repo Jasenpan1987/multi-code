@@ -85,6 +85,20 @@ Each instance has a `backend` field (`"claude"` or `"opencode"`) chosen at creat
 
 (source: 2026-05-18 opencode-support ideation, which rejected hooks because they would have had to be written into the user's own config; revised by the builder on 2026-10-06, when passing them with `--settings` removed that reason — see docs/timeline/2026-10-06_attention-alerts-investigation.md)
 
+### Backend roadmap (2026-10-16)
+
+The builder's long-term goal is one Multi-Code for every coding agent they use. One backend at a time, not all at once.
+
+| Backend | State |
+|---|---|
+| Claude Code | Supported |
+| OpenCode | Supported on 1.x today. Moving to **2.x only**; 1.x support is dropped (see decisions.md, 2026-10-16) |
+| Pi (`@earendil-works/pi-coding-agent`) | Backlog. Researched 2026-10-16: maps well except dialogs, which Pi only has through extensions |
+| DeepSeek Harness | Backlog. Not yet identified or researched |
+| Codex | Backlog. Not yet researched |
+
+(source: builder, 2026-10-16; research in docs/timeline/2026-10-16_backend-expansion-research.md)
+
 ## Secretary Mode (planned 2026-10-07)
 
 The builder wants agents to keep working while they are away from the screen. Each session gets a **secretary** that briefs them by voice, the way a secretary briefs a CEO: a narrated account of what happened, with the details, not the screen read aloud.
