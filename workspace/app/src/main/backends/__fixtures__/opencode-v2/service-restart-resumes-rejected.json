@@ -1,0 +1,1675 @@
+{
+  "scenario": "service-restart-resumes-rejected",
+  "opencodeVersion": "2.0.32",
+  "notes": "Extra, from the first restart attempt: on boot the new service resumed every root whose last turn ended interrupted{shutdown} through a Reject or a dismiss (permission-reject, permission-esc, question-dismiss, question-api-dismiss), each with a synthetic restart row in the DB but no event seen, and they asked their permissions/questions again (new ids). Not resumed: turns ended interrupted{user}. Cleaned up with POST /api/session/:id/interrupt (reason user releases the claim).",
+  "frames": [
+    {
+      "t": 203,
+      "stream": "disconnect",
+      "reason": "eof"
+    },
+    {
+      "t": 721,
+      "stream": "connect",
+      "status": 200,
+      "service": {
+        "id": "702ee1b8-72e0-4868-a62d-e587c4aaa7d7",
+        "version": "2.0.32",
+        "url": "http://127.0.0.1:49411",
+        "pid": 2180
+      }
+    },
+    {
+      "t": 721,
+      "event": {
+        "id": "evt_15549fa7a001fSXr830BBauICF",
+        "type": "server.connected",
+        "data": {}
+      }
+    },
+    {
+      "t": 796,
+      "event": {
+        "id": "evt_15549fac6001KJ7XD1bKF9WLsX",
+        "created": 1792432274118,
+        "type": "project.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "canonical": "/private/tmp/oc2-spike/projects/scen",
+          "time": {
+            "created": 1792431240537,
+            "updated": 1792431240537,
+            "active": 1792432274117
+          },
+          "sandboxes": []
+        }
+      }
+    },
+    {
+      "t": 801,
+      "event": {
+        "id": "evt_15549facc001gRIkcN9747bqtY",
+        "created": 1792432274124,
+        "type": "project.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/home"
+        },
+        "data": {
+          "id": "df8751f3f97f77b13c9dbc47d6d57816b4a73b82",
+          "canonical": "/private/tmp/oc2-spike/home",
+          "time": {
+            "created": 1792430865924,
+            "updated": 1792430865924,
+            "active": 1792432274123
+          },
+          "sandboxes": []
+        }
+      }
+    },
+    {
+      "t": 1290,
+      "event": {
+        "id": "evt_15549fca1001RFJG3N6ftrTLNS",
+        "created": 1792432274593,
+        "type": "integration.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/home"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 1290,
+      "event": {
+        "id": "evt_15549fca300114aw6W7MYp0P1k",
+        "created": 1792432274595,
+        "type": "provider.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/home"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 1290,
+      "event": {
+        "id": "evt_15549fca7001l4A13JqHM7DiBB",
+        "created": 1792432274599,
+        "type": "model.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/home"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 1290,
+      "event": {
+        "id": "evt_15549fca8001AYNifZCbL9pNu4",
+        "created": 1792432274600,
+        "type": "agent.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/home"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 1290,
+      "event": {
+        "id": "evt_15549fca8002m2y7TfoNgFnoda",
+        "created": 1792432274600,
+        "type": "command.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/home"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 1290,
+      "event": {
+        "id": "evt_15549fca8003Sl1EgpYqv2YaCt",
+        "created": 1792432274600,
+        "type": "skill.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/home"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 1290,
+      "event": {
+        "id": "evt_15549fca9001d7otHcc4UxbyaF",
+        "created": 1792432274601,
+        "type": "websearch.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/home"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 1290,
+      "event": {
+        "id": "evt_15549fcb5001BSY37ApOUx6jlZ",
+        "created": 1792432274613,
+        "type": "reference.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/home"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 1290,
+      "event": {
+        "id": "evt_15549fcb5002024poFeI2SH0Z6",
+        "created": 1792432274613,
+        "type": "plugin.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/home"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 1360,
+      "event": {
+        "id": "evt_15549fcba001J34J4VypcH0pQQ",
+        "created": 1792432274618,
+        "type": "integration.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 1360,
+      "event": {
+        "id": "evt_15549fcbd001M6FkzsLfbQZQZ0",
+        "created": 1792432274621,
+        "type": "provider.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 1360,
+      "event": {
+        "id": "evt_15549fcc0001hygaHvN1lW3JXD",
+        "created": 1792432274624,
+        "type": "model.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 1360,
+      "event": {
+        "id": "evt_15549fcc1001OxkpACFwLpNbiO",
+        "created": 1792432274625,
+        "type": "agent.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 1360,
+      "event": {
+        "id": "evt_15549fcc1002f5mydLrwX1EbYS",
+        "created": 1792432274625,
+        "type": "command.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 1360,
+      "event": {
+        "id": "evt_15549fcc1003ysnV5ORT24T5tI",
+        "created": 1792432274625,
+        "type": "skill.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 1360,
+      "event": {
+        "id": "evt_15549fcc20013y1fXEId0TS8Jv",
+        "created": 1792432274626,
+        "type": "websearch.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 1360,
+      "event": {
+        "id": "evt_15549fcc9002X5ejj6i9ZZafbT",
+        "created": 1792432274633,
+        "type": "reference.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 1360,
+      "event": {
+        "id": "evt_15549fcc9003wxWNrV3vMNbfWy",
+        "created": 1792432274633,
+        "type": "plugin.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 2934,
+      "event": {
+        "id": "evt_1554a0319001FwG8djOa5SUGBl",
+        "created": 1792432276249,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_15549fce9001KjGY3nY395sGkt",
+          "started": 1792432274668
+        },
+        "durable": {
+          "aggregateID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "seq": 17,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2934,
+      "event": {
+        "id": "evt_1554a031e001kPjbeVGQtBuLfh",
+        "created": 1792432276254,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "assistantMessageID": "msg_15549fce9001KjGY3nY395sGkt",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "seq": 18,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3035,
+      "event": {
+        "id": "evt_1554a0386001Yf2jspfEbJ7Nvw",
+        "created": 1792432276358,
+        "type": "session.reasoning.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "assistantMessageID": "msg_15549fce9001KjGY3nY395sGkt",
+          "ordinal": 0,
+          "delta": "The user asked to run exactly `mv api-once.txt moved.txt`. The tool call was declined. Now"
+        }
+      }
+    },
+    {
+      "t": 3546,
+      "event": {
+        "id": "evt_1554a0583001A4krmyXE9o6IN7",
+        "created": 1792432276867,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_15549fce0001mt7bJT3JshGE2g",
+          "started": 1792432274663
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 19,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3546,
+      "event": {
+        "id": "evt_1554a0585001HimYSOU7Pvq2L6",
+        "created": 1792432276869,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "assistantMessageID": "msg_15549fce0001mt7bJT3JshGE2g",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 20,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4149,
+      "event": {
+        "id": "evt_1554a07d90017kLbx5bsnEANqs",
+        "created": 1792432277465,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_15549fcf5001Kiei4XalzZuXM7",
+          "started": 1792432274682
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 17,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4149,
+      "event": {
+        "id": "evt_1554a07dd001WsPLirK6lHOT6X",
+        "created": 1792432277469,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "assistantMessageID": "msg_15549fcf5001Kiei4XalzZuXM7",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 18,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4180,
+      "event": {
+        "id": "evt_1554a07fd0013xCiik1oVnwkAJ",
+        "created": 1792432277501,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "assistantMessageID": "msg_15549fce0001mt7bJT3JshGE2g",
+          "id": "call_00_eg0rsm6fuxqao7xarv3brfja",
+          "name": "shell"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 21,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4188,
+      "event": {
+        "id": "evt_1554a0802001wVqVv2UId8mIMA",
+        "created": 1792432277506,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "assistantMessageID": "msg_15549fce0001mt7bJT3JshGE2g",
+          "ordinal": 0,
+          "text": "The user declined the tool call. Now the server restarted. I should continue from where I left off. But the tool call was declined — the user rejected it. Should I retry? The instruction says \"Continu…",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 22,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4188,
+      "event": {
+        "id": "evt_1554a0804001aJAENoARxKyCM0",
+        "created": 1792432277508,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "assistantMessageID": "msg_15549fce0001mt7bJT3JshGE2g",
+          "id": "call_00_eg0rsm6fuxqao7xarv3brfja",
+          "text": "{\"command\": \"ls -la\"}"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 23,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4188,
+      "event": {
+        "id": "evt_1554a08050012PSoy32hEvLfn5",
+        "created": 1792432277509,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "assistantMessageID": "msg_15549fce0001mt7bJT3JshGE2g",
+          "id": "call_00_eg0rsm6fuxqao7xarv3brfja",
+          "input": {
+            "command": "ls -la"
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 24,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4188,
+      "event": {
+        "id": "evt_1554a0807001mgKrv5QYXWMmQF",
+        "created": 1792432277511,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "assistantMessageID": "msg_15549fce0001mt7bJT3JshGE2g"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 25,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4211,
+      "event": {
+        "id": "evt_1554a081e0022es17kL8W7kDRA",
+        "created": 1792432277534,
+        "type": "permission.asked",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "per_1554a081e0017coOeWa27gH0ve",
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "action": "shell",
+          "resources": [
+            "ls -la"
+          ],
+          "save": [
+            "ls *"
+          ],
+          "source": {
+            "type": "tool",
+            "messageID": "msg_15549fce0001mt7bJT3JshGE2g",
+            "id": "call_00_eg0rsm6fuxqao7xarv3brfja"
+          }
+        }
+      }
+    },
+    {
+      "t": 4239,
+      "event": {
+        "id": "evt_1554a083a002GEF2GFNmA4NA7h",
+        "created": 1792432277562,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "assistantMessageID": "msg_15549fce9001KjGY3nY395sGkt",
+          "id": "call_00_ane5rg08ikoco6usv7bhl7ku",
+          "name": "shell"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "seq": 19,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4254,
+      "event": {
+        "id": "evt_1554a08420013z1A3L56senJ49",
+        "created": 1792432277570,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "assistantMessageID": "msg_15549fce9001KjGY3nY395sGkt",
+          "ordinal": 0,
+          "text": "The user asked to run exactly `mv api-once.txt moved.txt`. The tool call was declined. Now the server restarted. The \"continue from where you left off\" message is a system-ish instruction but the actu…",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "seq": 20,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4254,
+      "event": {
+        "id": "evt_1554a0843001A3Z410be1r5bGd",
+        "created": 1792432277571,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "assistantMessageID": "msg_15549fce9001KjGY3nY395sGkt",
+          "id": "call_00_ane5rg08ikoco6usv7bhl7ku",
+          "text": "{\"command\": \"mv api-once.txt moved.txt\"}"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "seq": 21,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4254,
+      "event": {
+        "id": "evt_1554a08440011OUa4vWHSZ0zlk",
+        "created": 1792432277572,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "assistantMessageID": "msg_15549fce9001KjGY3nY395sGkt",
+          "id": "call_00_ane5rg08ikoco6usv7bhl7ku",
+          "input": {
+            "command": "mv api-once.txt moved.txt"
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "seq": 22,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4254,
+      "event": {
+        "id": "evt_1554a0845001GknIe1RhNvCOzW",
+        "created": 1792432277573,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "assistantMessageID": "msg_15549fce9001KjGY3nY395sGkt"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "seq": 23,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4254,
+      "event": {
+        "id": "evt_1554a0849002M9GeGP7bjKeri6",
+        "created": 1792432277577,
+        "type": "permission.asked",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "per_1554a0849001acOrvHnEeOLvqa",
+          "sessionID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "action": "shell",
+          "resources": [
+            "mv api-once.txt moved.txt"
+          ],
+          "save": [
+            "mv *"
+          ],
+          "source": {
+            "type": "tool",
+            "messageID": "msg_15549fce9001KjGY3nY395sGkt",
+            "id": "call_00_ane5rg08ikoco6usv7bhl7ku"
+          }
+        }
+      }
+    },
+    {
+      "t": 4362,
+      "event": {
+        "id": "evt_1554a08b4001n11Keq7sKmDMzr",
+        "created": 1792432277684,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "assistantMessageID": "msg_15549fcf5001Kiei4XalzZuXM7",
+          "id": "call_00_g33gqgv7iniu39g49bhy9sci",
+          "name": "question"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 19,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4392,
+      "event": {
+        "id": "evt_1554a08cd001wmkpSY0EJCzw4O",
+        "created": 1792432277709,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "assistantMessageID": "msg_15549fcf5001Kiei4XalzZuXM7",
+          "ordinal": 0,
+          "text": "The question was dismissed/aborted due to restart. I should retry asking the question.",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 20,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4392,
+      "event": {
+        "id": "evt_1554a08ce001t3R18Kevck4BNU",
+        "created": 1792432277710,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "assistantMessageID": "msg_15549fcf5001Kiei4XalzZuXM7",
+          "id": "call_00_g33gqgv7iniu39g49bhy9sci",
+          "text": "{\"questions\": [{\"header\": \"Pick a number\", \"options\": [{\"description\": \"Pick number one\", \"label\": \"One\"}, {\"description\": \"Pick number two\", \"label\": \"Two\"}, {\"description\": \"Pick number three\", \"lab…"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 21,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4392,
+      "event": {
+        "id": "evt_1554a08cf001CVp9NTPMjRr7W5",
+        "created": 1792432277711,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "assistantMessageID": "msg_15549fcf5001Kiei4XalzZuXM7",
+          "id": "call_00_g33gqgv7iniu39g49bhy9sci",
+          "input": {
+            "questions": [
+              {
+                "header": "Pick a number",
+                "options": [
+                  {
+                    "description": "Pick number one",
+                    "label": "One"
+                  },
+                  {
+                    "description": "Pick number two",
+                    "label": "Two"
+                  },
+                  {
+                    "description": "Pick number three",
+                    "label": "Three"
+                  }
+                ],
+                "question": "Which number do you pick?"
+              }
+            ]
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 22,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4392,
+      "event": {
+        "id": "evt_1554a08d0001mi6Npn8Mot1mm9",
+        "created": 1792432277712,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "assistantMessageID": "msg_15549fcf5001Kiei4XalzZuXM7"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 23,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4392,
+      "event": {
+        "id": "evt_1554a08d3002eQ6xw1Ubmt6Kbl",
+        "created": 1792432277715,
+        "type": "form.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "form": {
+            "id": "frm_1554a08d3001xnqXtl9yhmcEtb",
+            "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+            "title": "Questions",
+            "metadata": {
+              "kind": "question",
+              "tool": {
+                "messageID": "msg_15549fcf5001Kiei4XalzZuXM7",
+                "id": "call_00_g33gqgv7iniu39g49bhy9sci"
+              }
+            },
+            "fields": [
+              {
+                "key": "q0",
+                "title": "Pick a number",
+                "description": "Which number do you pick?",
+                "type": "string",
+                "options": [
+                  {
+                    "value": "One",
+                    "label": "One",
+                    "description": "Pick number one"
+                  },
+                  {
+                    "value": "Two",
+                    "label": "Two",
+                    "description": "Pick number two"
+                  },
+                  {
+                    "value": "Three",
+                    "label": "Three",
+                    "description": "Pick number three"
+                  }
+                ],
+                "custom": true
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "t": 11916,
+      "event": {
+        "id": "evt_1554a2633001Z7ZdOV5H8ayxVc",
+        "created": 1792432285236,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_15549fcee001uqWIKkTunEgXtU",
+          "started": 1792432274676
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 17,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 11916,
+      "event": {
+        "id": "evt_1554a2636001hkrmcm3emPBNnV",
+        "created": 1792432285238,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "assistantMessageID": "msg_15549fcee001uqWIKkTunEgXtU",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 18,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 12404,
+      "event": {
+        "id": "evt_1554a2819001TyxsKl54DR0DjP",
+        "created": 1792432285721,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "assistantMessageID": "msg_15549fcee001uqWIKkTunEgXtU",
+          "id": "call_00_czgk13e92ptsd0av4072d926",
+          "name": "question"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 19,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 12478,
+      "event": {
+        "id": "evt_1554a285f001EMB4UmRzsQN4ci",
+        "created": 1792432285791,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "assistantMessageID": "msg_15549fcee001uqWIKkTunEgXtU",
+          "ordinal": 0,
+          "text": "The question was dismissed (aborted). The user asked me to ask the question and then reply with the pick. The question tool returned an abort — user dismissed. I should retry asking, since no answer w…",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 20,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 12478,
+      "event": {
+        "id": "evt_1554a2862001t6sX7pr0k1Vrae",
+        "created": 1792432285794,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "assistantMessageID": "msg_15549fcee001uqWIKkTunEgXtU",
+          "id": "call_00_czgk13e92ptsd0av4072d926",
+          "text": "{\"questions\": [{\"header\": \"Animal choice\", \"options\": [{\"description\": \"Pick the cat\", \"label\": \"Cat\"}, {\"description\": \"Pick the dog\", \"label\": \"Dog\"}, {\"description\": \"Pick the fox\", \"label\": \"Fox\"}…"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 21,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 12478,
+      "event": {
+        "id": "evt_1554a2864001EYGuPkNg4c8ZV2",
+        "created": 1792432285796,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "assistantMessageID": "msg_15549fcee001uqWIKkTunEgXtU",
+          "id": "call_00_czgk13e92ptsd0av4072d926",
+          "input": {
+            "questions": [
+              {
+                "header": "Animal choice",
+                "options": [
+                  {
+                    "description": "Pick the cat",
+                    "label": "Cat"
+                  },
+                  {
+                    "description": "Pick the dog",
+                    "label": "Dog"
+                  },
+                  {
+                    "description": "Pick the fox",
+                    "label": "Fox"
+                  }
+                ],
+                "question": "Which animal do you pick?"
+              }
+            ]
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 22,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 12478,
+      "event": {
+        "id": "evt_1554a2866001ITVidQFrecq6Dy",
+        "created": 1792432285798,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "assistantMessageID": "msg_15549fcee001uqWIKkTunEgXtU"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 23,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 12478,
+      "event": {
+        "id": "evt_1554a2869002ZZrkX5NB430Q1H",
+        "created": 1792432285801,
+        "type": "form.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "form": {
+            "id": "frm_1554a28690012KfD739KNs7DWz",
+            "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+            "title": "Questions",
+            "metadata": {
+              "kind": "question",
+              "tool": {
+                "messageID": "msg_15549fcee001uqWIKkTunEgXtU",
+                "id": "call_00_czgk13e92ptsd0av4072d926"
+              }
+            },
+            "fields": [
+              {
+                "key": "q0",
+                "title": "Animal choice",
+                "description": "Which animal do you pick?",
+                "type": "string",
+                "options": [
+                  {
+                    "value": "Cat",
+                    "label": "Cat",
+                    "description": "Pick the cat"
+                  },
+                  {
+                    "value": "Dog",
+                    "label": "Dog",
+                    "description": "Pick the dog"
+                  },
+                  {
+                    "value": "Fox",
+                    "label": "Fox",
+                    "description": "Pick the fox"
+                  }
+                ],
+                "custom": true
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "t": 66137,
+      "event": {
+        "id": "evt_1554af9fc001FM6RAaQCjw8Gac",
+        "created": 1792432339452,
+        "type": "session.tool.failed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "assistantMessageID": "msg_15549fce0001mt7bJT3JshGE2g",
+          "id": "call_00_eg0rsm6fuxqao7xarv3brfja",
+          "error": {
+            "type": "aborted",
+            "message": "Tool execution interrupted"
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 26,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 66137,
+      "event": {
+        "id": "evt_1554af9ff001yma4tPOmM74lKX",
+        "created": 1792432339455,
+        "type": "session.step.failed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "assistantMessageID": "msg_15549fce0001mt7bJT3JshGE2g",
+          "error": {
+            "type": "aborted",
+            "message": "Step interrupted"
+          },
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 132,
+            "output": 39,
+            "reasoning": 112,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 27,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 66137,
+      "event": {
+        "id": "evt_1554afa01001B49hFLwr7LO0mw",
+        "created": 1792432339457,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "cost": 0,
+          "tokens": {
+            "input": 3658,
+            "output": 87,
+            "reasoning": 260,
+            "cache": {
+              "read": 7552,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 66138,
+      "event": {
+        "id": "evt_1554afa02001wU2Ymo8lKwAliQ",
+        "created": 1792432339458,
+        "type": "session.execution.interrupted",
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "reason": "user"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 28,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 66138,
+      "event": {
+        "id": "evt_1554afa05001n6isvtYFAUS56J",
+        "created": 1792432339461,
+        "type": "project.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "canonical": "/private/tmp/oc2-spike/projects/scen",
+          "time": {
+            "created": 1792431240537,
+            "updated": 1792431240537,
+            "active": 1792432339460
+          },
+          "sandboxes": []
+        }
+      }
+    },
+    {
+      "t": 66180,
+      "event": {
+        "id": "evt_1554afa2c001SoUQXBG79GPBnO",
+        "created": 1792432339500,
+        "type": "session.tool.failed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "assistantMessageID": "msg_15549fce9001KjGY3nY395sGkt",
+          "id": "call_00_ane5rg08ikoco6usv7bhl7ku",
+          "error": {
+            "type": "aborted",
+            "message": "Tool execution interrupted"
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "seq": 24,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 66180,
+      "event": {
+        "id": "evt_1554afa2d001HQxq7ieWcPGkW4",
+        "created": 1792432339501,
+        "type": "session.step.failed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "assistantMessageID": "msg_15549fce9001KjGY3nY395sGkt",
+          "error": {
+            "type": "aborted",
+            "message": "Step interrupted"
+          },
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 121,
+            "output": 43,
+            "reasoning": 250,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "seq": 25,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 66180,
+      "event": {
+        "id": "evt_1554afa2e001QgoFN49WKKZ3o3",
+        "created": 1792432339502,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "cost": 0,
+          "tokens": {
+            "input": 195,
+            "output": 96,
+            "reasoning": 288,
+            "cache": {
+              "read": 11008,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 66180,
+      "event": {
+        "id": "evt_1554afa2e002wzPWehMcm5odwt",
+        "created": 1792432339502,
+        "type": "session.execution.interrupted",
+        "data": {
+          "sessionID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "reason": "user"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac0c97effepaWWHLEWyIodfY",
+          "seq": 26,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 66221,
+      "event": {
+        "id": "evt_1554afa540010Jigrq1gUOKPOP",
+        "created": 1792432339540,
+        "type": "form.cancelled",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "frm_1554a28690012KfD739KNs7DWz",
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l"
+        }
+      }
+    },
+    {
+      "t": 66221,
+      "event": {
+        "id": "evt_1554afa550014Vs9qK5OI962CZ",
+        "created": 1792432339541,
+        "type": "session.tool.failed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "assistantMessageID": "msg_15549fcee001uqWIKkTunEgXtU",
+          "id": "call_00_czgk13e92ptsd0av4072d926",
+          "error": {
+            "type": "aborted",
+            "message": "Tool execution interrupted"
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 24,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 66221,
+      "event": {
+        "id": "evt_1554afa560015JPGLzrAQAEoyV",
+        "created": 1792432339542,
+        "type": "session.step.failed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "assistantMessageID": "msg_15549fcee001uqWIKkTunEgXtU",
+          "error": {
+            "type": "aborted",
+            "message": "Step interrupted"
+          },
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 193,
+            "output": 102,
+            "reasoning": 76,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 25,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 66221,
+      "event": {
+        "id": "evt_1554afa57001VkMBb6ynLyW266",
+        "created": 1792432339543,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "cost": 0,
+          "tokens": {
+            "input": 295,
+            "output": 210,
+            "reasoning": 215,
+            "cache": {
+              "read": 11008,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 66221,
+      "event": {
+        "id": "evt_1554afa58001lzcrfLbytb6emj",
+        "created": 1792432339544,
+        "type": "session.execution.interrupted",
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "reason": "user"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 26,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 66263,
+      "event": {
+        "id": "evt_1554afa7f001BTf9RFQIUhf7Zz",
+        "created": 1792432339583,
+        "type": "form.cancelled",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "frm_1554a08d3001xnqXtl9yhmcEtb",
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN"
+        }
+      }
+    },
+    {
+      "t": 66263,
+      "event": {
+        "id": "evt_1554afa7f002kw0gRztDCh3fuk",
+        "created": 1792432339583,
+        "type": "session.tool.failed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "assistantMessageID": "msg_15549fcf5001Kiei4XalzZuXM7",
+          "id": "call_00_g33gqgv7iniu39g49bhy9sci",
+          "error": {
+            "type": "aborted",
+            "message": "Tool execution interrupted"
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 24,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 66263,
+      "event": {
+        "id": "evt_1554afa800014sDMFyCMq3u7Ms",
+        "created": 1792432339584,
+        "type": "session.step.failed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "assistantMessageID": "msg_15549fcf5001Kiei4XalzZuXM7",
+          "error": {
+            "type": "aborted",
+            "message": "Step interrupted"
+          },
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 194,
+            "output": 103,
+            "reasoning": 19,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 25,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 66263,
+      "event": {
+        "id": "evt_1554afa81001H67R9GsSyBRYpR",
+        "created": 1792432339585,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "cost": 0,
+          "tokens": {
+            "input": 296,
+            "output": 215,
+            "reasoning": 198,
+            "cache": {
+              "read": 11008,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 66263,
+      "event": {
+        "id": "evt_1554afa82001q5vnpgwI2i0Ury",
+        "created": 1792432339586,
+        "type": "session.execution.interrupted",
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "reason": "user"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 26,
+          "version": 1
+        }
+      }
+    }
+  ],
+  "omitted": {
+    "repeatedDeltaFrames": {
+      "session.reasoning.delta": 19
+    }
+  },
+  "http": [
+    {
+      "t": 38491,
+      "method": "GET",
+      "path": "/api/session/active",
+      "status": 200,
+      "response": {
+        "data": {
+          "ses_eaac25063ffeHZk9s9EjId37ur": {
+            "type": "running"
+          },
+          "ses_eaac0c97effepaWWHLEWyIodfY": {
+            "type": "running"
+          },
+          "ses_eaabda43ffferVuefVIwYoG51l": {
+            "type": "running"
+          },
+          "ses_eaabc781fffeY75DO92M4bk0tN": {
+            "type": "running"
+          }
+        }
+      }
+    },
+    {
+      "t": 66124,
+      "method": "POST",
+      "path": "/api/session/ses_eaac25063ffeHZk9s9EjId37ur/interrupt",
+      "status": 200
+    },
+    {
+      "t": 66174,
+      "method": "POST",
+      "path": "/api/session/ses_eaac0c97effepaWWHLEWyIodfY/interrupt",
+      "status": 200
+    },
+    {
+      "t": 66214,
+      "method": "POST",
+      "path": "/api/session/ses_eaabda43ffferVuefVIwYoG51l/interrupt",
+      "status": 200
+    },
+    {
+      "t": 66257,
+      "method": "POST",
+      "path": "/api/session/ses_eaabc781fffeY75DO92M4bk0tN/interrupt",
+      "status": 200
+    },
+    {
+      "t": 68337,
+      "method": "GET",
+      "path": "/api/session/active",
+      "status": 200,
+      "response": {
+        "data": {}
+      }
+    }
+  ],
+  "marks": [
+    {
+      "t": 791,
+      "mark": "service restart returned"
+    }
+  ]
+}

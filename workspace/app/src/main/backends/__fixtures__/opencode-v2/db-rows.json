@@ -1,0 +1,1191 @@
+{
+  "opencodeVersion": "2.0.32",
+  "source": "T-601 scratch DB (/tmp/oc2-spike), read-only",
+  "notes": "Rows as stored. `data` (session_message) and the JSON columns of session_v2 (model, permission, metadata, summary_diffs, revert, fork_boundary) are parsed here; JSON.stringify them on insert. Directories are the physical /private/tmp/... form the TUI reports.",
+  "ddl": {
+    "session_message": "CREATE TABLE `session_message` (\n          `id` text PRIMARY KEY,\n          `session_id` text NOT NULL,\n          `type` text NOT NULL,\n          `seq` integer NOT NULL,\n          `time_created` integer NOT NULL,\n          `time_updated` integer NOT NULL,\n          `data` text NOT NULL,\n          CONSTRAINT `fk_session_message_session_id_session_v2_id_fk` FOREIGN KEY (`session_id`) REFERENCES `session_v2`(`id`) ON DELETE CASCADE\n        )",
+    "session_v2": "CREATE TABLE `session_v2` (\n          `id` text PRIMARY KEY,\n          `project_id` text NOT NULL,\n          `workspace_id` text,\n          `parent_id` text,\n          `fork_session_id` text,\n          `fork_boundary` text,\n          `slug` text NOT NULL,\n          `directory` text NOT NULL,\n          `path` text,\n          `title` text,\n          `version` text NOT NULL,\n          `share_url` text,\n          `summary_additions` integer,\n          `summary_deletions` integer,\n          `summary_files` integer,\n          `summary_diffs` text,\n          `metadata` text,\n          `cost` real DEFAULT 0 NOT NULL,\n          `tokens_input` integer DEFAULT 0 NOT NULL,\n          `tokens_output` integer DEFAULT 0 NOT NULL,\n          `tokens_reasoning` integer DEFAULT 0 NOT NULL,\n          `tokens_cache_read` integer DEFAULT 0 NOT NULL,\n          `tokens_cache_write` integer DEFAULT 0 NOT NULL,\n          `revert` text,\n          `permission` text,\n          `agent` text,\n          `model` text,\n          `time_created` integer NOT NULL,\n          `time_updated` integer NOT NULL,\n          `time_idle` integer,\n          `time_viewed` integer,\n          `idle_outcome` text,\n          `time_compacting` integer,\n          `time_archived` integer,\n          `time_suspended` integer,\n          `resume_attempts` integer DEFAULT 0 NOT NULL,\n          CONSTRAINT `fk_session_v2_project_id_project_id_fk` FOREIGN KEY (`project_id`) REFERENCES `project`(`id`) ON DELETE CASCADE\n        )",
+    "session_message_session_seq_idx": "CREATE UNIQUE INDEX `session_message_session_seq_idx` ON `session_message` (`session_id`,`seq`)",
+    "session_message_session_time_created_id_idx": "CREATE INDEX `session_message_session_time_created_id_idx` ON `session_message` (`session_id`,`time_created`,`id`)",
+    "session_message_session_type_seq_idx": "CREATE INDEX `session_message_session_type_seq_idx` ON `session_message` (`session_id`,`type`,`seq`)",
+    "session_message_time_created_idx": "CREATE INDEX `session_message_time_created_idx` ON `session_message` (`time_created`)",
+    "session_v2_parent_idx": "CREATE INDEX `session_v2_parent_idx` ON `session_v2` (`parent_id`)",
+    "session_v2_project_idx": "CREATE INDEX `session_v2_project_idx` ON `session_v2` (`project_id`)",
+    "session_v2_time_suspended_idx": "CREATE INDEX `session_v2_time_suspended_idx` ON `session_v2` (`time_suspended`) WHERE \"session_v2\".\"time_suspended\" is not null",
+    "session_v2_workspace_idx": "CREATE INDEX `session_v2_workspace_idx` ON `session_v2` (`workspace_id`)"
+  },
+  "trees": {
+    "subagent-permission (root + child, shell asked in the child, subagent tool in the root)": [
+      "ses_eaabb698cffeEDUgeksY5LDH40",
+      "ses_eaabb5cbbffeN3yPU2VkSyVIdK"
+    ],
+    "service-restart (shell sleep cut by a restart, synthetic restart notice, resumed, idle succeeded)": [
+      "ses_eaab49affffeiBK1cNpR5BBiNs"
+    ],
+    "permission-reject (declined tool, interrupted; resumed after a restart, asked again, interrupted by user)": [
+      "ses_eaac25063ffeHZk9s9EjId37ur"
+    ],
+    "question-two (question tool, two fields answered)": [
+      "ses_eaabe1d88ffetkPqn39VQqATA6"
+    ]
+  },
+  "session_v2": [
+    {
+      "id": "ses_eaabb698cffeEDUgeksY5LDH40",
+      "project_id": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+      "workspace_id": null,
+      "parent_id": null,
+      "fork_session_id": null,
+      "fork_boundary": null,
+      "slug": "happy-sailor",
+      "directory": "/private/tmp/oc2-spike/projects/scen",
+      "path": "",
+      "title": "Subagent to run touch sub-once.txt",
+      "version": "2.0.32",
+      "share_url": null,
+      "summary_additions": null,
+      "summary_deletions": null,
+      "summary_files": null,
+      "summary_diffs": null,
+      "metadata": null,
+      "cost": 0.0,
+      "tokens_input": 443,
+      "tokens_output": 237,
+      "tokens_reasoning": 111,
+      "tokens_cache_read": 11008,
+      "tokens_cache_write": 0,
+      "revert": null,
+      "permission": null,
+      "agent": "build",
+      "model": {
+        "id": "deepseek-v4.1-flash-free",
+        "providerID": "opencode"
+      },
+      "time_created": 1792431920759,
+      "time_updated": 1792431946815,
+      "time_idle": 1792431946817,
+      "time_viewed": 1792431946817,
+      "idle_outcome": "succeeded",
+      "time_compacting": null,
+      "time_archived": null,
+      "time_suspended": null,
+      "resume_attempts": 0
+    },
+    {
+      "id": "ses_eaabb5cbbffeN3yPU2VkSyVIdK",
+      "project_id": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+      "workspace_id": null,
+      "parent_id": "ses_eaabb698cffeEDUgeksY5LDH40",
+      "fork_session_id": null,
+      "fork_boundary": null,
+      "slug": "silent-pixel",
+      "directory": "/private/tmp/oc2-spike/projects/scen",
+      "path": "",
+      "title": "Run touch sub-once.txt",
+      "version": "2.0.32",
+      "share_url": null,
+      "summary_additions": null,
+      "summary_deletions": null,
+      "summary_files": null,
+      "summary_diffs": null,
+      "metadata": null,
+      "cost": 0.0,
+      "tokens_input": 1774,
+      "tokens_output": 163,
+      "tokens_reasoning": 123,
+      "tokens_cache_read": 11776,
+      "tokens_cache_write": 0,
+      "revert": null,
+      "permission": null,
+      "agent": "general",
+      "model": {
+        "id": "deepseek-v4.1-flash-free",
+        "providerID": "opencode",
+        "variant": "default"
+      },
+      "time_created": 1792431924037,
+      "time_updated": 1792431943393,
+      "time_idle": 1792431943395,
+      "time_viewed": null,
+      "idle_outcome": "succeeded",
+      "time_compacting": null,
+      "time_archived": null,
+      "time_suspended": null,
+      "resume_attempts": 0
+    },
+    {
+      "id": "ses_eaab49affffeiBK1cNpR5BBiNs",
+      "project_id": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+      "workspace_id": null,
+      "parent_id": null,
+      "fork_session_id": null,
+      "fork_boundary": null,
+      "slug": "neon-sailor",
+      "directory": "/private/tmp/oc2-spike/projects/scen",
+      "path": "",
+      "title": "Sleep 30 command execution",
+      "version": "2.0.32",
+      "share_url": null,
+      "summary_additions": null,
+      "summary_deletions": null,
+      "summary_files": null,
+      "summary_diffs": null,
+      "metadata": null,
+      "cost": 0.0,
+      "tokens_input": 354,
+      "tokens_output": 123,
+      "tokens_reasoning": 125,
+      "tokens_cache_read": 16384,
+      "tokens_cache_write": 0,
+      "revert": null,
+      "permission": null,
+      "agent": "build",
+      "model": {
+        "id": "deepseek-v4.1-flash-free",
+        "providerID": "opencode"
+      },
+      "time_created": 1792432366854,
+      "time_updated": 1792432414851,
+      "time_idle": 1792432414854,
+      "time_viewed": 1792432414854,
+      "idle_outcome": "succeeded",
+      "time_compacting": null,
+      "time_archived": null,
+      "time_suspended": null,
+      "resume_attempts": 0
+    },
+    {
+      "id": "ses_eaac25063ffeHZk9s9EjId37ur",
+      "project_id": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+      "workspace_id": null,
+      "parent_id": null,
+      "fork_session_id": null,
+      "fork_boundary": null,
+      "slug": "misty-sailor",
+      "directory": "/private/tmp/oc2-spike/projects/scen",
+      "path": "",
+      "title": "Running mkdir reject-dir command",
+      "version": "2.0.32",
+      "share_url": null,
+      "summary_additions": null,
+      "summary_deletions": null,
+      "summary_files": null,
+      "summary_diffs": null,
+      "metadata": null,
+      "cost": 0.0,
+      "tokens_input": 3658,
+      "tokens_output": 87,
+      "tokens_reasoning": 260,
+      "tokens_cache_read": 7552,
+      "tokens_cache_write": 0,
+      "revert": null,
+      "permission": null,
+      "agent": "build",
+      "model": {
+        "id": "deepseek-v4.1-flash-free",
+        "providerID": "opencode"
+      },
+      "time_created": 1792431468449,
+      "time_updated": 1792432339455,
+      "time_idle": 1792432339458,
+      "time_viewed": null,
+      "idle_outcome": "interrupted",
+      "time_compacting": null,
+      "time_archived": null,
+      "time_suspended": null,
+      "resume_attempts": 0
+    },
+    {
+      "id": "ses_eaabe1d88ffetkPqn39VQqATA6",
+      "project_id": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+      "workspace_id": null,
+      "parent_id": null,
+      "fork_session_id": null,
+      "fork_boundary": null,
+      "slug": "hidden-otter",
+      "directory": "/private/tmp/oc2-spike/projects/scen",
+      "path": "",
+      "title": "Drink and size selection questions",
+      "version": "2.0.32",
+      "share_url": null,
+      "summary_additions": null,
+      "summary_deletions": null,
+      "summary_files": null,
+      "summary_diffs": null,
+      "metadata": null,
+      "cost": 0.0,
+      "tokens_input": 368,
+      "tokens_output": 176,
+      "tokens_reasoning": 308,
+      "tokens_cache_read": 11008,
+      "tokens_cache_write": 0,
+      "revert": null,
+      "permission": null,
+      "agent": "build",
+      "model": {
+        "id": "deepseek-v4.1-flash-free",
+        "providerID": "opencode"
+      },
+      "time_created": 1792431743611,
+      "time_updated": 1792431761958,
+      "time_idle": 1792431761959,
+      "time_viewed": 1792431761959,
+      "idle_outcome": "succeeded",
+      "time_compacting": null,
+      "time_archived": null,
+      "time_suspended": null,
+      "resume_attempts": 0
+    }
+  ],
+  "session_message": [
+    {
+      "id": "msg_155449675001tO3OJCdVNUrJkj",
+      "session_id": "ses_eaabb698cffeEDUgeksY5LDH40",
+      "type": "user",
+      "seq": 4,
+      "time_created": 1792431920784,
+      "time_updated": 1792431920784,
+      "data": {
+        "time": {
+          "created": 1792431920784
+        },
+        "text": "Use your subagent tool to start one general subagent. Its task: use the shell tool to run exactly this command: touch sub-once.txt, then report back. Do not run the command yourself.",
+        "files": [],
+        "agents": []
+      }
+    },
+    {
+      "id": "msg_155449699001Ip5I6nRekgWWZP",
+      "session_id": "ses_eaabb698cffeEDUgeksY5LDH40",
+      "type": "assistant",
+      "seq": 5,
+      "time_created": 1792431920797,
+      "time_updated": 1792431943400,
+      "data": {
+        "time": {
+          "created": 1792431920797,
+          "streamed": 1792431924031,
+          "completed": 1792431943400
+        },
+        "agent": "build",
+        "model": {
+          "id": "deepseek-v4.1-flash-free",
+          "providerID": "opencode",
+          "variant": "default"
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "I'll start one general subagent for that task, without running the command myself."
+          },
+          {
+            "type": "tool",
+            "id": "call_00_rnre8c28g41o0ycqyrxpn2us",
+            "name": "subagent",
+            "executed": false,
+            "state": {
+              "status": "completed",
+              "input": {
+                "agent": "general",
+                "description": "Run touch sub-once.txt",
+                "prompt": "Use the shell tool to run exactly this command:\n\ntouch sub-once.txt\n\nRun it exactly once, verbatim, in the current working directory. Do not modify the command or run it more than once. Then report ba…"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<subagent sessionID=\"ses_eaabb5cbbffeN3yPU2VkSyVIdK\" state=\"completed\">\nConfirmed.\n\n- **Command run:** `touch sub-once.txt` — exactly once, verbatim.\n- **Result:** Succeeded (exit 0, no output).\n- **F…"
+                }
+              ],
+              "metadata": {
+                "sessionID": "ses_eaabb5cbbffeN3yPU2VkSyVIdK",
+                "status": "completed",
+                "truncated": false
+              }
+            },
+            "time": {
+              "created": 1792431923848,
+              "ran": 1792431924028,
+              "completed": 1792431943398
+            }
+          }
+        ],
+        "finish": "tool-calls",
+        "rawFinish": "tool_calls",
+        "cost": 0,
+        "tokens": {
+          "input": 50,
+          "output": 147,
+          "reasoning": 0,
+          "cache": {
+            "read": 5248,
+            "write": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "msg_15544eeef00133tKgA7IE7l2ub",
+      "session_id": "ses_eaabb698cffeEDUgeksY5LDH40",
+      "type": "assistant",
+      "seq": 16,
+      "time_created": 1792431943414,
+      "time_updated": 1792431946816,
+      "data": {
+        "time": {
+          "created": 1792431943414,
+          "streamed": 1792431946814,
+          "completed": 1792431946815
+        },
+        "agent": "build",
+        "model": {
+          "id": "deepseek-v4.1-flash-free",
+          "providerID": "opencode",
+          "variant": "default"
+        },
+        "content": [
+          {
+            "type": "reasoning",
+            "text": "The subagent reported success. I should just report back. Possibly verify? The user said don't run the command myself. Verifying with ls isn't the command, but simplest to just report. I could verify …",
+            "state": {
+              "reasoningField": "reasoning_content"
+            },
+            "time": {
+              "created": 1792431946241,
+              "completed": 1792431946810
+            }
+          },
+          {
+            "type": "text",
+            "text": "The subagent completed the task.\n\n- **Command run:** `touch sub-once.txt` (exactly once, verbatim, by the subagent)\n- **Result:** Exit code 0, no output\n- **File created:** `/private/tmp/oc2-spike/pro…"
+          }
+        ],
+        "finish": "stop",
+        "rawFinish": "stop",
+        "cost": 0,
+        "tokens": {
+          "input": 319,
+          "output": 80,
+          "reasoning": 66,
+          "cache": {
+            "read": 5248,
+            "write": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "msg_15544fc41002ayi5XZrBbGNrZD",
+      "session_id": "ses_eaabb698cffeEDUgeksY5LDH40",
+      "type": "idle",
+      "seq": 23,
+      "time_created": 1792431946817,
+      "time_updated": 1792431946817,
+      "data": {
+        "time": {
+          "created": 1792431946817
+        },
+        "outcome": "succeeded"
+      }
+    },
+    {
+      "id": "msg_15544a347002bQ2h2xhF3rp1kM",
+      "session_id": "ses_eaabb5cbbffeN3yPU2VkSyVIdK",
+      "type": "user",
+      "seq": 4,
+      "time_created": 1792431924044,
+      "time_updated": 1792431924045,
+      "data": {
+        "time": {
+          "created": 1792431924044
+        },
+        "text": "You are a subagent spawned by another session.\nUse the shell tool to run exactly this command:\n\ntouch sub-once.txt\n\nRun it exactly once, verbatim, in the current working directory. Do not modify the c…"
+      }
+    },
+    {
+      "id": "msg_15544a34f001QWClluGSFdpP1D",
+      "session_id": "ses_eaabb5cbbffeN3yPU2VkSyVIdK",
+      "type": "assistant",
+      "seq": 5,
+      "time_created": 1792431924052,
+      "time_updated": 1792431926463,
+      "data": {
+        "time": {
+          "created": 1792431924052,
+          "streamed": 1792431926444,
+          "completed": 1792431926462
+        },
+        "agent": "general",
+        "model": {
+          "id": "deepseek-v4.1-flash-free",
+          "providerID": "opencode",
+          "variant": "default"
+        },
+        "content": [
+          {
+            "type": "reasoning",
+            "text": "The user is asking me to run a simple command. This is straightforward and benign. Let me run it once, verbatim, in the current working directory. The tool description says prefer dedicated tools, but…",
+            "state": {
+              "reasoningField": "reasoning_content"
+            },
+            "time": {
+              "created": 1792431925900,
+              "completed": 1792431926438
+            }
+          },
+          {
+            "type": "tool",
+            "id": "call_00_4l3nagu2t0jdao4k76r77e6d",
+            "name": "shell",
+            "executed": false,
+            "state": {
+              "status": "completed",
+              "input": {
+                "command": "touch sub-once.txt"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "(no output)"
+                }
+              ],
+              "metadata": {
+                "status": "completed",
+                "truncated": false,
+                "exit": 0
+              }
+            },
+            "time": {
+              "created": 1792431926416,
+              "ran": 1792431926442,
+              "completed": 1792431926460
+            }
+          }
+        ],
+        "finish": "tool-calls",
+        "rawFinish": "tool_calls",
+        "cost": 0,
+        "tokens": {
+          "input": 1434,
+          "output": 41,
+          "reasoning": 101,
+          "cache": {
+            "read": 2944,
+            "write": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "msg_15544acc5001ayYha7hEQRbaZJ",
+      "session_id": "ses_eaabb5cbbffeN3yPU2VkSyVIdK",
+      "type": "assistant",
+      "seq": 14,
+      "time_created": 1792431926474,
+      "time_updated": 1792431941768,
+      "data": {
+        "time": {
+          "created": 1792431926474,
+          "streamed": 1792431929230,
+          "completed": 1792431941767
+        },
+        "agent": "general",
+        "model": {
+          "id": "deepseek-v4.1-flash-free",
+          "providerID": "opencode",
+          "variant": "default"
+        },
+        "content": [
+          {
+            "type": "reasoning",
+            "text": "The command succeeded (no output, exit 0). Let me confirm the file location by checking it exists.",
+            "state": {
+              "reasoningField": "reasoning_content"
+            },
+            "time": {
+              "created": 1792431928933,
+              "completed": 1792431929218
+            }
+          },
+          {
+            "type": "tool",
+            "id": "call_00_t8v3oh23g634kdprn36uxlfk",
+            "name": "shell",
+            "executed": false,
+            "state": {
+              "status": "completed",
+              "input": {
+                "command": "ls -la sub-once.txt"
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "-rw-r--r--@ 1 jasenpan  wheel  0 Oct 20 04:45 sub-once.txt\n"
+                }
+              ],
+              "metadata": {
+                "status": "completed",
+                "truncated": false,
+                "exit": 0
+              }
+            },
+            "time": {
+              "created": 1792431929068,
+              "ran": 1792431929228,
+              "completed": 1792431941766
+            }
+          }
+        ],
+        "finish": "tool-calls",
+        "rawFinish": "tool_calls",
+        "cost": 0,
+        "tokens": {
+          "input": 182,
+          "output": 43,
+          "reasoning": 22,
+          "cache": {
+            "read": 4352,
+            "write": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "msg_15544e88b0012RxdSViPtQGXxM",
+      "session_id": "ses_eaabb5cbbffeN3yPU2VkSyVIdK",
+      "type": "assistant",
+      "seq": 23,
+      "time_created": 1792431941775,
+      "time_updated": 1792431943393,
+      "data": {
+        "time": {
+          "created": 1792431941775,
+          "streamed": 1792431943390,
+          "completed": 1792431943393
+        },
+        "agent": "general",
+        "model": {
+          "id": "deepseek-v4.1-flash-free",
+          "providerID": "opencode",
+          "variant": "default"
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Confirmed.\n\n- **Command run:** `touch sub-once.txt` — exactly once, verbatim.\n- **Result:** Succeeded (exit 0, no output).\n- **File created:** `/private/tmp/oc2-spike/projects/scen/sub-once.txt` (0 by…"
+          }
+        ],
+        "finish": "stop",
+        "rawFinish": "stop",
+        "cost": 0,
+        "tokens": {
+          "input": 158,
+          "output": 79,
+          "reasoning": 0,
+          "cache": {
+            "read": 4480,
+            "write": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "msg_15544eee3001d1B5xwzi3voDwy",
+      "session_id": "ses_eaabb5cbbffeN3yPU2VkSyVIdK",
+      "type": "idle",
+      "seq": 28,
+      "time_created": 1792431943395,
+      "time_updated": 1792431943396,
+      "data": {
+        "time": {
+          "created": 1792431943395
+        },
+        "outcome": "succeeded"
+      }
+    },
+    {
+      "id": "msg_1554b6502001NfiFEb3k0IvG0f",
+      "session_id": "ses_eaab49affffeiBK1cNpR5BBiNs",
+      "type": "user",
+      "seq": 4,
+      "time_created": 1792432366877,
+      "time_updated": 1792432366877,
+      "data": {
+        "time": {
+          "created": 1792432366877
+        },
+        "text": "Use your shell tool to run exactly this command: sleep 30 . When it finishes, reply with the word: awake",
+        "files": [],
+        "agents": []
+      }
+    },
+    {
+      "id": "msg_1554b6522001m6n78V6iXQlizX",
+      "session_id": "ses_eaab49affffeiBK1cNpR5BBiNs",
+      "type": "assistant",
+      "seq": 5,
+      "time_created": 1792432366885,
+      "time_updated": 1792432371715,
+      "data": {
+        "time": {
+          "created": 1792432366885,
+          "streamed": 1792432368416,
+          "completed": 1792432371714
+        },
+        "agent": "build",
+        "model": {
+          "id": "deepseek-v4.1-flash-free",
+          "providerID": "opencode",
+          "variant": "default"
+        },
+        "content": [
+          {
+            "type": "tool",
+            "id": "call_00_uvkeof2rz5qt0301voqpk9p9",
+            "name": "shell",
+            "executed": false,
+            "state": {
+              "status": "error",
+              "input": {
+                "command": "sleep 30",
+                "timeout": 60000
+              },
+              "error": {
+                "type": "aborted",
+                "message": "Tool execution interrupted"
+              },
+              "metadata": {
+                "shellID": "sh_1554b6b26001c0gTng2UeSR02s"
+              }
+            },
+            "time": {
+              "created": 1792432368406,
+              "ran": 1792432368415,
+              "completed": 1792432371713
+            }
+          }
+        ],
+        "finish": "error",
+        "rawFinish": "tool_calls",
+        "cost": 0,
+        "tokens": {
+          "input": 32,
+          "output": 57,
+          "reasoning": 0,
+          "cache": {
+            "read": 5248,
+            "write": 0
+          }
+        },
+        "error": {
+          "type": "aborted",
+          "message": "Step interrupted"
+        }
+      }
+    },
+    {
+      "id": "msg_1554b78940014xDNqEIggK3d6R",
+      "session_id": "ses_eaab49affffeiBK1cNpR5BBiNs",
+      "type": "synthetic",
+      "seq": 15,
+      "time_created": 1792432371860,
+      "time_updated": 1792432371862,
+      "data": {
+        "metadata": {
+          "notice": "restart"
+        },
+        "time": {
+          "created": 1792432371860
+        },
+        "text": "The server restarted while you were working. Continue from where you left off without repeating completed work.",
+        "description": "Continuing after restart"
+      }
+    },
+    {
+      "id": "msg_1554b79d3001gbNl6hd5vKQrYD",
+      "session_id": "ses_eaab49affffeiBK1cNpR5BBiNs",
+      "type": "assistant",
+      "seq": 17,
+      "time_created": 1792432372184,
+      "time_updated": 1792432405044,
+      "data": {
+        "time": {
+          "created": 1792432372184,
+          "streamed": 1792432375002,
+          "completed": 1792432405043
+        },
+        "agent": "build",
+        "model": {
+          "id": "deepseek-v4.1-flash-free",
+          "providerID": "opencode",
+          "variant": "default"
+        },
+        "content": [
+          {
+            "type": "reasoning",
+            "text": "The sleep command was interrupted by the server restart. I should re-run it since it didn't complete. The user asked to run exactly `sleep 30` and then reply \"awake\". Let me rerun it.",
+            "state": {
+              "reasoningField": "reasoning_content"
+            },
+            "time": {
+              "created": 1792432374752,
+              "completed": 1792432374995
+            }
+          },
+          {
+            "type": "tool",
+            "id": "call_00_gtbum4cdevzs9lcyabe3so7h",
+            "name": "shell",
+            "executed": false,
+            "state": {
+              "status": "completed",
+              "input": {
+                "command": "sleep 30",
+                "timeout": 60000
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "(no output)"
+                }
+              ],
+              "metadata": {
+                "status": "completed",
+                "truncated": false,
+                "exit": 0
+              }
+            },
+            "time": {
+              "created": 1792432374985,
+              "ran": 1792432375000,
+              "completed": 1792432405040
+            }
+          }
+        ],
+        "finish": "tool-calls",
+        "rawFinish": "tool_calls",
+        "cost": 0,
+        "tokens": {
+          "input": 139,
+          "output": 57,
+          "reasoning": 45,
+          "cache": {
+            "read": 5248,
+            "write": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "msg_1554bfa3c001SYM7T5SHmL13LC",
+      "session_id": "ses_eaab49affffeiBK1cNpR5BBiNs",
+      "type": "assistant",
+      "seq": 26,
+      "time_created": 1792432405057,
+      "time_updated": 1792432414852,
+      "data": {
+        "time": {
+          "created": 1792432405057,
+          "streamed": 1792432414849,
+          "completed": 1792432414851
+        },
+        "agent": "build",
+        "model": {
+          "id": "deepseek-v4.1-flash-free",
+          "providerID": "opencode",
+          "variant": "default"
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "awake"
+          }
+        ],
+        "finish": "stop",
+        "rawFinish": "stop",
+        "cost": 0,
+        "tokens": {
+          "input": 127,
+          "output": 3,
+          "reasoning": 0,
+          "cache": {
+            "read": 5376,
+            "write": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "msg_1554c2086001pYDn2s5f7z031w",
+      "session_id": "ses_eaab49affffeiBK1cNpR5BBiNs",
+      "type": "idle",
+      "seq": 31,
+      "time_created": 1792432414854,
+      "time_updated": 1792432414855,
+      "data": {
+        "time": {
+          "created": 1792432414854
+        },
+        "outcome": "succeeded"
+      }
+    },
+    {
+      "id": "msg_1553daf9e001gJoUpOc68lueES",
+      "session_id": "ses_eaac25063ffeHZk9s9EjId37ur",
+      "type": "user",
+      "seq": 4,
+      "time_created": 1792431468471,
+      "time_updated": 1792431468471,
+      "data": {
+        "time": {
+          "created": 1792431468471
+        },
+        "text": "Use your shell tool to run exactly this command: mkdir reject-dir",
+        "files": [],
+        "agents": []
+      }
+    },
+    {
+      "id": "msg_1553dafbc001wPcpBzaBAy1YAo",
+      "session_id": "ses_eaac25063ffeHZk9s9EjId37ur",
+      "type": "assistant",
+      "seq": 5,
+      "time_created": 1792431468480,
+      "time_updated": 1792431472758,
+      "data": {
+        "time": {
+          "created": 1792431468480,
+          "streamed": 1792431470170,
+          "completed": 1792431472757
+        },
+        "agent": "build",
+        "model": {
+          "id": "deepseek-v4.1-flash-free",
+          "providerID": "opencode",
+          "variant": "default"
+        },
+        "content": [
+          {
+            "type": "reasoning",
+            "text": "The user asks to run exactly `mkdir reject-dir`. Let me do that.",
+            "state": {
+              "reasoningField": "reasoning_content"
+            },
+            "time": {
+              "created": 1792431470063,
+              "completed": 1792431470163
+            }
+          },
+          {
+            "type": "tool",
+            "id": "call_00_5dq11k819and86l27zm9bo2y",
+            "name": "shell",
+            "executed": false,
+            "state": {
+              "status": "error",
+              "input": {
+                "command": "mkdir reject-dir"
+              },
+              "error": {
+                "type": "aborted",
+                "message": "The user declined this tool call"
+              }
+            },
+            "time": {
+              "created": 1792431470109,
+              "ran": 1792431470167,
+              "completed": 1792431472755
+            }
+          }
+        ],
+        "finish": "error",
+        "rawFinish": "tool_calls",
+        "cost": 0,
+        "tokens": {
+          "input": 3479,
+          "output": 40,
+          "reasoning": 17,
+          "cache": {
+            "read": 1792,
+            "write": 0
+          }
+        },
+        "error": {
+          "type": "aborted",
+          "message": "Step interrupted"
+        }
+      }
+    },
+    {
+      "id": "msg_15549fa03001gbbaL8qP8rxpiJ",
+      "session_id": "ses_eaac25063ffeHZk9s9EjId37ur",
+      "type": "synthetic",
+      "seq": 17,
+      "time_created": 1792432273923,
+      "time_updated": 1792432273947,
+      "data": {
+        "metadata": {
+          "notice": "restart"
+        },
+        "time": {
+          "created": 1792432273923
+        },
+        "text": "The server restarted while you were working. Continue from where you left off without repeating completed work.",
+        "description": "Continuing after restart"
+      }
+    },
+    {
+      "id": "msg_15549fce0001mt7bJT3JshGE2g",
+      "session_id": "ses_eaac25063ffeHZk9s9EjId37ur",
+      "type": "assistant",
+      "seq": 19,
+      "time_created": 1792432274663,
+      "time_updated": 1792432339456,
+      "data": {
+        "time": {
+          "created": 1792432274663,
+          "streamed": 1792432277511,
+          "completed": 1792432339455
+        },
+        "agent": "build",
+        "model": {
+          "id": "deepseek-v4.1-flash-free",
+          "providerID": "opencode",
+          "variant": "default"
+        },
+        "content": [
+          {
+            "type": "reasoning",
+            "text": "The user declined the tool call. Now the server restarted. I should continue from where I left off. But the tool call was declined — the user rejected it. Should I retry? The instruction says \"Continu…",
+            "state": {
+              "reasoningField": "reasoning_content"
+            },
+            "time": {
+              "created": 1792432276869,
+              "completed": 1792432277506
+            }
+          },
+          {
+            "type": "tool",
+            "id": "call_00_eg0rsm6fuxqao7xarv3brfja",
+            "name": "shell",
+            "executed": false,
+            "state": {
+              "status": "error",
+              "input": {
+                "command": "ls -la"
+              },
+              "error": {
+                "type": "aborted",
+                "message": "Tool execution interrupted"
+              }
+            },
+            "time": {
+              "created": 1792432277501,
+              "ran": 1792432277509,
+              "completed": 1792432339452
+            }
+          }
+        ],
+        "finish": "error",
+        "rawFinish": "tool_calls",
+        "cost": 0,
+        "tokens": {
+          "input": 132,
+          "output": 39,
+          "reasoning": 112,
+          "cache": {
+            "read": 5248,
+            "write": 0
+          }
+        },
+        "error": {
+          "type": "aborted",
+          "message": "Step interrupted"
+        }
+      }
+    },
+    {
+      "id": "msg_1554afa02001wU2Ymo8lKwAliQ",
+      "session_id": "ses_eaac25063ffeHZk9s9EjId37ur",
+      "type": "idle",
+      "seq": 28,
+      "time_created": 1792432339458,
+      "time_updated": 1792432339458,
+      "data": {
+        "time": {
+          "created": 1792432339458
+        },
+        "outcome": "interrupted"
+      }
+    },
+    {
+      "id": "msg_15541e279001yNYf1WC6pLJ27L",
+      "session_id": "ses_eaabe1d88ffetkPqn39VQqATA6",
+      "type": "user",
+      "seq": 4,
+      "time_created": 1792431743634,
+      "time_updated": 1792431743634,
+      "data": {
+        "time": {
+          "created": 1792431743634
+        },
+        "text": "Use your question tool ONCE with TWO single-select questions in the same call: first which drink (Tea or Coffee), second which size (Small or Large). Then reply with my two answers.",
+        "files": [],
+        "agents": []
+      }
+    },
+    {
+      "id": "msg_15541e296001yFphXr8G63A5Fv",
+      "session_id": "ses_eaabe1d88ffetkPqn39VQqATA6",
+      "type": "assistant",
+      "seq": 5,
+      "time_created": 1792431743641,
+      "time_updated": 1792431760725,
+      "data": {
+        "time": {
+          "created": 1792431743641,
+          "streamed": 1792431747193,
+          "completed": 1792431760725
+        },
+        "agent": "build",
+        "model": {
+          "id": "deepseek-v4.1-flash-free",
+          "providerID": "opencode",
+          "variant": "default"
+        },
+        "content": [
+          {
+            "type": "tool",
+            "id": "call_00_n5tvmejrf9nkkut8zvl57wbi",
+            "name": "question",
+            "executed": false,
+            "state": {
+              "status": "completed",
+              "input": {
+                "questions": [
+                  {
+                    "header": "Drink",
+                    "question": "Which drink would you like?",
+                    "multiple": false,
+                    "options": [
+                      {
+                        "label": "Tea",
+                        "description": "A hot cup of tea"
+                      },
+                      {
+                        "label": "Coffee",
+                        "description": "A hot cup of coffee"
+                      }
+                    ]
+                  },
+                  {
+                    "header": "Size",
+                    "question": "Which size would you like?",
+                    "multiple": false,
+                    "options": [
+                      {
+                        "label": "Small",
+                        "description": "Small size"
+                      },
+                      {
+                        "label": "Large",
+                        "description": "Large size"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "content": [
+                {
+                  "type": "text",
+                  "text": "User has answered your questions: \"Which drink would you like?\"=\"Coffee\", \"Which size would you like?\"=\"Small\". You can now continue with the user's answers in mind."
+                }
+              ],
+              "metadata": {
+                "answers": [
+                  [
+                    "Coffee"
+                  ],
+                  [
+                    "Small"
+                  ]
+                ],
+                "truncated": false
+              }
+            },
+            "time": {
+              "created": 1792431747157,
+              "ran": 1792431747192,
+              "completed": 1792431760724
+            }
+          }
+        ],
+        "finish": "tool-calls",
+        "rawFinish": "tool_calls",
+        "cost": 0,
+        "tokens": {
+          "input": 48,
+          "output": 151,
+          "reasoning": 0,
+          "cache": {
+            "read": 5248,
+            "write": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "msg_15542255b001Kr3WH7gJsp77lg",
+      "session_id": "ses_eaabe1d88ffetkPqn39VQqATA6",
+      "type": "assistant",
+      "seq": 14,
+      "time_created": 1792431760735,
+      "time_updated": 1792431761958,
+      "data": {
+        "time": {
+          "created": 1792431760735,
+          "streamed": 1792431761957,
+          "completed": 1792431761958
+        },
+        "agent": "build",
+        "model": {
+          "id": "deepseek-v4.1-flash-free",
+          "providerID": "opencode",
+          "variant": "default"
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Your answers:\n\n1. **Drink:** Coffee\n2. **Size:** Small"
+          }
+        ],
+        "finish": "stop",
+        "rawFinish": "stop",
+        "cost": 0,
+        "tokens": {
+          "input": 248,
+          "output": 18,
+          "reasoning": 0,
+          "cache": {
+            "read": 5248,
+            "write": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "msg_155422a27002V8GTouLgM6RUWZ",
+      "session_id": "ses_eaabe1d88ffetkPqn39VQqATA6",
+      "type": "idle",
+      "seq": 19,
+      "time_created": 1792431761959,
+      "time_updated": 1792431761959,
+      "data": {
+        "time": {
+          "created": 1792431761959
+        },
+        "outcome": "succeeded"
+      }
+    }
+  ]
+}
