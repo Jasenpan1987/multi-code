@@ -1372,6 +1372,9 @@ export class ProcessManager {
     const unfinished: { name: string; state: "busy" | "blocked" }[] = [];
     for (const instance of this.instances.values()) {
       if (!instance.ptyProcess) continue;
+      // OpenCode 2's turns run in its shared background service, which outlives
+      // the terminal: quitting cuts none of them off (opencode-v2 Story 11).
+      if (instance.backend === "opencode") continue;
       const state = instance.runState.state();
       if (state !== "busy" && state !== "blocked") continue;
       unfinished.push({

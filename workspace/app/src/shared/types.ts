@@ -314,7 +314,7 @@ export interface ElectronAPI {
   // Blank resets the name to the folder's. Resolves to the renamed contact.
   setAlias: (id: string, alias: string) => Promise<Instance | null>;
   selectDirectory: () => Promise<string | null>;
-  isBackendAvailable: (backend: BackendName) => Promise<boolean>;
+  backendAvailability: (backend: BackendName) => Promise<BackendAvailability>;
   getGitStatus: (id: string) => Promise<GitStatus>;
   getResumeCommand: (id: string) => Promise<string | null>;
   readFile: (instanceId: string, path: string) => Promise<ReadFileResult>;

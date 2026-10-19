@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { BackendName } from "../../shared/types";
+import type { BackendAvailability, BackendName } from "../../shared/types";
 
 const LAST_BACKEND_KEY = "multicode.lastBackend";
 
@@ -24,7 +24,10 @@ export function NewInstanceDialog({
   const [backend, setBackend] = useState<BackendName>("claude");
   const [error, setError] = useState("");
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
-  const [opencodeMissing, setOpencodeMissing] = useState(false);
+  // Whether OpenCode can start, while it's selected. A problem is a warning, not a
+  // block, as a missing `opencode` always was: it can be installed or upgraded
+  // before the contact's next start.
+  const [opencode, setOpencode] = useState<BackendAvailability>({ ok: true });
 
   useEffect(() => {
     if (open) setBackend(readLastBackend());
@@ -34,12 +37,12 @@ export function NewInstanceDialog({
   useEffect(() => {
     if (!open) return;
     if (backend !== "opencode") {
-      setOpencodeMissing(false);
+      setOpencode({ ok: true });
       return;
     }
     let cancelled = false;
-    window.electronAPI.isBackendAvailable("opencode").then((ok) => {
-      if (!cancelled) setOpencodeMissing(!ok);
+    window.electronAPI.backendAvailability("opencode").then((availability) => {
+      if (!cancelled) setOpencode(availability);
     });
     return () => {
       cancelled = true;
@@ -127,10 +130,17 @@ export function NewInstanceDialog({
               OpenCode
             </label>
           </div>
-          {opencodeMissing && (
+          {!opencode.ok && opencode.reason === "missing" && (
             <div className="dialog-warning">
               <code>opencode</code> not found on PATH. The instance will fail
               to start. Install OpenCode CLI first, or pick Claude Code.
+            </div>
+          )}
+          {!opencode.ok && opencode.reason === "outdated" && (
+            <div className="dialog-warning">
+              OpenCode {opencode.version} found. Multi-Code needs
+              OpenCode 2: run{" "}
+              <code>curl -fsSL https://opencode.ai/v2/install | bash</code>
             </div>
           )}
         </div>

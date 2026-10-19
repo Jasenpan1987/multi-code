@@ -293,4 +293,16 @@ describe("what a quit would cut off", () => {
     pty().onExitCb?.({ exitCode: 0 });
     expect(manager.unfinishedInstances()).toEqual([]);
   });
+
+  // Its turn runs on in OpenCode's shared service after the terminal closes, so a
+  // quit cuts nothing off. The Claude one beside it still counts.
+  it("leaves out an OpenCode instance mid-turn", () => {
+    goIdle();
+    manager.sendPrompt(instanceId, "do the thing");
+    const opencodeId = manager.createInstance("/Users/x/code/oc", "oc", "opencode").id;
+    goIdle(); // the new instance's detector now
+    manager.sendPrompt(opencodeId, "do the other thing");
+    expect(manager.runStateOf(opencodeId)).toBe("busy");
+    expect(manager.unfinishedInstances()).toEqual([{ name: "msk", state: "busy" }]);
+  });
 });

@@ -6,8 +6,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("create-instance", cwd, alias, backend),
   createManager: () => ipcRenderer.invoke("create-manager"),
   hasManager: () => ipcRenderer.invoke("has-manager"),
-  isBackendAvailable: (backend: string) =>
-    ipcRenderer.invoke("is-backend-available", backend),
+  backendAvailability: (backend: string) =>
+    ipcRenderer.invoke("backend-availability", backend),
   startInstance: (id: string) => ipcRenderer.invoke("start-instance", id),
   killInstance: (id: string) => ipcRenderer.invoke("kill-instance", id),
   removeInstance: (id: string) => ipcRenderer.invoke("remove-instance", id),

@@ -313,12 +313,18 @@ export function App() {
     window.electronAPI.isDevBuild().then(setIsDev);
   }, []);
 
-  // An instance whose hooks stopped (or started) reaching Multi-Code.
+  // An instance whose alerts stopped (or started) working, and why.
   useEffect(() => {
-    return window.electronAPI.onInstanceAlertsDegraded((id, degraded) => {
+    return window.electronAPI.onInstanceAlertsDegraded((id, degraded, reason) => {
       setInstances((prev) =>
         prev.map((inst) =>
-          inst.id === id ? { ...inst, alertsDegraded: degraded || undefined } : inst
+          inst.id === id
+            ? {
+                ...inst,
+                alertsDegraded: degraded || undefined,
+                alertsDegradedReason: degraded ? reason : undefined,
+              }
+            : inst
         )
       );
     });
@@ -678,21 +684,38 @@ export function App() {
         )}
         {selectedInstance?.status === "running" && selectedInstance.alertsDegraded && (
           // PRD Story 6: say so rather than go quiet. No fallback guesses at the
-          // state instead; see docs/specs/attention-alerts/prd.md.
+          // state instead; see docs/specs/attention-alerts/prd.md. OpenCode has two
+          // ways to fail (opencode-v2 Story 9). Keyed on the backend first: a reason
+          // left out arrives as "hooks", which is never OpenCode's.
           selectedInstance.backend === "opencode" ? (
-            <div
-              className="alerts-degraded-bar"
-              title={
-                "Multi-Code hears when a session finishes or needs you through a plugin it " +
-                "loads into opencode at launch, and it hasn't reported from this one. Likely " +
-                "causes: an OPENCODE_CONFIG_CONTENT in Multi-Code's environment that isn't " +
-                "plain JSON, opencode run with --pure, or a config error that stopped plugins " +
-                "loading."
-              }
-            >
-              Multi-Code&apos;s plugin isn&apos;t running in this session, so Multi-Code can&apos;t
-              tell you when it finishes or needs you. Check on it yourself.
-            </div>
+            selectedInstance.alertsDegradedReason === "service" ? (
+              <div
+                className="alerts-degraded-bar"
+                title={
+                  "OpenCode 2 runs sessions in one background service shared by every " +
+                  "opencode, and Multi-Code listens to it to hear when a session finishes or " +
+                  "needs you. Likely causes: the service was stopped or is restarting, or it " +
+                  "was started with a different setup. This bar goes away by itself once " +
+                  "Multi-Code reaches it again."
+                }
+              >
+                Multi-Code can&apos;t reach OpenCode&apos;s background service, so it can&apos;t
+                tell you when this session finishes or needs you. Check on it yourself.
+              </div>
+            ) : (
+              <div
+                className="alerts-degraded-bar"
+                title={
+                  "Multi-Code loads a report-only plugin into the opencode terminals it starts, " +
+                  "and that plugin tells it which session the terminal shows. This one never " +
+                  "reported. Likely causes: an OPENCODE_CLI_CONFIG_CONTENT in Multi-Code's " +
+                  "environment, or a cli.json Multi-Code couldn't read."
+                }
+              >
+                Multi-Code&apos;s terminal plugin didn&apos;t load in this OpenCode, so Multi-Code
+                can&apos;t follow which session it shows. Check on it yourself.
+              </div>
+            )
           ) : (
             <div
               className="alerts-degraded-bar"
@@ -730,6 +753,13 @@ export function App() {
               return (
                 <div className="content-offline-overlay">
                   <div className="content-offline-text">Offline</div>
+                  {selectedInstance.startError ? (
+                    // Why the last start launched nothing (OpenCode 1.x), with the
+                    // fix in it. Selectable, so the upgrade command can be copied.
+                    <div className="content-offline-error">
+                      {selectedInstance.startError}
+                    </div>
+                  ) : null}
                 </div>
               );
             }
