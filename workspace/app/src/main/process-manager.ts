@@ -9,6 +9,7 @@ import { getBackend } from "./backends";
 import type {
   AlertDelivery,
   AlertsDegradedReason,
+  AnswerResult,
   Backend,
   BackendName,
   DialogRef,
@@ -28,6 +29,7 @@ import { RunStateTracker, type RunState, type WriteVerdict } from "./run-state";
 import { INSTANCE_ENV, SPAWN_ENV } from "./backends/instance-env";
 import { KEY_GAP_MS } from "./secretary/dialog";
 import type { AnswerPlan } from "./secretary/dialog";
+import { answerForChoice } from "./backends/opencodeAnswer";
 
 export interface InstanceInfo {
   id: string;
@@ -170,16 +172,23 @@ interface ManagedInstance {
   // Writes that carried input, from anyone. answerDialog stops when one lands
   // between its own keys: the builder typed in the terminal, or the phone answered.
   inputWrites?: number;
+  // The dialog the agent last reported it is stopped on, with the request to answer
+  // when its backend answers through the CLI's API. Set on `prompt`, cleared on
+  // `prompt-cleared` and exit; a phone's tap is held to it (answerPhoneChoice).
+  livePrompt?: { detail: PromptDetail; dialog?: DialogRef };
 }
 
 // What answerDialog did. `answered`: the event it was asked about isn't the live
-// one any more, so nothing was written. `changed`: a new dialog came up while the
-// keys were going in, and the rest weren't written. `interrupted`: someone else's
-// input landed between its keys, and the rest weren't written. `stopped`: the
-// process went, or the caller called it off.
+// one any more, or the CLI said its dialog was already answered, so nothing was
+// written. `changed`: a new dialog came up while the keys were going in, and the rest
+// weren't written. `interrupted`: someone else's input landed between its keys, and
+// the rest weren't written. `stopped`: the process went, or the caller called it off.
+// `failed`: an answer through the CLI's API didn't go through (the CLI couldn't be
+// reached or refused it, or the event names no dialog to answer); it may or may not
+// have landed, so the builder should look.
 export type AnswerOutcome =
   | { ok: true; recorded?: PromptToolCall }
-  | { ok: false; reason: "answered" | "changed" | "interrupted" | "stopped" };
+  | { ok: false; reason: "answered" | "changed" | "interrupted" | "stopped" | "failed" };
 
 export interface AnswerTiming {
   keyGapMs: number;
@@ -389,6 +398,11 @@ export class ProcessManager {
   // once the dialog is gone. For a question box, resolves with the call the CLI
   // reported when the box cleared, which holds its record of the answers. Aborting
   // `signal` (the brief was replaced, or Secretary Mode went off) stops the rest.
+  //
+  // A plan with an `answer` (OpenCode, opencode-v2 T-607) writes no keys: the answer
+  // goes once through the CLI's API to the request the event names, after the same
+  // checks. It names the request by id, so unlike a key it can't land in a dialog
+  // that came up meanwhile; the CLI says `gone` when the builder got there first.
   async answerDialog(
     id: string,
     seq: number,
@@ -401,6 +415,23 @@ export class ProcessManager {
     if (!instance || !ptyProcess || signal?.aborted) return { ok: false, reason: "stopped" };
     const event = instance.secretaryEvent;
     if (event?.kind !== "needs-you" || event.seq !== seq) return { ok: false, reason: "answered" };
+
+    if (plan.answer) {
+      const ref = event.prompt?.dialog;
+      const attention = instance.hookAttention;
+      if (!ref || ref.kind !== plan.answer.kind || !attention?.answer) {
+        return { ok: false, reason: "failed" };
+      }
+      let result: AnswerResult;
+      try {
+        result = await attention.answer(ref, plan.answer);
+      } catch {
+        result = { ok: false, reason: "failed" };
+      }
+      if (!result.ok) return { ok: false, reason: result.reason === "gone" ? "answered" : "failed" };
+      this.clearPhonePrompt(instance, ref);
+      return { ok: true };
+    }
 
     const same = () => this.instances.get(id) === instance && instance.ptyProcess === ptyProcess;
     // Registered before the first key, so a box that clears at once isn't missed.
@@ -475,6 +506,51 @@ export class ProcessManager {
       },
       cancel: () => finish(undefined),
     };
+  }
+
+  // A paired phone tapped option `index` of the dialog it shows, `detail` being the
+  // buttons it was sent. Resolves true when that answered it, false when nothing was
+  // answered: the phone then says the choice is no longer available.
+  //
+  // A backend that answers through the CLI's API (OpenCode) gets no keys from a tap
+  // at all. The answer goes to the request the live prompt names, and only while the
+  // tapped buttons are that prompt's own: an index into an older dialog's options
+  // would pick the wrong thing. Otherwise (Claude) the backend's keys for the option
+  // are written, as typed.
+  async answerPhoneChoice(id: string, detail: PromptDetail, index: number): Promise<boolean> {
+    const instance = this.instances.get(id);
+    if (!instance) return false;
+    const attention = instance.hookAttention;
+    if (attention?.answer) {
+      const live = instance.livePrompt;
+      if (!live?.dialog || live.detail !== detail) return false;
+      const answer = answerForChoice(live.detail, live.dialog, index);
+      if (!answer) return false;
+      let result: AnswerResult;
+      try {
+        result = await attention.answer(live.dialog, answer);
+      } catch {
+        return false;
+      }
+      if (!result.ok) return false;
+      this.clearPhonePrompt(instance, live.dialog);
+      return true;
+    }
+    const keys = this.keystrokeForChoice(id, detail.tool, index, detail.options.length);
+    if (keys === null) return false;
+    this.writeToInstance(id, keys);
+    return true;
+  }
+
+  // After an answer through the API, drop the phone's badge and buttons as a key
+  // written from it does (writeToInstance). Only while that dialog is still the live
+  // one: the CLI may already have reported the next dialog while the answer was in
+  // flight, and its buttons must stay.
+  private clearPhonePrompt(instance: ManagedInstance, ref: DialogRef) {
+    if (this.instances.get(instance.id) !== instance) return;
+    const live = instance.livePrompt?.dialog;
+    if (live?.kind !== ref.kind || live.requestId !== ref.requestId) return;
+    remoteServer.clearActivity(instance.id);
   }
 
   // What the secretary's brief writer reads for an instance: the name the builder
@@ -927,6 +1003,7 @@ export class ProcessManager {
       instance.ptyProcess = null;
       instance.runState.onExit();
       // A dead process has no dialog to answer and no turn to report on.
+      instance.livePrompt = undefined;
       this.clearSecretaryEvent(instance);
       for (const waiter of (instance.dialogClearWaiters ?? []).slice()) waiter(undefined);
       this.teardownObservers(instance);
@@ -989,6 +1066,13 @@ export class ProcessManager {
     // A finished turn is exactly when context usage moved, so refresh now instead
     // of waiting for the TTL. Cheap: once per turn, not per list call.
     if (type === "waiting") this.refreshContextUsage(instance);
+    // What a phone's tap answers. A newer dialog with nothing to offer replaces the
+    // older one all the same: those buttons are no longer what's on screen.
+    if (type === "prompt") {
+      instance.livePrompt = detail ? { detail, dialog: toolCall?.dialog } : undefined;
+    } else if (type === "prompt-cleared") {
+      instance.livePrompt = undefined;
+    }
     // Before anything else hears of it, so a write made in reaction to this
     // activity clears the event it raised instead of landing before it exists.
     this.updateSecretaryEvent(instance, type, detail, toolCall);

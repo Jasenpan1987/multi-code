@@ -36,8 +36,7 @@ export function initRemote() {
       })),
     writeToInstance: (id, data) => processManager.writeToInstance(id, data),
     sendPrompt: (id, text) => processManager.sendPrompt(id, text),
-    keystrokeForChoice: (id, tool, index, optionCount) =>
-      processManager.keystrokeForChoice(id, tool, index, optionCount),
+    answerChoice: (id, detail, index) => processManager.answerPhoneChoice(id, detail, index),
     readTranscript: (id, limit) => processManager.readTranscript(id, limit),
   });
 

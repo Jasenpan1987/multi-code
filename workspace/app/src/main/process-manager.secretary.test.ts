@@ -7,7 +7,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
 import path from "path";
 import { parseAlertDelivery } from "./manager-mcp/server";
-import type { ActivityCallback } from "./backends/types";
+import type {
+  ActivityCallback,
+  AnswerResult,
+  DialogAnswer,
+  DialogRef,
+  PromptToolCall,
+} from "./backends/types";
+import type { PromptDetail } from "./remote/promptExtract";
 import type { SecretaryEvent } from "./process-manager";
 
 interface Spawn {
@@ -23,6 +30,13 @@ let nextPid = 500;
 
 // What the CLI's registry says, as ClaudeHookAttention reads it after a Stop.
 let registryStatus: () => string | null = () => "idle";
+
+// What an OpenCode instance's attention was asked to answer through the CLI's API,
+// and what the CLI says back (opencode-v2 T-607).
+const apiAnswers: { ref: DialogRef; answer: DialogAnswer }[] = [];
+let apiResult: () => Promise<AnswerResult> = async () => ({ ok: true });
+// Instances whose phone badge and buttons were dropped.
+const phoneCleared: string[] = [];
 
 vi.mock("node-pty", () => ({
   spawn: (_cmd: string, _args: string[], o: { env: Record<string, string> }) => {
@@ -59,7 +73,7 @@ vi.mock("./remote/ws-server", () => ({
     broadcastExit: () => {},
     broadcastInstances: () => {},
     broadcastOutput: () => {},
-    clearActivity: () => {},
+    clearActivity: (id: string) => phoneCleared.push(id),
   },
 }));
 
@@ -80,16 +94,26 @@ vi.mock("./backends", async () => {
     ) => {
       const spawn = spawns.find((s) => s.pid === pid);
       if (spawn) spawn.report = onActivity;
-      return new ClaudeHookAttention(
+      const attention = new ClaudeHookAttention(
         onActivity,
         () => registryStatus(),
         undefined,
         onHooksHealth
       );
+      // OpenCode answers its dialogs through its API; Claude's attention can't.
+      if (name !== "opencode") return attention;
+      return Object.assign(attention, {
+        answer: (ref: DialogRef, answer: DialogAnswer) => {
+          apiAnswers.push({ ref, answer });
+          return apiResult();
+        },
+      });
     },
     readTranscript: () => [],
     readContextUsage: () => null,
-    keystrokeForChoice: () => null,
+    // Claude's digits, for the phone's keystroke path.
+    keystrokeForChoice: (_tool: string, index: number, count: number) =>
+      index >= 0 && index < count ? String(index + 1) : null,
     findLatestSessionId: () => null,
     findLiveSessionId: () => null,
     buildResumeCommand: () => "x",
@@ -154,6 +178,9 @@ beforeEach(() => {
   vi.useFakeTimers();
   spawns.length = 0;
   registryStatus = () => "idle";
+  apiAnswers.length = 0;
+  apiResult = async () => ({ ok: true });
+  phoneCleared.length = 0;
 });
 
 afterEach(() => {
@@ -713,5 +740,268 @@ describe("answering a dialog for the secretary (T-509)", () => {
     const done = manager.answerDialog(id, seq, { keys: ["1"], expect: { q: "a" } }, undefined, timing);
     await vi.advanceTimersByTimeAsync(5000);
     await expect(done).resolves.toEqual({ ok: true, recorded: undefined });
+  });
+});
+
+// OpenCode 2's dialogs, in the shapes its attention reports them (opencode-v2 T-604),
+// each naming its request.
+const PERMISSION_REF: DialogRef = { kind: "permission", sessionId: "ses_1", requestId: "per_1" };
+const FORM_REF: DialogRef = { kind: "form", sessionId: "ses_1", requestId: "frm_1" };
+interface OcPrompt {
+  detail: PromptDetail;
+  toolCall: PromptToolCall;
+}
+const OC_PERMISSION: OcPrompt = {
+  detail: {
+    tool: "Permission",
+    question: "Permission required: shell: rm -rf build",
+    options: [{ label: "Allow once" }, { label: "Always allow" }, { label: "Reject" }],
+  },
+  toolCall: {
+    toolName: "shell",
+    toolInput: { resources: ["rm -rf build"], metadata: { command: "rm -rf build" }, save: ["rm *"] },
+    dialog: PERMISSION_REF,
+  },
+};
+const ocQuestion = (tool: string): OcPrompt => ({
+  detail: { tool, question: "Which db?", options: [{ label: "Postgres" }, { label: "SQLite" }] },
+  toolCall: {
+    toolName: "question",
+    toolInput: { questions: [{ question: "Which db?", options: [{ label: "Postgres" }, { label: "SQLite" }] }] },
+    dialog: FORM_REF,
+  },
+});
+
+// The same call with no request named, as an attention that can't name one reports it.
+const OC_PERMISSION_NO_REF: PromptToolCall = {
+  toolName: OC_PERMISSION.toolCall.toolName,
+  toolInput: OC_PERMISSION.toolCall.toolInput,
+};
+
+function raisedOpencode(manager: Manager, prompt: OcPrompt = OC_PERMISSION) {
+  const id = create(manager, "opencode");
+  latestSpawn(id).report("prompt", prompt.detail, prompt.toolCall);
+  return { id, seq: manager.secretaryEventOf(id)!.seq, spawn: latestSpawn(id), detail: prompt.detail };
+}
+
+describe("answering an OpenCode dialog through its API for the secretary (opencode-v2 T-607)", () => {
+  const ONCE: DialogAnswer = { kind: "permission", decision: "once" };
+
+  it("the event carries the request its dialog names", () => {
+    const manager = new ProcessManager();
+    const { id } = raisedOpencode(manager);
+    expect(manager.secretaryEventOf(id)?.prompt?.dialog).toEqual(PERMISSION_REF);
+  });
+
+  it("answers once, to the event's request, writing no keys, and drops the phone's buttons", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raisedOpencode(manager);
+    const reject: DialogAnswer = { kind: "permission", decision: "reject", message: "use ls instead" };
+    await expect(manager.answerDialog(id, seq, { keys: [], answer: reject })).resolves.toEqual({ ok: true });
+    expect(apiAnswers).toEqual([{ ref: PERMISSION_REF, answer: reject }]);
+    expect(spawn.written).toEqual([]);
+    expect(phoneCleared).toEqual([id]);
+  });
+
+  it("answers a question box with its whole form answer", async () => {
+    const manager = new ProcessManager();
+    const { id, seq } = raisedOpencode(manager, ocQuestion("Question (multi-select)"));
+    const answer: DialogAnswer = { kind: "form", answer: { q0: "SQLite", q1: ["Cache", "Metrics"] } };
+    await expect(manager.answerDialog(id, seq, { keys: [], answer })).resolves.toEqual({ ok: true });
+    expect(apiAnswers).toEqual([{ ref: FORM_REF, answer }]);
+  });
+
+  it("answers nothing, and calls no API, for an event that isn't the live one", async () => {
+    const manager = new ProcessManager();
+    const { id, seq } = raisedOpencode(manager);
+    await expect(manager.answerDialog(id, seq - 1, { keys: [], answer: ONCE })).resolves.toEqual({
+      ok: false,
+      reason: "answered",
+    });
+    latestSpawn(id).report("prompt-cleared");
+    await expect(manager.answerDialog(id, seq, { keys: [], answer: ONCE })).resolves.toEqual({
+      ok: false,
+      reason: "answered",
+    });
+    expect(apiAnswers).toEqual([]);
+  });
+
+  it("says answered when the CLI says the dialog is gone", async () => {
+    const manager = new ProcessManager();
+    const { id, seq } = raisedOpencode(manager);
+    apiResult = async () => ({ ok: false, reason: "gone" });
+    await expect(manager.answerDialog(id, seq, { keys: [], answer: ONCE })).resolves.toEqual({
+      ok: false,
+      reason: "answered",
+    });
+    expect(apiAnswers).toHaveLength(1);
+    expect(phoneCleared).toEqual([]);
+  });
+
+  it("says failed when the CLI couldn't be reached or refused, or the call threw", async () => {
+    const manager = new ProcessManager();
+    const { id, seq } = raisedOpencode(manager);
+    apiResult = async () => ({ ok: false, reason: "failed" });
+    await expect(manager.answerDialog(id, seq, { keys: [], answer: ONCE })).resolves.toEqual({
+      ok: false,
+      reason: "failed",
+    });
+    apiResult = () => Promise.reject(new Error("socket hang up"));
+    await expect(manager.answerDialog(id, seq, { keys: [], answer: ONCE })).resolves.toEqual({
+      ok: false,
+      reason: "failed",
+    });
+    expect(phoneCleared).toEqual([]);
+  });
+
+  it("answers nothing when the event names no request, or one of the other kind", async () => {
+    const manager = new ProcessManager();
+    const id = create(manager, "opencode");
+    latestSpawn(id).report("prompt", OC_PERMISSION.detail, OC_PERMISSION_NO_REF);
+    const seq = manager.secretaryEventOf(id)!.seq;
+    await expect(manager.answerDialog(id, seq, { keys: [], answer: ONCE })).resolves.toEqual({
+      ok: false,
+      reason: "failed",
+    });
+    const form: DialogAnswer = { kind: "form", answer: { q0: "SQLite" } };
+    const other = raisedOpencode(manager);
+    await expect(manager.answerDialog(other.id, other.seq, { keys: [], answer: form })).resolves.toEqual({
+      ok: false,
+      reason: "failed",
+    });
+    expect(apiAnswers).toEqual([]);
+    expect(latestSpawn(id).written).toEqual([]);
+  });
+
+  it("answers nothing once called off, or once the process is gone", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raisedOpencode(manager);
+    const abort = new AbortController();
+    abort.abort();
+    await expect(manager.answerDialog(id, seq, { keys: [], answer: ONCE }, abort.signal)).resolves.toEqual({
+      ok: false,
+      reason: "stopped",
+    });
+    spawn.exit({ exitCode: 0 });
+    await expect(manager.answerDialog(id, seq, { keys: [], answer: ONCE })).resolves.toEqual({
+      ok: false,
+      reason: "stopped",
+    });
+    expect(apiAnswers).toEqual([]);
+  });
+
+  it("leaves the phone's buttons alone when the next dialog came up while the answer was in flight", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raisedOpencode(manager);
+    apiResult = async () => {
+      spawn.report("prompt", OC_PERMISSION.detail, {
+        ...OC_PERMISSION.toolCall,
+        dialog: { ...PERMISSION_REF, requestId: "per_2" },
+      });
+      return { ok: true };
+    };
+    await expect(manager.answerDialog(id, seq, { keys: [], answer: ONCE })).resolves.toEqual({ ok: true });
+    expect(phoneCleared).toEqual([]);
+  });
+});
+
+describe("a phone's tap (opencode-v2 T-607)", () => {
+  it("answers an OpenCode permission through the API by the tapped option, writing no keys", async () => {
+    const manager = new ProcessManager();
+    const { id, spawn, detail } = raisedOpencode(manager);
+    await expect(manager.answerPhoneChoice(id, detail, 1)).resolves.toBe(true);
+    expect(apiAnswers).toEqual([{ ref: PERMISSION_REF, answer: { kind: "permission", decision: "always" } }]);
+    expect(spawn.written).toEqual([]);
+    expect(phoneCleared).toEqual([id]);
+  });
+
+  it("answers the two-option permission's second button as Reject", async () => {
+    const manager = new ProcessManager();
+    const two = {
+      ...OC_PERMISSION,
+      detail: { ...OC_PERMISSION.detail, options: [{ label: "Allow once" }, { label: "Reject" }] },
+    };
+    const { id, detail } = raisedOpencode(manager, two);
+    await expect(manager.answerPhoneChoice(id, detail, 1)).resolves.toBe(true);
+    expect(apiAnswers.map((a) => a.answer)).toEqual([{ kind: "permission", decision: "reject" }]);
+  });
+
+  it("answers a single-select question with the option's label", async () => {
+    const manager = new ProcessManager();
+    const { id, detail } = raisedOpencode(manager, ocQuestion("Question"));
+    await expect(manager.answerPhoneChoice(id, detail, 1)).resolves.toBe(true);
+    expect(apiAnswers).toEqual([{ ref: FORM_REF, answer: { kind: "form", answer: { q0: "SQLite" } } }]);
+  });
+
+  it("refuses an index out of range, a multi-select or several-question box, with no API call and no keys", async () => {
+    const manager = new ProcessManager();
+    const perm = raisedOpencode(manager);
+    await expect(manager.answerPhoneChoice(perm.id, perm.detail, 3)).resolves.toBe(false);
+    const box = raisedOpencode(manager, ocQuestion("Question (multi-select)"));
+    await expect(manager.answerPhoneChoice(box.id, box.detail, 0)).resolves.toBe(false);
+    expect(apiAnswers).toEqual([]);
+    expect([...perm.spawn.written, ...box.spawn.written]).toEqual([]);
+  });
+
+  it("refuses buttons that aren't the live dialog's own", async () => {
+    const manager = new ProcessManager();
+    const { id, detail, spawn } = raisedOpencode(manager);
+    // The phone still shows the first dialog; a second one has replaced it.
+    spawn.report("prompt", { ...OC_PERMISSION.detail }, {
+      ...OC_PERMISSION.toolCall,
+      dialog: { ...PERMISSION_REF, requestId: "per_2" },
+    });
+    await expect(manager.answerPhoneChoice(id, detail, 0)).resolves.toBe(false);
+    expect(apiAnswers).toEqual([]);
+  });
+
+  it("refuses when the CLI says the dialog is gone, or the answer failed", async () => {
+    const manager = new ProcessManager();
+    const { id, detail } = raisedOpencode(manager);
+    apiResult = async () => ({ ok: false, reason: "gone" });
+    await expect(manager.answerPhoneChoice(id, detail, 0)).resolves.toBe(false);
+    apiResult = async () => ({ ok: false, reason: "failed" });
+    await expect(manager.answerPhoneChoice(id, detail, 0)).resolves.toBe(false);
+    apiResult = () => Promise.reject(new Error("socket hang up"));
+    await expect(manager.answerPhoneChoice(id, detail, 0)).resolves.toBe(false);
+    expect(phoneCleared).toEqual([]);
+  });
+
+  it("never falls back to keys for OpenCode once its dialog cleared or names no request", async () => {
+    const manager = new ProcessManager();
+    const { id, detail, spawn } = raisedOpencode(manager);
+    spawn.report("prompt-cleared");
+    await expect(manager.answerPhoneChoice(id, detail, 0)).resolves.toBe(false);
+    spawn.report("prompt", detail, OC_PERMISSION_NO_REF);
+    await expect(manager.answerPhoneChoice(id, detail, 0)).resolves.toBe(false);
+    expect(apiAnswers).toEqual([]);
+    expect(spawn.written).toEqual([]);
+  });
+
+  it("forgets the live dialog when the process exits", async () => {
+    const manager = new ProcessManager();
+    const { id, detail, spawn } = raisedOpencode(manager);
+    spawn.exit({ exitCode: 0 });
+    await manager.answerPhoneChoice(id, detail, 0);
+    expect(apiAnswers).toEqual([]);
+    expect(spawn.written).toEqual([]);
+  });
+
+  it("writes Claude's keys for the tapped option, as typed", async () => {
+    const manager = new ProcessManager();
+    const id = create(manager);
+    const detail = {
+      tool: "Bash",
+      question: "Bash: rm -rf build",
+      options: [{ label: "Yes" }, { label: "Yes, and don't ask again" }, { label: "No" }],
+    };
+    latestSpawn(id).report("prompt", detail, { toolName: "Bash", toolInput: { command: "rm -rf build" } });
+    await expect(manager.answerPhoneChoice(id, detail, 2)).resolves.toBe(true);
+    expect(latestSpawn(id).written).toEqual(["3"]);
+    // A key from the phone is input like any other.
+    expect(manager.secretaryEventOf(id)).toBeUndefined();
+    expect(phoneCleared).toEqual([id]);
+    await expect(manager.answerPhoneChoice(id, detail, 3)).resolves.toBe(false);
+    expect(latestSpawn(id).written).toEqual(["3"]);
   });
 });

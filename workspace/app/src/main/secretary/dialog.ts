@@ -5,18 +5,20 @@
 // ("allow-always", "revise") or the option numbers it means, and `checkChoice` holds
 // that to the dialog, sends a wider choice back as a confirmation to ask, and turns
 // the rest into keys by the rules measured on the CLI. Every Claude sequence here was driven key by
-// key on 2.1.295: docs/timeline/2026-10-10_reply-key-flows-spike.md. OpenCode answers
-// only what the phone link already answers (one permission row, one single-select
-// question), with the phone's verified keystrokes; anything else goes to the terminal.
+// key on 2.1.295: docs/timeline/2026-10-10_reply-key-flows-spike.md. OpenCode 2 takes
+// no keys at all: its dialogs are answered through its API, by the request's id
+// (opencode-v2 T-607; docs/timeline/2026-10-20_opencode-v2-source-reading.md,
+// "Answering dialogs through the API"). So for OpenCode every shape a reply can
+// decide is answerable: a reason goes with a Reject, and a question box takes
+// several questions, multi-select and typed text in one answer.
 
 import type { SecretaryEvent } from "../process-manager";
 import type { BackendName } from "../../shared/types";
 import type { DialogAnswer } from "../backends/types";
 import {
+  MULTI_QUESTION_TOOL_LABEL,
   PERMISSION_TOOL,
   QUESTION_TOOL_LABEL,
-  keystrokeForPermission,
-  keystrokeForQuestion,
 } from "../backends/opencodePrompt";
 
 // What an option of a permission or plan dialog does. Two of them widen what the agent
@@ -31,9 +33,12 @@ export type OptionEffect =
 
 export const ESCALATING: ReadonlySet<OptionEffect> = new Set(["allow-always", "approve-auto"]);
 
+// `description` says what an option does when its label doesn't say it all; the
+// reply interpreter sees it with the option.
 export interface EffectOption {
   effect: OptionEffect;
   label: string;
+  description?: string;
 }
 
 export interface DialogQuestion {
@@ -64,8 +69,9 @@ export type Choice =
 // gone, an ordinary prompt (a denial's reason). `expect` is what the CLI should record
 // for a question box, by question text, to compare with its PostToolUse answers.
 // `answer`, for a backend that answers through its API (OpenCode), replaces the keys:
-// `keys` is then empty and the answer goes to the dialog the event's DialogRef names
-// (opencode-v2 T-607).
+// `keys` is then empty, there is no `followUp` (a reason travels in the answer) and no
+// `expect` (OpenCode reports no record to compare), and the answer goes to the dialog
+// the event's DialogRef names (opencode-v2 T-607).
 export interface AnswerPlan {
   keys: string[];
   followUp?: string;
@@ -87,6 +93,36 @@ const CLAUDE_PLAN_OPTIONS: EffectOption[] = [
   { effect: "revise", label: "No, tell Claude what to change" },
 ];
 
+// OpenCode 2's permission labels (opencodePrompt.ts reports the TUI's own), and the
+// effect of each. "Always allow" is offered only when the request has something to
+// save, and saves it for the project with no expiry. Its label doesn't say how far it
+// reaches, so its description does, for the reply interpreter to tell the builder.
+const OPENCODE_PERMISSION = new Map<string, EffectOption>([
+  ["Allow once", { effect: "allow-once", label: "Allow once" }],
+  [
+    "Always allow",
+    {
+      effect: "allow-always",
+      label: "Always allow",
+      description: "Allow it, and save that for this project: calls like it are allowed from now on",
+    },
+  ],
+  ["Reject", { effect: "deny", label: "Reject" }],
+]);
+
+// What OpenCode's reply endpoint is told for each effect a permission can have.
+const OPENCODE_DECISION: Partial<Record<OptionEffect, "once" | "always" | "reject">> = {
+  "allow-once": "once",
+  "allow-always": "always",
+  deny: "reject",
+};
+
+// The two permission shapes known: with and without the wider option.
+const PERMISSION_SHAPES: ReadonlySet<string> = new Set([
+  "allow-once,allow-always,deny",
+  "allow-once,deny",
+]);
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -98,7 +134,8 @@ const str = (value: unknown): string | undefined =>
 
 // A question box's questions from its tool input, Claude's AskUserQuestion and
 // OpenCode's `question` alike. Null when any question can't be shown as digits: at
-// most eight options, so "Type something" is still a single digit.
+// most eight options, so "Type something" is still a single digit. OpenCode takes no
+// digits, and the cap holds for it too: a box of nine options goes to the terminal.
 function questionsOf(toolInput: unknown): DialogQuestion[] | null {
   const raw = asRecord(toolInput)?.questions;
   if (!Array.isArray(raw) || raw.length === 0) return null;
@@ -126,26 +163,32 @@ function questionsOf(toolInput: unknown): DialogQuestion[] | null {
 }
 
 // The dialog behind a needs-you event, or null when the secretary can't answer it in
-// words: no decoded dialog (an MCP elicitation), or one whose keys aren't known.
+// words: no decoded dialog (an MCP elicitation), or one whose keys aren't known. For
+// OpenCode, also null when the event names no request to answer (its DialogRef):
+// without one the answer could only go in as keys, which OpenCode no longer takes.
 export function dialogOf(event: SecretaryEvent, backend: BackendName): Dialog | null {
   const prompt = event.kind === "needs-you" ? event.prompt : undefined;
   if (!prompt) return null;
   const { detail, toolName, toolInput } = prompt;
 
   if (backend === "opencode") {
+    const ref = prompt.dialog;
+    if (!ref) return null;
     if (detail.tool === PERMISSION_TOOL) {
-      // Allow once / Allow always / Reject, always all three.
-      const effects: OptionEffect[] = ["allow-once", "allow-always", "deny"];
-      if (detail.options.length !== effects.length) return null;
-      return {
-        kind: "permission",
-        backend,
-        toolName,
-        toolInput,
-        options: detail.options.map((o, i) => ({ effect: effects[i], label: o.label })),
-      };
+      if (ref.kind !== "permission") return null;
+      // Allow once / Always allow / Reject, or the first and last alone.
+      const options: EffectOption[] = [];
+      for (const o of detail.options) {
+        const known = OPENCODE_PERMISSION.get(o.label);
+        if (!known) return null;
+        options.push({ ...known });
+      }
+      if (!PERMISSION_SHAPES.has(options.map((o) => o.effect).join())) return null;
+      return { kind: "permission", backend, toolName, toolInput, options };
     }
-    if (detail.tool === QUESTION_TOOL_LABEL) {
+    // One question, several, or multi-select: the answer carries them all.
+    if (detail.tool === QUESTION_TOOL_LABEL || detail.tool === MULTI_QUESTION_TOOL_LABEL) {
+      if (ref.kind !== "form") return null;
       const questions = questionsOf(toolInput);
       return questions ? { kind: "questions", backend, questions } : null;
     }
@@ -170,10 +213,7 @@ export function dialogOf(event: SecretaryEvent, backend: BackendName): Dialog | 
     if (/^no\b/i.test(o.label)) return { effect: "deny", label: o.label };
     return { effect: "allow-once", label: o.label };
   });
-  const effects = options.map((o) => o.effect);
-  const shapeKnown =
-    effects.join() === "allow-once,allow-always,deny" || effects.join() === "allow-once,deny";
-  if (!shapeKnown) return null;
+  if (!PERMISSION_SHAPES.has(options.map((o) => o.effect).join())) return null;
   return { kind: "permission", backend, toolName, toolInput, options };
 }
 
@@ -209,9 +249,10 @@ export type AskBack =
   | "unanswered";
 export type Refusal = "unsupported" | "bad-choice";
 
-// Hold the model's decision to the dialog and plan the keys. Anything out of range,
-// or not in the dialog, is refused rather than guessed. A wider choice comes back as
-// a confirmation to ask, unless `confirmed`: the builder said a plain yes to it.
+// Hold the model's decision to the dialog and plan the keys, or OpenCode's answer.
+// Anything out of range, or not in the dialog, is refused rather than guessed. A wider
+// choice comes back as a confirmation to ask, unless `confirmed`: the builder said a
+// plain yes to it.
 export function checkChoice(dialog: Dialog, choice: Choice, confirmed = false): Checked {
   if (dialog.kind === "questions") {
     if (!("answers" in choice)) return { ok: false, refuse: "bad-choice" };
@@ -236,10 +277,13 @@ export function checkChoice(dialog: Dialog, choice: Choice, confirmed = false): 
   }
 
   if (dialog.backend === "opencode") {
-    // A reason after Reject isn't something the OpenCode TUI was measured to take.
-    if (feedback && choice.effect === "deny") return { ok: false, refuse: "unsupported" };
-    const keys = keystrokeForPermission(index, dialog.options.length);
-    return keys ? { ok: true, plan: { keys: [keys] } } : { ok: false, refuse: "bad-choice" };
+    const decision = OPENCODE_DECISION[choice.effect];
+    if (!decision) return { ok: false, refuse: "bad-choice" };
+    // A Reject's reason goes with it: OpenCode hands it to the agent, which carries on
+    // from it, so there is nothing to send after.
+    const message = choice.effect === "deny" ? feedback : undefined;
+    const answer: DialogAnswer = { kind: "permission", decision, ...(message ? { message } : {}) };
+    return { ok: true, plan: { keys: [], answer } };
   }
   if (choice.effect === "deny" && feedback) {
     return { ok: true, plan: { keys: [digit(index)], followUp: feedback } };
@@ -278,14 +322,18 @@ function checkAnswers(
   }
 
   if (dialog.backend === "opencode") {
-    // One single-select question and one of its own options: the phone's keystrokes.
-    const [only] = resolved;
-    if (questions.length !== 1 || questions[0].multiSelect || only.text) {
-      return { ok: false, refuse: "unsupported" };
-    }
-    // The option list on screen ends with "Type your own answer".
-    const keys = keystrokeForQuestion(only.picks[0] - 1, questions[0].options.length + 1);
-    return keys ? { ok: true, plan: { keys: [keys] } } : { ok: false, refuse: "bad-choice" };
+    // Field `q<index>` per question, in the box's order. A single-select question
+    // takes the option's label or the typed text; a multi-select one the picked labels
+    // in option order, typed text last, as Claude records it.
+    const answer: Record<string, string | string[]> = {};
+    questions.forEach((question, q) => {
+      const { picks, text } = resolved[q];
+      const labels = picks.map((p) => question.options[p - 1].label);
+      answer[`q${q}`] = question.multiSelect
+        ? [...labels, ...(text ? [text] : [])]
+        : text ?? labels[0];
+    });
+    return { ok: true, plan: { keys: [], answer: { kind: "form", answer } } };
   }
 
   // A review page follows the last question when there are several, or when the one
