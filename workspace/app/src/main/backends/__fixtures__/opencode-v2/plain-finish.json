@@ -1,0 +1,388 @@
+{
+  "scenario": "plain-finish",
+  "opencodeVersion": "2.0.32",
+  "notes": "TUI prompt 'Reply with exactly the word: done' + Enter in a fresh session (/new before the window). Screen: the reply, then 'Build · DeepSeek V4.1 Flash Free · 1.6s'. execution.succeeded is followed by session.viewed (the TUI showing the session marks it viewed).",
+  "frames": [
+    {
+      "t": 1023,
+      "event": {
+        "id": "evt_1553aa415001JtYZ4z2XNEVodJ",
+        "created": 1792431268885,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "slug": "cosmic-eagle",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1084,
+      "event": {
+        "id": "evt_1553aa43b001ImTuXnyimGDZb5",
+        "created": 1792431268923,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_1553aa40f0015nYpD8ucoawBX9",
+          "sessionID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "Reply with exactly the word: done",
+              "files": [],
+              "agents": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1084,
+      "event": {
+        "id": "evt_1553aa43d0012pxHFKdIdpHLci",
+        "created": 1792431268925,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1084,
+      "event": {
+        "id": "evt_1553aa4450012O6sB9rIcESe4i",
+        "created": 1792431268933,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 1084,
+      "event": {
+        "id": "evt_1553aa447001XlBwO4Saoz5puk",
+        "created": 1792431268935,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "inboxID": "msg_1553aa40f0015nYpD8ucoawBX9"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2560,
+      "event": {
+        "id": "evt_1553aaa19001hejmtOYcJv69hC",
+        "created": 1792431270425,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "cost": 0,
+          "tokens": {
+            "input": 39,
+            "output": 2,
+            "reasoning": 0,
+            "cache": {
+              "read": 512,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 2560,
+      "event": {
+        "id": "evt_1553aaa1a001jTDmipDkBoJd6g",
+        "created": 1792431270426,
+        "type": "session.renamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "title": "done"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "seq": 6,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2633,
+      "event": {
+        "id": "evt_1553aaa5c0010p6AHoEFSal50f",
+        "created": 1792431270492,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_1553aa44e001mBHDQvcbg9IadV",
+          "started": 1792431268948
+        },
+        "durable": {
+          "aggregateID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "seq": 7,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2633,
+      "event": {
+        "id": "evt_1553aaa5e001ynuse1lxNUsHiQ",
+        "created": 1792431270494,
+        "type": "session.text.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "assistantMessageID": "msg_1553aa44e001mBHDQvcbg9IadV",
+          "ordinal": 0
+        },
+        "durable": {
+          "aggregateID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "seq": 8,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2633,
+      "event": {
+        "id": "evt_1553aaa5f001mnhhidr0gINm72",
+        "created": 1792431270495,
+        "type": "session.text.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "assistantMessageID": "msg_1553aa44e001mBHDQvcbg9IadV",
+          "ordinal": 0,
+          "delta": "done"
+        }
+      }
+    },
+    {
+      "t": 2633,
+      "event": {
+        "id": "evt_1553aaa60001YoGTRJ5IivbzRx",
+        "created": 1792431270496,
+        "type": "session.text.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "assistantMessageID": "msg_1553aa44e001mBHDQvcbg9IadV",
+          "ordinal": 0,
+          "text": "done"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "seq": 9,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2633,
+      "event": {
+        "id": "evt_1553aaa61001vqc00ocwAF3HUm",
+        "created": 1792431270497,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "assistantMessageID": "msg_1553aa44e001mBHDQvcbg9IadV"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "seq": 10,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2633,
+      "event": {
+        "id": "evt_1553aaa61002kUqOcj086nWx8g",
+        "created": 1792431270497,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "assistantMessageID": "msg_1553aa44e001mBHDQvcbg9IadV",
+          "finish": "stop",
+          "rawFinish": "stop",
+          "cost": 0,
+          "tokens": {
+            "input": 3471,
+            "output": 2,
+            "reasoning": 0,
+            "cache": {
+              "read": 1792,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "seq": 11,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2633,
+      "event": {
+        "id": "evt_1553aaa62001B16M0ulXvEB70u",
+        "created": 1792431270498,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "cost": 0,
+          "tokens": {
+            "input": 3510,
+            "output": 4,
+            "reasoning": 0,
+            "cache": {
+              "read": 2304,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 2633,
+      "event": {
+        "id": "evt_1553aaa63001ZnfAgUoIb3Hz0h",
+        "created": 1792431270499,
+        "type": "session.execution.succeeded",
+        "data": {
+          "sessionID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "seq": 12,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2658,
+      "event": {
+        "id": "evt_1553aaa7a0015mWli5KLUJ2iyk",
+        "created": 1792431270522,
+        "type": "session.viewed",
+        "data": {
+          "sessionID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "idle": 1792431270499
+        },
+        "durable": {
+          "aggregateID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a",
+          "seq": 13,
+          "version": 1
+        }
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "t": 71,
+      "key": {
+        "text": "Reply with exactly the word: done"
+      }
+    },
+    {
+      "t": 995,
+      "key": "Enter"
+    }
+  ],
+  "pluginRoutes": [
+    {
+      "t": 1039,
+      "route": {
+        "type": "session",
+        "sessionID": "ses_eaac55bf3ffe6XiyaPpYAAKD9a"
+      }
+    }
+  ]
+}

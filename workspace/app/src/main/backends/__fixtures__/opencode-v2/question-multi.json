@@ -1,0 +1,826 @@
+{
+  "scenario": "question-multi",
+  "opencodeVersion": "2.0.32",
+  "notes": "One multiselect field; the form shows a tab row 'Pizza toppings  Submit' and '[ ]' boxes, Enter toggles. Keys: Enter (Cheese), Down, Down, Enter (Olives), Tab (to Submit, which lists 'Pizza toppings: Cheese, Olives'), Enter. form.replied {q0:['Cheese','Olives']}.",
+  "frames": [
+    {
+      "t": 1043,
+      "event": {
+        "id": "evt_1554165df0013MZFT37KFKtIqx",
+        "created": 1792431711711,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "slug": "tidy-river",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1070,
+      "event": {
+        "id": "evt_1554165ee001Rc7lSsWfWAL7NW",
+        "created": 1792431711726,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_1554165dd001Ig4Hhpd8r25i63",
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "Use your question tool to ask me one multi-select question (multiple answers allowed): which pizza toppings, with options Cheese, Ham and Olives. Then reply with the toppings I picked.",
+              "files": [],
+              "agents": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1070,
+      "event": {
+        "id": "evt_1554165ef001W20le5jAjbVygh",
+        "created": 1792431711727,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1070,
+      "event": {
+        "id": "evt_1554165f2001sLBVYpDsqnibpM",
+        "created": 1792431711730,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 1070,
+      "event": {
+        "id": "evt_1554165f30013ZRC7HEiwNk60B",
+        "created": 1792431711731,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "inboxID": "msg_1554165dd001Ig4Hhpd8r25i63"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2523,
+      "event": {
+        "id": "evt_155416ba6001qjqRvmJL929r3I",
+        "created": 1792431713190,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_1554165f8001NSs6pLv8YCQ5ha",
+          "started": 1792431711739
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 5,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2523,
+      "event": {
+        "id": "evt_155416ba7001adXy1t6ynZuqkA",
+        "created": 1792431713191,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "assistantMessageID": "msg_1554165f8001NSs6pLv8YCQ5ha",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 6,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2627,
+      "event": {
+        "id": "evt_155416c0f001ZRbRdduNCZk11B",
+        "created": 1792431713295,
+        "type": "session.reasoning.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "assistantMessageID": "msg_1554165f8001NSs6pLv8YCQ5ha",
+          "ordinal": 0,
+          "delta": "The user wants me to ask a multi-select question with options Cheese, Ham and Olives,"
+        }
+      }
+    },
+    {
+      "t": 2939,
+      "event": {
+        "id": "evt_155416d450011aOjSuesm0rbF2",
+        "created": 1792431713605,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "assistantMessageID": "msg_1554165f8001NSs6pLv8YCQ5ha",
+          "id": "call_00_cbmgbukf27cctbxakhp2bh75",
+          "name": "question"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 7,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2973,
+      "event": {
+        "id": "evt_155416d65001yBc97U2UEQsVgb",
+        "created": 1792431713637,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "assistantMessageID": "msg_1554165f8001NSs6pLv8YCQ5ha",
+          "ordinal": 0,
+          "text": "The user wants me to ask a multi-select question with options Cheese, Ham and Olives, then reply with picked toppings. Use the question tool with multiple: true.",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 8,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2973,
+      "event": {
+        "id": "evt_155416d6600130tffWsa1p6LUP",
+        "created": 1792431713638,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "assistantMessageID": "msg_1554165f8001NSs6pLv8YCQ5ha",
+          "id": "call_00_cbmgbukf27cctbxakhp2bh75",
+          "text": "{\"questions\": [{\"header\": \"Pizza toppings\", \"multiple\": true, \"question\": \"Which pizza toppings would you like? (Select all that apply)\", \"options\": [{\"label\": \"Cheese\", \"description\": \"Classic melted…"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 9,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2973,
+      "event": {
+        "id": "evt_155416d67001DAdbsLhZtLWk7H",
+        "created": 1792431713639,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "assistantMessageID": "msg_1554165f8001NSs6pLv8YCQ5ha",
+          "id": "call_00_cbmgbukf27cctbxakhp2bh75",
+          "input": {
+            "questions": [
+              {
+                "header": "Pizza toppings",
+                "multiple": true,
+                "question": "Which pizza toppings would you like? (Select all that apply)",
+                "options": [
+                  {
+                    "label": "Cheese",
+                    "description": "Classic melted cheese"
+                  },
+                  {
+                    "label": "Ham",
+                    "description": "Sliced ham"
+                  },
+                  {
+                    "label": "Olives",
+                    "description": "Sliced olives"
+                  }
+                ]
+              }
+            ]
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 10,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2973,
+      "event": {
+        "id": "evt_155416d68001yA1AYyvCDv7jK7",
+        "created": 1792431713640,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "assistantMessageID": "msg_1554165f8001NSs6pLv8YCQ5ha"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 11,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2973,
+      "event": {
+        "id": "evt_155416d6a0027HaQhPBU6jFBF8",
+        "created": 1792431713642,
+        "type": "form.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "form": {
+            "id": "frm_155416d6a001xXCplN3nv7QcZ5",
+            "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+            "title": "Questions",
+            "metadata": {
+              "kind": "question",
+              "tool": {
+                "messageID": "msg_1554165f8001NSs6pLv8YCQ5ha",
+                "id": "call_00_cbmgbukf27cctbxakhp2bh75"
+              }
+            },
+            "fields": [
+              {
+                "key": "q0",
+                "title": "Pizza toppings",
+                "description": "Which pizza toppings would you like? (Select all that apply)",
+                "type": "multiselect",
+                "options": [
+                  {
+                    "value": "Cheese",
+                    "label": "Cheese",
+                    "description": "Classic melted cheese"
+                  },
+                  {
+                    "value": "Ham",
+                    "label": "Ham",
+                    "description": "Sliced ham"
+                  },
+                  {
+                    "value": "Olives",
+                    "label": "Olives",
+                    "description": "Sliced olives"
+                  }
+                ],
+                "custom": true
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "t": 4277,
+      "event": {
+        "id": "evt_155417280001pyHkLORWtiW10H",
+        "created": 1792431714944,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "cost": 0,
+          "tokens": {
+            "input": 69,
+            "output": 7,
+            "reasoning": 112,
+            "cache": {
+              "read": 512,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 4277,
+      "event": {
+        "id": "evt_155417281001bwtvp14Xiyiqc0",
+        "created": 1792431714945,
+        "type": "session.renamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "title": "Pizza toppings multi-select question"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 13,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4277,
+      "event": {
+        "id": "evt_155417282001xTDwmBCaZA9e5U",
+        "created": 1792431714946,
+        "type": "project.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "canonical": "/private/tmp/oc2-spike/projects/scen",
+          "time": {
+            "created": 1792431240537,
+            "updated": 1792431240537,
+            "active": 1792431714946
+          },
+          "sandboxes": []
+        }
+      }
+    },
+    {
+      "t": 19260,
+      "event": {
+        "id": "evt_15541acfd001jcR4INuyw33r04",
+        "created": 1792431729917,
+        "type": "form.replied",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "frm_155416d6a001xXCplN3nv7QcZ5",
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "answer": {
+            "q0": [
+              "Cheese",
+              "Olives"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "t": 19260,
+      "event": {
+        "id": "evt_15541acfe001F0miPhVCu4S03F",
+        "created": 1792431729918,
+        "type": "session.tool.success",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "assistantMessageID": "msg_1554165f8001NSs6pLv8YCQ5ha",
+          "id": "call_00_cbmgbukf27cctbxakhp2bh75",
+          "content": [
+            {
+              "type": "text",
+              "text": "User has answered your questions: \"Which pizza toppings would you like? (Select all that apply)\"=\"Cheese, Olives\". You can now continue with the user's answers in mind."
+            }
+          ],
+          "metadata": {
+            "answers": [
+              [
+                "Cheese",
+                "Olives"
+              ]
+            ],
+            "truncated": false
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 14,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 19260,
+      "event": {
+        "id": "evt_15541acff0019py19mCiprWNeQ",
+        "created": 1792431729919,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "assistantMessageID": "msg_1554165f8001NSs6pLv8YCQ5ha",
+          "finish": "tool-calls",
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 45,
+            "output": 120,
+            "reasoning": 34,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 15,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 19260,
+      "event": {
+        "id": "evt_15541ad00001aJWVwSBt7FZOWj",
+        "created": 1792431729920,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "cost": 0,
+          "tokens": {
+            "input": 114,
+            "output": 127,
+            "reasoning": 146,
+            "cache": {
+              "read": 5760,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 20862,
+      "event": {
+        "id": "evt_15541b33e001D6hX7MgPgXfFQ7",
+        "created": 1792431731518,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_15541ad05001xnQbhKdAu2aaR0",
+          "started": 1792431729929
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 16,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 20862,
+      "event": {
+        "id": "evt_15541b342001uSpnAvr5ATBUem",
+        "created": 1792431731522,
+        "type": "session.text.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "assistantMessageID": "msg_15541ad05001xnQbhKdAu2aaR0",
+          "ordinal": 0
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 17,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 20862,
+      "event": {
+        "id": "evt_15541b3440014pmTE2kExv3WM5",
+        "created": 1792431731524,
+        "type": "session.text.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "assistantMessageID": "msg_15541ad05001xnQbhKdAu2aaR0",
+          "ordinal": 0,
+          "delta": "You picked: **Cheese and Olives**."
+        }
+      }
+    },
+    {
+      "t": 20862,
+      "event": {
+        "id": "evt_15541b345001CAbt1xEejzM0Gi",
+        "created": 1792431731525,
+        "type": "session.text.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "assistantMessageID": "msg_15541ad05001xnQbhKdAu2aaR0",
+          "ordinal": 0,
+          "text": "You picked: **Cheese and Olives**."
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 18,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 20862,
+      "event": {
+        "id": "evt_15541b347001md6FQvhKQPTZoM",
+        "created": 1792431731527,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "assistantMessageID": "msg_15541ad05001xnQbhKdAu2aaR0"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 19,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 20862,
+      "event": {
+        "id": "evt_15541b348001wJtPUd24N1aeKM",
+        "created": 1792431731528,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "assistantMessageID": "msg_15541ad05001xnQbhKdAu2aaR0",
+          "finish": "stop",
+          "rawFinish": "stop",
+          "cost": 0,
+          "tokens": {
+            "input": 249,
+            "output": 11,
+            "reasoning": 0,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 20,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 20862,
+      "event": {
+        "id": "evt_15541b34a001shtsLNDYaO4sHS",
+        "created": 1792431731530,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "cost": 0,
+          "tokens": {
+            "input": 363,
+            "output": 138,
+            "reasoning": 146,
+            "cache": {
+              "read": 11008,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 20863,
+      "event": {
+        "id": "evt_15541b34b001VFQlE0546GgelM",
+        "created": 1792431731531,
+        "type": "session.execution.succeeded",
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 21,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 20885,
+      "event": {
+        "id": "evt_15541b361001gydSwyRuDYrY3u",
+        "created": 1792431731554,
+        "type": "session.viewed",
+        "data": {
+          "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "idle": 1792431731531
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI",
+          "seq": 22,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 21692,
+      "event": {
+        "id": "evt_15541b680001mRV6dwg21KaHdD",
+        "created": 1792431732352,
+        "type": "provider.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 21693,
+      "event": {
+        "id": "evt_15541b689001r0JPaXnRivyCaf",
+        "created": 1792431732361,
+        "type": "model.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects"
+        },
+        "data": {}
+      }
+    }
+  ],
+  "omitted": {
+    "repeatedDeltaFrames": {
+      "session.reasoning.delta": 1
+    }
+  },
+  "inputs": [
+    {
+      "t": 42,
+      "key": {
+        "text": "Use your question tool to ask me one multi-select question (multiple answers allowed): which pizza toppings, with options Cheese, Ham and Olives. Then reply with the toppings I picked."
+      }
+    },
+    {
+      "t": 1030,
+      "key": "Enter"
+    },
+    {
+      "t": 11473,
+      "key": "Enter"
+    },
+    {
+      "t": 11883,
+      "key": "Down"
+    },
+    {
+      "t": 12184,
+      "key": "Down"
+    },
+    {
+      "t": 12494,
+      "key": "Enter"
+    },
+    {
+      "t": 13392,
+      "key": "Tab"
+    },
+    {
+      "t": 19246,
+      "key": "Enter"
+    }
+  ],
+  "pluginRoutes": [
+    {
+      "t": 1050,
+      "route": {
+        "type": "session",
+        "sessionID": "ses_eaabe9a24ffe6NQtkFpoDqLkKI"
+      }
+    }
+  ]
+}

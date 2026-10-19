@@ -1,0 +1,796 @@
+{
+  "scenario": "permission-api-reject-reason",
+  "opencodeVersion": "2.0.32",
+  "notes": "Root session, dialog for 'rm once.txt'; POST reply {decision:reject, message:'Do not delete files. Instead reply with the single word: understood'} -> 204. The turn continues (model replied 'understood') and ends execution.succeeded; no interrupted. Second POST {decision:reject} -> 404.",
+  "frames": [
+    {
+      "t": 377,
+      "event": {
+        "id": "evt_1553ec963001TTSjqgDVK9IHrN",
+        "created": 1792431540579,
+        "type": "provider.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 377,
+      "event": {
+        "id": "evt_1553ec96a001r4UBmpIQF5P8uH",
+        "created": 1792431540586,
+        "type": "model.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 1047,
+      "event": {
+        "id": "evt_1553ecc07001JvsQWhMhcZnpen",
+        "created": 1792431541255,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "slug": "lucky-canyon",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1072,
+      "event": {
+        "id": "evt_1553ecc14001svEUT75rSr5t72",
+        "created": 1792431541268,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_1553ecc02001kcc4Rb3UcZ6RuL",
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "Use your shell tool to run exactly this command: rm once.txt",
+              "files": [],
+              "agents": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1072,
+      "event": {
+        "id": "evt_1553ecc15001kN8vMfzWok2qKK",
+        "created": 1792431541269,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1073,
+      "event": {
+        "id": "evt_1553ecc18001bVI2pEc6rwKI1d",
+        "created": 1792431541272,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 1073,
+      "event": {
+        "id": "evt_1553ecc190018FjQ6AnoilTY6I",
+        "created": 1792431541273,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "inboxID": "msg_1553ecc02001kcc4Rb3UcZ6RuL"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2381,
+      "event": {
+        "id": "evt_1553ed137001mc7CxUIzpTQox8",
+        "created": 1792431542583,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_1553ecc1d0012kUTdOLCEVPS1U",
+          "started": 1792431541281
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 5,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2381,
+      "event": {
+        "id": "evt_1553ed13c001AZTqX1acxWDyon",
+        "created": 1792431542588,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "assistantMessageID": "msg_1553ecc1d0012kUTdOLCEVPS1U",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 6,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2483,
+      "event": {
+        "id": "evt_1553ed1a40018kJHEVC9p8CvTB",
+        "created": 1792431542692,
+        "type": "session.reasoning.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "assistantMessageID": "msg_1553ecc1d0012kUTdOLCEVPS1U",
+          "ordinal": 0,
+          "delta": "The user wants me to run exactly `rm once.txt`. This is a destructive command"
+        }
+      }
+    },
+    {
+      "t": 2716,
+      "event": {
+        "id": "evt_1553ed286001ZZMS7ldTtZzC9O",
+        "created": 1792431542918,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "assistantMessageID": "msg_1553ecc1d0012kUTdOLCEVPS1U",
+          "id": "call_00_0w5hzaucqo5h6pn96k3a481f",
+          "name": "shell"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 7,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2902,
+      "event": {
+        "id": "evt_1553ed342001mZJwWIEHW2Fa5C",
+        "created": 1792431543106,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "assistantMessageID": "msg_1553ecc1d0012kUTdOLCEVPS1U",
+          "ordinal": 0,
+          "text": "The user wants me to run exactly `rm once.txt`. This is a destructive command but explicit. It's a trivial file, likely part of a test scenario. Let me just run it. But should I check if the file exis…",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 8,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2903,
+      "event": {
+        "id": "evt_1553ed343001eo7FnpAHyhDOZs",
+        "created": 1792431543107,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "assistantMessageID": "msg_1553ecc1d0012kUTdOLCEVPS1U",
+          "id": "call_00_0w5hzaucqo5h6pn96k3a481f",
+          "text": "{\"command\": \"rm once.txt\"}"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 9,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2903,
+      "event": {
+        "id": "evt_1553ed344001c6skWv57BV92iv",
+        "created": 1792431543108,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "assistantMessageID": "msg_1553ecc1d0012kUTdOLCEVPS1U",
+          "id": "call_00_0w5hzaucqo5h6pn96k3a481f",
+          "input": {
+            "command": "rm once.txt"
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 10,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2903,
+      "event": {
+        "id": "evt_1553ed34600126V9PSD0hjyCcI",
+        "created": 1792431543110,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "assistantMessageID": "msg_1553ecc1d0012kUTdOLCEVPS1U"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 11,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2903,
+      "event": {
+        "id": "evt_1553ed348002FY8vppaDxR5NRI",
+        "created": 1792431543112,
+        "type": "permission.asked",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "per_1553ed348001Eem6jjmulAupOg",
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "action": "shell",
+          "resources": [
+            "rm once.txt"
+          ],
+          "save": [
+            "rm *"
+          ],
+          "source": {
+            "type": "tool",
+            "messageID": "msg_1553ecc1d0012kUTdOLCEVPS1U",
+            "id": "call_00_0w5hzaucqo5h6pn96k3a481f"
+          }
+        }
+      }
+    },
+    {
+      "t": 3339,
+      "event": {
+        "id": "evt_1553ed4fa001e9wDlmsDO4bJNV",
+        "created": 1792431543546,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "cost": 0,
+          "tokens": {
+            "input": 45,
+            "output": 8,
+            "reasoning": 154,
+            "cache": {
+              "read": 512,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 3339,
+      "event": {
+        "id": "evt_1553ed4fb001YGnfevlaVUOdYM",
+        "created": 1792431543547,
+        "type": "session.renamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "title": "Deleting once.txt via rm"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 13,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 10660,
+      "event": {
+        "id": "evt_1553ef185001657M9xU2HUu89v",
+        "created": 1792431550853,
+        "type": "permission.replied",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "requestID": "per_1553ed348001Eem6jjmulAupOg",
+          "reply": "reject"
+        }
+      }
+    },
+    {
+      "t": 10660,
+      "event": {
+        "id": "evt_1553ef186001IDWTCGE2jO34BB",
+        "created": 1792431550854,
+        "type": "session.tool.failed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "assistantMessageID": "msg_1553ecc1d0012kUTdOLCEVPS1U",
+          "id": "call_00_0w5hzaucqo5h6pn96k3a481f",
+          "error": {
+            "type": "permission.rejected",
+            "message": "Do not delete files. Instead reply with the single word: understood"
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 14,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 10660,
+      "event": {
+        "id": "evt_1553ef1880011yPvXbZvxGy2Lb",
+        "created": 1792431550856,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "assistantMessageID": "msg_1553ecc1d0012kUTdOLCEVPS1U",
+          "finish": "tool-calls",
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 21,
+            "output": 39,
+            "reasoning": 65,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 15,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 10661,
+      "event": {
+        "id": "evt_1553ef189001pAfN44ranSq6lE",
+        "created": 1792431550857,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "cost": 0,
+          "tokens": {
+            "input": 66,
+            "output": 47,
+            "reasoning": 219,
+            "cache": {
+              "read": 5760,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 12934,
+      "event": {
+        "id": "evt_1553efa71001BSLkwiCmzdRg2Q",
+        "created": 1792431553137,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_1553ef18f001IyZgElV43aMCkQ",
+          "started": 1792431550869
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 16,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 12934,
+      "event": {
+        "id": "evt_1553efa75001VlzWOclfYsXope",
+        "created": 1792431553141,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "assistantMessageID": "msg_1553ef18f001IyZgElV43aMCkQ",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 17,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 15130,
+      "event": {
+        "id": "evt_1553f0301001omTs6FWqHG4Hl5",
+        "created": 1792431555329,
+        "type": "session.text.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "assistantMessageID": "msg_1553ef18f001IyZgElV43aMCkQ",
+          "ordinal": 0
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 18,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 15130,
+      "event": {
+        "id": "evt_1553f0304001WZPqjjSFLlSuQ2",
+        "created": 1792431555332,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "assistantMessageID": "msg_1553ef18f001IyZgElV43aMCkQ",
+          "ordinal": 0,
+          "text": "The permission system rejected the command and instructs me to reply with the single word: understood. That's an instruction from the harness tool result. Should I comply? This looks like a scenario t…",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 19,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 15130,
+      "event": {
+        "id": "evt_1553f0306001mxzthF7yrceqog",
+        "created": 1792431555334,
+        "type": "session.text.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "assistantMessageID": "msg_1553ef18f001IyZgElV43aMCkQ",
+          "ordinal": 0,
+          "delta": "understood"
+        }
+      }
+    },
+    {
+      "t": 15130,
+      "event": {
+        "id": "evt_1553f0307001GhsAups0KGzHAE",
+        "created": 1792431555335,
+        "type": "session.text.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "assistantMessageID": "msg_1553ef18f001IyZgElV43aMCkQ",
+          "ordinal": 0,
+          "text": "understood"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 20,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 15130,
+      "event": {
+        "id": "evt_1553f0308001rmhlKiEJttIm6n",
+        "created": 1792431555336,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "assistantMessageID": "msg_1553ef18f001IyZgElV43aMCkQ"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 21,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 15130,
+      "event": {
+        "id": "evt_1553f0309001n25fYNOrXhzl2Q",
+        "created": 1792431555337,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "assistantMessageID": "msg_1553ef18f001IyZgElV43aMCkQ",
+          "finish": "stop",
+          "rawFinish": "stop",
+          "cost": 0,
+          "tokens": {
+            "input": 167,
+            "output": 3,
+            "reasoning": 375,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 22,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 15130,
+      "event": {
+        "id": "evt_1553f030a001YLOj0OLeNvZUJP",
+        "created": 1792431555338,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "cost": 0,
+          "tokens": {
+            "input": 233,
+            "output": 50,
+            "reasoning": 594,
+            "cache": {
+              "read": 11008,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 15130,
+      "event": {
+        "id": "evt_1553f030b001251Y14xC4iW2xB",
+        "created": 1792431555339,
+        "type": "session.execution.succeeded",
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 23,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 15151,
+      "event": {
+        "id": "evt_1553f03200012NefrWgsEum7Kz",
+        "created": 1792431555360,
+        "type": "session.viewed",
+        "data": {
+          "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "idle": 1792431555339
+        },
+        "durable": {
+          "aggregateID": "ses_eaac133ffffeQx3KtqFB4gaeQ3",
+          "seq": 24,
+          "version": 1
+        }
+      }
+    }
+  ],
+  "omitted": {
+    "repeatedDeltaFrames": {
+      "session.reasoning.delta": 18
+    }
+  },
+  "inputs": [
+    {
+      "t": 44,
+      "key": {
+        "text": "Use your shell tool to run exactly this command: rm once.txt"
+      }
+    },
+    {
+      "t": 1031,
+      "key": "Enter"
+    }
+  ],
+  "http": [
+    {
+      "t": 10640,
+      "method": "POST",
+      "path": "/api/session/ses_eaac133ffffeQx3KtqFB4gaeQ3/permission/per_1553ed348001Eem6jjmulAupOg/reply",
+      "body": {
+        "decision": "reject",
+        "message": "Do not delete files. Instead reply with the single word: understood"
+      },
+      "status": 204
+    },
+    {
+      "t": 10704,
+      "method": "POST",
+      "path": "/api/session/ses_eaac133ffffeQx3KtqFB4gaeQ3/permission/per_1553ed348001Eem6jjmulAupOg/reply",
+      "body": {
+        "decision": "reject"
+      },
+      "status": 404,
+      "response": {
+        "_tag": "PermissionNotFoundError",
+        "requestID": "per_1553ed348001Eem6jjmulAupOg",
+        "message": "Permission request not found: per_1553ed348001Eem6jjmulAupOg"
+      }
+    }
+  ],
+  "pluginRoutes": [
+    {
+      "t": 1052,
+      "route": {
+        "type": "session",
+        "sessionID": "ses_eaac133ffffeQx3KtqFB4gaeQ3"
+      }
+    }
+  ]
+}

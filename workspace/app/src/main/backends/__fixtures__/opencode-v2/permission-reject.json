@@ -1,0 +1,555 @@
+{
+  "scenario": "permission-reject",
+  "opencodeVersion": "2.0.32",
+  "notes": "Root session, dialog for 'mkdir reject-dir'; Right, Right, Enter (Reject). A root-session Reject sends at once (no reason step). Order: permission.replied{reject}, tool.failed{aborted}, step.failed, execution.interrupted{reason:shutdown}, the last three in the same ms, 1 ms after the reply. Screen: 'The user declined this tool call' and '· interrupted'. NOTE: this turn keeps its execution claim and is resumed at the next service start (see service-restart-resumes-rejected).",
+  "frames": [
+    {
+      "t": 972,
+      "event": {
+        "id": "evt_1553dafa1001WaWX5ax8kfXxdm",
+        "created": 1792431468449,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "slug": "misty-sailor",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1001,
+      "event": {
+        "id": "evt_1553dafb1001YO7SEeoA3Yqtft",
+        "created": 1792431468465,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_1553daf9e001gJoUpOc68lueES",
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "Use your shell tool to run exactly this command: mkdir reject-dir",
+              "files": [],
+              "agents": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1002,
+      "event": {
+        "id": "evt_1553dafb3001dhOrFGZI1TajHP",
+        "created": 1792431468467,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1002,
+      "event": {
+        "id": "evt_1553dafb6001KJjbDFtJYx6Iuh",
+        "created": 1792431468470,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 1002,
+      "event": {
+        "id": "evt_1553dafb7001xn2XqEstqIudPu",
+        "created": 1792431468471,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "inboxID": "msg_1553daf9e001gJoUpOc68lueES"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2588,
+      "event": {
+        "id": "evt_1553db5e90010lg2W4Rw8lWhPK",
+        "created": 1792431470057,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_1553dafbc001wPcpBzaBAy1YAo",
+          "started": 1792431468480
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 5,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2588,
+      "event": {
+        "id": "evt_1553db5ef001YNU6HZi6QyqZGK",
+        "created": 1792431470063,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "assistantMessageID": "msg_1553dafbc001wPcpBzaBAy1YAo",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 6,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2634,
+      "event": {
+        "id": "evt_1553db61d001RcpXhXNhv5C56T",
+        "created": 1792431470109,
+        "type": "session.reasoning.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "assistantMessageID": "msg_1553dafbc001wPcpBzaBAy1YAo",
+          "ordinal": 0,
+          "delta": "The user asks to run exactly `mkdir reject-dir`. Let me do that."
+        }
+      }
+    },
+    {
+      "t": 2634,
+      "event": {
+        "id": "evt_1553db61d002YWqvk7O1xJNCZ0",
+        "created": 1792431470109,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "assistantMessageID": "msg_1553dafbc001wPcpBzaBAy1YAo",
+          "id": "call_00_5dq11k819and86l27zm9bo2y",
+          "name": "shell"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 7,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2695,
+      "event": {
+        "id": "evt_1553db653001n9h6TKFSccXsOd",
+        "created": 1792431470163,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "assistantMessageID": "msg_1553dafbc001wPcpBzaBAy1YAo",
+          "ordinal": 0,
+          "text": "The user asks to run exactly `mkdir reject-dir`. Let me do that.",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 8,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2695,
+      "event": {
+        "id": "evt_1553db655001VICOqwoAp7BjtX",
+        "created": 1792431470165,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "assistantMessageID": "msg_1553dafbc001wPcpBzaBAy1YAo",
+          "id": "call_00_5dq11k819and86l27zm9bo2y",
+          "text": "{\"command\": \"mkdir reject-dir\"}"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 9,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2695,
+      "event": {
+        "id": "evt_1553db6570012rGijZxfv5H894",
+        "created": 1792431470167,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "assistantMessageID": "msg_1553dafbc001wPcpBzaBAy1YAo",
+          "id": "call_00_5dq11k819and86l27zm9bo2y",
+          "input": {
+            "command": "mkdir reject-dir"
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 10,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2695,
+      "event": {
+        "id": "evt_1553db65a001BsIJmSAxNdx66V",
+        "created": 1792431470170,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "assistantMessageID": "msg_1553dafbc001wPcpBzaBAy1YAo"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 11,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2696,
+      "event": {
+        "id": "evt_1553db65e0028dzGsdLsePlYnM",
+        "created": 1792431470174,
+        "type": "permission.asked",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "per_1553db65e001d91de9G2S6Flt9",
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "action": "shell",
+          "resources": [
+            "mkdir reject-dir"
+          ],
+          "save": [
+            "mkdir *"
+          ],
+          "source": {
+            "type": "tool",
+            "messageID": "msg_1553dafbc001wPcpBzaBAy1YAo",
+            "id": "call_00_5dq11k819and86l27zm9bo2y"
+          }
+        }
+      }
+    },
+    {
+      "t": 3694,
+      "event": {
+        "id": "evt_1553dba410011BOH3bxSz8cdEq",
+        "created": 1792431471169,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "cost": 0,
+          "tokens": {
+            "input": 47,
+            "output": 8,
+            "reasoning": 131,
+            "cache": {
+              "read": 512,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 3694,
+      "event": {
+        "id": "evt_1553dba43001GnNhx1bpMPoM59",
+        "created": 1792431471171,
+        "type": "session.renamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "title": "Running mkdir reject-dir command"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 13,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 5281,
+      "event": {
+        "id": "evt_1553dc072001iYebRQ8dlHZJ35",
+        "created": 1792431472754,
+        "type": "permission.replied",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "requestID": "per_1553db65e001d91de9G2S6Flt9",
+          "reply": "reject"
+        }
+      }
+    },
+    {
+      "t": 5282,
+      "event": {
+        "id": "evt_1553dc073001AI74n5lV2FRpjj",
+        "created": 1792431472755,
+        "type": "session.tool.failed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "assistantMessageID": "msg_1553dafbc001wPcpBzaBAy1YAo",
+          "id": "call_00_5dq11k819and86l27zm9bo2y",
+          "error": {
+            "type": "aborted",
+            "message": "The user declined this tool call"
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 14,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 5282,
+      "event": {
+        "id": "evt_1553dc0750010hiZKcnpH1U0Vg",
+        "created": 1792431472757,
+        "type": "session.step.failed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "assistantMessageID": "msg_1553dafbc001wPcpBzaBAy1YAo",
+          "error": {
+            "type": "aborted",
+            "message": "Step interrupted"
+          },
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 3479,
+            "output": 40,
+            "reasoning": 17,
+            "cache": {
+              "read": 1792,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 15,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 5282,
+      "event": {
+        "id": "evt_1553dc077001QrVwE8jqNKzToE",
+        "created": 1792431472759,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "cost": 0,
+          "tokens": {
+            "input": 3526,
+            "output": 48,
+            "reasoning": 148,
+            "cache": {
+              "read": 2304,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 5282,
+      "event": {
+        "id": "evt_1553dc077002XDznDzFGHIgml2",
+        "created": 1792431472759,
+        "type": "session.execution.interrupted",
+        "data": {
+          "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "reason": "shutdown"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac25063ffeHZk9s9EjId37ur",
+          "seq": 16,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 16211,
+      "event": {
+        "id": "evt_1553deb25001huPe5GhzC6UabS",
+        "created": 1792431483685,
+        "type": "provider.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/p0"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 16212,
+      "event": {
+        "id": "evt_1553deb290013XX4c5Q1SWQ9g5",
+        "created": 1792431483689,
+        "type": "model.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/p0"
+        },
+        "data": {}
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "t": 33,
+      "key": {
+        "text": "Use your shell tool to run exactly this command: mkdir reject-dir"
+      }
+    },
+    {
+      "t": 959,
+      "key": "Enter"
+    },
+    {
+      "t": 3965,
+      "key": "Right"
+    },
+    {
+      "t": 4375,
+      "key": "Right"
+    },
+    {
+      "t": 5273,
+      "key": "Enter"
+    }
+  ],
+  "pluginRoutes": [
+    {
+      "t": 980,
+      "route": {
+        "type": "session",
+        "sessionID": "ses_eaac25063ffeHZk9s9EjId37ur"
+      }
+    }
+  ]
+}
