@@ -891,3 +891,130 @@ describe("a reply on the card (T-509)", () => {
     expect(h.answers).toHaveLength(0);
   });
 });
+
+// OpenCode 2's dialogs are answered through its API (opencode-v2 T-607): the plan
+// carries the answer and no keys, and "always" is saved for the project.
+describe("a reply on an OpenCode dialog (opencode-v2 T-607)", () => {
+  const PERMISSION: Dialog = {
+    kind: "permission",
+    backend: "opencode",
+    toolName: "shell",
+    toolInput: { resources: ["rm -rf build"], metadata: {}, save: ["rm *"] },
+    options: [
+      { effect: "allow-once", label: "Allow once" },
+      {
+        effect: "allow-always",
+        label: "Always allow",
+        description: "Allow it, and save that for this project: calls like it are allowed from now on",
+      },
+      { effect: "deny", label: "Reject" },
+    ],
+  };
+  const QUESTIONS: Dialog = {
+    kind: "questions",
+    backend: "opencode",
+    questions: [
+      { question: "Which db?", multiSelect: false, options: [{ label: "Postgres" }, { label: "SQLite" }] },
+      { question: "Which extras?", multiSelect: true, options: [{ label: "Cache" }, { label: "Queue" }] },
+    ],
+  };
+
+  async function waiting(dialog: Dialog) {
+    const h = harness();
+    h.dialogs.dialog = dialog;
+    h.secretary.start(true);
+    h.fire("a", ev(3, "needs-you"));
+    h.writes[0].settle(brief("MSK 想删 build 文件夹。要允许吗？"));
+    await flush();
+    return h;
+  }
+  const last = (h: ReturnType<typeof harness>) => h.pushes("a").at(-1);
+
+  it("rejects with the builder's reason in the answer, and says what it did", async () => {
+    const h = await waiting(PERMISSION);
+    const done = h.secretary.reply("a", 3, "不行，用 ls 看看就好");
+    h.interprets[0].settle({
+      ok: true,
+      action: "choose",
+      choice: { effect: "deny", feedback: "用 ls 看看就好" },
+      message: "好，已经拒绝了，并告诉它用 ls 看看就好。",
+    });
+    await flush();
+    expect(h.answers[0].plan).toEqual({
+      keys: [],
+      answer: { kind: "permission", decision: "reject", message: "用 ls 看看就好" },
+    });
+    h.answers[0].settle({ ok: true });
+    await done;
+    expect(last(h)?.exchanges?.[0]).toMatchObject({ outcome: "pressed" });
+  });
+
+  it("asks once-or-always and confirms always as saved for this project", async () => {
+    const h = await waiting(PERMISSION);
+    const first = h.secretary.reply("a", 3, "always?");
+    h.interprets[0].settle({ ok: true, action: "choose", choice: { effect: "allow-always" }, message: "Done." });
+    await first;
+    expect(last(h)?.exchanges?.[0]).toMatchObject({
+      outcome: "asked",
+      response: "Allow it just this once, or save it for this project and allow it from now on?",
+    });
+
+    const second = h.secretary.reply("a", 3, "以后都可以");
+    h.interprets[1].settle({
+      ok: true,
+      action: "choose",
+      choice: { effect: "allow-always", explicit: true },
+      message: "好，这个项目以后都允许了。",
+    });
+    await second;
+    expect(h.answers).toHaveLength(0);
+    expect(last(h)?.exchanges?.[1]).toMatchObject({
+      outcome: "asked",
+      response:
+        "确认一下：允许它，并且给这个项目记下来，以后这类操作都直接允许，不再问你，对吗？回答“是”我就照办。",
+    });
+
+    const yes = h.secretary.reply("a", 3, "是");
+    await flush();
+    expect(h.answers[0].plan).toEqual({ keys: [], answer: { kind: "permission", decision: "always" } });
+    h.answers[0].settle({ ok: true });
+    await yes;
+    expect(last(h)?.exchanges?.[2]).toMatchObject({ outcome: "pressed", response: "好，这个项目以后都允许了。" });
+  });
+
+  it("answers a box of two questions, typed text included, in one answer", async () => {
+    const h = await waiting(QUESTIONS);
+    void h.secretary.reply("a", 3, "SQLite，再加个 Metrics");
+    h.interprets[0].settle({
+      ok: true,
+      action: "choose",
+      choice: {
+        answers: [
+          { question: 1, picks: [2] },
+          { question: 2, picks: [1], text: "Metrics" },
+        ],
+      },
+      message: "好，用 SQLite，加 Cache 和 Metrics。",
+    });
+    await flush();
+    expect(h.answers[0].plan).toEqual({
+      keys: [],
+      answer: { kind: "form", answer: { q0: "SQLite", q1: ["Cache", "Metrics"] } },
+    });
+  });
+
+  it("says the dialog was answered when OpenCode says it's gone, and asks for a look when it failed", async () => {
+    for (const [reason, says] of [
+      ["answered", "The dialog was answered while I was thinking. I pressed nothing."],
+      ["failed", "I couldn't confirm the answer reached the session. Please check the terminal."],
+    ] as const) {
+      const h = await waiting(PERMISSION);
+      const done = h.secretary.reply("a", 3, "yes");
+      h.interprets[0].settle({ ok: true, action: "choose", choice: { effect: "allow-once" }, message: "Done." });
+      await flush();
+      h.answers[0].settle({ ok: false, reason });
+      await done;
+      expect(last(h)?.exchanges?.[0]).toMatchObject({ outcome: "refused", response: says });
+    }
+  });
+});
