@@ -81,29 +81,17 @@ export function QuickActionsSection({
     }
   }, [instance.id, sessionId]);
 
-  // Rename the current CLI session. Our own dialog collects the name; how it
-  // reaches the agent differs per backend because their `/rename` commands work
-  // differently (this is the "our dialog, per-backend adapter" approach):
-  //   - claude:   `/rename <name>` takes the name inline — send it in one shot.
-  //   - opencode: `/rename` takes NO argument; it opens opencode's own inline
-  //               rename dialog. So we send `/rename\r` to open that dialog,
-  //               wait briefly for it to appear, then type the name + Enter.
-  // The alias (our contact display name, edited via the context menu) is a
-  // separate concept — this renames the agent's session itself.
+  // Rename the current CLI session. Our own dialog collects the name, and both
+  // CLIs take it inline as `/rename <name>`, so it goes in one write. (OpenCode 2's
+  // bare `/rename` would have its model make a title up instead.) The alias, our
+  // contact display name edited from the context menu, is a separate thing: this
+  // renames the agent's session itself.
   const handleRename = useCallback(
     (name: string) => {
-      const write = (data: string) =>
-        window.electronAPI.writeToInstance(instance.id, data);
-      if (instance.backend === "opencode") {
-        // Open opencode's rename dialog, then fill + submit once it's up.
-        write("/rename\r");
-        setTimeout(() => write(`${name}\r`), 250);
-      } else {
-        write(`/rename ${name}\r`);
-      }
+      window.electronAPI.writeToInstance(instance.id, `/rename ${name}\r`);
       setRenameOpen(false);
     },
-    [instance.id, instance.backend]
+    [instance.id]
   );
 
   if (!active) return null;
@@ -122,7 +110,7 @@ export function QuickActionsSection({
         disabled={!isRunning || isOpencode}
         title={
           isOpencode
-            ? "OpenCode does not have an inline cost command"
+            ? "OpenCode has no inline cost command; its /stats page shows usage"
             : isRunning
               ? undefined
               : "Instance is stopped"

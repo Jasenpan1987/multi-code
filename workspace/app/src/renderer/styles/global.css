@@ -815,10 +815,25 @@ body,
   position: absolute;
   inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 10px;
   background: var(--content-overlay-bg);
   pointer-events: none;
+}
+
+/* Why the last start launched nothing. Takes pointer events back from the overlay so
+   its text (an upgrade command) can be selected and copied. */
+.content-offline-error {
+  max-width: 80%;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--content-starting-fg);
+  pointer-events: auto;
+  user-select: text;
+  cursor: text;
 }
 
 .content-offline-text {
