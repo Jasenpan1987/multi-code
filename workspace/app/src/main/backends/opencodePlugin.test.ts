@@ -1,337 +1,536 @@
-// The plugin runs inside the user's own OpenCode, so the properties worth testing
-// are the ones that protect it: inert outside Multi-Code, never throwing or
-// waiting, never reporting twice. It is loaded here the way OpenCode loads it, as
-// an ES module from the generated file, and posts into the real `/alert` endpoint,
-// so the body shape is checked against the parser that will read it.
+// The plugin runs inside the user's own OpenCode TUI, so the properties worth testing
+// are the ones that protect it: inert outside Multi-Code, never throwing or waiting,
+// reporting only what changed, never twice. It is loaded here the way OpenCode loads
+// it, as an ES module from the generated file, with a fake `ctx` (the router and slot
+// API of `packages/plugin/src/tui/context.ts`, v2.0.32), a fake `solid-js` beside it
+// (OpenCode resolves the host's copy) and a fake `fetch`. One test posts into the real
+// `/alert` endpoint, so the body shape is checked against the parser that reads it.
 //
-// The forwarding test replays a T-409 fixture (OpenCode 1.18.35) with the noise
-// OpenCode interleaves put back in.
+// The CLI config half is pure and reads `cli.json` only through the injected reader.
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
-import http from "http";
-import net from "net";
 import os from "os";
 import path from "path";
 import { pathToFileURL } from "url";
 import { ManagerMcpServer } from "../manager-mcp/server";
 import {
   OPENCODE_INIT_EVENT,
-  OPENCODE_PLUGIN_EVENTS,
+  OPENCODE_PLUGIN_ENTRY,
+  OPENCODE_ROUTE_EVENT,
+  opencodeCliConfig,
+  opencodeCliConfigPath,
   opencodePluginSource,
-  withMulticodePlugin,
 } from "./opencodePlugin";
 import type { AlertDelivery } from "./types";
 
-type Hooks = { event?: (input: { event: unknown }) => Promise<void> };
-type PluginFn = (input: unknown) => Promise<Hooks>;
+type Route = { type: string; sessionID?: string; [key: string]: unknown };
+type Claim = { append?: string; render: () => unknown };
+type Plugin = { id: string; setup: (ctx: unknown) => unknown };
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), "multicode plugin-"));
+// A space in the path on purpose, as in the real userData.
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), "multicode tui-"));
 const ENV_KEYS = ["MULTICODE_INSTANCE_ID", "MULTICODE_SPAWN_ID", "MULTICODE_ALERT_FILE"];
-let server: ManagerMcpServer | null = null;
-let received: AlertDelivery[] = [];
+
+// The fake `solid-js`: createEffect runs its function now and keeps it, so a test can
+// re-run every effect after changing the route, as Solid would.
+fs.mkdirSync(path.join(dir, "node_modules", "solid-js"), { recursive: true });
+fs.writeFileSync(
+  path.join(dir, "node_modules", "solid-js", "package.json"),
+  JSON.stringify({ name: "solid-js", type: "module", exports: "./index.js" })
+);
+fs.writeFileSync(
+  path.join(dir, "node_modules", "solid-js", "index.js"),
+  "export const createEffect = (fn) => globalThis.__fakeSolid.createEffect(fn);\n"
+);
+
+let effects: (() => void)[] = [];
+let posts: { url: string; headers: Record<string, string>; body: Record<string, unknown> }[] = [];
+let fetchImpl: (url: string, init: RequestInit) => Promise<Response>;
 let loads = 0;
 
 beforeEach(() => {
-  received = [];
-  delete (globalThis as Record<string, unknown>).__multicodeAlerts;
+  effects = [];
+  posts = [];
+  fetchImpl = async () => new Response(null, { status: 204 });
+  (globalThis as Record<string, unknown>).__fakeSolid = {
+    createEffect: (fn: () => void) => {
+      effects.push(fn);
+      fn();
+    },
+  };
+  vi.stubGlobal("fetch", (url: string, init: RequestInit) => {
+    posts.push({
+      url,
+      headers: init.headers as Record<string, string>,
+      body: JSON.parse(init.body as string),
+    });
+    return fetchImpl(url, init);
+  });
+  delete (globalThis as Record<string, unknown>).__multicodeTui;
 });
 
-afterEach(async () => {
+afterEach(() => {
+  vi.unstubAllGlobals();
   for (const key of ENV_KEYS) delete process.env[key];
-  delete (globalThis as Record<string, unknown>).__multicodeAlerts;
-  await server?.stop();
-  server = null;
+  delete (globalThis as Record<string, unknown>).__multicodeTui;
 });
 
 // A fresh file per load: a module URL is imported once per process, and each test
-// needs the plugin's init to run again.
-async function loadPlugin(): Promise<{ exports: Record<string, unknown>; plugin: PluginFn }> {
-  const file = path.join(dir, `multicode-plugin-${loads++}.js`);
+// needs the plugin's setup to run against its own module state.
+async function loadPlugin(): Promise<{ exports: Record<string, unknown>; plugin: Plugin }> {
+  const file = path.join(dir, `tui-${loads++}.js`);
   fs.writeFileSync(file, opencodePluginSource());
   const exports = (await import(/* @vite-ignore */ pathToFileURL(file).href)) as Record<string, unknown>;
-  return { exports, plugin: Object.values(exports)[0] as PluginFn };
+  return { exports, plugin: exports.default as Plugin };
 }
 
-// Starts the real server and sets the env Multi-Code gives an OpenCode spawn.
-async function startMulticode(target?: { endpoint: string; token: string }) {
-  server = new ManagerMcpServer();
-  server.onAlertDelivery((delivery) => received.push(delivery));
-  await server.start();
-  const targetPath = path.join(dir, "alert.json");
-  fs.writeFileSync(
-    targetPath,
-    JSON.stringify(target ?? { endpoint: server.getAlertEndpoint(), token: server.getAlertToken() })
-  );
+// The TUI's ctx, as far as the plugin touches it.
+function fakeCtx(initial: Route) {
+  const ctx = {
+    route: initial,
+    claims: [] as Claim[],
+    disposed: 0,
+    ui: {
+      router: { current: () => ctx.route },
+      slot: (claim: Claim) => {
+        ctx.claims.push(claim);
+        // The host renders the claim; the plugin's effect is created inside it.
+        claim.render();
+        return () => {
+          ctx.disposed++;
+        };
+      },
+    },
+  };
+  return ctx;
+}
+
+function navigate(ctx: ReturnType<typeof fakeCtx>, route: Route) {
+  ctx.route = route;
+  for (const effect of effects) effect();
+}
+
+function setMulticodeEnv(target = { endpoint: "http://127.0.0.1:9/alert", token: "tok_test" }) {
+  const file = path.join(dir, "alert.json");
+  fs.writeFileSync(file, JSON.stringify(target));
   process.env.MULTICODE_INSTANCE_ID = "inst-1";
   process.env.MULTICODE_SPAWN_ID = "spawn-1";
-  process.env.MULTICODE_ALERT_FILE = targetPath;
+  process.env.MULTICODE_ALERT_FILE = file;
+  return file;
 }
 
-async function waitFor(count: number, timeoutMs = 2000) {
+async function flush(count: number, timeoutMs = 1000) {
   const end = Date.now() + timeoutMs;
-  while (received.length < count && Date.now() < end) {
-    await new Promise((r) => setTimeout(r, 10));
-  }
+  while (posts.length < count && Date.now() < end) await new Promise((r) => setTimeout(r, 5));
 }
 
-const settle = () => new Promise((r) => setTimeout(r, 150));
+const settle = () => new Promise((r) => setTimeout(r, 50));
 
-describe("withMulticodePlugin", () => {
-  const ours = "file:///Users/x/Library/Application%20Support/multi-code/opencode/multicode-plugin.js";
-
-  it("names only our plugin when nothing was inherited", () => {
-    expect(JSON.parse(withMulticodePlugin(undefined, ours)!)).toEqual({ plugin: [ours] });
-    expect(JSON.parse(withMulticodePlugin("  ", ours)!)).toEqual({ plugin: [ours] });
+describe("the TUI plugin", () => {
+  it("has the shape OpenCode loads: one default export with an id and a setup", async () => {
+    const { exports, plugin } = await loadPlugin();
+    expect(Object.keys(exports)).toEqual(["default"]);
+    expect(plugin.id).toBe("multicode");
+    expect(typeof plugin.setup).toBe("function");
+    expect(OPENCODE_PLUGIN_ENTRY).toBe("tui.js");
   });
 
-  it("keeps the user's own config and plugins, adding ours last", () => {
-    const inherited = JSON.stringify({
-      model: "anthropic/claude-sonnet",
-      plugin: ["opencode-wakatime", ["some-plugin", { opt: 1 }]],
-    });
-    expect(JSON.parse(withMulticodePlugin(inherited, ours)!)).toEqual({
-      model: "anthropic/claude-sonnet",
-      plugin: ["opencode-wakatime", ["some-plugin", { opt: 1 }], ours],
-    });
-  });
-
-  it("lists ours once when the inherited value already names it", () => {
-    const inherited = JSON.stringify({ plugin: [ours, "opencode-wakatime"] });
-    expect(JSON.parse(withMulticodePlugin(inherited, ours)!).plugin).toEqual([
-      "opencode-wakatime",
-      ours,
-    ]);
-  });
-
-  it("never removes another entry, even one with our file name", () => {
-    // A path can't tell a user's same-named plugin from a parent Multi-Code's, so
-    // both stay; the plugin's newest-init guard handles a parent copy loading too.
-    const theirs = [
-      "file:///Users/x/plugins/multicode-plugin.js",
-      "file:///Users/x/.config/opencode/multicode-plugin.js",
-      "file:///Users/x/Library/Application%20Support/Multi-Code/opencode/multicode-plugin.js",
-    ];
-    expect(JSON.parse(withMulticodePlugin(JSON.stringify({ plugin: theirs }), ours)!).plugin).toEqual([
-      ...theirs,
-      ours,
-    ]);
-  });
-
-  it("refuses a value it can't read rather than rewrite it", () => {
-    expect(withMulticodePlugin('{ // jsonc\n "model": "x" }', ours)).toBeNull();
-    expect(withMulticodePlugin("[1]", ours)).toBeNull();
-    expect(withMulticodePlugin('"text"', ours)).toBeNull();
-    expect(withMulticodePlugin(JSON.stringify({ plugin: "one" }), ours)).toBeNull();
-  });
-});
-
-describe("the plugin", () => {
-  it("exports exactly one thing, the plugin function", async () => {
-    // OpenCode calls every export as a plugin.
-    const { exports } = await loadPlugin();
-    expect(Object.keys(exports)).toEqual(["MulticodeAlerts"]);
-    expect(typeof exports.MulticodeAlerts).toBe("function");
-  });
-
-  it("does nothing in an OpenCode Multi-Code didn't start", async () => {
-    await startMulticode();
+  it("does nothing in a TUI Multi-Code didn't start", async () => {
+    setMulticodeEnv();
     delete process.env.MULTICODE_INSTANCE_ID;
     const { plugin } = await loadPlugin();
-    const hooks = await plugin({});
-    expect(hooks).toEqual({});
+    const ctx = fakeCtx({ type: "home" });
+    expect(plugin.setup(ctx)).toBeUndefined();
+    navigate(ctx, { type: "session", sessionID: "ses_x" });
     await settle();
-    expect(received).toEqual([]);
+    expect(posts).toEqual([]);
+    // Not even a slot: nothing of it in the user's TUI.
+    expect(ctx.claims).toEqual([]);
   });
 
-  it("reports its init under the instance's own ids", async () => {
-    await startMulticode();
+  it("posts its init and the starting route, under the instance's own ids", async () => {
+    setMulticodeEnv();
     const { plugin } = await loadPlugin();
-    await plugin({});
-    await waitFor(1);
-    expect(received).toHaveLength(1);
-    expect(received[0]).toMatchObject({
-      instanceId: "inst-1",
-      spawnId: "spawn-1",
-      event: OPENCODE_INIT_EVENT,
-      payload: { pid: process.pid },
+    plugin.setup(fakeCtx({ type: "home" }));
+    await flush(2);
+    expect(posts.map((p) => p.body)).toEqual([
+      { hook_event_name: OPENCODE_INIT_EVENT, pid: process.pid },
+      { hook_event_name: OPENCODE_ROUTE_EVENT, route: { type: "home" } },
+    ]);
+    for (const post of posts) {
+      expect(post.url).toBe("http://127.0.0.1:9/alert");
+      expect(post.headers).toEqual({
+        Authorization: "Bearer tok_test",
+        "Content-Type": "application/json",
+        "X-Multicode-Instance": "inst-1",
+        "X-Multicode-Spawn": "spawn-1",
+      });
+    }
+  });
+
+  it("reports each route change, the session's id on session routes only", async () => {
+    // The spike's sequence (G-601): home with a minted id, the first prompt, `/new`
+    // (home with a location), a prompt there, a plugin page, back to a session.
+    setMulticodeEnv();
+    const { plugin } = await loadPlugin();
+    const ctx = fakeCtx({ type: "home" });
+    plugin.setup(ctx);
+    navigate(ctx, { type: "session", sessionID: "ses_minted" });
+    navigate(ctx, { type: "home", location: { directory: "/private/tmp/p" } });
+    navigate(ctx, { type: "session", sessionID: "ses_new" });
+    navigate(ctx, { type: "plugin", id: "opencode.stats", name: "stats" });
+    navigate(ctx, { type: "session", sessionID: "ses_new" });
+    await flush(7);
+    expect(posts.slice(1).map((p) => p.body)).toEqual([
+      { hook_event_name: OPENCODE_ROUTE_EVENT, route: { type: "home" } },
+      { hook_event_name: OPENCODE_ROUTE_EVENT, session_id: "ses_minted", route: { type: "session", sessionID: "ses_minted" } },
+      { hook_event_name: OPENCODE_ROUTE_EVENT, route: { type: "home" } },
+      { hook_event_name: OPENCODE_ROUTE_EVENT, session_id: "ses_new", route: { type: "session", sessionID: "ses_new" } },
+      { hook_event_name: OPENCODE_ROUTE_EVENT, route: { type: "plugin" } },
+      { hook_event_name: OPENCODE_ROUTE_EVENT, session_id: "ses_new", route: { type: "session", sessionID: "ses_new" } },
+    ]);
+  });
+
+  it("says nothing when an effect re-runs on the same route", async () => {
+    setMulticodeEnv();
+    const { plugin } = await loadPlugin();
+    const ctx = fakeCtx({ type: "session", sessionID: "ses_a" });
+    plugin.setup(ctx);
+    navigate(ctx, { type: "session", sessionID: "ses_a", other: 1 });
+    navigate(ctx, { type: "session", sessionID: "ses_a" });
+    await settle();
+    expect(posts.map((p) => p.body.hook_event_name)).toEqual([OPENCODE_INIT_EVENT, OPENCODE_ROUTE_EVENT]);
+  });
+
+  it("copies the route rather than keeping the store's object", async () => {
+    // The route is a store proxy that changes in place; a queued post must carry what
+    // the route was when it was read.
+    setMulticodeEnv();
+    let release = () => {};
+    fetchImpl = () => new Promise((resolve) => (release = () => resolve(new Response(null, { status: 204 }))));
+    const { plugin } = await loadPlugin();
+    const route: Route = { type: "session", sessionID: "ses_a" };
+    const ctx = fakeCtx(route);
+    plugin.setup(ctx);
+    // The init post is in flight and the route's is queued behind it.
+    await flush(1);
+    route.sessionID = "ses_b";
+    release();
+    await flush(2);
+    expect(posts[1].body).toEqual({
+      hook_event_name: OPENCODE_ROUTE_EVENT,
+      session_id: "ses_a",
+      route: { type: "session", sessionID: "ses_a" },
     });
   });
 
-  it("forwards the events attention needs, in order, and nothing else", async () => {
-    await startMulticode();
+  it("takes its ids out of the env the agent's tools and a restarted service inherit", async () => {
+    setMulticodeEnv();
     const { plugin } = await loadPlugin();
-    const hooks = await plugin({});
-    const fixture = JSON.parse(
-      fs.readFileSync(path.join(__dirname, "__fixtures__/opencode-plugin/subagent-permission.json"), "utf8")
-    ) as { events: { type: string; properties: Record<string, unknown> }[] };
-
-    const noise = ["message.part.delta", "message.part.updated", "session.idle", "plugin.added", "session.diff"];
-    for (const [i, e] of fixture.events.entries()) {
-      await hooks.event!({ event: { type: e.type, properties: e.properties } });
-      await hooks.event!({ event: { type: noise[i % noise.length], properties: { sessionID: "x" } } });
-    }
-
-    const expected = fixture.events.filter((e) =>
-      (OPENCODE_PLUGIN_EVENTS as readonly string[]).includes(e.type)
-    );
-    // The fixture has every kind the subagent path needs: a child session, its
-    // permission, and the root's busy/idle.
-    expect(new Set(expected.map((e) => e.type))).toEqual(
-      new Set(["session.created", "session.updated", "session.status", "permission.asked", "permission.replied"])
-    );
-    await waitFor(expected.length + 1);
-    await settle();
-    const forwarded = received.slice(1);
-    expect(forwarded.map((d) => d.event)).toEqual(expected.map((e) => e.type));
-    for (const [i, delivery] of forwarded.entries()) {
-      const props = expected[i].properties as { sessionID?: string; info?: { id?: string } };
-      expect(delivery.sessionId).toBe(props.sessionID ?? props.info?.id);
-      expect(delivery.payload.properties).toEqual(expected[i].properties);
-    }
-  });
-
-  it("names a session event by its info id when it carries no sessionID", async () => {
-    await startMulticode();
-    const { plugin } = await loadPlugin();
-    const hooks = await plugin({});
-    await hooks.event!({ event: { type: "session.created", properties: { info: { id: "ses_child", parentID: "ses_root" } } } });
-    await waitFor(2);
-    expect(received[1]).toMatchObject({ event: "session.created", sessionId: "ses_child" });
-  });
-
-  it("takes its ids out of the env the agent's tools inherit", async () => {
-    // Otherwise an `opencode` the agent runs loads this plugin with the same ids and
-    // reports its sessions as this instance's.
-    await startMulticode();
-    const { plugin } = await loadPlugin();
-    await plugin({});
+    plugin.setup(fakeCtx({ type: "home" }));
     for (const key of ENV_KEYS) expect(process.env[key]).toBeUndefined();
   });
 
-  it("neither throws nor waits when Multi-Code is wedged or gone", async () => {
-    // Accepts the connection and never answers: the worst case for anything that
-    // awaits a post.
-    const sockets: net.Socket[] = [];
-    const hung = net.createServer((socket) => sockets.push(socket));
-    await new Promise<void>((r) => hung.listen(0, "127.0.0.1", r));
-    const { port } = hung.address() as net.AddressInfo;
-    try {
-      for (const endpoint of [`http://127.0.0.1:${port}/alert`, "http://127.0.0.1:1/alert"]) {
-        delete (globalThis as Record<string, unknown>).__multicodeAlerts;
-        await server?.stop();
-        await startMulticode({ endpoint, token: "t" });
-        const { plugin } = await loadPlugin();
-        const started = Date.now();
-        const hooks = await plugin({});
-        for (let i = 0; i < 50; i++) {
-          await hooks.event!({ event: { type: "session.status", properties: { sessionID: "s", status: { type: "busy" } } } });
-        }
-        expect(Date.now() - started).toBeLessThan(100);
-      }
-    } finally {
-      // Drains the queued posts, which would otherwise time out one by one.
-      hung.close();
-      for (const socket of sockets) socket.destroy();
-    }
-    await settle();
-    expect(received).toEqual([]);
+  it("disposes its slot when OpenCode runs its cleanup", async () => {
+    setMulticodeEnv();
+    const { plugin } = await loadPlugin();
+    const ctx = fakeCtx({ type: "home" });
+    const cleanup = plugin.setup(ctx) as () => void;
+    expect(ctx.claims).toHaveLength(1);
+    expect(ctx.claims[0].append).toBe("app");
+    cleanup();
+    expect(ctx.disposed).toBe(1);
   });
 
-  it("returns no hooks when its target file is missing or unreadable", async () => {
-    await startMulticode();
-    process.env.MULTICODE_ALERT_FILE = path.join(dir, "missing.json");
-    expect(await (await loadPlugin()).plugin({})).toEqual({});
+  it("neither throws nor waits when Multi-Code is wedged or gone", async () => {
+    setMulticodeEnv();
+    const hung: (() => void)[] = [];
+    fetchImpl = () => new Promise((_resolve, reject) => hung.push(() => reject(new Error("refused"))));
+    const { plugin } = await loadPlugin();
+    const ctx = fakeCtx({ type: "home" });
+    const started = Date.now();
+    plugin.setup(ctx);
+    for (let i = 0; i < 100; i++) navigate(ctx, { type: "session", sessionID: `ses_${i}` });
+    expect(Date.now() - started).toBeLessThan(200);
 
-    delete (globalThis as Record<string, unknown>).__multicodeAlerts;
-    process.env.MULTICODE_INSTANCE_ID = "inst-1";
-    process.env.MULTICODE_SPAWN_ID = "spawn-1";
+    // A broken router is swallowed too.
+    ctx.ui.router.current = () => {
+      throw new Error("router gone");
+    };
+    expect(() => navigate(ctx, { type: "home" })).not.toThrow();
+
+    // Refusals drain the queue in order, each swallowed.
+    fetchImpl = () => Promise.reject(new Error("refused"));
+    for (const reject of hung) reject();
+    const state = (globalThis as Record<string, unknown>).__multicodeTui as { queued: number };
+    const end = Date.now() + 2000;
+    while (state.queued > 0 && Date.now() < end) await new Promise((r) => setTimeout(r, 5));
+    expect(state.queued).toBe(0);
+    expect(posts).toHaveLength(102);
+  });
+
+  it("gives every post an abort signal, so a hung one stops holding up the next", async () => {
+    setMulticodeEnv();
+    const signals: (AbortSignal | null | undefined)[] = [];
+    fetchImpl = async (_url, init) => {
+      signals.push(init.signal);
+      return new Response(null, { status: 204 });
+    };
+    const { plugin } = await loadPlugin();
+    plugin.setup(fakeCtx({ type: "home" }));
+    await flush(2);
+    expect(signals).toHaveLength(2);
+    for (const signal of signals) expect(signal).toBeInstanceOf(AbortSignal);
+    expect(opencodePluginSource()).toContain("AbortSignal.timeout(2000)");
+  });
+
+  it("caps what it queues while a post hangs", async () => {
+    setMulticodeEnv();
+    fetchImpl = () => new Promise(() => {});
+    const { plugin } = await loadPlugin();
+    const ctx = fakeCtx({ type: "home" });
+    plugin.setup(ctx);
+    for (let i = 0; i < 500; i++) navigate(ctx, { type: "session", sessionID: `ses_${i}` });
+    const state = (globalThis as Record<string, unknown>).__multicodeTui as { queued: number };
+    expect(state.queued).toBe(200);
+  });
+
+  it("returns nothing when its target file is missing or unreadable", async () => {
+    setMulticodeEnv();
+    process.env.MULTICODE_ALERT_FILE = path.join(dir, "missing.json");
+    const ctx = fakeCtx({ type: "home" });
+    expect((await loadPlugin()).plugin.setup(ctx)).toBeUndefined();
+
+    delete (globalThis as Record<string, unknown>).__multicodeTui;
+    setMulticodeEnv();
     const broken = path.join(dir, "broken.json");
     fs.writeFileSync(broken, "{not json");
     process.env.MULTICODE_ALERT_FILE = broken;
-    expect(await (await loadPlugin()).plugin({})).toEqual({});
-  });
-
-  it("lets only the newest init in a process report", async () => {
-    await startMulticode();
-    const { plugin } = await loadPlugin();
-    const first = await plugin({});
-    const second = await plugin({});
-    await waitFor(2);
-    expect(received.map((d) => d.event)).toEqual([OPENCODE_INIT_EVENT, OPENCODE_INIT_EVENT]);
-
-    const busy = { type: "session.status", properties: { sessionID: "s", status: { type: "busy" } } };
-    await first.event!({ event: busy });
-    await second.event!({ event: busy });
-    await waitFor(3);
+    expect((await loadPlugin()).plugin.setup(ctx)).toBeUndefined();
     await settle();
-    expect(received.map((d) => d.event)).toEqual([
-      OPENCODE_INIT_EVENT,
-      OPENCODE_INIT_EVENT,
-      "session.status",
-    ]);
+    expect(posts).toEqual([]);
+    expect(ctx.claims).toEqual([]);
   });
 
-  it("reports once when a second copy of the file loads too", async () => {
-    // A parent Multi-Code's entry left in an inherited OPENCODE_CONFIG_CONTENT.
-    await startMulticode();
-    const parentCopy = await (await loadPlugin()).plugin({});
-    const ours = await (await loadPlugin()).plugin({});
-    const busy = { type: "session.status", properties: { sessionID: "s", status: { type: "busy" } } };
-    await parentCopy.event!({ event: busy });
-    await ours.event!({ event: busy });
-    await waitFor(3);
+  it("lets only the newest setup in a process report", async () => {
+    // OpenCode reloads a local plugin whose file changed; the old copy's effect may
+    // run once more before its slot goes.
+    setMulticodeEnv();
+    const old = fakeCtx({ type: "home" });
+    (await loadPlugin()).plugin.setup(old);
+    const oldEffects = effects;
+    effects = [];
+    const current = fakeCtx({ type: "home" });
+    (await loadPlugin()).plugin.setup(current);
+    await flush(4);
+    expect(posts.map((p) => p.body.hook_event_name)).toEqual([
+      OPENCODE_INIT_EVENT,
+      OPENCODE_ROUTE_EVENT,
+      OPENCODE_INIT_EVENT,
+      OPENCODE_ROUTE_EVENT,
+    ]);
+
+    old.route = { type: "session", sessionID: "ses_old" };
+    for (const effect of oldEffects) effect();
+    navigate(current, { type: "session", sessionID: "ses_new" });
+    await flush(5);
     await settle();
-    expect(received.map((d) => d.event)).toEqual([
-      OPENCODE_INIT_EVENT,
-      OPENCODE_INIT_EVENT,
-      "session.status",
-    ]);
+    expect(posts.slice(4).map((p) => p.body.session_id)).toEqual(["ses_new"]);
   });
 
-  it("keeps posting in order across a re-init while a post is stuck", async () => {
-    // What the old copy queued happened first, so it must arrive first: an old
-    // idle landing after the new copy's busy would read as the turn ending.
-    const arrived: string[] = [];
-    let release = () => {};
-    const slow = http.createServer((req, res) => {
-      let body = "";
-      req.on("data", (c) => (body += c));
-      req.on("end", () => {
-        const p = JSON.parse(body) as { hook_event_name: string; session_id?: string };
-        arrived.push(p.session_id ? `${p.hook_event_name}:${p.session_id}` : p.hook_event_name);
-        if (arrived.length === 1) release = () => res.writeHead(204).end();
-        else res.writeHead(204).end();
-      });
-    });
-    await new Promise<void>((r) => slow.listen(0, "127.0.0.1", r));
+  it("is read by the real /alert endpoint as the delivery T-604 consumes", async () => {
+    const server = new ManagerMcpServer();
+    const received: AlertDelivery[] = [];
+    server.onAlertDelivery((delivery) => received.push(delivery));
+    await server.start();
     try {
-      const { port } = slow.address() as net.AddressInfo;
-      await startMulticode({ endpoint: `http://127.0.0.1:${port}/alert`, token: "t" });
+      vi.unstubAllGlobals();
+      setMulticodeEnv({ endpoint: server.getAlertEndpoint()!, token: server.getAlertToken()! });
       const { plugin } = await loadPlugin();
-      const status = (sessionID: string, type: string) => ({
-        event: { type: "session.status", properties: { sessionID, status: { type } } },
-      });
-
-      const old = await plugin({});
-      await old.event!(status("old", "idle"));
-      const end = Date.now() + 1000;
-      while (arrived.length === 0 && Date.now() < end) await new Promise((r) => setTimeout(r, 5));
-      const current = await plugin({});
-      await current.event!(status("new", "busy"));
-      await settle();
-      release();
-      const done = Date.now() + 1000;
-      while (arrived.length < 4 && Date.now() < done) await new Promise((r) => setTimeout(r, 5));
-
-      expect(arrived).toEqual([
-        OPENCODE_INIT_EVENT,
-        "session.status:old",
-        OPENCODE_INIT_EVENT,
-        "session.status:new",
+      const ctx = fakeCtx({ type: "home" });
+      plugin.setup(ctx);
+      navigate(ctx, { type: "session", sessionID: "ses_abc" });
+      const end = Date.now() + 2000;
+      while (received.length < 3 && Date.now() < end) await new Promise((r) => setTimeout(r, 10));
+      expect(received.map((d) => [d.event, d.sessionId])).toEqual([
+        [OPENCODE_INIT_EVENT, undefined],
+        [OPENCODE_ROUTE_EVENT, undefined],
+        [OPENCODE_ROUTE_EVENT, "ses_abc"],
       ]);
+      expect(received[2]).toMatchObject({
+        instanceId: "inst-1",
+        spawnId: "spawn-1",
+        payload: { route: { type: "session", sessionID: "ses_abc" } },
+      });
     } finally {
-      slow.close();
+      await server.stop();
     }
+  });
+});
+
+describe("opencodeCliConfig", () => {
+  const pluginDir = "/Users/x/Library/Application Support/multi-code/opencode/tui";
+  const cliJsonPath = "/Users/x/.config/opencode/cli.json";
+  const ours = { package: pluginDir };
+  const settings = { tabs: { mode: "off" }, keybinds: { "terminal.suspend": "none" } };
+  const missing = () => {
+    throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+  };
+  const file = (text: string) => (p: string) => {
+    expect(p).toBe(cliJsonPath);
+    return text;
+  };
+  const parse = (result: ReturnType<typeof opencodeCliConfig>) => JSON.parse(result!.content);
+
+  it("names only Multi-Code's plugin when there is no cli.json", () => {
+    const result = opencodeCliConfig({ inherited: undefined, cliJsonPath, pluginDir, readFile: missing });
+    expect(result!.plugin).toBe(true);
+    expect(parse(result)).toEqual({ ...settings, plugins: [ours] });
+  });
+
+  it("keeps the builder's own plugins first, relative ones resolved against cli.json's folder", () => {
+    // `localSource` (packages/plugin/src/source.ts): file URLs as they are, ./ ../ and
+    // absolute paths against the config's directory, anything else an npm spec or a
+    // selector, untouched.
+    const text = `{
+      // their TUI plugins
+      "theme": { "name": "nord" },
+      "plugins": [
+        "./plugins/mine",
+        "../shared/theirs",
+        "/abs/plugin",
+        "file:///Users/x/url-plugin",
+        "opencode-wakatime@1.2.0",
+        "-opencode.stats",
+        { "package": "./opts-plugin", "options": { "a": 1 } },
+        { "package": "@scope/pkg" },
+      ],
+    }`;
+    const result = opencodeCliConfig({ inherited: undefined, cliJsonPath, pluginDir, readFile: file(text) });
+    expect(result!.plugin).toBe(true);
+    // Only the list is copied: the rest of cli.json applies by itself, under this value.
+    expect(parse(result)).toEqual({
+      ...settings,
+      plugins: [
+        "/Users/x/.config/opencode/plugins/mine",
+        "/Users/x/.config/shared/theirs",
+        "/abs/plugin",
+        "file:///Users/x/url-plugin",
+        "opencode-wakatime@1.2.0",
+        "-opencode.stats",
+        { package: "/Users/x/.config/opencode/opts-plugin", options: { a: 1 } },
+        { package: "@scope/pkg" },
+        ours,
+      ],
+    });
+  });
+
+  it("adds the plugin to a cli.json without a plugins key", () => {
+    const result = opencodeCliConfig({
+      inherited: undefined,
+      cliJsonPath,
+      pluginDir,
+      readFile: file(JSON.stringify({ $schema: "https://opencode.ai/v2/cli.json", theme: { name: "x" } })),
+    });
+    expect(parse(result)).toEqual({ ...settings, plugins: [ours] });
+  });
+
+  it("leaves the plugins alone and adds none when cli.json can't be read safely", () => {
+    for (const readFile of [
+      file("{ not json"),
+      file("[1, 2]"),
+      file(JSON.stringify({ plugins: "one" })),
+      file(JSON.stringify({ plugins: [42] })),
+      file(JSON.stringify({ plugins: [{ package: "./x", options: "bad" }] })),
+      () => {
+        throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+      },
+    ]) {
+      const result = opencodeCliConfig({ inherited: undefined, cliJsonPath, pluginDir, readFile });
+      expect(result!.plugin).toBe(false);
+      // Still Multi-Code's own settings, but no `plugins`, so the builder's load as in
+      // any terminal.
+      expect(parse(result)).toEqual(settings);
+    }
+  });
+
+  it("merges into an inherited OPENCODE_CLI_CONFIG_CONTENT, extending its own plugins", () => {
+    // Its `plugins` already replaces cli.json's, so it is the list to keep.
+    const inherited = JSON.stringify({
+      theme: { name: "nord" },
+      tabs: { scope: "global", mode: "on" },
+      keybinds: { "app.exit": "ctrl+q" },
+      plugins: ["./env-plugin"],
+    });
+    const result = opencodeCliConfig({
+      inherited,
+      cliJsonPath,
+      pluginDir,
+      readFile: () => {
+        throw new Error("cli.json must not be read when the env names the plugins");
+      },
+    });
+    expect(parse(result)).toEqual({
+      theme: { name: "nord" },
+      tabs: { scope: "global", mode: "off" },
+      keybinds: { "app.exit": "ctrl+q", "terminal.suspend": "none" },
+      plugins: ["/Users/x/.config/opencode/env-plugin", ours],
+    });
+  });
+
+  it("copies cli.json's plugins under an inherited value that has none", () => {
+    const result = opencodeCliConfig({
+      inherited: JSON.stringify({ theme: { name: "nord" } }),
+      cliJsonPath,
+      pluginDir,
+      readFile: file(JSON.stringify({ plugins: ["theirs"] })),
+    });
+    expect(parse(result)).toEqual({ theme: { name: "nord" }, ...settings, plugins: ["theirs", ours] });
+  });
+
+  it("refuses an inherited value it can't read rather than rewrite it", () => {
+    for (const inherited of ["{ broken", "[1]", '"text"']) {
+      expect(opencodeCliConfig({ inherited, cliJsonPath, pluginDir, readFile: missing })).toBeNull();
+    }
+    // And an inherited list that isn't one: settings merged, no plugin.
+    const result = opencodeCliConfig({
+      inherited: JSON.stringify({ plugins: "x" }),
+      cliJsonPath,
+      pluginDir,
+      readFile: missing,
+    });
+    expect(result!.plugin).toBe(false);
+    expect(parse(result).plugins).toBe("x");
+  });
+
+  it("lists Multi-Code's plugin once", () => {
+    const result = opencodeCliConfig({
+      inherited: JSON.stringify({ plugins: [pluginDir, "theirs", { package: pluginDir }] }),
+      cliJsonPath,
+      pluginDir,
+      readFile: missing,
+    });
+    expect(parse(result).plugins).toEqual(["theirs", ours]);
+  });
+
+  it("sets only Multi-Code's settings when there is no plugin to load", () => {
+    const result = opencodeCliConfig({ inherited: undefined, cliJsonPath, readFile: file('{"plugins":["theirs"]}') });
+    expect(result!.plugin).toBe(false);
+    expect(parse(result)).toEqual(settings);
+  });
+});
+
+describe("opencodeCliConfigPath", () => {
+  it("follows OpenCode's own lookup", () => {
+    expect(opencodeCliConfigPath({ HOME: "/h" })).toBe("/h/.config/opencode/cli.json");
+    expect(opencodeCliConfigPath({ HOME: "/h", XDG_CONFIG_HOME: "/x" })).toBe("/x/opencode/cli.json");
+    expect(opencodeCliConfigPath({ HOME: "/h", XDG_CONFIG_HOME: "/x", OPENCODE_CONFIG_DIR: "/c" })).toBe(
+      "/c/cli.json"
+    );
+    // Empty counts as unset, as OpenCode's truthiness checks do.
+    expect(opencodeCliConfigPath({ HOME: "/h", XDG_CONFIG_HOME: "", OPENCODE_CONFIG_DIR: "" })).toBe(
+      "/h/.config/opencode/cli.json"
+    );
   });
 });

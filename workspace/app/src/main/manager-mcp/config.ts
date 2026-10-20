@@ -15,7 +15,11 @@ import fs from "fs";
 import path from "path";
 import { app } from "electron";
 import { hookEndpointFor, SELF_TOOL_MATCHER } from "./hook-activity";
-import { OPENCODE_PLUGIN_FILE, opencodePluginSource } from "../backends/opencodePlugin";
+import {
+  OPENCODE_PLUGIN_DIR,
+  OPENCODE_PLUGIN_ENTRY,
+  opencodePluginSource,
+} from "../backends/opencodePlugin";
 
 // The name the CLI prefixes onto every tool, so the manager sees these as
 // `mcp__multi-code__list_sessions`. Short because it shows up in every tool call.
@@ -59,19 +63,31 @@ function alertCurlConfigPath(): string {
   return path.join(app.getPath("userData"), "alert-hook.curl");
 }
 
-// OpenCode's counterpart of the two files above: Multi-Code's plugin, and the 0600
-// JSON it reads `/alert`'s endpoint and token from. Their own folder, so the plugin
-// sits in a directory holding nothing else OpenCode might look at.
+// OpenCode's counterpart of the two files above: Multi-Code's TUI plugin, and the
+// 0600 JSON it reads `/alert`'s endpoint and token from. The plugin gets a directory
+// of its own, because OpenCode names TUI plugins by directory and loads
+// `<dir>/tui.js` (spike G-601); one holding nothing else, so nothing beside it can
+// pass for a plugin entry (`index.js` would be a server entry).
 function opencodeDir(): string {
   return path.join(app.getPath("userData"), "opencode");
 }
 
+function opencodePluginDir(): string {
+  return path.join(opencodeDir(), OPENCODE_PLUGIN_DIR);
+}
+
 function opencodePluginPath(): string {
-  return path.join(opencodeDir(), OPENCODE_PLUGIN_FILE);
+  return path.join(opencodePluginDir(), OPENCODE_PLUGIN_ENTRY);
 }
 
 function opencodeAlertPath(): string {
   return path.join(opencodeDir(), "alert.json");
+}
+
+// Where Multi-Code before OpenCode 2 wrote its server plugin. Removed with the rest,
+// so a run that crashed under an older version doesn't leave it behind.
+function legacyOpencodePluginPath(): string {
+  return path.join(opencodeDir(), "multicode-plugin.js");
 }
 
 // The hook events a Claude instance reports for attention alerts: exactly the ones
@@ -197,18 +213,25 @@ export function writeAlertSettings(alert: McpConfigTarget | null): string | null
   );
 }
 
-// The plugin every OpenCode instance spawns with, and the file it reads its target
-// from. Null when the server isn't up or a file couldn't be written; the caller
-// then spawns OpenCode without the plugin.
+// The TUI plugin every OpenCode instance spawns with, and the file it reads its
+// target from. `pluginPath` is the plugin's directory, the form OPENCODE_CLI_CONFIG_CONTENT
+// names it in. Null when the server isn't up or a file couldn't be written; the
+// caller then spawns OpenCode without the plugin.
 //
 // The plugin holds no secret and is the same on every start, but it is rewritten
-// each time with the rest, so a Multi-Code upgrade never runs an older copy.
+// each time with the rest, so a Multi-Code upgrade never runs an older copy. Both
+// directories are 0700, the files 0600: only the user's own processes (their TUIs)
+// read them.
 export function writeOpencodePlugin(
   alert: McpConfigTarget | null
 ): { pluginPath: string; targetPath: string } | null {
   if (!alert) return null;
   try {
-    fs.mkdirSync(opencodeDir(), { recursive: true, mode: 0o700 });
+    for (const dir of [opencodeDir(), opencodePluginDir()]) {
+      fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+      // mkdir's mode is subject to the umask and skipped for a directory already there.
+      fs.chmodSync(dir, 0o700);
+    }
   } catch {
     return null;
   }
@@ -217,9 +240,8 @@ export function writeOpencodePlugin(
     JSON.stringify({ endpoint: alert.endpoint, token: alert.token })
   );
   if (!targetPath) return null;
-  const pluginPath = writePrivateFile(opencodePluginPath(), opencodePluginSource());
-  if (!pluginPath) return null;
-  return { pluginPath, targetPath };
+  if (!writePrivateFile(opencodePluginPath(), opencodePluginSource())) return null;
+  return { pluginPath: opencodePluginDir(), targetPath };
 }
 
 // One entry per alert event, all running the same command.
@@ -293,7 +315,7 @@ function shellQuote(value: string): string {
 }
 
 // Everything written for a spawn, the manager's, every Claude session's alert hooks
-// and OpenCode's plugin, all of it stale the moment the server stops: the port is
+// and OpenCode's TUI plugin, all of it stale the moment the server stops: the port is
 // OS-assigned and the tokens are minted per run.
 export function removeSpawnFiles(): void {
   for (const file of [
@@ -304,6 +326,7 @@ export function removeSpawnFiles(): void {
     alertCurlConfigPath(),
     opencodePluginPath(),
     opencodeAlertPath(),
+    legacyOpencodePluginPath(),
   ]) {
     try {
       fs.unlinkSync(file);
@@ -311,9 +334,11 @@ export function removeSpawnFiles(): void {
       // Already gone, or userData is unwritable — nothing useful to do either way.
     }
   }
-  try {
-    fs.rmdirSync(opencodeDir());
-  } catch {
-    // Not there, or something else was put in it: leave it.
+  for (const dir of [opencodePluginDir(), opencodeDir()]) {
+    try {
+      fs.rmdirSync(dir);
+    } catch {
+      // Not there, or something else was put in it: leave it.
+    }
   }
 }

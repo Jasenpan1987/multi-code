@@ -39,7 +39,8 @@ const alertSettingsFile = path.join(userData, "alert-settings.json");
 const alertCurlFile = path.join(userData, "alert-hook.curl");
 const alert = { endpoint: "http://127.0.0.1:54321/alert", token: "alert_tok_xyz" };
 const opencodeDir = path.join(userData, "opencode");
-const opencodePluginFile = path.join(opencodeDir, "multicode-plugin.js");
+const opencodePluginDir = path.join(opencodeDir, "tui");
+const opencodePluginFile = path.join(opencodePluginDir, "tui.js");
 const opencodeAlertFile = path.join(opencodeDir, "alert.json");
 
 const modeOf = (file: string) => (fs.statSync(file).mode & 0o777).toString(8);
@@ -276,13 +277,26 @@ describe("writeManagerSettings with alert hooks", () => {
 });
 
 describe("writeOpencodePlugin", () => {
-  it("writes the plugin and the file it reads its target from, both 0600", () => {
+  it("writes the TUI plugin as <dir>/tui.js and the file it reads its target from, both 0600", () => {
+    // OpenCode names a TUI plugin by its directory and loads `<dir>/tui.js` (spike
+    // G-601), so the directory is what the spawn is given.
     const written = writeOpencodePlugin(alert);
-    expect(written).toEqual({ pluginPath: opencodePluginFile, targetPath: opencodeAlertFile });
+    expect(written).toEqual({ pluginPath: opencodePluginDir, targetPath: opencodeAlertFile });
     expect(fs.readFileSync(opencodePluginFile, "utf8")).toBe(opencodePluginSource());
     expect(JSON.parse(fs.readFileSync(opencodeAlertFile, "utf8"))).toEqual(alert);
     expect(modeOf(opencodeAlertFile)).toBe("600");
     expect(modeOf(opencodePluginFile)).toBe("600");
+    // Nothing else in the plugin's directory that OpenCode could take for an entry.
+    expect(fs.readdirSync(opencodePluginDir)).toEqual(["tui.js"]);
+  });
+
+  it("keeps both directories 0700, even ones a laxer earlier run left", () => {
+    fs.mkdirSync(opencodePluginDir, { recursive: true, mode: 0o755 });
+    fs.chmodSync(opencodeDir, 0o755);
+    fs.chmodSync(opencodePluginDir, 0o755);
+    writeOpencodePlugin(alert);
+    expect(modeOf(opencodeDir)).toBe("700");
+    expect(modeOf(opencodePluginDir)).toBe("700");
   });
 
   it("keeps the token out of the plugin itself", () => {
@@ -323,10 +337,25 @@ describe("removeSpawnFiles", () => {
     expect(fs.existsSync(alertCurlFile)).toBe(false);
   });
 
-  it("deletes OpenCode's plugin, its target file and their folder", () => {
+  it("deletes OpenCode's TUI plugin, its target file and their folders", () => {
     writeOpencodePlugin(alert);
     removeSpawnFiles();
     expect(fs.existsSync(opencodeDir)).toBe(false);
+  });
+
+  it("deletes the server plugin an older Multi-Code left there too", () => {
+    writeOpencodePlugin(alert);
+    fs.writeFileSync(path.join(opencodeDir, "multicode-plugin.js"), "// 1.x");
+    removeSpawnFiles();
+    expect(fs.existsSync(opencodeDir)).toBe(false);
+  });
+
+  it("leaves a folder holding something it didn't write", () => {
+    writeOpencodePlugin(alert);
+    fs.writeFileSync(path.join(opencodePluginDir, "theirs.txt"), "x");
+    removeSpawnFiles();
+    expect(fs.readdirSync(opencodePluginDir)).toEqual(["theirs.txt"]);
+    fs.rmSync(opencodeDir, { recursive: true });
   });
 
   it("is a no-op when the files are already gone", () => {
