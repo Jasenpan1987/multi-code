@@ -16,7 +16,7 @@
 - **多后端** — 每个实例跑 **Claude Code** 或 **OpenCode**。创建实例时选后端,可以任意混用,甚至同一个项目目录里两个都开
 - **实例管理** — 按项目目录 spawn / restart / remove agent 会话
 - **完整终端能力** — 用 node-pty 接真 PTY,xterm.js 渲染。不做 chat 抽象,不解析消息
-- **会话通知** — 知道 agent 什么时候做完、什么时候在等你(Claude 通过 Multi-Code 启动时传给它的 hooks 自己上报,OpenCode 通过 Multi-Code 给它加载的插件上报),播放声音、闪烁联系人,并记到联系人的红色未读数和 macOS Dock 图标上
+- **会话通知** — 知道 agent 什么时候做完、什么时候在等你(Claude 通过 Multi-Code 启动时传给它的 hooks 自己上报;OpenCode 2 通过它自己后台服务的事件流上报),播放声音、闪烁联系人,并记到联系人的红色未读数和 macOS Dock 图标上
 - **Context 用量一眼可见** — 每一行联系人都显示这个会话的 context 窗口用了百分之多少,并按用量上色。鼠标悬停能看到精确 token 数、模型和统计时间。窗口大小确定不了的时候只显示 token 数,不瞎猜百分比。已停止的会话也显示最后一次的用量
 - **跟得上 `/clear` 和 `/new`** — 运行中的 CLI 切到新 session 时,Multi-Code 会跟过去,context 用量、通知和 Manager 看到的都是当前那个 session
 - **持久化** — 实例列表(含每个实例的后端)存盘,重启后恢复
@@ -39,8 +39,8 @@
 - **Git section** — 当前 branch、文件计数(new / modified / staged)、远端 ahead/behind,以及文件列表。每一行有 **View**(左右对照 diff)、**Go To**(在 VS Code 里打开),Markdown 文件还有 **MD**(预览)。改名的文件按改名显示。展开时每 5 秒轮询
 - **Quick Actions** — 一键操作按钮:
   - **Go to Code Base** — 在 VS Code 里打开项目
-  - **Show Cost / Clear / Compact** — 自动往终端敲 `/cost`、`/clear`、`/compact`(OpenCode 没有内联的 cost 命令,Show Cost 对它禁用)
-  - **Resume Elsewhere** — 复制该后端的续接命令到剪贴板,方便交接给独立终端(`claude --resume <id>` 或 `opencode tui --session <id>`)
+  - **Show Cost / Clear / Compact** — 自动往终端敲 `/cost`、`/clear`、`/compact`(OpenCode 没有内联的 cost 命令,Show Cost 对它禁用;用量在它的 `/stats` 页面里)
+  - **Resume Elsewhere** — 复制该后端的续接命令到剪贴板,方便交接给独立终端(`claude --resume <id>` 或 `opencode -s <id>`)
   - **Rename Session** — 给当前会话起个名字,走各后端自己的 `/rename`
 - **Terminal section** — 嵌入式真实 shell(用你的默认 `$SHELL`),在项目目录下运行。后台保活,折叠或切实例都不杀进程
 - **View section** — 内联渲染 Markdown 文件:粘贴一个 `.md` 路径(或点终端输出里的 `.md` 路径,或点 Git section 里某个变更 `.md` 旁边的 MD 标签)。支持 GitHub 风格 Markdown、数学公式(KaTeX)、Mermaid 图、本地和远程图片
@@ -149,11 +149,11 @@ curl -fsSL https://claude.ai/install.sh | sh
 claude --version   # 验证
 ```
 
-**OpenCode CLI**(可选,只在要开 OpenCode 实例时需要):
+**OpenCode CLI**(可选,只在要开 OpenCode 实例时需要)。Multi-Code 需要 **OpenCode 2**,不再支持 1.x。已经装了 1.x 的,跑同一条命令就地升级,会话会自动带过去:
 
 ```bash
-curl -fsSL https://opencode.ai/install | bash
-opencode --version   # 验证
+curl -fsSL https://opencode.ai/v2/install | bash
+opencode --version   # 验证:应显示 opencode v2.x
 ```
 
 对应命令能输出版本号就 OK。如果在 app 里选了某个后端但它的 CLI 没装,那个实例创建后会直接显示 OFFLINE。
@@ -195,7 +195,7 @@ xattr -cr /Applications/Multi-Code.app
 
 - Node.js >= 20
 - pnpm >= 9
-- PATH 里至少有一个后端 CLI:Claude Code(`claude`)和/或 OpenCode(`opencode`)
+- PATH 里至少有一个后端 CLI:Claude Code(`claude`)和/或 OpenCode 2(`opencode`)
 
 ### 安装并运行
 
@@ -224,7 +224,7 @@ Multi-Code 的核心定位是**轻量级 agent 调度中心**:你可以并行管
 ### 创建新实例
 
 1. 点击左侧 sidebar 底部的 **"+ New"** 按钮
-2. 选一个**后端**:**Claude Code** 或 **OpenCode**。选择器默认是你上次用的那个。如果选了 OpenCode 但它的 CLI 不在 PATH 里,会出一条内联提示(仍然可以创建)
+2. 选一个**后端**:**Claude Code** 或 **OpenCode**。选择器默认是你上次用的那个。如果选了 OpenCode 但它的 CLI 不在 PATH 里,或者是 1.x 版本,会出一条内联提示告诉你怎么办(仍然可以创建;1.x 的升级前启动不了)
 3. 选择项目目录(必须是绝对路径)
 4. 可选:填写一个 alias(联系人显示名)
 5. 点 Create,应用自动 spawn 选中的 CLI 在该目录(`claude` 或 `opencode`),有历史 session 就续上。实例头像**圆形是 Claude Code,圆角方形是 OpenCode**
@@ -279,7 +279,7 @@ TUI 自带的输入框是折叠的,写长消息、多行内容或要贴图时不
 | Show Cost | 在主聊天框敲 `/cost`。**OpenCode 下禁用**(没有内联 cost 命令),带说明 tooltip |
 | Clear | 在主聊天框敲 `/clear` |
 | Compact | 在主聊天框敲 `/compact` |
-| Resume Elsewhere | 复制该后端的续接命令(`claude --resume <session-id>` 或 `opencode tui --session <session-id>`)到剪贴板 |
+| Resume Elsewhere | 复制该后端的续接命令(`claude --resume <session-id>` 或 `opencode -s <session-id>`)到剪贴板 |
 | Rename Session | 弹框输入名字,通过该后端自己的 `/rename` 给会话改名 |
 
 #### View
@@ -341,7 +341,7 @@ Manager 的角色 guidance 放在它文件夹里的 `CLAUDE.md`。你可以改;�
 
 ### 通知行为
 
-两种后端的通知行为完全一致,只是来源不同。Claude Code 通过 hooks 上报自己的状态:Multi-Code 启动的每个 `claude` 都带一个来自 Multi-Code 数据目录的 `--settings` 文件,里面的 hooks 把状态发到 app 本地的 `/alert` 接口。不会写你自己的 Claude 配置,所以在普通终端里跑 `claude` 不受影响。OpenCode 也一样,靠一个只上报的插件:Multi-Code 启动的每个 `opencode` 都从 Multi-Code 数据目录加载它,插件写在这个进程的 `OPENCODE_CONFIG_CONTENT` 里,叠加在你自己的配置之上,不会往 `~/.config/opencode/` 或项目的 `.opencode/` 里写任何东西。
+两种后端的通知行为完全一致,只是来源不同。Claude Code 通过 hooks 上报自己的状态:Multi-Code 启动的每个 `claude` 都带一个来自 Multi-Code 数据目录的 `--settings` 文件,里面的 hooks 把状态发到 app 本地的 `/alert` 接口。不会写你自己的 Claude 配置,所以在普通终端里跑 `claude` 不受影响。OpenCode 2 把所有会话放在一个后台服务里跑,所有窗口(终端、VS Code、Multi-Code)共用这一个服务。Multi-Code 订阅这个服务的事件流,从里面知道哪一轮做完了、哪里弹了框。另有一个只上报的小插件,只加载到 Multi-Code 自己启动的终端里(写在这个进程的 `OPENCODE_CLI_CONFIG_CONTENT` 里,跟你自己 `cli.json` 里的插件放在一起),告诉 Multi-Code 每个终端正在显示哪个会话。不会往 `~/.config/opencode/` 或项目的 `.opencode/` 里写任何东西。停止 OpenCode 联系人或者退出 Multi-Code,只是关掉它的终端:还在跑的那一轮会在后台服务里跑完,跟关掉 VS Code 终端一样;停止的联系人不会为它提醒。
 
 - Agent 做完了,或停下来等你(权限确认、提问、计划审批)→ 响一次"滴滴",每个实例都响,包括你正在看的那个
 - 头像闪烁,联系人的红色徽标上未读数加一
@@ -361,7 +361,7 @@ Manager 的角色 guidance 放在它文件夹里的 `CLAUDE.md`。你可以改;�
 
 当某个 session 进入"需要边看代码边改"的深度模式:
 
-1. 工具箱 → Quick Actions → 点 **Resume Elsewhere**,该后端的续接命令已复制(`claude --resume <id>` 或 `opencode tui --session <id>`)
+1. 工具箱 → Quick Actions → 点 **Resume Elsewhere**,该后端的续接命令已复制(`claude --resume <id>` 或 `opencode -s <id>`)
 2. 在 VS Code 里打开终端(或开 iTerm/Terminal.app),`cd` 到项目根
 3. 粘贴回车,agent 在那个环境里继续这个 session
 4. Multi-Code 这边可以保持运行,也可以关掉
@@ -429,7 +429,7 @@ Manager 的角色 guidance 放在它文件夹里的 `CLAUDE.md`。你可以改;�
 - 回复有两种理解就反问你。问的是问题(比如"这个脚本会删什么?")就回答你。两种情况都不按任何键
 - 按完之后,卡片上会有一行字说它做了什么
 - 你回复的时候确认框已经没了或者变了,或者它按键的时候有人在终端里打字,它会停下来并告诉你
-- OpenCode 的话,能回答的跟手机一样:权限确认(Reject 后面不能带理由)和只有一个单选问题的提问框。其他的会让你去终端操作
+- OpenCode 的话,秘书通过 OpenCode 自己的 API 按请求 id 作答,不会答到别的框上:权限确认(Reject 也可以带理由,agent 会收到),以及各种提问框,包括你自己打的答案
 - 做完一轮的卡片没有回复框,照常在终端里回复。Manager 没有秘书
 
 **隐私:**
@@ -453,16 +453,16 @@ Multi-Code 自己存的东西都在 Electron 的 userData 目录里。macOS 上�
 - `manager-mcp.json`:Manager 的 MCP 配置,因为里面有 bearer token 所以权限是 `0600`,退出时删除
 - `manager-settings.json`、`manager-hook.curl`:Manager 的 `--settings`(它自己的活动 hooks 加上提醒 hooks)和存 hook token 的 curl 配置;`0600`,退出时删除
 - `alert-settings.json`、`alert-hook.curl`:其他每个 Claude 实例的 `--settings`(只有提醒 hooks)和存 `/alert` token 的 curl 配置;`0600`,退出时删除
-- `opencode/multicode-plugin.js`、`opencode/alert.json`:每个 OpenCode 实例加载的只上报插件,以及它读取的 `/alert` 地址和 token;`0600`,退出时删除
+- `opencode/tui/tui.js`、`opencode/alert.json`:Multi-Code 启动的每个 OpenCode 终端加载的只上报插件,以及它读取的 `/alert` 地址和 token;`0600`,退出时删除
 - App 重启后自动恢复联系人列表(状态都是 stopped,需手动启动)
-- Session 内容由后端 CLI 自己管(Claude Code 在 `~/.claude/`,OpenCode 在 `~/.local/share/opencode/`),Multi-Code 不存任何对话内容,也从不往这些目录里写
+- Session 内容由后端 CLI 自己管(Claude Code 在 `~/.claude/`,OpenCode 在 `~/.local/share/opencode/`),Multi-Code 不存任何对话内容,也从不往这些目录里写。对话记录和 context 用量是只读地从 OpenCode 2 的数据库里读的
 
 ## 工作原理
 
 1. 用户选一个项目目录和后端(Claude Code / OpenCode)创建实例
-2. App 通过 node-pty 在该目录 spawn 对应后端 CLI(`claude` / `opencode`,有历史 session 就续上)。后端在 `src/main/backends/` 的一个小 `Backend` 接口后面可插拔
+2. App 通过 node-pty 在该目录 spawn 对应后端 CLI(`claude` / `opencode`,有历史 session 就续上)。OpenCode 会拿到你登录 shell 的环境变量(每次运行读一次),所以它的工具跟在终端里一样找得到;OpenCode 后台服务还没起来时,Multi-Code 先用这份环境把它启动。后端在 `src/main/backends/` 的一个小 `Backend` 接口后面可插拔
 3. PTY stdout 实时管道到 renderer 里的 xterm.js 终端
-4. 每个 agent 的状态来自 agent 自己:Claude Code 通过启动时用 `--settings` 传入的只上报 hooks 报告(做完了、在等权限确认或回答问题),OpenCode 通过写在它 `OPENCODE_CONFIG_CONTENT` 里的只上报插件报告。两者都不往用户自己的配置里写任何东西
+4. 每个 agent 的状态来自 agent 自己:Claude Code 通过启动时用 `--settings` 传入的只上报 hooks 报告(做完了、在等权限确认或回答问题),OpenCode 2 通过它共用后台服务的事件流报告,再由一个只上报的终端插件说明每个终端显示的是哪个会话。手机和秘书的作答按请求 id 发给 OpenCode 的 API。两者都不往用户自己的配置里写任何东西
 5. 做完或等你时:声音 + 闪烁 + 红色未读数和 Dock 未读数各加一,每个实例都一样。红点一直留着,直到你在那个会话里打字、点击,或选中它
 6. 工具箱 sections 各自管理生命周期:
    - Git:展开期间每 5s 调用 `git`

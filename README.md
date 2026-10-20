@@ -16,7 +16,7 @@ When working with multiple coding-agent sessions across different projects simul
 - **Multi-Backend** — Each instance runs either **Claude Code** or **OpenCode**. Pick the backend when creating an instance; mix both freely, even in the same project directory
 - **Instance Management** — Spawn, restart, and remove agent sessions per project directory
 - **Full Terminal Fidelity** — Real PTY via node-pty, rendered in xterm.js. No chat abstraction, no message parsing
-- **Session Notifications** — Knows when an agent has finished or is waiting on you (Claude reports it through hooks Multi-Code passes at launch, OpenCode through a plugin Multi-Code loads into it); plays audio, flashes the contact, and counts it on the contact's red badge and the macOS Dock icon
+- **Session Notifications** — Knows when an agent has finished or is waiting on you (Claude reports it through hooks Multi-Code passes at launch; OpenCode 2 through its own background service's event stream); plays audio, flashes the contact, and counts it on the contact's red badge and the macOS Dock icon
 - **Context usage at a glance** — Each contact row shows how full that session's context window is, as a percentage with a colour tint. Hover for the exact token count, the model, and when it was measured. Where the window size can't be established reliably, the row shows the raw token count instead of guessing a percentage. Stopped sessions show their last known usage too
 - **Follows `/clear` and `/new`** — When a running CLI moves to a fresh session, Multi-Code follows it, so context usage, notifications, and the manager's view keep tracking the live session
 - **Persistence** — Instance list (including each instance's backend) saved to disk, survives app restart
@@ -39,8 +39,8 @@ When working with multiple coding-agent sessions across different projects simul
 - **Git section** — Current branch, file counts (new / modified / staged), remote ahead/behind, and a file list where each row has **View** (side-by-side diff), **Go To** (open in VS Code), and for Markdown files **MD** (preview). Renames show as renames. Polls every 5s while the section is expanded
 - **Quick Actions** — One-click buttons for common operations:
   - **Go to Code Base** — Open the project in VS Code
-  - **Show Cost / Clear / Compact** — Auto-type `/cost`, `/clear`, `/compact` into the terminal (Show Cost is disabled for OpenCode, which has no inline cost command)
-  - **Resume Elsewhere** — Copy the backend's resume command to clipboard for handoff to a standalone terminal (`claude --resume <id>` or `opencode tui --session <id>`)
+  - **Show Cost / Clear / Compact** — Auto-type `/cost`, `/clear`, `/compact` into the terminal (Show Cost is disabled for OpenCode, which has no inline cost command; its `/stats` page shows usage)
+  - **Resume Elsewhere** — Copy the backend's resume command to clipboard for handoff to a standalone terminal (`claude --resume <id>` or `opencode -s <id>`)
   - **Rename Session** — Give the current session a name, using each backend's own `/rename`
 - **Terminal section** — Embedded real shell (your default `$SHELL`) running in the project's directory. Persists in background across collapses and instance switches
 - **View section** — Render a Markdown file inline: paste a `.md` path (or click a `.md` path in the terminal output, or the "View" affordance on a changed `.md` in the Git section). Supports GitHub-flavored Markdown, math (KaTeX), Mermaid diagrams, and local/remote images
@@ -149,11 +149,11 @@ curl -fsSL https://claude.ai/install.sh | sh
 claude --version   # verify
 ```
 
-**OpenCode CLI** (optional — only for OpenCode instances):
+**OpenCode CLI** (optional — only for OpenCode instances). Multi-Code needs **OpenCode 2**; 1.x is no longer supported. The same command upgrades a 1.x install in place, and your sessions carry over:
 
 ```bash
-curl -fsSL https://opencode.ai/install | bash
-opencode --version   # verify
+curl -fsSL https://opencode.ai/v2/install | bash
+opencode --version   # verify: opencode v2.x
 ```
 
 If the relevant command prints a version number, you're good. If you pick a backend in the app whose CLI isn't installed, that instance simply comes up OFFLINE.
@@ -195,7 +195,7 @@ Drag the new `Multi-Code.app` into Applications (replace the old one), then run 
 
 - Node.js >= 20
 - pnpm >= 9
-- At least one backend CLI in PATH: Claude Code (`claude`) and/or OpenCode (`opencode`)
+- At least one backend CLI in PATH: Claude Code (`claude`) and/or OpenCode 2 (`opencode`)
 
 ### Install & Run
 
@@ -224,7 +224,7 @@ Multi-Code positions itself as a **lightweight agent orchestration hub**: run mu
 ### Creating an instance
 
 1. Click the **"+ New"** button at the bottom of the left sidebar
-2. Choose a **backend** — **Claude Code** or **OpenCode**. The picker defaults to whichever you used last. If you select OpenCode and its CLI isn't on your PATH, an inline warning appears (you can still create the instance)
+2. Choose a **backend** — **Claude Code** or **OpenCode**. The picker defaults to whichever you used last. If you select OpenCode and its CLI isn't on your PATH, or is a 1.x version, an inline warning appears with what to do (you can still create the instance; a 1.x one won't start until upgraded)
 3. Select a project directory (absolute path)
 4. Optionally fill in an alias (display name in the contact list)
 5. Click Create — the app spawns the chosen CLI in that directory (`claude` or `opencode`), resuming a prior session if one exists. The instance's avatar is **circular for Claude Code, rounded-square for OpenCode**.
@@ -279,7 +279,7 @@ The TUI's own input is folded, which is awkward for long messages, multi-line co
 | Show Cost | Types `/cost` into the main terminal. **Disabled for OpenCode** (no inline cost command) with an explanatory tooltip |
 | Clear | Types `/clear` into the main terminal |
 | Compact | Types `/compact` into the main terminal |
-| Resume Elsewhere | Copies the backend's resume command — `claude --resume <session-id>` or `opencode tui --session <session-id>` — to the clipboard |
+| Resume Elsewhere | Copies the backend's resume command — `claude --resume <session-id>` or `opencode -s <session-id>` — to the clipboard |
 | Rename Session | Asks for a name and renames the session through the backend's own `/rename` |
 
 #### View
@@ -341,7 +341,7 @@ The manager's role guidance lives in a `CLAUDE.md` in its folder. You can edit i
 
 ### Notification behavior
 
-Notifications work identically for both backends — only the source differs. Claude Code reports its own state through hooks: every `claude` Multi-Code starts gets a `--settings` file from Multi-Code's data folder whose hooks post to the app's local `/alert` endpoint. Nothing is written to your own Claude settings, so `claude` run in an ordinary terminal is unaffected. OpenCode does the same through a report-only plugin: every `opencode` Multi-Code starts loads it from Multi-Code's data folder, named in that process's `OPENCODE_CONFIG_CONTENT` on top of your own config, and nothing is written to `~/.config/opencode/` or a project's `.opencode/`.
+Notifications work identically for both backends — only the source differs. Claude Code reports its own state through hooks: every `claude` Multi-Code starts gets a `--settings` file from Multi-Code's data folder whose hooks post to the app's local `/alert` endpoint. Nothing is written to your own Claude settings, so `claude` run in an ordinary terminal is unaffected. OpenCode 2 runs every session in one background service shared by all its windows (terminals, VS Code, Multi-Code), and Multi-Code listens to that service's event stream for finishes and dialogs. A small report-only plugin, loaded only into the terminals Multi-Code starts (named in that process's `OPENCODE_CLI_CONFIG_CONTENT`, next to your own `cli.json` plugins), tells it which session each terminal is showing. Nothing is written to `~/.config/opencode/` or a project's `.opencode/`. Stopping an OpenCode contact, or quitting Multi-Code, closes its terminal only: a turn still running finishes in that service, as when a VS Code terminal closes, and a stopped contact raises no alerts for it.
 
 - Agent finishes, or stops to wait on you (a permission prompt, a question, a plan approval) → plays the "ding" once, for every instance, including the one you're looking at
 - Avatar blinks, and the contact's red badge counts one more
@@ -361,7 +361,7 @@ Notifications work identically for both backends — only the source differs. Cl
 
 When a session enters deep "edit code while watching the AI" territory:
 
-1. Toolbox → Quick Actions → click **Resume Elsewhere** — the backend's resume command is now on your clipboard (`claude --resume <id>` or `opencode --session <id>`)
+1. Toolbox → Quick Actions → click **Resume Elsewhere** — the backend's resume command is now on your clipboard (`claude --resume <id>` or `opencode -s <id>`)
 2. Open a terminal in VS Code (or iTerm / Terminal.app), `cd` to the project root
 3. Paste and press Enter — the agent continues this session in that environment
 4. You can leave Multi-Code running, or close it
@@ -471,9 +471,10 @@ not the Compose Box: nothing you type there goes into the terminal as text.
 - After acting, the card shows one line saying what it did
 - If the dialog has gone or changed by the time you reply, or someone types in the
   terminal while its keys go in, it stops and says so
-- For OpenCode, it answers what the phone can: the permission prompt (without a
-  reason after Reject) and a single question with one choice. Anything else points
-  you to the terminal
+- For OpenCode, it answers through OpenCode's own API, by request id, so an answer
+  can't land in a different dialog: the permission prompt (including a Reject with a
+  reason, which the agent receives), and question boxes of every shape, your own typed
+  answer included
 - A card for a finished turn has no reply box; reply in the terminal as usual. The
   manager has no secretary
 
@@ -502,16 +503,16 @@ Everything Multi-Code keeps lives in Electron's user-data folder. On macOS that 
 - `manager-mcp.json` — the manager's MCP config, written `0600` because it holds a bearer token; removed on shutdown
 - `manager-settings.json`, `manager-hook.curl` — the manager's `--settings` (its activity hooks plus the alert hooks) and the curl config holding its hook token; `0600`, removed on shutdown
 - `alert-settings.json`, `alert-hook.curl` — every other Claude instance's `--settings` (alert hooks only) and the curl config holding the `/alert` token; `0600`, removed on shutdown
-- `opencode/multicode-plugin.js`, `opencode/alert.json` — the report-only plugin every OpenCode instance loads, and the `/alert` address and token it reads; `0600`, removed on shutdown
+- `opencode/tui/tui.js`, `opencode/alert.json` — the report-only terminal plugin every OpenCode terminal Multi-Code starts loads, and the `/alert` address and token it reads; `0600`, removed on shutdown
 - On app restart, the contact list is restored (all entries start as stopped — relaunch manually)
-- Session content itself is managed by the backend CLI (Claude Code under `~/.claude/`, OpenCode under `~/.local/share/opencode/`); Multi-Code does not store any conversation data and never writes into those directories
+- Session content itself is managed by the backend CLI (Claude Code under `~/.claude/`, OpenCode under `~/.local/share/opencode/`); Multi-Code does not store any conversation data and never writes into those directories. It reads OpenCode 2's database read-only for transcripts and context usage
 
 ## How It Works
 
 1. User creates an instance by selecting a project directory and a backend (Claude Code / OpenCode)
-2. App spawns the backend CLI (`claude` / `opencode`, resuming a prior session if one exists) via node-pty in that directory. Backends are pluggable behind a small `Backend` interface in `src/main/backends/`
+2. App spawns the backend CLI (`claude` / `opencode`, resuming a prior session if one exists) via node-pty in that directory. OpenCode gets your login shell's environment (read once per run), so its tools find what a terminal would; when OpenCode's background service isn't running yet, Multi-Code starts it first with that environment. Backends are pluggable behind a small `Backend` interface in `src/main/backends/`
 3. PTY stdout is piped in real-time to an xterm.js terminal in the renderer
-4. Each agent's state comes from the agent: Claude Code reports it through report-only hooks passed with `--settings` at launch (finished, waiting on a permission prompt or question), OpenCode through a report-only plugin named in its `OPENCODE_CONFIG_CONTENT`. Neither writes anything into the user's own config
+4. Each agent's state comes from the agent: Claude Code reports it through report-only hooks passed with `--settings` at launch (finished, waiting on a permission prompt or question), OpenCode 2 through its shared background service's event stream, with a report-only terminal plugin naming the session each terminal shows. Dialogs answered from the phone or the secretary go to OpenCode's API by request id. Neither writes anything into the user's own config
 5. On a finish or a needs-you: audio + flash + one more on the red badge and the Dock count, for every instance. The red dot stays until you type or click in that session, or select it
 6. Toolbox sections each manage their own lifecycle:
    - Git: shells out to `git` every 5s while expanded

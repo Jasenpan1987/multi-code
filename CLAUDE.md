@@ -7,10 +7,11 @@ Multi-Code is an Electron desktop app that manages multiple Claude Code CLI inst
 ## Architecture
 
 - **No abstraction layers** — The app spawns the `claude` CLI directly. No SDK, no bridge, no hooks middleware.
-- **Report-only hooks and plugins are allowed** — Passed from `userData` to the processes Multi-Code spawns (Claude: `--settings`; OpenCode: a plugin named in `OPENCODE_CONFIG_CONTENT`), never written to the user's own config. They report state and never block or change a call, so plain `claude` or `opencode` outside Multi-Code is unaffected.
+- **Report-only hooks and plugins are allowed** — Passed from `userData` to the processes Multi-Code spawns (Claude: `--settings`; OpenCode: a TUI plugin named in `OPENCODE_CLI_CONFIG_CONTENT`), never written to the user's own config. They report state and never block or change a call, so plain `claude` or `opencode` outside Multi-Code is unaffected. One exception (decisions.md, 2026-10-16): OpenCode dialogs answered from the phone or the secretary go through OpenCode's own API, by request id, as the builder would answer by keypress.
+- **OpenCode 2 only** — OpenCode runs every session in one shared background service per user; Multi-Code's terminals attach to it as VS Code's do (`opencode --session <id>`, tabs off). Multi-Code puts nothing into that service, starts it only when none is running (with the builder's login-shell environment), and never restarts or stops it. 1.x is refused with the upgrade command. Epic `opencode-v2` (`docs/specs/opencode-v2/prd.md`).
 - **Monorepo** — pnpm workspace with `workspace/app/` as the main package.
 - **Electron** — Main process manages PTY lifecycle; renderer shows terminals in React.
-- **Session monitoring** — Claude instances report finished / needs-you through report-only hooks (`--settings <userData>/alert-settings.json`) posting to the local `/alert` endpoint; `backends/claudeHooks.ts` turns them into activity. OpenCode instances do the same through Multi-Code's plugin (`backends/opencodePlugin.ts`), turned into activity by `backends/opencodeAttention.ts`. Epic `attention-alerts` (`docs/specs/attention-alerts/prd.md`). The session JSONL and OpenCode's database are still read for transcripts and context usage, never for state.
+- **Session monitoring** — Claude instances report finished / needs-you through report-only hooks (`--settings <userData>/alert-settings.json`) posting to the local `/alert` endpoint; `backends/claudeHooks.ts` turns them into activity. OpenCode instances' state comes from the shared service's event stream (`backends/opencodeService.ts`), and the session each terminal shows from Multi-Code's TUI plugin (`backends/opencodePlugin.ts`, posting to `/alert`); `backends/opencodeAttention.ts` turns both into activity. Epics `attention-alerts` and `opencode-v2`. The session JSONL and OpenCode 2's database (`session_v2`, `session_message`, read-only) are still read for transcripts and context usage, never for state.
 
 ## Key Paths
 
@@ -83,9 +84,10 @@ once, they read the same contacts and overwrite each other's spawn files. Never 
 - `alert-settings.json`, `alert-hook.curl` — every other Claude instance's
   `--settings` (alert hooks only) and the curl config holding the `/alert` token; 0600,
   removed on shutdown
-- `opencode/multicode-plugin.js`, `opencode/alert.json` — the report-only plugin every
-  OpenCode instance loads (named in its `OPENCODE_CONFIG_CONTENT`) and the `/alert`
-  endpoint and token it reads (path in `MULTICODE_ALERT_FILE`); 0600, removed on shutdown
+- `opencode/tui/tui.js`, `opencode/alert.json` — the report-only TUI plugin every
+  OpenCode terminal Multi-Code starts loads (named in its `OPENCODE_CLI_CONFIG_CONTENT`)
+  and the `/alert` endpoint and token it reads (path in `MULTICODE_ALERT_FILE`); 0600,
+  removed on shutdown
 - `speech-key` — the secretary's speech-server bearer key, alone in its file at 0600;
   never in `settings.json`, never logged, never sent to the renderer (it learns only
   whether one is set); kept across runs

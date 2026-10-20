@@ -535,3 +535,12 @@ with two new "answer" cases (`git worktree remove ../m2-ui --force` asked about 
 ("Check the package name, the version, and the files before you say yes."). The OpenCode
 samples (oc-*) weren't rebuilt. Before and after audio of s3, s5 and s2 is in
 `.omt/probes/voice-secretary/t532/audio/`.
+
+## opencode-v2 T-607 addendum: OpenCode 2's permission names (prompt v11, 2026-10-20)
+
+One sentence changed: the note on OpenCode's permissions now names OpenCode 2's actions
+("such as shell or edit, with the specifics in toolInput.resources and toolInput.metadata")
+instead of 1.x's ("such as bash or edit, with the details in toolInput.metadata"). Nothing
+else in the prompt moved, and no sample was re-run: the builder is trying v10's STE80 wording
+(2026-10-10) and the change is a fact about OpenCode 2, not a change of style. New hash in
+`briefWriter.test.ts`.

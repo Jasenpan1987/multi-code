@@ -92,7 +92,7 @@ The builder's long-term goal is one Multi-Code for every coding agent they use. 
 | Backend | State |
 |---|---|
 | Claude Code | Supported |
-| OpenCode | Supported on 1.x today. Moving to **2.x only**; 1.x support is dropped (see decisions.md, 2026-10-16) |
+| OpenCode | Supported on **2.x only** (epic `opencode-v2`, 2026-10-20); 1.x is refused with the upgrade command (decisions.md, 2026-10-16) |
 | Pi (`@earendil-works/pi-coding-agent`) | Backlog. Researched 2026-10-16: maps well except dialogs, which Pi only has through extensions |
 | DeepSeek Harness | Backlog. Not yet identified or researched |
 | Codex | Backlog. Not yet researched |

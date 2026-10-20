@@ -166,7 +166,7 @@ Paths are under `workspace/app/src/main/` unless they start with `renderer/`, `s
 
 ### T-609: Docs for OpenCode 2
 - **Type:** setup
-- **Status:** in-progress
+- **Status:** done
 - **Story:** all
 - **Description:** CLAUDE.md "Architecture" (the API-answer exception), "Session monitoring" (service events + TUI plugin, no server plugin), "Data Storage" (the TUI plugin replaces `opencode/multicode-plugin.js`); both READMEs (OpenCode 2 required, how to upgrade, Stop leaves the turn running); `docs/knowledge/tech-conventions.md` (OpenCode state from the service; the V2 tables); `business-overview.md` backend roadmap → "Supported on 2.x".
 - **Carried over:** from T-607: the brief writer's prompt is now v11 (only the note on OpenCode's permission names changed); add a "v11" addendum line to `docs/timeline/2026-10-08_brief-writer-spike.md`.
@@ -176,7 +176,7 @@ Paths are under `workspace/app/src/main/` unless they start with `renderer/`, `s
 
 ### T-611: QA and cross-model review
 - **Type:** qa
-- **Status:** backlog
+- **Status:** in-progress
 - **Story:** all
 - **Description:** A test plan (`docs/specs/opencode-v2/test-plan.md`) covering every acceptance criterion, run on an isolated dev instance against an isolated OpenCode 2 (T-601's setup) with CDP and the probe, plus one read-only pass on the builder's real data (transcript and context figure of a real session, no turns run). Then `cross-model-review:gpt-review` with `--model gpt-6.1-sol`, one area prompt per lane, fixes, a second round on the fixes. The builder then tries it on real work.
 - **Acceptance:** every test-plan row passes or has a recorded reason; review findings fixed or answered in `.omt/opencode-v2-decisions.md`; the epic merges to `master` after the builder's go-ahead.
@@ -199,3 +199,4 @@ Paths are under `workspace/app/src/main/` unless they start with `renderer/`, `s
 - 2026-10-20: T-601 done and merged (d8e7773): 24 fixtures, G-601..G-605 answered. Builder chose the login-shell env + Multi-Code starting a missing service (PRD v1.1). T-604 and T-605 started.
 - 2026-10-20: T-604 done and merged (a810587): 24 fixtures replayed, 1343 tests pass on the epic branch.
 - 2026-10-20: T-605 done and merged (684a3a7). T-610 done by the supervisor: 1.x readers, discovery, keystrokes, plugin and fixtures removed; `OpencodeAttention` wired; refused 1.x starts keep the contact's session; `Backend.warm()` reads the login shell when OpenCode contacts load; a subagent session the TUI shows is never adopted; one shared upgrade-command constant. Lint, type, 1358 tests, build all pass. T-610's live check moves into T-611.
+- 2026-10-20: T-609 done (CLAUDE.md, both READMEs, tech-conventions, business-overview, brief-writer v11 note). T-611 started: live QA in an isolated dev build, then the cross-model review.
