@@ -18,7 +18,8 @@
 - **完整终端能力** — 用 node-pty 接真 PTY,xterm.js 渲染。不做 chat 抽象,不解析消息
 - **会话通知** — 知道 agent 什么时候做完、什么时候在等你(Claude 通过 Multi-Code 启动时传给它的 hooks 自己上报;OpenCode 2 通过它自己后台服务的事件流上报),播放声音、闪烁联系人,并记到联系人的红色未读数和 macOS Dock 图标上
 - **Context 用量一眼可见** — 每一行联系人都显示这个会话的 context 窗口用了百分之多少,并按用量上色。鼠标悬停能看到精确 token 数、模型和统计时间。窗口大小确定不了的时候只显示 token 数,不瞎猜百分比。已停止的会话也显示最后一次的用量
-- **跟得上 `/clear` 和 `/new`** — 运行中的 CLI 切到新 session 时,Multi-Code 会跟过去,context 用量、通知和 Manager 看到的都是当前那个 session
+- **跟得上 `/clear` 和 `/new`** — 运行中的 CLI 切到另一个 session 时(`/clear`、`/new`,OpenCode 还包括 `/sessions` 和它的标签页),Multi-Code 会跟过去,context 用量、通知和 Manager 看到的都是当前那个 session
+- **OpenCode 自己的标签页** — OpenCode 2 的标签栏在 Multi-Code 里照常显示,跟在终端里一样,按你自己的 `cli.json` 设置。用鼠标点标签切换:在 Multi-Code 的终端里 `Ctrl+Tab` 传不到 OpenCode。OpenCode 按项目目录保存标签,所以同一个项目上的两个 OpenCode 联系人会看到彼此的 session;在一个联系人里点开另一个的标签,两个终端就显示同一个 session,两边都会为它提醒
 - **持久化** — 实例列表(含每个实例的后端)存盘,重启后恢复
 - **拖拽排序** — 在侧边栏上下拖动联系人,顺序会保存,重启后还在
 - **改名和复制** — 右键联系人,可以改它在列表里显示的名字(留空就回到文件夹名),也可以复制它:在同一个项目上新建一个联系人,用新的会话,排在原来那个下面。每个联系人记住并恢复自己的会话
@@ -53,7 +54,7 @@
 - **出门也能用** — 装了 [Tailscale](https://tailscale.com) 之后,人在外面手机照样是直连电脑。在家同一个 WiFi 下什么都不用配
 - **不用装 App** — 电脑端直接把手机网页发给你,扫码即用,加到主屏幕就跟 App 一样
 - **实时同步** — 终端输出实时推过来;中途才打开手机也会先收到当前屏幕的快照,不是一片空白
-- **点一下就回答** — Agent 弹选项时,选项在手机上渲染成按钮,点一下 agent 就继续跑
+- **点一下就回答** — Agent 弹选项时,选项在手机上渲染成按钮,点一下 agent 就继续跑。一次点按只回答它显示时的那个对话框:如果那个已经在别处答掉、换成了新的,手机会提示这个选项已失效,而不会去回答新的那个。升级 Multi-Code 之后,已经打开着的手机页面要刷新一下,否则点按会被拒绝
 - **也能打字回答** — 开放式问题用输入框回,发送机制跟电脑端 `Cmd+L` 那个框一样
 - **端到端加密** — NaCl box(Curve25519 + XSalsa20-Poly1305)。配对时手机会 pin 住电脑的公钥,同一个地址上的冒充者过不了这一关
 - **可吊销** — 每台配对的手机有自己的 token,吊销一台立刻断开,不影响别的
@@ -460,7 +461,7 @@ Multi-Code 自己存的东西都在 Electron 的 userData 目录里。macOS 上�
 ## 工作原理
 
 1. 用户选一个项目目录和后端(Claude Code / OpenCode)创建实例
-2. App 通过 node-pty 在该目录 spawn 对应后端 CLI(`claude` / `opencode`,有历史 session 就续上)。OpenCode 会拿到你登录 shell 的环境变量(每次运行读一次),所以它的工具跟在终端里一样找得到;OpenCode 后台服务还没起来时,Multi-Code 先用这份环境把它启动。后端在 `src/main/backends/` 的一个小 `Backend` 接口后面可插拔
+2. App 通过 node-pty 在该目录 spawn 对应后端 CLI(`claude` / `opencode`,有历史 session 就续上)。OpenCode 会拿到你登录 shell 的环境变量(每次运行读一次),所以它的工具跟在终端里一样找得到;OpenCode 后台服务还没起来时,Multi-Code 先用这份环境把它启动。Multi-Code 也按这份环境去找 OpenCode 的服务、数据库和配置(你在 shell 的 rc 文件里设的 `XDG_*`、`OPENCODE_DB`)。后端在 `src/main/backends/` 的一个小 `Backend` 接口后面可插拔
 3. PTY stdout 实时管道到 renderer 里的 xterm.js 终端
 4. 每个 agent 的状态来自 agent 自己:Claude Code 通过启动时用 `--settings` 传入的只上报 hooks 报告(做完了、在等权限确认或回答问题),OpenCode 2 通过它共用后台服务的事件流报告,再由一个只上报的终端插件说明每个终端显示的是哪个会话。手机和秘书的作答按请求 id 发给 OpenCode 的 API。两者都不往用户自己的配置里写任何东西
 5. 做完或等你时:声音 + 闪烁 + 红色未读数和 Dock 未读数各加一,每个实例都一样。红点一直留着,直到你在那个会话里打字、点击,或选中它
