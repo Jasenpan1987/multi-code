@@ -15,6 +15,11 @@ a real OpenCode 2.0.32. What failed:
 - **B-3 (low):** a contact with no session on record gets a fresh session when another contact
   holds the directory's newest one. The PRD says it should open the newest one nobody holds.
 
+**After the run (supervisor, 2026-10-20):** B-1 fixed (`sendSlash` types an OpenCode command, then
+sends its Enter 250 ms later, the way `run_command` did in row 8.5); not yet re-run live. B-2 left
+open as a known limit: the figure corrects itself on the next turn. B-3 kept as is, for parity
+with Claude (a held newest session gives a fresh one), and PRD Story 1 reworded to match.
+
 Stories 5 and 6 (phone, secretary) ran semi-live. The answer paths were called in the main
 process with real dialogs and a real service, but with no phone, no speech server and no reply
 interpreter. Everything that wasn't run says why.
@@ -255,6 +260,8 @@ No speech server, and no reply interpreter: it would run on the builder's Bedroc
 - **Suspect:** `sendSlash` in `renderer/components/QuickActionsSection.tsx` writes `cmd + "\r"` in
   one write, and OpenCode's menu takes that Enter. A fix would type the command and send Enter
   after a pause, as `processManager.tryRunCommand` does.
+- **Status:** fixed after the run: for OpenCode, `sendSlash` writes the command, then `\r` 250 ms
+  later. Not re-run live; the same sequence is what row 8.5's `run_command` passed with.
 
 ### B-2: the context figure doesn't reset after a compaction (low)
 
@@ -268,6 +275,8 @@ No speech server, and no reply interpreter: it would run on the builder's Bedroc
 - **Suspect:** `ProcessManager.refreshContextUsage` keeps the last figure whenever a read comes
   back `null` (meant for a locked or unreadable transcript), so the reader's "reset" can't reach
   it. The backend needs a way to say "reset" that isn't "unreadable".
+- **Status:** open, accepted as a known limit (low): the next turn's step corrects it. A fix
+  needs a "reset" answer from the backend distinct from "unreadable", for one figure on screen.
 
 ### B-3: no session on record, the newest held → fresh instead of the newest unheld (low)
 
@@ -284,6 +293,10 @@ No speech server, and no reply interpreter: it would run on the builder's Bedroc
   without the `isClaimed` callback that `opencodeDb.latestRootSession` takes for this purpose.
   This may be deliberate, for parity with Claude's `--continue`; if so the PRD wording should say
   so.
+- **Status:** kept, for parity with Claude, whose `--continue` can't skip a held session. PRD v1.2
+  Story 1 now says "the directory's most recent root session, else a fresh one when another
+  contact holds it". It only reaches contacts with no session on record: every OpenCode contact
+  names its session from its first start.
 
 ## Other observations
 

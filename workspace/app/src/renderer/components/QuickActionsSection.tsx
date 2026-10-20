@@ -3,6 +3,11 @@ import type { ReactNode } from "react";
 import type { Instance } from "../../shared/types";
 import { RenameSessionDialog } from "./RenameSessionDialog";
 
+// How long OpenCode's slash menu is given to draw before the Enter that runs the
+// command. The manager's run_command waits 120 ms; a quick action has nobody waiting
+// on it, so a little more.
+const SLASH_MENU_SETTLE_MS = 250;
+
 interface QuickActionsSectionProps {
   instance: Instance;
   active: boolean;
@@ -58,11 +63,19 @@ export function QuickActionsSection({
     }
   }, [instance.cwd]);
 
+  // Claude runs a slash command typed with its Enter in one write. OpenCode 2's slash
+  // menu takes that Enter and leaves the command in the box (T-611, B-1), so the Enter
+  // follows once the menu has drawn, as the manager's run_command does.
   const sendSlash = useCallback(
     (cmd: string) => {
-      window.electronAPI.writeToInstance(instance.id, `${cmd}\r`);
+      if (instance.backend !== "opencode") {
+        window.electronAPI.writeToInstance(instance.id, `${cmd}\r`);
+        return;
+      }
+      window.electronAPI.writeToInstance(instance.id, cmd);
+      setTimeout(() => window.electronAPI.writeToInstance(instance.id, "\r"), SLASH_MENU_SETTLE_MS);
     },
-    [instance.id]
+    [instance.id, instance.backend]
   );
 
   const handleResume = useCallback(async () => {

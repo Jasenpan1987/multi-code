@@ -58,11 +58,12 @@ const POST_TIMEOUT_MS = 2000;
 //   - The route is copied field by field: it is a store proxy, and a retained one
 //     would change under the queue.
 //
-// After reading its ids it deletes them from `process.env`. The TUI pushes its env to
-// the service as the shell tool's base env, and a service this TUI restarts inherits
-// it, so an `opencode` the agent runs would otherwise load this plugin with the same
-// ids and report its route as this contact's. The ids are kept on globalThis for a
-// later setup in the same process.
+// After reading its ids it deletes them from `process.env`, so a service this TUI
+// restarts (OpenCode respawns a dead one from an attached TUI) doesn't inherit them
+// (measured in T-611: the respawned service had none). It can't take them out of the
+// env the TUI has already pushed for its root session: the agent's shell there still
+// sees them, as a Claude contact's Bash does (spike G-605, accepted). The ids are kept
+// on globalThis for a later setup in the same process.
 //
 // The newest setup wins. OpenCode reloads a local plugin when its file changes (a
 // second Multi-Code sharing userData rewrites it on start), and the old copy's effect

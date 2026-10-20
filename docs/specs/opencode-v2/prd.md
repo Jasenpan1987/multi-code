@@ -1,6 +1,6 @@
 # PRD: OpenCode 2
 
-**Version:** 1.1
+**Version:** 1.2
 **Last Updated:** 2026-10-20
 **Status:** draft
 **Owner:** Jasen
@@ -42,7 +42,7 @@ Multi-Code's OpenCode backend moves from OpenCode 1.x to 2.x, and 1.x support is
 - [ ] Starting an OpenCode contact opens the OpenCode 2 TUI in its terminal, in the contact's project directory, connected to the user's shared service (the one plain `opencode` uses)
 - [ ] A contact with a session of its own reopens that session on every start and restart, including sessions made under 1.x (their ids survived the migration)
 - [ ] A new contact, a duplicated contact and a contact whose session is gone start in a fresh session that belongs to that contact alone, even before anything is typed
-- [ ] A contact with no session on record opens the directory's most recent root session that no other contact holds, else a fresh one
+- [ ] A contact with no session on record opens the directory's most recent root session, or a fresh one when another contact holds that one (as Claude's `--continue` does; T-611 B-3)
 - [ ] Two contacts on one project never open the same session through these rules
 - [ ] The TUI shows no tab bar inside Multi-Code; Ctrl+Z does not freeze the terminal
 - [ ] The user's own OpenCode settings apply inside Multi-Code as in a terminal: their config, providers, server plugins, and their own TUI plugins
@@ -243,4 +243,5 @@ Tracked in docs/specs/opencode-v2/gaps.md. None blocks the design; G-601 to G-60
 ## Changelog
 
 - v1.0 (2026-10-20): First version.
+- v1.2 (2026-10-20): Story 1's "no session on record" rule matches what was built and what Claude does: a held newest session gives a fresh one (T-611 B-3).
 - v1.1 (2026-10-20): Story 1 and Story 10 gain the login-shell environment and Multi-Code starting a missing service itself (builder decision after the T-601 spike found the shared service keeps its starter's environment). Story 3's rules refined by the spike: a root that carries on after a subagent's Reject and succeeds chimes Finished.
