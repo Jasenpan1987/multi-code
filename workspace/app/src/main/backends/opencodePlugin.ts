@@ -188,12 +188,11 @@ export default {
 
 // ------------------------------------------------------------ TUI settings
 
-// Multi-Code's per-process TUI settings. Tabs off: Multi-Code's sidebar already lists
-// the sessions, and OpenCode turns them off itself inside hosts that manage several
-// terminals (`tabs.mode: auto` under Herdr). Ctrl+Z off: by default it suspends the
-// renderer, and in a pty child the frozen TUI can't be told from a busy one (spike,
-// G-601: `ps` still showed it running).
-const TUI_SETTINGS = { tabs: { mode: "off" }, keybinds: { "terminal.suspend": "none" } } as const;
+// Multi-Code's per-process TUI settings. Tabs are not among them: they follow the
+// builder's own settings, as in any terminal (builder, 2026-10-20; decisions.md). Ctrl+Z
+// off: by default it suspends the renderer, and in a pty child the frozen TUI can't be
+// told from a busy one (spike, G-601: `ps` still showed it running).
+const TUI_SETTINGS = { keybinds: { "terminal.suspend": "none" } } as const;
 
 // The CLI config file OpenCode merges OPENCODE_CLI_CONFIG_CONTENT over:
 // `$OPENCODE_CONFIG_DIR` (when set), else `<XDG_CONFIG_HOME or ~/.config>/opencode`,
@@ -284,7 +283,6 @@ export function opencodeCliConfig(input: {
   }
   const merged: Record<string, unknown> = {
     ...config,
-    tabs: { ...(isRecord(config.tabs) ? config.tabs : {}), ...TUI_SETTINGS.tabs },
     keybinds: { ...(isRecord(config.keybinds) ? config.keybinds : {}), ...TUI_SETTINGS.keybinds },
   };
   if (!input.pluginDir) return { content: JSON.stringify(merged), plugin: false };

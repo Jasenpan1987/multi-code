@@ -433,7 +433,8 @@ describe("opencodeCliConfig", () => {
   const pluginDir = "/Users/x/Library/Application Support/multi-code/opencode/tui";
   const cliJsonPath = "/Users/x/.config/opencode/cli.json";
   const ours = { package: pluginDir };
-  const settings = { tabs: { mode: "off" }, keybinds: { "terminal.suspend": "none" } };
+  // Ctrl+Z off and nothing else: tabs follow the builder's own settings (2026-10-20).
+  const settings = { keybinds: { "terminal.suspend": "none" } };
   const missing = () => {
     throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
   };
@@ -533,7 +534,8 @@ describe("opencodeCliConfig", () => {
     });
     expect(parse(result)).toEqual({
       theme: { name: "nord" },
-      tabs: { scope: "global", mode: "off" },
+      // The builder's tab settings pass through untouched.
+      tabs: { scope: "global", mode: "on" },
       keybinds: { "app.exit": "ctrl+q", "terminal.suspend": "none" },
       plugins: ["/Users/x/.config/opencode/env-plugin", ours],
     });
