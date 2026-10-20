@@ -195,10 +195,11 @@ describe("opencode spawn", () => {
     expect(asked).toEqual(["env", freshCwd]);
   });
 
-  it("turns the TUI's tabs and Ctrl+Z off and loads Multi-Code's plugin by directory", () => {
+  it("turns Ctrl+Z off, leaves tabs to the builder, and loads Multi-Code's plugin by directory", () => {
     const { env } = buildOpencodeSpawn(freshCwd, { opencodePlugin }, { kind: "fresh" }, fakeHost());
+    // No `tabs` key: the builder's cli.json (or OpenCode's default) decides, as in any
+    // terminal (builder, 2026-10-20).
     expect(JSON.parse(env.OPENCODE_CLI_CONFIG_CONTENT)).toEqual({
-      tabs: { mode: "off" },
       keybinds: { "terminal.suspend": "none" },
       plugins: [{ package: opencodePlugin.pluginPath }],
     });
@@ -230,7 +231,6 @@ describe("opencode spawn", () => {
       readFile: () => "{ broken",
     }));
     expect(JSON.parse(env.OPENCODE_CLI_CONFIG_CONTENT)).toEqual({
-      tabs: { mode: "off" },
       keybinds: { "terminal.suspend": "none" },
     });
     expect(env.MULTICODE_ALERT_FILE).toBeUndefined();
@@ -251,7 +251,6 @@ describe("opencode spawn", () => {
     }));
     expect(JSON.parse(env.OPENCODE_CLI_CONFIG_CONTENT)).toEqual({
       theme: { name: "nord" },
-      tabs: { mode: "off" },
       keybinds: { "terminal.suspend": "none" },
       plugins: [{ package: opencodePlugin.pluginPath }],
     });

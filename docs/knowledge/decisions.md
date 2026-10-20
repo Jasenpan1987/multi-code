@@ -4,6 +4,21 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-10-20 — OpenCode's tabs stay on inside Multi-Code
+
+**Decision:** Multi-Code no longer passes `tabs.mode: "off"` to the OpenCode terminals it starts. Tabs follow the builder's own `cli.json`, or OpenCode's default (`auto`, which is on outside Herdr), as in any terminal. The rest of the 2026-10-16 decision stands; Ctrl+Z stays off.
+
+**Why:** Trying the merged build, the builder missed OpenCode 2's tabs. Multi-Code is an enhanced terminal for the CLIs, so OpenCode should look in it as it does in a terminal. Following the shown session already works with tabs: a tab switch is a route change the TUI plugin reports, and a root nobody holds becomes the contact's.
+
+**Alternatives considered:** keep tabs off (the 2026-10-16 reasons: the sidebar lists sessions, OpenCode's own Herdr precedent). `tabs.scope` has only `cwd` and `global`, so no setting keeps one terminal's tabs to itself.
+
+**Consequences:** measured live on the isolated setup, 2026-10-20. Tabs are shared per directory and live (`tui/tabs.json`): two OpenCode contacts on one project see each other's sessions as tabs, and opening the other's tab shows that session in both terminals. Multi-Code then keeps each contact's own session, but both contacts alert for the shared one. The builder's contacts have no two OpenCode contacts in one directory. Switching tabs works with the mouse; `ctrl+tab` / `ctrl+shift+tab` do nothing in Multi-Code's terminal, which can't send them (xterm.js 5.5, no kitty keyboard protocol).
+
+**Source:** builder, 2026-10-20, in session; docs/specs/opencode-v2/test-plan.md row 1.8
+**Affects:** `backends/opencodePlugin.ts` (TUI settings), docs/specs/opencode-v2/prd.md Story 1, CLAUDE.md
+
+---
+
 ## 2026-10-20 — OpenCode gets the builder's login-shell environment
 
 **Decision:** Multi-Code reads the builder's login-shell environment once per run (`$SHELL -l -i`, about 1.4 s, cached) and gives it to every OpenCode terminal it starts. When no shared OpenCode service is running, Multi-Code starts it first (`opencode service start`) with that environment minus Multi-Code's own variables (`MULTICODE_*`, `OPENCODE_CLI_CONFIG_CONTENT`), then starts the terminal. Claude's spawns are unchanged.
