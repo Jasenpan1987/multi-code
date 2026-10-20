@@ -51,6 +51,11 @@ export type AnswerResult = { ok: true } | { ok: false; reason: "gone" | "failed"
  *   - "latest": the directory's most recent session (Claude's `--continue`;
  *     OpenCode's newest root session, named by id), for a contact with no session
  *     of its own on record, as every contact had before contacts.json kept one.
+ *     `isClaimed` says whether another contact holds a session. A backend that
+ *     picks the session itself (OpenCode, by id) asks it about the one it picks,
+ *     when it picks it, and takes a fresh one when that is held: the newest may
+ *     have changed since process-manager looked, or it looked in another database
+ *     (OpenCode's paths come from the login shell, read by the spawn).
  *
  * Without "own", two contacts on one project both open the directory's most recent
  * session after every restart, and then share it.
@@ -58,7 +63,7 @@ export type AnswerResult = { ok: true } | { ok: false; reason: "gone" | "failed"
 export type SessionStart =
   | { kind: "own"; sessionId: string }
   | { kind: "fresh" }
-  | { kind: "latest" };
+  | { kind: "latest"; isClaimed?: (sessionId: string) => boolean };
 
 /**
  * Extra spawn wiring. The manager gets the three Claude fields; every other
@@ -158,7 +163,12 @@ export interface BuilderTurn {
 export type ActivityCallback = (
   type: string,
   detail?: PromptDetail,
-  toolCall?: PromptToolCall
+  toolCall?: PromptToolCall,
+  // `prompt` only: a dialog reported before is the one blocking the contact again,
+  // after the one shown closed or a turn ended around it (OpenCode, whose contact can
+  // have several open). Everything follows it as the live dialog; nothing chimes,
+  // vibrates or counts it a second time.
+  restated?: boolean
 ) => void;
 
 export interface HookAttention {
@@ -194,6 +204,15 @@ export interface Backend {
    * in voice-secretary PRD v1.6.
    */
   readonly keepsSecretaryEvents: boolean;
+
+  /**
+   * Whether the backend picks the directory's newest session itself when it spawns
+   * a "latest" start, checking its pick with the start's `isClaimed` (OpenCode: the
+   * database it reads is named by the login-shell env the spawn resolves). Then
+   * process-manager doesn't look first, and doesn't turn a held newest into
+   * "fresh": its look could be in another database.
+   */
+  readonly picksLatestSession?: boolean;
 
   /**
    * Build the command line for a new instance. `opts` carries the manager's MCP

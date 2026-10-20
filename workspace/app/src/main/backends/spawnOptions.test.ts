@@ -162,6 +162,9 @@ describe("opencode spawn", () => {
       [{ kind: "own", sessionId: "ses_own" }, { latestRootSession: () => "ses_latest" }, "ses_own"],
       [{ kind: "latest" }, { latestRootSession: () => "ses_latest" }, "ses_latest"],
       [{ kind: "latest" }, {}, "ses_minted"],
+      // The newest, checked against the other contacts as it is picked.
+      [{ kind: "latest", isClaimed: () => false }, { latestRootSession: () => "ses_latest" }, "ses_latest"],
+      [{ kind: "latest", isClaimed: (id) => id === "ses_held" }, { latestRootSession: () => "ses_held" }, "ses_minted"],
       [undefined, { latestRootSession: () => "ses_latest" }, "ses_latest"],
       [{ kind: "fresh" }, { latestRootSession: () => "ses_latest" }, "ses_minted"],
     ];
@@ -173,15 +176,23 @@ describe("opencode spawn", () => {
     }
   });
 
-  it("asks for the directory's newest root session with the contact's cwd", () => {
+  it("asks for the directory's newest root session with the contact's cwd, after the env", () => {
+    // The env first: the login shell may move OpenCode's database, and the newest
+    // session has to come from the database the TUI will open.
     const asked: string[] = [];
-    buildOpencodeSpawn(freshCwd, undefined, { kind: "latest" }, fakeHost({
+    const host = fakeHost({
       latestRootSession: (cwd) => {
         asked.push(cwd);
         return null;
       },
-    }));
-    expect(asked).toEqual([freshCwd]);
+    });
+    const env = host.env;
+    host.env = () => {
+      asked.push("env");
+      return env();
+    };
+    buildOpencodeSpawn(freshCwd, undefined, { kind: "latest" }, host);
+    expect(asked).toEqual(["env", freshCwd]);
   });
 
   it("turns the TUI's tabs and Ctrl+Z off and loads Multi-Code's plugin by directory", () => {

@@ -37,6 +37,8 @@ const apiAnswers: { ref: DialogRef; answer: DialogAnswer }[] = [];
 let apiResult: () => Promise<AnswerResult> = async () => ({ ok: true });
 // Instances whose phone badge and buttons were dropped.
 const phoneCleared: string[] = [];
+// What the phone was told: [instanceId, activity, detail, restated].
+const phoneActivity: unknown[][] = [];
 
 vi.mock("node-pty", () => ({
   spawn: (_cmd: string, _args: string[], o: { env: Record<string, string> }) => {
@@ -69,7 +71,7 @@ vi.mock("electron", () => ({
 
 vi.mock("./remote/ws-server", () => ({
   remoteServer: {
-    broadcastActivity: () => {},
+    broadcastActivity: (...args: unknown[]) => phoneActivity.push(args),
     broadcastExit: () => {},
     broadcastInstances: () => {},
     broadcastOutput: () => {},
@@ -181,6 +183,7 @@ beforeEach(() => {
   apiAnswers.length = 0;
   apiResult = async () => ({ ok: true });
   phoneCleared.length = 0;
+  phoneActivity.length = 0;
 });
 
 afterEach(() => {
@@ -967,6 +970,29 @@ describe("a phone's tap (opencode-v2 T-607)", () => {
     apiResult = () => Promise.reject(new Error("socket hang up"));
     await expect(manager.answerPhoneChoice(id, detail, 0)).resolves.toBe(false);
     expect(phoneCleared).toEqual([]);
+  });
+
+  it("a restated dialog is the live one, without reaching the renderer or vibrating the phone", async () => {
+    const manager = new ProcessManager();
+    const sent: unknown[][] = [];
+    manager.setMainWindow({
+      isDestroyed: () => false,
+      webContents: { send: (...args: unknown[]) => sent.push(args) },
+    } as never);
+    const { id, spawn } = raisedOpencode(manager);
+    const before = manager.secretaryEventOf(id)!.seq;
+    // Another dialog was shown and closed; the first is the one blocking again.
+    const again = { ...OC_PERMISSION.detail };
+    spawn.report("prompt", again, OC_PERMISSION.toolCall, true);
+    expect(sent.filter(([channel]) => channel === "instance-activity")).toHaveLength(1);
+    expect(phoneActivity.map(([, activity, , restated]) => [activity, restated])).toEqual([
+      ["prompt", false],
+      ["prompt", true],
+    ]);
+    // The secretary and the phone answer it.
+    expect(manager.secretaryEventOf(id)!.seq).toBeGreaterThan(before);
+    await expect(manager.answerPhoneChoice(id, again, 0)).resolves.toBe(true);
+    expect(apiAnswers.map((a) => a.ref)).toEqual([PERMISSION_REF]);
   });
 
   it("never falls back to keys for OpenCode once its dialog cleared or names no request", async () => {

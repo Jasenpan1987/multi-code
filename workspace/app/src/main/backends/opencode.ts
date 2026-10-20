@@ -281,12 +281,16 @@ export const defaultOpencodeSpawnHost: OpencodeSpawnHost = {
 // moment and discovery never has to guess:
 //   - own: the contact's id. Resumed, or created under that id by the first prompt
 //     when it is gone or was never typed in (OpenCode allows both).
-//   - latest: the directory's newest root session (process-manager already turned one
-//     another contact holds into "fresh"), else a new id.
+//   - latest: the directory's newest root session, read after the env (so from the
+//     database the login shell names) and checked against the other contacts as it
+//     is picked; a new id when it is held or there is none.
 //   - fresh: a new id.
 function sessionIdFor(cwd: string, session: SessionStart, host: OpencodeSpawnHost): string {
   if (session.kind === "own") return session.sessionId;
-  if (session.kind === "latest") return host.latestRootSession(cwd) ?? host.mintSessionId();
+  if (session.kind === "latest") {
+    const latest = host.latestRootSession(cwd);
+    return latest && !session.isClaimed?.(latest) ? latest : host.mintSessionId();
+  }
   return host.mintSessionId();
 }
 
@@ -329,6 +333,8 @@ export function buildOpencodeSpawn(
 export const opencodeBackend: Backend = {
   name: "opencode",
   keepsSecretaryEvents: true,
+  // After the env, from the database the TUI will open (sessionIdFor).
+  picksLatestSession: true,
 
   // Of SpawnOptions only `opencodePlugin` applies. The settings file is a Claude
   // `--settings` file, and the rest exists for the manager, which is claude-only

@@ -330,15 +330,18 @@ export function App() {
     });
   }, []);
 
-  // Listen for session-id matched (used by Resume Elsewhere button)
+  // Listen for session-id matched (used by Resume Elsewhere button). The context
+  // figure belongs to the session too: main dropped the old one's, so ask now rather
+  // than show it until the next poll (opencode-v2 PRD Story 4: within 2s).
   useEffect(() => {
     const cleanup = window.electronAPI.onInstanceSessionId((id, sessionId) => {
       setInstances((prev) =>
         prev.map((inst) => (inst.id === id ? { ...inst, sessionId } : inst))
       );
+      refreshContextUsage();
     });
     return cleanup;
-  }, []);
+  }, [refreshContextUsage]);
 
   // Compose box: Cmd+L (dispatched from TerminalView's key handler) summons the
   // box for a running instance. Gated here so the hotkey is a no-op for stopped

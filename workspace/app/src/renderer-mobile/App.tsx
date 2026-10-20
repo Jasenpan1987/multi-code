@@ -28,6 +28,8 @@ interface ActivePrompt {
   tool: string;
   question?: string;
   options: PromptOption[];
+  // Sent back with a tap, so the desktop can tell it from a newer prompt's.
+  promptId: string;
 }
 
 const STATE_LABEL: Record<ConnectionState, string> = {
@@ -121,6 +123,7 @@ export function App() {
             tool: frame.tool,
             question: frame.question,
             options: frame.options,
+            promptId: frame.promptId,
           });
           return next;
         });
@@ -208,6 +211,7 @@ export function App() {
       type: "choose",
       instanceId: selectedId,
       optionIndex: index,
+      promptId: prompts.get(selectedId)?.promptId,
     });
   };
 

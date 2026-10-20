@@ -103,7 +103,9 @@ export class RemoteServer {
   private onStatusChange: (() => void) | null = null;
   // Latest prompt per instance, so a phone that connects while the agent is
   // already blocked still gets the buttons.
-  private activePrompts = new Map<string, PromptDetail>();
+  // The prompt each instance is blocked on, as the phone was last shown it, and the
+  // number its `prompt-state` carried.
+  private activePrompts = new Map<string, { detail: PromptDetail; promptId: string }>();
   // Latest activity signal per instance. Kept server-side rather than only in
   // the phone's memory so that reopening the app (or a reconnect after a screen
   // lock) still shows which agents are waiting, instead of a clean list that
@@ -297,10 +299,13 @@ export class RemoteServer {
     return this.activity.get(instanceId) ?? null;
   }
 
+  // `restated`: a dialog the phone was told about before is the live one again. Its
+  // buttons replace the ones shown, without a second vibration.
   broadcastActivity(
     instanceId: string,
     activity: string,
-    detail?: PromptDetail
+    detail?: PromptDetail,
+    restated = false
   ) {
     if (activity === "prompt-cleared") {
       this.activePrompts.delete(instanceId);
@@ -313,19 +318,21 @@ export class RemoteServer {
 
     if (activity !== "waiting" && activity !== "prompt") return;
     this.activity.set(instanceId, activity);
-    this.broadcast({ type: "activity", instanceId, activity });
+    if (!restated) this.broadcast({ type: "activity", instanceId, activity });
     // The agent just changed state, so whoever is watching wants the updated
     // summary, not the one from when they subscribed.
     this.broadcastTranscript(instanceId);
 
     if (activity === "prompt" && detail) {
-      this.activePrompts.set(instanceId, detail);
+      const promptId = crypto.randomUUID();
+      this.activePrompts.set(instanceId, { detail, promptId });
       this.broadcast({
         type: "prompt-state",
         instanceId,
         tool: detail.tool,
         question: detail.question,
         options: detail.options,
+        promptId,
       });
     }
     this.broadcastInstances();
@@ -581,9 +588,10 @@ export class RemoteServer {
           this.send(conn, {
             type: "prompt-state",
             instanceId: frame.instanceId,
-            tool: prompt.tool,
-            question: prompt.question,
-            options: prompt.options,
+            tool: prompt.detail.tool,
+            question: prompt.detail.question,
+            options: prompt.detail.options,
+            promptId: prompt.promptId,
           });
         }
         return;
@@ -610,14 +618,17 @@ export class RemoteServer {
             type: "error",
             message: "That choice is no longer available — use the terminal view.",
           });
-        const detail = this.activePrompts.get(frame.instanceId);
-        if (!detail || !this.host) {
+        const prompt = this.activePrompts.get(frame.instanceId);
+        // A tap on buttons another prompt has replaced since: its index means
+        // something else now (a desk answer, then the next dialog, while the tap
+        // was on its way). One that doesn't say which buttons can't be told apart.
+        if (!prompt || frame.promptId !== prompt.promptId || !this.host) {
           unavailable();
           return;
         }
         // Keys are written before the call returns, so input the phone sends after
         // still lands after them; an answer through the CLI's API resolves later.
-        this.host.answerChoice(frame.instanceId, detail, frame.optionIndex).then(
+        this.host.answerChoice(frame.instanceId, prompt.detail, frame.optionIndex).then(
           (answered) => {
             if (!answered) unavailable();
           },

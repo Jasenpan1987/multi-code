@@ -45,6 +45,13 @@ export const OPENCODE_ROUTE_EVENT = "multicode.route";
 const MAX_QUEUED = 200;
 const POST_TIMEOUT_MS = 2000;
 
+// A route is said once, when it changes, so a lost post (a timeout while Multi-Code
+// was busy, its server restarting) would leave the contact on the session before for
+// good. A failed one is sent again after a wait that doubles up to the max, for as
+// long as the terminal still shows that route and the plugin is live.
+const ROUTE_RETRY_MIN_MS = 500;
+const ROUTE_RETRY_MAX_MS = 30_000;
+
 // The plugin's source. Plain JS, importing only `fs` and the host's `solid-js`,
 // because OpenCode runs it inside the user's TUI and nothing here may need installing.
 // Rules it keeps, each because it runs inside someone else's terminal:
@@ -103,25 +110,33 @@ export default {
       };
 
       const generation = ++state.generation;
+      let disposed = false;
+      // Resolves true once Multi-Code took it, false when it didn't. A newer setup's
+      // own posts speak for this TUI, and a disposed one says nothing more, so their
+      // posts are dropped and count as done.
       const post = (body) => {
-        if (generation !== state.generation || state.queued >= ${MAX_QUEUED}) return;
+        if (disposed || generation !== state.generation) return Promise.resolve(true);
+        if (state.queued >= ${MAX_QUEUED}) return Promise.resolve(false);
         const payload = JSON.stringify(body);
         state.queued++;
-        state.queue = state.queue
+        const sent = state.queue
           .then(() => fetch(target.endpoint, {
             method: "POST",
             headers,
             body: payload,
             signal: AbortSignal.timeout(${POST_TIMEOUT_MS}),
           }))
-          .then((res) => res.body?.cancel())
-          .catch(() => {})
+          .then((res) => Promise.resolve(res.body?.cancel()).then(() => res.ok, () => res.ok))
+          .catch(() => false)
           .finally(() => { state.queued--; });
+        state.queue = sent;
+        return sent;
       };
 
       post({ hook_event_name: ${JSON.stringify(OPENCODE_INIT_EVENT)}, pid: process.pid });
 
       let last;
+      let retry;
       const report = () => {
         try {
           const current = ctx.ui.router.current();
@@ -133,9 +148,17 @@ export default {
           const key = type + "\\n" + (route.sessionID ?? "");
           if (key === last) return;
           last = key;
+          clearTimeout(retry);
           const body = { hook_event_name: ${JSON.stringify(OPENCODE_ROUTE_EVENT)}, route };
           if (type === "session" && route.sessionID) body.session_id = route.sessionID;
-          post(body);
+          const send = (wait) =>
+            post(body).then((ok) => {
+              if (ok || disposed || last !== key) return;
+              retry = setTimeout(() => {
+                if (last === key) send(Math.min(wait * 2, ${ROUTE_RETRY_MAX_MS}));
+              }, wait);
+            });
+          send(${ROUTE_RETRY_MIN_MS});
         } catch {}
       };
 
@@ -149,6 +172,8 @@ export default {
         },
       });
       return () => {
+        disposed = true;
+        clearTimeout(retry);
         try {
           if (typeof dispose === "function") dispose();
         } catch {}

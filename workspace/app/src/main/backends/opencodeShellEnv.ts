@@ -248,3 +248,12 @@ export function opencodeShellEnv(): Record<string, string> | null {
 export function cachedOpencodeShellEnv(): Record<string, string> | null {
   return resolver.peek();
 }
+
+// The env OpenCode's own files are found by: the service's registration, the database
+// and the config sit under XDG_STATE_HOME, XDG_DATA_HOME, XDG_CONFIG_HOME and
+// OPENCODE_DB as the OpenCode Multi-Code starts sees them, which is the login shell's.
+// Multi-Code's own env until that is known, or when it can't be read (spawns then use
+// Multi-Code's too).
+export function opencodePathEnv(): NodeJS.ProcessEnv {
+  return cachedOpencodeShellEnv() ?? process.env;
+}

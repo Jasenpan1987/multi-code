@@ -73,6 +73,10 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   for (const key of ENV_KEYS) delete process.env[key];
+  // As a newer setup would: the test's plugin sends nothing more, so a retry still
+  // in its queue can't land in the next test's posts.
+  const state = (globalThis as Record<string, unknown>).__multicodeTui as { generation: number } | undefined;
+  if (state) state.generation++;
   delete (globalThis as Record<string, unknown>).__multicodeTui;
 });
 
@@ -243,6 +247,18 @@ describe("the TUI plugin", () => {
     expect(ctx.disposed).toBe(1);
   });
 
+  it("sends nothing more once OpenCode has run its cleanup", async () => {
+    setMulticodeEnv();
+    const { plugin } = await loadPlugin();
+    const ctx = fakeCtx({ type: "home" });
+    const cleanup = plugin.setup(ctx) as () => void;
+    await flush(2);
+    cleanup();
+    navigate(ctx, { type: "session", sessionID: "ses_after" });
+    await settle();
+    expect(posts).toHaveLength(2);
+  });
+
   it("neither throws nor waits when Multi-Code is wedged or gone", async () => {
     setMulticodeEnv();
     const hung: (() => void)[] = [];
@@ -267,7 +283,51 @@ describe("the TUI plugin", () => {
     const end = Date.now() + 2000;
     while (state.queued > 0 && Date.now() < end) await new Promise((r) => setTimeout(r, 5));
     expect(state.queued).toBe(0);
+    // init, home and 100 routes. The last one, still shown, waits for its retry.
     expect(posts).toHaveLength(102);
+  });
+
+  it("sends a route again when its post fails, while it is still the route shown", async () => {
+    setMulticodeEnv();
+    const { plugin } = await loadPlugin();
+    const ctx = fakeCtx({ type: "session", sessionID: "ses_a" });
+    plugin.setup(ctx);
+    await flush(2);
+    // B's first post is lost (Multi-Code busy past the timeout); the next one lands.
+    let failures = 1;
+    fetchImpl = async () => {
+      if (failures-- > 0) throw new Error("timeout");
+      return new Response(null, { status: 204 });
+    };
+    navigate(ctx, { type: "session", sessionID: "ses_b" });
+    await flush(4);
+    await settle();
+    expect(posts.map((p) => p.body.session_id ?? null)).toEqual([null, "ses_a", "ses_b", "ses_b"]);
+  });
+
+  it("keeps sending a failing route, further apart each time, and stops once the terminal leaves it", async () => {
+    setMulticodeEnv();
+    const sentA: number[] = [];
+    fetchImpl = async (_url, init) => {
+      if (JSON.parse(init.body as string).session_id !== "ses_a") return new Response(null, { status: 204 });
+      sentA.push(Date.now());
+      return new Response(null, { status: 503 });
+    };
+    const { plugin } = await loadPlugin();
+    const ctx = fakeCtx({ type: "session", sessionID: "ses_a" });
+    plugin.setup(ctx);
+    await flush(4, 3000);
+    expect(sentA).toHaveLength(3);
+    // About 500 ms, then about 1000 ms.
+    expect(sentA[1] - sentA[0]).toBeGreaterThanOrEqual(450);
+    expect(sentA[2] - sentA[1]).toBeGreaterThanOrEqual(950);
+
+    navigate(ctx, { type: "session", sessionID: "ses_b" });
+    await flush(5);
+    // Past the 2000 ms A's next try would have waited.
+    await new Promise((r) => setTimeout(r, 2200));
+    expect(sentA).toHaveLength(3);
+    expect(posts.map((p) => p.body.session_id ?? null)).toEqual([null, "ses_a", "ses_a", "ses_a", "ses_b"]);
   });
 
   it("gives every post an abort signal, so a hung one stops holding up the next", async () => {

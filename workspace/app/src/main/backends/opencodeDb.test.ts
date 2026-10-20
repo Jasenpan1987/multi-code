@@ -14,6 +14,11 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import Database from "better-sqlite3";
+
+// The env OpenCode runs with; Multi-Code's own unless a test says otherwise.
+vi.mock("./opencodeShellEnv", () => ({ opencodePathEnv: vi.fn(() => process.env) }));
+
+import { opencodePathEnv } from "./opencodeShellEnv";
 import {
   BUILDER_TURN_SCAN_MESSAGES,
   latestRootSession,
@@ -507,6 +512,15 @@ describe("opencodeDbPath", () => {
       "/d/opencode/alt.db"
     );
   });
+
+  it("by default reads the env the OpenCode it starts runs with (the login shell's)", () => {
+    vi.mocked(opencodePathEnv).mockReturnValue({ HOME: "/h", OPENCODE_DB: "/shell/x.db" });
+    try {
+      expect(opencodeDbPath()).toBe("/shell/x.db");
+    } finally {
+      vi.mocked(opencodePathEnv).mockImplementation(() => process.env);
+    }
+  });
 });
 
 describe("opencodeConfigPaths", () => {
@@ -518,6 +532,15 @@ describe("opencodeConfigPaths", () => {
     expect(opencodeConfigPaths({ HOME: "/h", XDG_CONFIG_HOME: "/c" })[0]).toBe(
       "/c/opencode/opencode.json"
     );
+  });
+
+  it("by default reads the env the OpenCode it starts runs with (the login shell's)", () => {
+    vi.mocked(opencodePathEnv).mockReturnValue({ HOME: "/h", XDG_CONFIG_HOME: "/shell" });
+    try {
+      expect(opencodeConfigPaths()[0]).toBe("/shell/opencode/opencode.json");
+    } finally {
+      vi.mocked(opencodePathEnv).mockImplementation(() => process.env);
+    }
   });
 });
 

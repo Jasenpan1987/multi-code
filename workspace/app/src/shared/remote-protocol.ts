@@ -133,10 +133,15 @@ export interface PromptFrame {
 // Answer a detected interactive prompt by index (0-based over the options the
 // desktop reported in `prompt-state`). The desktop translates the index into
 // the keystrokes the CLI expects, so the phone never hardcodes TUI key bindings.
+// `promptId` is the `prompt-state` the tapped buttons came from: a tap that
+// arrives after another dialog replaced that one is refused, not applied to the
+// new one. A tap without one (a phone page from before it existed) is refused too:
+// there is no telling which buttons it was.
 export interface ChooseFrame {
   type: "choose";
   instanceId: string;
   optionIndex: number;
+  promptId?: string;
 }
 
 export interface PingFrame {
@@ -253,6 +258,10 @@ export interface PromptStateFrame {
   tool: string;
   question?: string;
   options: PromptOption[];
+  // Which prompt this is, for the phone's `choose` to name. A new one for every
+  // prompt reported, the same dialog said again included, and random, so a phone
+  // still holding buttons from before Multi-Code restarted can't match a new one.
+  promptId: string;
 }
 
 // The prompt cleared (someone answered, on either side).

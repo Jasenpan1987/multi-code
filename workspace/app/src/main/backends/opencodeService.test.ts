@@ -18,8 +18,11 @@ import type { AddressInfo } from "net";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../debug-trace", () => ({ debugTrace: vi.fn() }));
+// The env OpenCode runs with; Multi-Code's own unless a test says otherwise.
+vi.mock("./opencodeShellEnv", () => ({ opencodePathEnv: vi.fn(() => process.env) }));
 
 import { debugTrace } from "../debug-trace";
+import { opencodePathEnv } from "./opencodeShellEnv";
 import {
   DEFAULT_TIMING,
   SseParser,
@@ -283,6 +286,30 @@ describe("discovery and auth", () => {
     const service = client({ home });
     vi.stubEnv("XDG_STATE_HOME", state);
     expect(await service.activeSessions()).toEqual(new Set());
+  });
+
+  it("by default looks where the OpenCode it starts looks: the login shell's XDG_STATE_HOME", async () => {
+    const { fake, state, home } = await setup();
+    fake.route("GET /api/session/active", json(200, { data: { ses_l: { type: "running" } } }));
+    vi.mocked(opencodePathEnv).mockReturnValue({ XDG_STATE_HOME: state });
+    try {
+      expect(await client({ home }).activeSessions()).toEqual(new Set(["ses_l"]));
+    } finally {
+      vi.mocked(opencodePathEnv).mockImplementation(() => process.env);
+    }
+  });
+
+  it("by default falls back to the login shell's HOME, not Multi-Code's", async () => {
+    const fake = await new FakeService().start();
+    const s = scratch();
+    writeReg(path.join(s.home, ".local", "state"), { url: fake.url, pid: 7, password: PASSWORD });
+    fake.route("GET /api/session/active", json(200, { data: { ses_home: { type: "running" } } }));
+    vi.mocked(opencodePathEnv).mockReturnValue({ HOME: s.home });
+    try {
+      expect(await client({}).activeSessions()).toEqual(new Set(["ses_home"]));
+    } finally {
+      vi.mocked(opencodePathEnv).mockImplementation(() => process.env);
+    }
   });
 
   it("sends Basic opencode:<password> on reads, replies and the event stream", async () => {

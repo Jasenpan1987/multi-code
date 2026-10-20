@@ -219,6 +219,7 @@ interface Raised {
   type: string;
   detail?: PromptDetail;
   toolCall?: PromptToolCall;
+  restated?: boolean;
 }
 
 function harness(opts: { sessionId?: string; service?: FakeService } = {}) {
@@ -228,12 +229,14 @@ function harness(opts: { sessionId?: string; service?: FakeService } = {}) {
   const health: [boolean, AlertsDegradedReason?][] = [];
   const shown: string[] = [];
   const attention = new OpencodeAttention(
-    (type, detail, toolCall) => raised.push({ type, detail, toolCall }),
+    (type, detail, toolCall, restated) =>
+      raised.push({ type, detail, toolCall, ...(restated ? { restated } : {}) }),
     (ok, reason) => health.push(reason === undefined ? [ok] : [ok, reason]),
     { instanceId: "inst-1", sessionId: opts.sessionId, onSessionShown: (id) => shown.push(id) },
     { service, timers }
   );
-  const types = () => raised.map((r) => r.type);
+  // A restatement (a dialog reported before, live again) reads as "restated".
+  const types = () => raised.map((r) => (r.restated ? "restated" : r.type));
   return { service, timers, raised, health, shown, attention, types };
 }
 
@@ -621,9 +624,29 @@ describe("dialogs", () => {
     await h.publish(created("ses_root"), started("ses_root"), created("ses_child", "ses_root"));
     await h.publish(asked("per_1", "ses_root"), asked("per_2", "ses_child"));
     await h.publish(replied("per_2", "ses_child"));
-    expect(h.types()).toEqual(["prompt", "prompt"]);
+    // The phone and the secretary move to the one still open, without a second chime.
+    expect(h.types()).toEqual(["prompt", "prompt", "restated"]);
+    expect(h.raised[2].toolCall?.dialog?.requestId).toBe("per_1");
+    expect(h.raised[2].detail).toEqual(h.raised[0].detail);
     await h.publish(replied("per_1", "ses_root"));
-    expect(h.types()).toEqual(["prompt", "prompt", "prompt-cleared"]);
+    expect(h.types()).toEqual(["prompt", "prompt", "restated", "prompt-cleared"]);
+    expect(h.raised[3].toolCall?.dialog?.requestId).toBe("per_1");
+  });
+
+  it("closing a dialog that isn't the live one leaves the live one as it is", async () => {
+    const h = await live();
+    await h.publish(created("ses_root"), started("ses_root"), created("ses_child", "ses_root"));
+    await h.publish(asked("per_1", "ses_root"), asked("per_2", "ses_child"));
+    await h.publish(replied("per_1", "ses_root"));
+    expect(h.types()).toEqual(["prompt", "prompt"]);
+  });
+
+  it("a subagent ending with the live dialog moves the phone to its root's open one", async () => {
+    const h = await live();
+    await h.publish(created("ses_root"), started("ses_root"), created("ses_child", "ses_root"));
+    await h.publish(asked("per_1", "ses_root"), started("ses_child"), asked("per_2", "ses_child"));
+    await h.publish(interrupted("ses_child", "shutdown"));
+    expect(h.types()).toEqual(["prompt", "prompt", "restated"]);
     expect(h.raised[2].toolCall?.dialog?.requestId).toBe("per_1");
   });
 
@@ -636,10 +659,11 @@ describe("dialogs", () => {
     await flush();
     await h.publish(started("ses_a"), started("ses_b"), asked("per_a", "ses_a"));
     await h.publish(succeeded("ses_b"));
-    expect(h.types()).toEqual(["prompt", "waiting", "prompt"]);
+    // Said again as a restatement: B's finish chimes, A's dialog had its chime.
+    expect(h.types()).toEqual(["prompt", "waiting", "restated"]);
     expect(h.raised[2].toolCall?.dialog?.requestId).toBe("per_a");
     await h.publish(replied("per_a", "ses_a"), succeeded("ses_a"));
-    expect(h.types()).toEqual(["prompt", "waiting", "prompt", "prompt-cleared", "waiting"]);
+    expect(h.types()).toEqual(["prompt", "waiting", "restated", "prompt-cleared", "waiting"]);
   });
 
   it("a finish with nothing else open says nothing after it", async () => {
@@ -889,7 +913,7 @@ describe("re-sync", () => {
     h.service.record(succeeded("ses_b"));
     h.service.connect();
     await flush();
-    expect(h.types()).toEqual(["prompt", "prompt", "waiting", "prompt"]);
+    expect(h.types()).toEqual(["prompt", "prompt", "waiting", "restated"]);
     expect(h.raised[3].toolCall?.dialog?.requestId).toBe("per_a");
   });
 
@@ -995,6 +1019,52 @@ describe("re-sync", () => {
     expect(h.types()).toEqual(["prompt", "prompt-cleared", "prompt"]);
     await h.publish(replied("per_2", "ses_root"));
     expect(h.types()).toEqual(["prompt", "prompt-cleared", "prompt", "prompt-cleared"]);
+  });
+
+  it("a dialog settled while away goes, even when the stream speaks for its session during the re-sync", async () => {
+    const h = await live();
+    await h.publish(created("ses_root"), started("ses_root"), asked("per_old", "ses_root"));
+    h.service.disconnect();
+    h.service.record(replied("per_old", "ses_root"));
+    const gate = gated(h.service);
+    h.service.connect();
+    await flush();
+    await gate.next();
+    // The dialog reads are out, listing nothing; a new dialog opens before they land.
+    await h.publish(asked("per_new", "ses_root"));
+    await gate.open();
+    expect(h.types()).toEqual(["prompt", "prompt"]);
+    // per_old went with the snapshot, so answering per_new leaves nothing open.
+    await h.publish(replied("per_new", "ses_root"));
+    expect(h.types()).toEqual(["prompt", "prompt", "prompt-cleared"]);
+  });
+
+  it("a dialog asked while away is raised, even when the stream settles another of its session during the re-sync", async () => {
+    const h = await live();
+    await h.publish(created("ses_root"), started("ses_root"), asked("per_a", "ses_root"));
+    h.service.disconnect();
+    h.service.record(asked("per_b", "ses_root"));
+    const gate = gated(h.service);
+    h.service.connect();
+    await flush();
+    await gate.next();
+    // The dialog reads are out and will list both; per_a is answered before they land.
+    await h.publish(replied("per_a", "ses_root"));
+    await gate.open();
+    expect(h.types()).toEqual(["prompt", "prompt-cleared", "prompt"]);
+    expect(h.raised[2].toolCall?.dialog?.requestId).toBe("per_b");
+  });
+
+  it("the live dialog settled while away moves the phone to the one still open", async () => {
+    const h = await live();
+    await h.publish(created("ses_root"), started("ses_root"), created("ses_child", "ses_root"));
+    await h.publish(asked("per_1", "ses_root"), started("ses_child"), asked("per_2", "ses_child"));
+    h.service.disconnect();
+    h.service.record(replied("per_2", "ses_child"));
+    h.service.connect();
+    await flush();
+    expect(h.types()).toEqual(["prompt", "prompt", "restated"]);
+    expect(h.raised[2].toolCall?.dialog?.requestId).toBe("per_1");
   });
 
   it("an event in a subagent's root during a re-sync keeps the snapshot off the subagent", async () => {

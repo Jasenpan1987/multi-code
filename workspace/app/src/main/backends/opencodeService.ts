@@ -18,6 +18,7 @@ import os from "os";
 import path from "path";
 import type { AnswerResult } from "./types";
 import { debugTrace } from "../debug-trace";
+import { opencodePathEnv } from "./opencodeShellEnv";
 
 // One frame of `GET /api/event`, as the service sent it. `data` is the event's payload
 // (`sessionID` and the rest); `location` is absent on most session events.
@@ -146,9 +147,11 @@ export const DEFAULT_TIMING: ServiceTiming = {
 };
 
 export interface ServiceOptions {
-  // Where XDG_STATE_HOME is read, at every lookup. process.env by default.
+  // Where XDG_STATE_HOME is read, at every lookup. By default the env OpenCode runs
+  // with (opencodePathEnv), so the registration found is the one its service wrote.
   env?: Record<string, string | undefined>;
-  // The home directory the default state path falls back to. os.homedir() by default.
+  // The home directory the default state path falls back to. By default the env's
+  // HOME, else os.homedir().
   home?: string;
   fetch?: typeof fetch;
   timing?: Partial<ServiceTiming>;
@@ -580,7 +583,9 @@ class ServiceClient implements OpencodeService {
   // The registration, read fresh every time: it's a tiny file, and a reply must go to
   // whichever service is registered now, not the one a stream last reached.
   private async endpoint(): Promise<Endpoint | Refused> {
-    const file = registrationPath(this.options.env ?? process.env, this.options.home);
+    const env = this.options.env ?? opencodePathEnv();
+    // The home the same env names, as the spawn's own lookup takes it.
+    const file = registrationPath(env, this.options.home ?? (env.HOME || os.homedir()));
     let text: string;
     try {
       text = await fs.promises.readFile(file, "utf8");

@@ -326,14 +326,17 @@ export class ProcessManager {
     ownSessionId?: string
   ): SessionStart {
     if (ownSessionId) return { kind: "own", sessionId: ownSessionId };
+    const isClaimed = (sessionId: string) => this.isSessionClaimedBy(sessionId, id);
+    const impl = getBackend(backend);
+    if (impl.picksLatestSession) return { kind: "latest", isClaimed };
     let latest: string | null = null;
     try {
-      latest = getBackend(backend).findLatestSessionId(cwd);
+      latest = impl.findLatestSessionId(cwd);
     } catch {
       // Unreadable: --continue is what every start did before.
     }
-    if (latest && this.isSessionClaimedBy(latest, id)) return { kind: "fresh" };
-    return { kind: "latest" };
+    if (latest && isClaimed(latest)) return { kind: "fresh" };
+    return { kind: "latest", isClaimed };
   }
 
   setManagerSpawnOptions(opts: SpawnOptions | null) {
@@ -981,8 +984,8 @@ export class ProcessManager {
 
     instance.hookAttention = backend.createHookAttention(
       ptyProcess.pid,
-      (type, detail, toolCall) =>
-        this.reportActivity(instance, type, detail, toolCall),
+      (type, detail, toolCall, restated) =>
+        this.reportActivity(instance, type, detail, toolCall, restated),
       (ok, reason) => this.setAlertsDegraded(instance, !ok, reason),
       {
         instanceId: id,
@@ -1087,14 +1090,18 @@ export class ProcessManager {
     instance: ManagedInstance,
     type: string,
     detail?: PromptDetail,
-    toolCall?: PromptToolCall
+    toolCall?: PromptToolCall,
+    // A dialog reported before, blocking the contact again (ActivityCallback).
+    restated = false
   ) {
     const id = instance.id;
-    debugTrace(`[activity] ${id.slice(0, 8)} ${type} at ${new Date().toISOString()}`);
+    debugTrace(
+      `[activity] ${id.slice(0, 8)} ${type}${restated ? " (restated)" : ""} at ${new Date().toISOString()}`
+    );
     instance.runState.onActivity(type);
-    // Recorded for every activity except the bookkeeping one, so the manager can
+    // Recorded for every activity except the bookkeeping ones, so the manager can
     // tell a session that just finished from one that has been idle for hours.
-    if (type !== "prompt-cleared") instance.lastActivityAt = Date.now();
+    if (type !== "prompt-cleared" && !restated) instance.lastActivityAt = Date.now();
     // A finished turn is exactly when context usage moved, so refresh now instead
     // of waiting for the TTL. Cheap: once per turn, not per list call.
     if (type === "waiting") this.refreshContextUsage(instance);
@@ -1116,11 +1123,17 @@ export class ProcessManager {
     }
     // "prompt-cleared" exists for paired phones (drop the stale option buttons);
     // the desktop UI has nothing to do with it, so it isn't forwarded to the
-    // renderer.
-    if (type !== "prompt-cleared" && this.mainWindow && !this.mainWindow.isDestroyed()) {
+    // renderer. Nor is a restatement: the renderer chimes and counts every event it
+    // hears, and this dialog has had its chime.
+    if (
+      type !== "prompt-cleared" &&
+      !restated &&
+      this.mainWindow &&
+      !this.mainWindow.isDestroyed()
+    ) {
       this.mainWindow.webContents.send("instance-activity", id, type);
     }
-    remoteServer.broadcastActivity(id, type, detail);
+    remoteServer.broadcastActivity(id, type, detail, restated);
     this.emitActivity(id, type);
   }
 

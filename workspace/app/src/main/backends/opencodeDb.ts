@@ -17,6 +17,7 @@ import type { BuilderTurn } from "./types";
 import type { TranscriptEntry } from "../../shared/remote-protocol";
 import type { ContextUsage } from "../../shared/types";
 import { resolvePath } from "./resolvePath";
+import { opencodePathEnv } from "./opencodeShellEnv";
 
 function homeOf(env: NodeJS.ProcessEnv): string {
   return env.HOME || os.homedir();
@@ -24,8 +25,9 @@ function homeOf(env: NodeJS.ProcessEnv): string {
 
 // `$OPENCODE_DB`, else `<XDG_DATA_HOME or ~/.local/share>/opencode/opencode.db`.
 // A relative `$OPENCODE_DB` is taken against that data directory, as OpenCode does
-// (`packages/cli/src/database-path.ts`).
-export function opencodeDbPath(env: NodeJS.ProcessEnv = process.env): string {
+// (`packages/cli/src/database-path.ts`). The env is the one OpenCode runs with
+// (opencodePathEnv), so a shell that moves the data directory moves it here too.
+export function opencodeDbPath(env: NodeJS.ProcessEnv = opencodePathEnv()): string {
   const data = env.XDG_DATA_HOME || path.join(homeOf(env), ".local", "share");
   const file = env.OPENCODE_DB || "opencode.db";
   if (file === ":memory:") return file;
@@ -34,7 +36,7 @@ export function opencodeDbPath(env: NodeJS.ProcessEnv = process.env): string {
 
 // The user's global config files, in the order OpenCode merges them (a later one
 // wins). Read only, never written.
-export function opencodeConfigPaths(env: NodeJS.ProcessEnv = process.env): string[] {
+export function opencodeConfigPaths(env: NodeJS.ProcessEnv = opencodePathEnv()): string[] {
   const dir = path.join(env.XDG_CONFIG_HOME || path.join(homeOf(env), ".config"), "opencode");
   return [path.join(dir, "opencode.json"), path.join(dir, "opencode.jsonc")];
 }

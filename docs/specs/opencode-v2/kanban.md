@@ -176,7 +176,7 @@ Paths are under `workspace/app/src/main/` unless they start with `renderer/`, `s
 
 ### T-611: QA and cross-model review
 - **Type:** qa
-- **Status:** in-progress
+- **Status:** done
 - **Story:** all
 - **Description:** A test plan (`docs/specs/opencode-v2/test-plan.md`) covering every acceptance criterion, run on an isolated dev instance against an isolated OpenCode 2 (T-601's setup) with CDP and the probe, plus one read-only pass on the builder's real data (transcript and context figure of a real session, no turns run). Then `cross-model-review:gpt-review` with `--model gpt-6.1-sol`, one area prompt per lane, fixes, a second round on the fixes. The builder then tries it on real work.
 - **Acceptance:** every test-plan row passes or has a recorded reason; review findings fixed or answered in `.omt/opencode-v2-decisions.md`; the epic merges to `master` after the builder's go-ahead.
@@ -198,6 +198,7 @@ Paths are under `workspace/app/src/main/` unless they start with `renderer/`, `s
 - 2026-10-20: T-606 done and merged (457b22b); T-607 done and merged (c9d1b15). Epic branch: type check clean, 1290 tests pass. Carry-overs added to T-610 and T-609; T-604 must reword "Always allow" ("saved for this project").
 - 2026-10-20: T-601 done and merged (d8e7773): 24 fixtures, G-601..G-605 answered. Builder chose the login-shell env + Multi-Code starting a missing service (PRD v1.1). T-604 and T-605 started.
 - 2026-10-20: T-604 done and merged (a810587): 24 fixtures replayed, 1343 tests pass on the epic branch.
+- 2026-10-20: T-611 done. QA run (test-plan.md), B-1 fixed; cross-model review in three stages (seven area reviews, a second round on the fixes, a 3-round review loop ending clean), accepted findings fixed, every changed path re-run live. 1377 tests pass. Merging to `master` waits for the builder's go-ahead.
 - 2026-10-20: T-605 done and merged (684a3a7). T-610 done by the supervisor: 1.x readers, discovery, keystrokes, plugin and fixtures removed; `OpencodeAttention` wired; refused 1.x starts keep the contact's session; `Backend.warm()` reads the login shell when OpenCode contacts load; a subagent session the TUI shows is never adopted; one shared upgrade-command constant. Lint, type, 1358 tests, build all pass. T-610's live check moves into T-611.
 - 2026-10-20: T-609 done (CLAUDE.md, both READMEs, tech-conventions, business-overview, brief-writer v11 note). T-611 started: live QA in an isolated dev build, then the cross-model review.
 - 2026-10-20: The gpt-review skill (apra-amcos-cc-marketplace cross-model-review 1.2.0) speaks OpenCode 1.x's API and fails on 2.x. Builder: record it, ask the marketplace's session to update the skill, and hold the cross-model review until then (write-up `.omt/gpt-review-opencode-v2-issue.md`, sent to the `claude-sdlc` session).

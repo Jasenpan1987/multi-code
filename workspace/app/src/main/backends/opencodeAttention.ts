@@ -102,6 +102,14 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
+// The request a reply or a cancel settles: permission.replied names it `requestID`,
+// form.replied and form.cancelled `id`.
+function settledRequest(event: ServiceEvent): string | undefined {
+  if (event.type === "permission.replied") return str(event.data.requestID);
+  if (event.type === "form.replied" || event.type === "form.cancelled") return str(event.data.id);
+  return undefined;
+}
+
 // The session an event is about. A form's is inside the form (`form.created` data is
 // `{form}`); everything else carries `sessionID` at the top.
 function sessionOf(event: ServiceEvent): string | undefined {
@@ -130,6 +138,15 @@ function formDialog(form: FormInfo): OpenDialog {
 }
 
 type HealthState = "ok" | AlertsDegradedReason;
+
+// What arrived on the stream during one re-sync: the sessions any event spoke for
+// (their run state is the event's), the requests a reply or cancel settled, and the
+// sessions whose turn ended (taking their dialogs, and their subagents', with them).
+interface SyncNotes {
+  sessions: Set<string>;
+  settled: Set<string>;
+  ended: Set<string>;
+}
 
 export interface OpencodeAttentionDeps {
   service?: OpencodeService;
@@ -172,14 +189,18 @@ export class OpencodeAttention implements HookAttention {
   // Open dialogs by request id (a permission's `per_…`, a form's `frm_…`), oldest first.
   private readonly dialogs = new Map<string, OpenDialog>();
   private promptOutstanding = false;
+  // The dialog last reported as the one blocking the contact: what the phone shows and
+  // the secretary answers. When it closes and another is still open, that one is said
+  // again (restate).
+  private live: string | undefined;
 
   // ── Re-sync ──
   // Bumped by every re-sync and by stop(), so an older one's answers are dropped.
   private syncGen = 0;
-  // Sessions an event spoke for while the current re-sync was reading. The event is
-  // newer than the snapshot, so it wins for that session, as the official client
-  // does (packages/client/src/solid/data.ts).
-  private touched: Set<string> | null = null;
+  // What the stream said while the current re-sync was reading. An event is newer
+  // than the snapshot, so it wins where it speaks, as the official client does
+  // (packages/client/src/solid/data.ts).
+  private sync: SyncNotes | null = null;
 
   // ── Health (PRD Story 9) ──
   private pluginHeard = false;
@@ -261,7 +282,7 @@ export class OpencodeAttention implements HookAttention {
     if (this.stopped) return;
     this.stopped = true;
     this.syncGen++;
-    this.touched = null;
+    this.sync = null;
     this.held.clear();
     this.unsubscribe();
     if (this.healthTimer !== null) {
@@ -296,8 +317,8 @@ export class OpencodeAttention implements HookAttention {
     if (!RELEVANT.has(event.type)) return;
     const session = sessionOf(event);
     if (!session || session === GLOBAL_SESSION) return;
-    // Marked on arrival, held or not: a held event is newer than any snapshot in flight.
-    this.touched?.add(session);
+    // Noted on arrival, held or not: a held event is newer than any snapshot in flight.
+    this.noteDuringSync(event, session);
 
     const held = this.held.get(session);
     if (held) {
@@ -313,7 +334,7 @@ export class OpencodeAttention implements HookAttention {
   }
 
   private apply(event: ServiceEvent, session: string) {
-    this.touched?.add(session);
+    this.noteDuringSync(event, session);
     const type = event.type;
 
     if (type === STARTED) {
@@ -364,9 +385,17 @@ export class OpencodeAttention implements HookAttention {
       return;
     }
 
-    // permission.replied names its request `requestID`, form.replied/cancelled `id`.
     // Only a request this contact has open means anything; the rest are other owners'.
-    this.close(type === "permission.replied" ? str(event.data.requestID) : str(event.data.id));
+    this.close(settledRequest(event));
+  }
+
+  private noteDuringSync(event: ServiceEvent, session: string) {
+    const sync = this.sync;
+    if (!sync) return;
+    sync.sessions.add(session);
+    if (ENDED.has(event.type)) sync.ended.add(session);
+    const settled = settledRequest(event);
+    if (settled) sync.settled.add(settled);
   }
 
   private turnEnded(session: string, finishing: boolean) {
@@ -381,12 +410,13 @@ export class OpencodeAttention implements HookAttention {
     // A subagent's end is never the contact's (PRD Story 3); its root carries on, even
     // after a Reject inside the subagent (subagent-reject-noreason), and finishes with
     // its own end.
-    if (!finishing || alreadyFinished || !this.isRoot(session)) return;
-    this.onActivity("waiting");
-    // Another root's dialog still blocks the contact. Said again, or the finish above
-    // reads as the whole contact being idle, and the write gate would let an
-    // automated write land in that dialog as its answer.
-    this.reraiseOpenPrompt();
+    const finished = finishing && !alreadyFinished && this.isRoot(session);
+    if (finished) this.onActivity("waiting");
+    // Another root's dialog still blocks the contact. Said again after a finish, or the
+    // finish reads as the whole contact being idle, and the write gate would let an
+    // automated write land in that dialog as its answer; and when the dialog the phone
+    // and secretary were shown went with this turn.
+    if (finished || !this.liveOpen()) this.restateNewest();
   }
 
   // ── Dialogs ───────────────────────────────────────────────────────────────
@@ -396,18 +426,22 @@ export class OpencodeAttention implements HookAttention {
     if (this.dialogs.has(id)) return;
     this.dialogs.set(id, dialog);
     this.promptOutstanding = true;
+    this.live = id;
     this.onActivity("prompt", dialog.detail, dialog.toolCall);
   }
 
   // A reply closes its request; Needs-you clears once nothing is left open. The
   // clearing carries the closed request's call: the secretary's waiters only take a
-  // clearing with a call (process-manager `dialogClearWaiters`).
+  // clearing with a call (process-manager `dialogClearWaiters`). When the one closed
+  // was the live one and another is still open, the phone and the secretary move to
+  // that one.
   private close(id: string | undefined) {
     if (!id) return;
     const dialog = this.dialogs.get(id);
     if (!dialog) return;
     this.dialogs.delete(id);
     if (this.dialogs.size === 0) this.clearPrompt(dialog.toolCall);
+    else if (!this.liveOpen()) this.restateNewest();
   }
 
   // Drops every open dialog of `root`'s tree without a word, returning the call of the
@@ -422,15 +456,24 @@ export class OpencodeAttention implements HookAttention {
     return closed;
   }
 
-  // The newest dialog still open, raised again.
-  private reraiseOpenPrompt() {
-    const newest = [...this.dialogs.values()].at(-1);
+  private liveOpen(): boolean {
+    return this.live !== undefined && this.dialogs.has(this.live);
+  }
+
+  // The newest dialog still open, said again as the one blocking the contact. It was
+  // reported when it opened, so it is marked a restatement: run state, the phone's
+  // buttons and the secretary follow it, but it doesn't chime or count twice.
+  private restateNewest() {
+    const newest = [...this.dialogs].at(-1);
     if (!newest) return;
+    const [id, dialog] = newest;
     this.promptOutstanding = true;
-    this.onActivity("prompt", newest.detail, newest.toolCall);
+    this.live = id;
+    this.onActivity("prompt", dialog.detail, dialog.toolCall, true);
   }
 
   private clearPrompt(toolCall: PromptToolCall) {
+    this.live = undefined;
     if (!this.promptOutstanding) return;
     this.promptOutstanding = false;
     this.onActivity("prompt-cleared", undefined, toolCall);
@@ -524,8 +567,11 @@ export class OpencodeAttention implements HookAttention {
   private async resync(): Promise<void> {
     if (this.stopped) return;
     const gen = ++this.syncGen;
-    const touched = new Set<string>();
-    this.touched = touched;
+    const sync: SyncNotes = { sessions: new Set(), settled: new Set(), ended: new Set() };
+    this.sync = sync;
+    // Dialogs known before any read went out. One of these missing from its session's
+    // snapshot was settled, whatever the stream says meanwhile.
+    const before = new Set(this.dialogs.keys());
     const current = () => !this.stopped && gen === this.syncGen;
     try {
       const active = await this.read(() => this.service.activeSessions());
@@ -557,7 +603,7 @@ export class OpencodeAttention implements HookAttention {
       // An owned root running before and not now ended while the stream was down. Its
       // record says how; the end event itself is gone.
       const ended = [...this.running].filter(
-        (id) => !active.has(id) && !touched.has(id) && this.owned(id) && this.isRoot(id)
+        (id) => !active.has(id) && !sync.sessions.has(id) && this.owned(id) && this.isRoot(id)
       );
       const outcomes = new Map<string, ServiceSession["outcome"]>();
       await Promise.all(
@@ -567,9 +613,9 @@ export class OpencodeAttention implements HookAttention {
       );
       if (!current()) return;
 
-      this.applySnapshot(active, pending, ended, outcomes, touched);
+      this.applySnapshot(active, pending, ended, outcomes, sync, before);
     } finally {
-      if (gen === this.syncGen) this.touched = null;
+      if (gen === this.syncGen) this.sync = null;
     }
   }
 
@@ -596,12 +642,12 @@ export class OpencodeAttention implements HookAttention {
     return dialogs;
   }
 
-  // Whether an event spoke for `session`, or for a session above it, during the
-  // re-sync: a root's end closes its subagents' dialogs too.
-  private spokenFor(session: string, touched: Set<string>): boolean {
+  // Whether `session`, or a session above it, is in `sessions`: a root's end closes
+  // its subagents' dialogs too.
+  private withinAny(session: string, sessions: Set<string>): boolean {
     let current: string | null | undefined = session;
     for (let depth = 0; current && depth < MAX_DEPTH; depth++) {
-      if (touched.has(current)) return true;
+      if (sessions.has(current)) return true;
       current = this.parents.get(current);
     }
     return false;
@@ -612,9 +658,11 @@ export class OpencodeAttention implements HookAttention {
     pending: Map<string, Map<string, OpenDialog> | null>,
     ended: string[],
     outcomes: Map<string, ServiceSession["outcome"]>,
-    touched: Set<string>
+    sync: SyncNotes,
+    before: Set<string>
   ) {
     // Turns, except where an event spoke since the read.
+    const touched = sync.sessions;
     for (const id of this.running) {
       if (!active.has(id) && !touched.has(id)) this.running.delete(id);
     }
@@ -639,17 +687,21 @@ export class OpencodeAttention implements HookAttention {
 
     // Dialogs: those gone (answered elsewhere, or dropped with their turn) and those
     // new to us (asked while the stream was down, or by a resumed turn under a new id).
-    // A read that failed leaves its session's dialogs as they were.
+    // A read that failed leaves its session's dialogs as they were. The stream wins
+    // where it spoke since the read went out: a dialog raised since isn't judged by the
+    // read, and one the read lists isn't taken up if a reply settled it or its turn
+    // ended since.
     const fresh: [string, OpenDialog][] = [];
     for (const [session, dialogs] of pending) {
-      if (!dialogs || this.spokenFor(session, touched)) continue;
+      if (!dialogs) continue;
       for (const [id, dialog] of this.dialogs) {
-        if (dialog.session !== session || dialogs.has(id)) continue;
+        if (dialog.session !== session || dialogs.has(id) || !before.has(id)) continue;
         this.dialogs.delete(id);
         closed = dialog.toolCall;
       }
       for (const [id, dialog] of dialogs) {
-        if (this.dialogs.has(id)) continue;
+        if (this.dialogs.has(id) || sync.settled.has(id)) continue;
+        if (this.withinAny(dialog.session, sync.ended)) continue;
         if (endedRoots.some((root) => this.inTree(dialog.session, root))) continue;
         fresh.push([id, dialog]);
       }
@@ -663,7 +715,7 @@ export class OpencodeAttention implements HookAttention {
       this.onActivity("waiting");
     }
     for (const [id, dialog] of fresh) this.raise(id, dialog);
-    if (finished.length > 0 && fresh.length === 0) this.reraiseOpenPrompt();
+    if (fresh.length === 0 && (finished.length > 0 || !this.liveOpen())) this.restateNewest();
   }
 
   // ── Health ────────────────────────────────────────────────────────────────

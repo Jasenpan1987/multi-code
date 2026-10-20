@@ -26,6 +26,10 @@ interpreter. Everything that wasn't run says why.
 
 `pnpm test` on the same build: 1358 passed, 28 skipped.
 
+**After the cross-model review (2026-10-20):** the accepted findings fixed (list in the decision log), then a live re-run
+of every changed path on the same isolated setup: all pass, B-1 included. See "Cross-model review
+and live re-run" below. `pnpm test`: 1377 passed, 28 skipped.
+
 ## Setup
 
 ### Isolation
@@ -244,6 +248,8 @@ No speech server, and no reply interpreter: it would run on the builder's Bedroc
 
 ### B-1: Clear and Compact don't run on OpenCode 2 (medium)
 
+**Fixed and re-run live (2026-10-20): pass** (R-2, R-3 under "Cross-model review and live re-run").
+
 - **Steps:** an OpenCode contact on a session with turns → Toolbox, Quick Actions, **Compact**
   (or **Clear**).
 - **Expected:** the session compacts, or the TUI goes to a fresh session.
@@ -333,6 +339,43 @@ No speech server, and no reply interpreter: it would run on the builder's Bedroc
     Restart is disabled while running.
   - After an API interrupt the TUI kept showing the stale permission dialog (spike-documented),
     and it swallowed the next typed prompt.
+
+## Cross-model review and live re-run
+
+The review (gpt-review 1.4.0, `gpt-6.1-sol`) and its findings are in
+`.omt/opencode-v2-decisions.md`, "Cross-model review". The fixes were then run live, from the
+main tree (the T-611 worktree is gone), on the same scratch setup, with two differences:
+
+- `launch2.sh`: the dev build's own env has **no** `XDG_*` and no `OPENCODE_DB`. Only the fake
+  `.zshrc` sets them, so OpenCode's paths can come only from the login shell (fix 1).
+- The dev build's phone server was started on port 46768 (the builder's app holds 6768) and
+  paired with a test phone, `phone.mjs`: the real handshake and sealed frames, commands on stdin.
+  Stopped afterwards, its device revoked and the offer file deleted.
+
+| # | Row | Result |
+|---|---|---|
+| R-1 | OpenCode paths from the login shell (fix 1) | **pass**: with the app's env bare, the DB, config and registration paths resolved to `/tmp/oc2-qa/…`; starting alpha, Multi-Code started the scratch service (49431) and connected; no bar after 20 s; nothing created under the fake HOME's `.local` |
+| R-2 | B-1, Compact | **pass**: `session.compaction.started{manual}` → `ended` → `execution.succeeded` 3 s later; one Finished |
+| R-3 | B-1, Clear | **pass**: the TUI went to its home screen; the plugin reported the home route; the contact kept its session until the next prompt |
+| R-4 | Context figure on a session change (Story 4) | **pass**: the sidebar figure changed 51 ms after `instance-session-id`, 12 s before the turn's end |
+| R-5 | Restated dialog, no second chime | **pass**: alpha blocked on a permission in session S2; another owned root (S1, driven through the API) finished: the renderer got `waiting` only (unread +1), main logged `prompt (restated)`, alpha stayed `blocked` on S2's request, the secretary's event was set again; answering it from another client cleared it, and S2's own end chimed |
+| R-6 | Plugin route retry | **pass**: the dev build's `/alert` answered 503 to alpha's next two posts; the plugin sent the new session's route at +6 ms, +506 ms and +1002 ms, the third landed and the contact moved to the session |
+| R-7 | Phone tap held to its prompt | **pass**: A answered at the desk, B open; a tap with A's `promptId` and a tap with none were both refused ("That choice is no longer available"), B still pending; a tap with B's id allowed B within 5 ms |
+| R-8 | Restated dialog on the phone | **pass**: after the other root's finish, the phone got `activity: waiting`, then the same dialog's buttons under a new `promptId` and no second `activity: prompt` (no second vibration); a tap with the new id answered it |
+
+Not run: a physical phone (vibration itself), and the 28 skipped tests (live secretary, the real
+DB smoke).
+
+**Observed, not changed:** a session's turn that ends before its route reaches Multi-Code is not
+the contact's yet, so it raises no Finished. R-6 shows the window: about 1.5 s with two lost
+posts. Before the retry, such a route was never delivered at all.
+
+**Safety:** `baseline.sh` before (23:23:01) and after: the builder's service (pid 55216, same id
+and url), `~/.config/opencode/*`, the real `contacts.json`, and the real DB's `session_v2` and
+`session_message` maxima and counts all identical; no `opencode.log` line names `oc2-qa` or 49431.
+One write to the real DB meanwhile: `project.time_active` of `apra-amcos-cc-marketplace` at
+23:26:08, the builder's own session there. The dev build, the scratch service and the event logger
+were stopped by pid; ports 9611, 9612, 46768 and 49431 were free afterwards.
 
 ## Safety check (the builder's real OpenCode and Multi-Code)
 
