@@ -1,178 +1,234 @@
-// What a paired phone is shown for an OpenCode dialog, and the keystrokes that answer
-// it. The dialogs are the ones OpenCode 1.18.35 sent through Multi-Code's plugin
-// (T-409 fixtures); the keystrokes were checked against the live TUI (T-411: each
-// answered its dialog when sent 0.36s after the dialog's event).
+// What a paired phone is shown for an OpenCode 2 dialog, and the request the secretary
+// gets with it. The dialogs are the ones OpenCode 2.0.32's service published (T-601
+// fixtures, __fixtures__/opencode-v2/); the shapes are the ones the answer paths read
+// (opencodeAnswer.ts, secretary/dialog.ts, opencode-v2 T-607).
 
 import { describe, expect, it } from "vitest";
 import fs from "fs";
 import path from "path";
 import {
+  formDetail,
+  formToolCall,
+  isQuestionForm,
   keystrokeForPermission,
   keystrokeForQuestion,
   MULTI_QUESTION_TOOL_LABEL,
-  PERMISSION_LABELS,
   PERMISSION_TOOL,
   permissionDetail,
+  permissionToolCall,
   QUESTION_TOOL_LABEL,
-  questionDetail,
 } from "./opencodePrompt";
+import { toFormInfo, toPermissionRequest, type FormInfo, type PermissionRequest } from "./opencodeService";
+import { answerForChoice } from "./opencodeAnswer";
 import { opencodeBackend } from "./opencode";
 
-function asked(fixture: string, type: string): Record<string, unknown> {
-  const { events } = JSON.parse(
-    fs.readFileSync(path.join(__dirname, "__fixtures__/opencode-plugin", `${fixture}.json`), "utf8")
-  ) as { events: { type: string; properties: Record<string, unknown> }[] };
-  const event = events.find((e) => e.type === type);
-  if (!event) throw new Error(`${fixture} has no ${type}`);
-  return event.properties;
+function firstEvent(fixture: string, type: string): Record<string, unknown> {
+  const { frames } = JSON.parse(
+    fs.readFileSync(path.join(__dirname, "__fixtures__/opencode-v2", `${fixture}.json`), "utf8")
+  ) as { frames: { event?: { type: string; data: Record<string, unknown> } }[] };
+  const frame = frames.find((f) => f.event?.type === type);
+  if (!frame?.event) throw new Error(`${fixture} has no ${type}`);
+  return frame.event.data;
+}
+
+function permissionOf(fixture: string): PermissionRequest {
+  const request = toPermissionRequest(firstEvent(fixture, "permission.asked"));
+  if (!request) throw new Error(`${fixture}: permission.asked doesn't parse`);
+  return request;
+}
+
+function formOf(fixture: string): FormInfo {
+  const form = toFormInfo(firstEvent(fixture, "form.created").form);
+  if (!form) throw new Error(`${fixture}: form.created doesn't parse`);
+  return form;
 }
 
 describe("permissionDetail", () => {
-  it("names what is asked and offers the dialog's three options in order", () => {
-    const detail = permissionDetail(asked("permission-once", "permission.asked"));
+  it("names what is asked and offers the TUI's three options when there is a pattern to save", () => {
+    const detail = permissionDetail(permissionOf("permission-once"));
     expect(detail.tool).toBe(PERMISSION_TOOL);
-    expect(detail.question).toBe("Permission required: bash: touch a.txt");
-    expect(detail.options.map((o) => o.label)).toEqual([...PERMISSION_LABELS]);
+    expect(detail.question).toBe("Permission required: shell: touch once.txt");
+    expect(detail.options.map((o) => o.label)).toEqual(["Allow once", "Always allow", "Reject"]);
   });
 
-  it("still offers the options when the event names nothing", () => {
-    const detail = permissionDetail({});
-    expect(detail.question).toBe("Permission required");
-    expect(detail.options).toHaveLength(3);
-  });
-});
-
-describe("questionDetail", () => {
-  it("offers the question's options plus OpenCode's own free-text one", () => {
-    const detail = questionDetail(asked("question", "question.asked"));
-    expect(detail?.tool).toBe(QUESTION_TOOL_LABEL);
-    expect(detail?.question).toBe("Do you prefer tea or coffee?");
-    expect(detail?.options.map((o) => o.label)).toEqual(["tea", "coffee", "Type your own answer"]);
-  });
-
-  it("marks a box with several questions as not one tap", () => {
-    // An Enter per question, then one more to submit (T-409, question-multi).
-    expect(questionDetail(asked("question-multi", "question.asked"))?.tool).toBe(
-      MULTI_QUESTION_TOOL_LABEL
+  it("says what each option does in OpenCode 2", () => {
+    const [once, always, reject] = permissionDetail(permissionOf("permission-once")).options;
+    expect(once.description).toBe("Permit this one action");
+    // Saved per project with no expiry (permission-always), not "until restart" as 1.x.
+    expect(always.description).toBe(
+      'OpenCode saves "touch *" for this project and allows it from now on'
     );
+    // Without a reason the turn stops (permission-reject); with one the agent goes on.
+    expect(reject.description).toMatch(/turn stops.*reason/);
   });
 
-  it("marks a multi-select question as not one tap", () => {
-    const detail = questionDetail({
-      questions: [{ question: "Fruit?", multiple: true, options: [{ label: "Apple" }] }],
-    });
-    expect(detail?.tool).toBe(MULTI_QUESTION_TOOL_LABEL);
+  it("offers Allow once / Reject alone when the request has nothing to save", () => {
+    // permission-no-save: `permission.asked` carries no `save` key at all.
+    const request = permissionOf("permission-no-save");
+    expect(request.save).toBeUndefined();
+    const detail = permissionDetail(request);
+    expect(detail.question).toBe("Permission required: question: *");
+    expect(detail.options.map((o) => o.label)).toEqual(["Allow once", "Reject"]);
+    expect(permissionDetail({ ...request, save: [] }).options).toHaveLength(2);
   });
 
-  it("is null when there is nothing to offer", () => {
-    expect(questionDetail({})).toBeNull();
-    expect(questionDetail({ questions: [{ question: "?", options: [] }] })).toBeNull();
+  it("joins several resources and caps the question", () => {
+    const base = permissionOf("permission-once");
+    expect(permissionDetail({ ...base, resources: ["a", "b"] }).question).toBe(
+      "Permission required: shell: a, b"
+    );
+    expect(permissionDetail({ ...base, resources: [] }).question).toBe("Permission required: shell");
+    const long = permissionDetail({ ...base, resources: ["x".repeat(500)] }).question!;
+    expect(long).toHaveLength(240);
+  });
+
+  it("is answered by the label the phone taps, in both shapes", () => {
+    // The shapes opencodeAnswer.ts reads (T-607).
+    const three = permissionDetail(permissionOf("permission-once"));
+    const two = permissionDetail(permissionOf("permission-no-save"));
+    const ref = permissionToolCall(permissionOf("permission-once")).dialog!;
+    expect(answerForChoice(three, ref, 1)).toEqual({ kind: "permission", decision: "always" });
+    expect(answerForChoice(two, ref, 1)).toEqual({ kind: "permission", decision: "reject" });
   });
 });
 
-describe("keystrokeForPermission", () => {
-  // Verified against a live dialog: it opens on "Allow once", right arrow moves
-  // one step per press, and digits do nothing at all.
-  it("sends only Enter for the option already selected", () => {
-    expect(keystrokeForPermission(0, 3)).toBe("\r");
+describe("permissionToolCall", () => {
+  it("carries the action, what it touches, and the request's own session and id", () => {
+    const request = permissionOf("subagent-permission");
+    expect(permissionToolCall(request)).toEqual({
+      toolName: "shell",
+      toolInput: { resources: ["ls -la sub-once.txt"], metadata: undefined, save: ["ls *"] },
+      // The subagent's session, which is the one the reply has to name.
+      dialog: {
+        kind: "permission",
+        sessionId: "ses_eaabb5cbbffeN3yPU2VkSyVIdK",
+        requestId: "per_15544b792001B1484uLFDySezd",
+      },
+    });
+  });
+});
+
+describe("formDetail", () => {
+  it("a single-select question: its options and no free-text row", () => {
+    const form = formOf("question-single");
+    expect(isQuestionForm(form)).toBe(true);
+    expect(formDetail(form)).toEqual({
+      tool: QUESTION_TOOL_LABEL,
+      question: "Which fruit do you prefer?",
+      options: [
+        { label: "Apple", description: "Choose Apple" },
+        { label: "Banana", description: "Choose Banana" },
+        { label: "Cherry", description: "Choose Cherry" },
+      ],
+    });
   });
 
-  it("sends one right arrow per step to reach later options", () => {
+  it("a multi-select question is shown read-only, with its options", () => {
+    const detail = formDetail(formOf("question-multi"));
+    expect(detail?.tool).toBe(MULTI_QUESTION_TOOL_LABEL);
+    expect(detail?.options.map((o) => o.label)).toEqual(["Cheese", "Ham", "Olives"]);
+  });
+
+  it("a form of two questions is shown read-only, with the first", () => {
+    const detail = formDetail(formOf("question-two"));
+    expect(detail).toMatchObject({
+      tool: MULTI_QUESTION_TOOL_LABEL,
+      question: "Which drink would you like?",
+      options: [{ label: "Tea" }, { label: "Coffee" }],
+    });
+  });
+
+  it("falls back to the header when a question has no text", () => {
+    const form = formOf("question-single");
+    const [field] = form.fields;
+    const detail = formDetail({ ...form, fields: [{ ...field, description: undefined }] });
+    expect(detail?.question).toBe("Favorite fruit");
+  });
+
+  it("has nothing to offer for a question without options, or a form that isn't a question", () => {
+    const form = formOf("question-single");
+    expect(formDetail({ ...form, fields: [{ ...form.fields[0], options: [] }] })).toBeUndefined();
+    expect(formDetail({ ...form, fields: [] })).toBeUndefined();
+    const elicitation: FormInfo = {
+      id: "frm_mcp",
+      sessionID: "ses_1",
+      title: "Log in",
+      fields: [{ key: "token", type: "string", options: [{ value: "a", label: "a" }] }],
+    };
+    expect(isQuestionForm(elicitation)).toBe(false);
+    expect(formDetail(elicitation)).toBeUndefined();
+  });
+});
+
+describe("formToolCall", () => {
+  it("a question form reads as AskUserQuestion's input, questions in field order", () => {
+    const form = formOf("question-two");
+    const call = formToolCall(form);
+    expect(call).toEqual({
+      toolName: "question",
+      toolInput: {
+        questions: [
+          {
+            question: "Which drink would you like?",
+            header: "Drink",
+            options: [
+              { label: "Tea", description: "A hot cup of tea" },
+              { label: "Coffee", description: "A hot cup of coffee" },
+            ],
+            multiple: false,
+          },
+          {
+            question: "Which size would you like?",
+            header: "Size",
+            options: expect.any(Array),
+            multiple: false,
+          },
+        ],
+      },
+      dialog: { kind: "form", sessionId: form.sessionID, requestId: form.id },
+    });
+  });
+
+  it("marks a multi-select question", () => {
+    const call = formToolCall(formOf("question-multi"));
+    expect((call.toolInput as { questions: { multiple: boolean }[] }).questions[0].multiple).toBe(true);
+  });
+
+  it("passes any other form on as it is", () => {
+    const fields = [{ key: "token", type: "string", title: "API token" }];
+    expect(formToolCall({ id: "frm_mcp", sessionID: "ses_1", title: "Log in", fields })).toEqual({
+      toolName: "form",
+      toolInput: { title: "Log in", fields },
+      dialog: { kind: "form", sessionId: "ses_1", requestId: "frm_mcp" },
+    });
+  });
+});
+
+// OpenCode 1.x's keystrokes, still behind opencodeBackend.keystrokeForChoice until
+// T-610 removes both. Measured on 1.18.35 (T-411).
+describe("1.x keystrokes", () => {
+  it("permission: one right arrow per step, Enter, and a second Enter on Allow always", () => {
+    expect(keystrokeForPermission(0, 3)).toBe("\r");
+    expect(keystrokeForPermission(1, 3)).toBe("\x1b[C\r\r");
     expect(keystrokeForPermission(2, 3)).toBe("\x1b[C\x1b[C\r");
   });
 
-  it("confirms Allow always's second screen with another Enter", () => {
-    // "This will allow the following patterns until OpenCode is restarted …
-    // Confirm / Cancel": without it the dialog is left open on that screen.
-    expect(keystrokeForPermission(1, 3)).toBe("\x1b[C\r\r");
-  });
-
-  it("never sends digits, which the dialog ignores", () => {
-    for (let i = 0; i < 3; i++) {
-      expect(keystrokeForPermission(i, 3)).not.toMatch(/[0-9]/);
-    }
-  });
-
-  it("declines out-of-range and non-integer indices", () => {
-    // Confirming the wrong option here grants or refuses the wrong thing, so
-    // declining is the only safe answer.
-    expect(keystrokeForPermission(3, 3)).toBeNull();
-    expect(keystrokeForPermission(-1, 3)).toBeNull();
-    expect(keystrokeForPermission(1.5, 3)).toBeNull();
-    expect(keystrokeForPermission(0, 0)).toBeNull();
-  });
-});
-
-describe("multi-select questions", () => {
-  // Verified by driving a real `multiple: true` box: options render as
-  // checkboxes ("1. [ ] Apple"), the hint changes from "enter submit" to "enter
-  // toggle", and submitting is a second stage reached with Tab. One tap can't
-  // express that, and sending the single-select keystrokes would tick a checkbox
-  // and leave the agent blocked while the phone showed the prompt as answered.
-  it("is reported under a distinct tool name", () => {
-    // The name is what routes the answer path to a refusal, so it's asserted
-    // here as well as at the routing site.
-    expect(MULTI_QUESTION_TOOL_LABEL).not.toBe(QUESTION_TOOL_LABEL);
-  });
-
-  it("has no keystroke mapping, so the answer path must refuse", () => {
-    // There is deliberately no keystrokeForMultiQuestion: refusing is correct
-    // until the toggle-then-confirm flow is actually implemented.
-    expect(
-      opencodeBackend.keystrokeForChoice(MULTI_QUESTION_TOOL_LABEL, 0, 4)
-    ).toBeNull();
-    expect(
-      opencodeBackend.keystrokeForChoice(MULTI_QUESTION_TOOL_LABEL, 2, 4)
-    ).toBeNull();
-  });
-
-  it("still answers single-select questions", () => {
-    // Guard against the refusal being applied too broadly.
-    expect(opencodeBackend.keystrokeForChoice(QUESTION_TOOL_LABEL, 1, 4)).toBe(
-      "\x1b[B\r"
-    );
-  });
-});
-
-describe("opencodeBackend.keystrokeForChoice", () => {
-  it("routes each dialog kind to its own axis", () => {
-    // The whole point of per-backend routing: these must not be interchangeable.
-    expect(opencodeBackend.keystrokeForChoice(PERMISSION_TOOL, 2, 3)).toBe(
-      "\x1b[C\x1b[C\r"
-    );
-    expect(opencodeBackend.keystrokeForChoice(QUESTION_TOOL_LABEL, 1, 3)).toBe(
-      "\x1b[B\r"
-    );
-  });
-
-  it("refuses a dialog it doesn't recognize", () => {
-    expect(opencodeBackend.keystrokeForChoice("SomethingNew", 0, 3)).toBeNull();
-  });
-
-  it("never sends digits, which no OpenCode dialog accepts", () => {
-    for (const tool of [PERMISSION_TOOL, QUESTION_TOOL_LABEL]) {
-      const keys = opencodeBackend.keystrokeForChoice(tool, 2, 4);
-      expect(keys).not.toMatch(/[0-9]/);
-    }
-  });
-});
-
-describe("keystrokeForQuestion", () => {
-  // The question box is a vertical list, so it navigates on the other axis.
-  it("uses down arrows, not right arrows", () => {
+  it("question: down arrows, not right arrows", () => {
     expect(keystrokeForQuestion(0, 4)).toBe("\r");
-    expect(keystrokeForQuestion(1, 4)).toBe("\x1b[B\r");
     expect(keystrokeForQuestion(3, 4)).toBe("\x1b[B\x1b[B\x1b[B\r");
   });
 
-  it("differs from the permission mapping for the same index", () => {
-    // Guards against the two being collapsed into one helper again: sending
-    // left/right to a vertical list does nothing.
-    expect(keystrokeForQuestion(1, 3)).not.toBe(keystrokeForPermission(1, 3));
+  it("declines out-of-range and non-integer indices", () => {
+    for (const [index, count] of [[3, 3], [-1, 3], [1.5, 3], [0, 0]]) {
+      expect(keystrokeForPermission(index, count)).toBeNull();
+      expect(keystrokeForQuestion(index, count)).toBeNull();
+    }
   });
 
-  it("declines out-of-range indices", () => {
-    expect(keystrokeForQuestion(4, 4)).toBeNull();
-    expect(keystrokeForQuestion(-1, 4)).toBeNull();
+  it("keystrokeForChoice routes each dialog to its own axis and refuses the rest", () => {
+    expect(opencodeBackend.keystrokeForChoice(PERMISSION_TOOL, 2, 3)).toBe("\x1b[C\x1b[C\r");
+    expect(opencodeBackend.keystrokeForChoice(QUESTION_TOOL_LABEL, 1, 3)).toBe("\x1b[B\r");
+    expect(opencodeBackend.keystrokeForChoice(MULTI_QUESTION_TOOL_LABEL, 0, 4)).toBeNull();
+    expect(opencodeBackend.keystrokeForChoice("SomethingNew", 0, 3)).toBeNull();
   });
 });

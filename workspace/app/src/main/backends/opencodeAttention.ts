@@ -1,53 +1,99 @@
-// Turns an OpenCode instance's plugin deliveries into the activity vocabulary
-// everything downstream already speaks: `waiting` (finished), `prompt` (needs you),
-// and `prompt-cleared`. OpenCode's counterpart of claudeHooks.ts.
+// Turns what the user's shared OpenCode 2 service reports into the activity
+// vocabulary everything downstream already speaks: `waiting` (finished), `prompt`
+// (needs you) and `prompt-cleared`, for one OpenCode contact. OpenCode's counterpart
+// of claudeHooks.ts.
 //
-// Replaces polling OpenCode's SQLite rows and parsing its permission dialog off the
-// screen (see docs/knowledge/tech-conventions.md, "Agent state comes from the
-// agent"). Every rule follows something OpenCode 1.18.35 was measured to report
-// through the plugin (backends/opencodePlugin.ts):
-// docs/timeline/2026-10-06_attention-alerts-investigation.md, "OpenCode plugin
-// spike". The fixtures those runs produced are what opencodeAttention.test.ts
-// replays.
+// Two sources (docs/knowledge/tech-conventions.md, "Agent state comes from the
+// agent"). The service's event stream (backends/opencodeService.ts) says when a turn
+// starts and ends and when a dialog opens and closes, for every session of every
+// client of the service. Multi-Code's TUI plugin, through `/alert`, says which session
+// this contact's terminal shows: nothing else can (spike G-601, "No server event marks
+// a route change"). A contact owns the sessions its terminal has shown since this
+// spawn started, plus their subagents; everything else on the service is VS Code, a
+// plain terminal or another contact, and is ignored.
 //
-// A delivery's `event` is the OpenCode event type, `sessionId` its session, and
-// `payload.properties` the event's properties.
+// Every rule follows what OpenCode 2.0.32 was measured to do:
+// docs/timeline/2026-10-20_opencode-v2-spike.md (G-603), whose fixtures
+// (__fixtures__/opencode-v2/) opencodeAttention.test.ts replays. Where the spike and
+// docs/timeline/2026-10-20_opencode-v2-source-reading.md disagree, the spike wins.
 //
-// No timers decide anything here: OpenCode reports a turn's end exactly, so the
-// only timer is the plugin-health one. Pure otherwise: no electron, no fs.
+// No polling. The service's snapshot reads are made only after a (re)connect and
+// when the terminal shows a session for the first time; the only timer is the
+// plugin-health one, injected as claudeHooks.ts does. Pure otherwise: no electron, no
+// fs, nothing but the service client it is handed.
 
-import type { ActivityCallback, AlertDelivery, PromptToolCall } from "./types";
+import type {
+  ActivityCallback,
+  AlertDelivery,
+  AlertsDegradedReason,
+  AnswerResult,
+  AttentionContext,
+  DialogAnswer,
+  DialogRef,
+  HookAttention,
+  PromptToolCall,
+} from "./types";
 import type { HookTimers } from "./claudeHooks";
 import type { PromptDetail } from "../remote/promptExtract";
-import { permissionDetail, questionDetail } from "./opencodePrompt";
+import {
+  getOpencodeService,
+  toFormInfo,
+  toPermissionRequest,
+  type FormInfo,
+  type OpencodeService,
+  type PermissionRequest,
+  type ServiceEvent,
+  type ServiceSession,
+  type ServiceStatus,
+} from "./opencodeService";
+import { formDetail, formToolCall, permissionDetail, permissionToolCall } from "./opencodePrompt";
 
-// How long after spawn without a single delivery before the plugin is taken not to
-// run: `--pure`, a config that broke loading, an inherited OPENCODE_CONFIG_CONTENT
-// Multi-Code couldn't merge into. There is no registry to start the clock on, and
-// the plugin's init delivery arrived 1.9–2.2s after spawn in every T-410 run.
+// How long after spawn without a word from Multi-Code's TUI plugin before it is taken
+// not to have loaded: a user config whose `plugins` couldn't be merged, a TUI that
+// failed before setup. The plugin posts `multicode.init` from its setup, which runs
+// as the TUI starts (spike G-601, "TUI plugin probe").
 const PLUGIN_MISSING_MS = 10_000;
 
-// OpenCode's current names and the v2 ones it is moving to (both in the 1.18.35
-// binary). The v2 payloads are unmeasured; read the same fields, best effort.
-const ASKED = new Set([
-  "permission.asked",
-  "permission.v2.asked",
-  "question.asked",
-  "question.v2.asked",
+// The plugin's deliveries (backends/opencodePlugin.ts, T-605). `multicode.route`
+// carries the shown session as the delivery's session id, none on the home screen,
+// and the route itself as `payload.route`.
+const PLUGIN_INIT_EVENT = "multicode.init";
+const PLUGIN_ROUTE_EVENT = "multicode.route";
+
+// Bound on a parentID walk. Subagents nest a level or two; this only stops a cycle.
+const MAX_DEPTH = 32;
+
+const STARTED = "session.execution.started";
+const ENDED = new Set([
+  "session.execution.succeeded",
+  "session.execution.failed",
+  "session.execution.interrupted",
 ]);
-const ANSWERED = new Set([
+// Events whose meaning depends on whose session it is: raising a dialog, ending a turn.
+// A start only marks the session running, and a closing names its request by id, so
+// neither needs to know the session's family.
+const NEEDS_FAMILY = new Set([...ENDED, "permission.asked", "form.created"]);
+// Everything attention acts on. The rest (text and tool streaming, titles, usage,
+// `session.viewed`) says nothing about Finished or Needs-you.
+const RELEVANT = new Set([
+  ...NEEDS_FAMILY,
+  STARTED,
   "permission.replied",
-  "permission.v2.replied",
-  "question.replied",
-  "question.v2.replied",
-  "question.rejected",
-  "question.v2.rejected",
+  "form.replied",
+  "form.cancelled",
 ]);
+
+// A form whose session is "global" (an MCP elicitation, source reading "Events
+// Multi-Code needs") belongs to no session, so no contact can claim it.
+const GLOBAL_SESSION = "global";
 
 const realTimers: HookTimers = {
   setTimeout: (fn, ms) => setTimeout(fn, ms),
   clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 };
+
+const str = (value: unknown): string | undefined =>
+  typeof value === "string" && value.length > 0 ? value : undefined;
 
 function record(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -55,192 +101,601 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
-// The request a dialog is about, for the secretary's brief (it never reaches the
-// phone, like Claude's PromptToolCall). A permission names what it guards in
-// `permission` ("bash", "edit", …), and `metadata` holds the specifics: for bash,
-// `{command}`. A question's input is its questions, the same shape as Claude's
-// AskUserQuestion input.
-function permissionCall(props: Record<string, unknown>): PromptToolCall {
+// The session an event is about. A form's is inside the form (`form.created` data is
+// `{form}`); everything else carries `sessionID` at the top.
+function sessionOf(event: ServiceEvent): string | undefined {
+  if (event.type === "form.created") return str(record(event.data.form).sessionID);
+  return str(event.data.sessionID);
+}
+
+// A dialog the contact is blocked on: the session that asked (a subagent's included),
+// what the phone is shown, and the request for the secretary.
+interface OpenDialog {
+  session: string;
+  detail?: PromptDetail;
+  toolCall: PromptToolCall;
+}
+
+function permissionDialog(request: PermissionRequest): OpenDialog {
   return {
-    toolName: typeof props.permission === "string" ? props.permission : "permission",
-    toolInput: { patterns: props.patterns, metadata: props.metadata },
+    session: request.sessionID,
+    detail: permissionDetail(request),
+    toolCall: permissionToolCall(request),
   };
 }
 
-function questionCall(props: Record<string, unknown>): PromptToolCall {
-  return { toolName: "question", toolInput: { questions: props.questions } };
+function formDialog(form: FormInfo): OpenDialog {
+  return { session: form.sessionID, detail: formDetail(form), toolCall: formToolCall(form) };
 }
 
-export class OpencodePluginAttention {
-  // Subagent session → its parent, from `info.parentID` on session.created/updated:
-  // the only place a child is marked. Everything else is a root. A resumed root
-  // announces no `session.created`, but a child is always created during the
-  // process's life.
-  private parents = new Map<string, string>();
-  // Root sessions whose turn is under way: busy seen, idle not yet. `busy` arrives
-  // 3–5 times a turn and `idle` twice after an error or abort, so Finished is this
-  // set losing a session, which happens once.
-  private busyRoots = new Set<string>();
-  // Open dialogs, request id → the session that asked, what it asked, and the
-  // request itself for the secretary.
-  private openRequests = new Map<
-    string,
-    { session: string; detail?: PromptDetail; toolCall: PromptToolCall }
-  >();
-  private promptOutstanding = false;
-  // Roots whose turn the builder ended: a Reject (or Esc) on a permission, Esc on a
-  // question, or an Esc interrupt, in that root or one of its subagents. OpenCode
-  // reports idle right after each, and that idle is theirs, not a finish. Cleared by
-  // the root going busy again, so a turn that carries on after a subagent's dialog
-  // was rejected still finishes. Per root: one OpenCode can run several sessions at
-  // once, and ending one must not silence another.
-  private endedByBuilder = new Set<string>();
+type HealthState = "ok" | AlertsDegradedReason;
+
+export interface OpencodeAttentionDeps {
+  service?: OpencodeService;
+  timers?: HookTimers;
+}
+
+export class OpencodeAttention implements HookAttention {
+  private readonly service: OpencodeService;
+  private readonly timers: HookTimers;
+  private readonly unsubscribe: () => void;
   private stopped = false;
 
-  // Plugin health (PRD Story 6), watched from spawn until the first delivery.
-  private heard = false;
-  private reportedMissing = false;
+  // ── Which sessions are the contact's ──
+  // The spawn's own session (it may not exist yet: a minted id is created by the first
+  // prompt, spike G-601) and every session the terminal has shown since. Never shrinks
+  // during a spawn: a turn left running in a session the builder moved away from still
+  // finishes for this contact (PRD Story 3).
+  private readonly shown = new Set<string>();
+  private lastShown: string | undefined;
+  // Session → its parent, null for a root. From `session.created`, the only event
+  // carrying `parentID`, else asked of the service once per session (`GET
+  // /api/session/:id`) and kept, "no such session" included. Parentage never changes.
+  private readonly parents = new Map<string, string | null>();
+  private readonly lookups = new Map<string, Promise<void>>();
+  // Events of a session whose family is being looked up, in arrival order, so they
+  // apply in the order the service sent them.
+  private readonly held = new Map<string, ServiceEvent[]>();
+
+  // ── Turns and dialogs ──
+  // Every session with a turn running, the contact's or not: a session the terminal
+  // moves to may already be running when the route arrives, and a start is cheap to
+  // remember. From `execution.started` and the ends, or the snapshot.
+  private readonly running = new Set<string>();
+  // Roots whose Finished a re-sync raised because their turn ended while the stream
+  // was down. Should that end's own event still turn up, it is the same end.
+  private readonly finishedBySync = new Set<string>();
+  // Open dialogs by request id (a permission's `per_…`, a form's `frm_…`), oldest first.
+  private readonly dialogs = new Map<string, OpenDialog>();
+  private promptOutstanding = false;
+
+  // ── Re-sync ──
+  // Bumped by every re-sync and by stop(), so an older one's answers are dropped.
+  private syncGen = 0;
+  // Sessions an event spoke for while the current re-sync was reading. The event is
+  // newer than the snapshot, so it wins for that session, as the official client
+  // does (packages/client/src/solid/data.ts).
+  private touched: Set<string> | null = null;
+
+  // ── Health (PRD Story 9) ──
+  private pluginHeard = false;
+  private pluginMissing = false;
+  private serviceDown = false;
+  private reportedHealth: HealthState = "ok";
   private healthTimer: unknown = null;
 
   constructor(
     private readonly onActivity: ActivityCallback,
-    private readonly timers: HookTimers = realTimers,
-    // false once the plugin is taken not to run, true again when it is heard.
-    private readonly onPluginHealth: (ok: boolean) => void = () => {}
+    // false (with why) once alerts can't work for this contact, true when they can
+    // again. One state for both causes: see reportHealth.
+    private readonly onHooksHealth: (ok: boolean, reason?: AlertsDegradedReason) => void,
+    private readonly context: AttentionContext,
+    deps: OpencodeAttentionDeps = {}
   ) {
+    this.service = deps.service ?? getOpencodeService();
+    this.timers = deps.timers ?? realTimers;
+    if (context.sessionId) this.shown.add(context.sessionId);
     this.healthTimer = this.timers.setTimeout(() => {
       this.healthTimer = null;
-      if (this.stopped || this.heard) return;
-      this.reportedMissing = true;
-      this.onPluginHealth(false);
+      if (this.stopped || this.pluginHeard) return;
+      this.pluginMissing = true;
+      this.reportHealth();
     }, PLUGIN_MISSING_MS);
+    // The service tells a new subscriber its status, and re-syncs it at once when its
+    // stream is already up; otherwise the re-sync follows `server.connected`.
+    this.unsubscribe = this.service.subscribe({
+      onEvent: (event) => this.onEvent(event),
+      onResync: () => void this.resync(),
+      onStatus: (status) => this.onStatus(status),
+    });
   }
 
+  // Deliveries from Multi-Code's TUI plugin. Anything else reaching this contact's
+  // `/alert` (a stray 1.x plugin, say) is not ours and proves nothing.
   handle(delivery: AlertDelivery) {
     if (this.stopped) return;
-    this.noteHeard();
-    const event = delivery.event;
-    const props = record(delivery.payload.properties);
-    const session = delivery.sessionId ?? "";
+    if (delivery.event !== PLUGIN_INIT_EVENT && delivery.event !== PLUGIN_ROUTE_EVENT) return;
+    // Any delivery proves the plugin loaded: its posts are fire-and-forget, so the
+    // init itself can be the one that was lost. Init's `pid` is not needed here.
+    this.notePluginHeard();
+    if (delivery.event !== PLUGIN_ROUTE_EVENT) return;
 
-    if (event === "session.created" || event === "session.updated") {
-      const info = record(props.info);
-      if (typeof info.id === "string" && typeof info.parentID === "string" && info.parentID) {
-        this.parents.set(info.id, info.parentID);
-      }
-      return;
+    const route = record(delivery.payload.route);
+    const session =
+      delivery.sessionId ?? (route.type === "session" ? str(route.sessionID) : undefined);
+    // Home (`/new`, `/clear`, or a minted id before its first prompt): no session is
+    // shown, and the one before stays the contact's until a prompt makes a new one.
+    if (!session) return;
+    const first = !this.shown.has(session);
+    this.shown.add(session);
+    if (session !== this.lastShown) {
+      this.lastShown = session;
+      this.context.onSessionShown(session);
     }
-
-    if (event === "session.status") {
-      const status = record(props.status).type;
-      if (!session) return;
-      if (this.parents.has(session)) {
-        // A subagent finishing is never the instance finishing. Its open dialogs
-        // are over, though: an abort sends no reply.
-        if (status === "idle") this.clearRequests((s) => s === session);
-        return;
-      }
-      if (status === "busy") {
-        this.busyRoots.add(session);
-        this.endedByBuilder.delete(session);
-        return;
-      }
-      if (status === "idle") {
-        // The turn is over, and with it every dialog of its subagents.
-        this.clearRequests((s) => this.rootOf(s) === session);
-        if (!this.busyRoots.delete(session)) return;
-        if (this.endedByBuilder.delete(session)) return;
-        // An API error ends here too, after its session.error, and chimes like a
-        // normal finish (G-002).
-        this.onActivity("waiting");
-        // Another root's dialog still blocks the instance. Said again, or the finish
-        // above reads as the whole instance being idle, and the write gate would let
-        // an automated write land in that dialog as its answer.
-        this.reraiseOpenPrompt();
-      }
-      // `retry` (rate limited, repeats ~2s apart) is neither: the turn goes on.
-      return;
-    }
-
-    if (event === "session.error") {
-      // An abort while a dialog is open sends no reply for it.
-      this.clearRequests((s) => s === session);
-      if (record(props.error).name === "MessageAbortedError") {
-        this.endedByBuilder.add(this.rootOf(session));
-      }
-      return;
-    }
-
-    if (ASKED.has(event)) {
-      // From any session: a subagent's dialog blocks the builder just the same.
-      const isPermission = event.startsWith("permission");
-      const detail = isPermission ? permissionDetail(props) : (questionDetail(props) ?? undefined);
-      const toolCall = isPermission ? permissionCall(props) : questionCall(props);
-      if (typeof props.id === "string") {
-        this.openRequests.set(props.id, { session, detail, toolCall });
-      }
-      this.promptOutstanding = true;
-      this.onActivity("prompt", detail, toolCall);
-      return;
-    }
-
-    if (ANSWERED.has(event)) {
-      if (props.reply === "reject" || event.endsWith(".rejected")) {
-        this.endedByBuilder.add(this.rootOf(session));
-      }
-      if (typeof props.requestID === "string") this.openRequests.delete(props.requestID);
-      if (this.openRequests.size === 0) this.clearPrompt();
-      return;
-    }
-    // multicode.init and anything else: nothing an alert depends on.
+    // A session shown for the first time may be mid-turn or blocked already (`/sessions`
+    // into a session VS Code is running, or a start or dialog that beat the route here),
+    // and those events were another owner's when they came. The snapshot says.
+    if (first) void this.resync();
   }
 
   stop() {
+    // A stopped contact raises nothing, whatever its sessions do in the service
+    // (PRD Story 11, builder 2026-10-20).
+    if (this.stopped) return;
     this.stopped = true;
+    this.syncGen++;
+    this.touched = null;
+    this.held.clear();
+    this.unsubscribe();
     if (this.healthTimer !== null) {
       this.timers.clearTimeout(this.healthTimer);
       this.healthTimer = null;
     }
   }
 
-  private noteHeard() {
-    if (this.heard) return;
-    this.heard = true;
-    if (this.reportedMissing) {
-      this.reportedMissing = false;
-      this.onPluginHealth(true);
+  // Through the service's reply endpoints, to the request's own session (a subagent's
+  // request answered on its root is a 404, source reading "Answering dialogs through
+  // the API"). The terminal is never written to. "Already answered" comes back as
+  // `gone` from the service; a ref of one kind with an answer of the other is refused.
+  async answer(ref: DialogRef, answer: DialogAnswer): Promise<AnswerResult> {
+    if (ref.kind === "permission" && answer.kind === "permission") {
+      return this.service.replyPermission(ref.sessionId, ref.requestId, answer.decision, answer.message);
     }
+    if (ref.kind === "form" && answer.kind === "form") {
+      return this.service.replyForm(ref.sessionId, ref.requestId, answer.answer);
+    }
+    return { ok: false, reason: "failed" };
   }
 
-  // The root session a session belongs to: itself, or its subagent chain's top.
-  private rootOf(session: string): string {
-    let current = session;
-    for (let depth = 0; depth < 32; depth++) {
-      const parent = this.parents.get(current);
-      if (parent === undefined) return current;
-      current = parent;
+  // ── The event stream ──────────────────────────────────────────────────────
+
+  private onEvent(event: ServiceEvent) {
+    if (this.stopped) return;
+    if (event.type === "session.created") {
+      const session = str(event.data.sessionID);
+      if (session) this.parents.set(session, str(event.data.parentID) ?? null);
+      return;
     }
-    return current;
+    if (!RELEVANT.has(event.type)) return;
+    const session = sessionOf(event);
+    if (!session || session === GLOBAL_SESSION) return;
+    // Marked on arrival, held or not: a held event is newer than any snapshot in flight.
+    this.touched?.add(session);
+
+    const held = this.held.get(session);
+    if (held) {
+      held.push(event);
+      return;
+    }
+    if (NEEDS_FAMILY.has(event.type) && this.unknownLink(session) !== null) {
+      this.held.set(session, [event]);
+      void this.releaseWhenKnown(session);
+      return;
+    }
+    this.apply(event, session);
   }
 
-  private clearRequests(matches: (session: string) => boolean) {
-    for (const [id, request] of this.openRequests) {
-      if (matches(request.session)) this.openRequests.delete(id);
+  private apply(event: ServiceEvent, session: string) {
+    this.touched?.add(session);
+    const type = event.type;
+
+    if (type === STARTED) {
+      this.running.add(session);
+      this.finishedBySync.delete(session);
+      return;
     }
-    if (this.openRequests.size === 0) this.clearPrompt();
+
+    if (ENDED.has(type)) {
+      // `succeeded`, and `failed` (an API or model error, api-error) like Claude's
+      // StopFailure (attention-alerts G-002), are a turn's end the builder hears.
+      // `interrupted` is not, by reason: `user` is the builder's own double Esc
+      // (interrupt-esc); `shutdown` is a plain Reject or a dismissed question
+      // (permission-reject, question-dismiss) or the service going away; `superseded`
+      // another runner took over. `inactivity` is OpenCode evicting the location after
+      // 60 minutes, which killed the turn without anyone ending it (PRD Story 3
+      // assumption: the builder wants to know). A reason not known here stays silent.
+      const finishing =
+        type !== "session.execution.interrupted" || event.data.reason === "inactivity";
+      this.turnEnded(session, finishing);
+      return;
+    }
+
+    if (type === "permission.asked") {
+      if (!this.owned(session)) return;
+      const request = toPermissionRequest(event.data);
+      if (request) {
+        this.raise(request.id, permissionDialog(request));
+        return;
+      }
+      // A shape this version doesn't know still blocks the builder: say so, with
+      // nothing to answer it by but the terminal.
+      const id = str(event.data.id);
+      if (id) this.raise(id, { session, toolCall: { toolName: "permission", toolInput: event.data } });
+      return;
+    }
+
+    if (type === "form.created") {
+      if (!this.owned(session)) return;
+      const raw = record(event.data.form);
+      const form = toFormInfo(raw);
+      if (form) {
+        this.raise(form.id, formDialog(form));
+        return;
+      }
+      const id = str(raw.id);
+      if (id) this.raise(id, { session, toolCall: { toolName: "form", toolInput: raw } });
+      return;
+    }
+
+    // permission.replied names its request `requestID`, form.replied/cancelled `id`.
+    // Only a request this contact has open means anything; the rest are other owners'.
+    this.close(type === "permission.replied" ? str(event.data.requestID) : str(event.data.id));
+  }
+
+  private turnEnded(session: string, finishing: boolean) {
+    this.running.delete(session);
+    const alreadyFinished = this.finishedBySync.delete(session);
+    if (!this.owned(session)) return;
+    // Every dialog of the tree goes with its turn: an interrupted turn drops a pending
+    // permission without a `permission.replied` (interrupt-pending-permission), and a
+    // subagent's turn ending leaves nothing of its own open.
+    const closed = this.closeTree(session);
+    if (closed && this.dialogs.size === 0) this.clearPrompt(closed);
+    // A subagent's end is never the contact's (PRD Story 3); its root carries on, even
+    // after a Reject inside the subagent (subagent-reject-noreason), and finishes with
+    // its own end.
+    if (!finishing || alreadyFinished || !this.isRoot(session)) return;
+    this.onActivity("waiting");
+    // Another root's dialog still blocks the contact. Said again, or the finish above
+    // reads as the whole contact being idle, and the write gate would let an
+    // automated write land in that dialog as its answer.
+    this.reraiseOpenPrompt();
+  }
+
+  // ── Dialogs ───────────────────────────────────────────────────────────────
+
+  private raise(id: string, dialog: OpenDialog) {
+    // Already reported (by the snapshot, or the same event twice): no second chime.
+    if (this.dialogs.has(id)) return;
+    this.dialogs.set(id, dialog);
+    this.promptOutstanding = true;
+    this.onActivity("prompt", dialog.detail, dialog.toolCall);
+  }
+
+  // A reply closes its request; Needs-you clears once nothing is left open. The
+  // clearing carries the closed request's call: the secretary's waiters only take a
+  // clearing with a call (process-manager `dialogClearWaiters`).
+  private close(id: string | undefined) {
+    if (!id) return;
+    const dialog = this.dialogs.get(id);
+    if (!dialog) return;
+    this.dialogs.delete(id);
+    if (this.dialogs.size === 0) this.clearPrompt(dialog.toolCall);
+  }
+
+  // Drops every open dialog of `root`'s tree without a word, returning the call of the
+  // last one dropped.
+  private closeTree(root: string): PromptToolCall | undefined {
+    let closed: PromptToolCall | undefined;
+    for (const [id, dialog] of this.dialogs) {
+      if (!this.inTree(dialog.session, root)) continue;
+      this.dialogs.delete(id);
+      closed = dialog.toolCall;
+    }
+    return closed;
   }
 
   // The newest dialog still open, raised again.
   private reraiseOpenPrompt() {
-    const newest = [...this.openRequests.values()].at(-1);
+    const newest = [...this.dialogs.values()].at(-1);
     if (!newest) return;
     this.promptOutstanding = true;
     this.onActivity("prompt", newest.detail, newest.toolCall);
   }
 
-  private clearPrompt() {
+  private clearPrompt(toolCall: PromptToolCall) {
     if (!this.promptOutstanding) return;
     this.promptOutstanding = false;
-    this.onActivity("prompt-cleared");
+    this.onActivity("prompt-cleared", undefined, toolCall);
+  }
+
+  // ── Families ──────────────────────────────────────────────────────────────
+
+  private owned(session: string): boolean {
+    let current: string | null | undefined = session;
+    for (let depth = 0; current && depth < MAX_DEPTH; depth++) {
+      if (this.shown.has(current)) return true;
+      current = this.parents.get(current);
+    }
+    return false;
+  }
+
+  // Known to have no parent. A session whose family is unknown is not taken for a
+  // root: its events wait for the lookup (onEvent), and a root that can't be looked up
+  // is recorded as one (lookup).
+  private isRoot(session: string): boolean {
+    return this.parents.get(session) === null;
+  }
+
+  private inTree(session: string, root: string): boolean {
+    let current: string | null | undefined = session;
+    for (let depth = 0; current && depth < MAX_DEPTH; depth++) {
+      if (current === root) return true;
+      current = this.parents.get(current);
+    }
+    return false;
+  }
+
+  // The first session up `session`'s parent chain whose parent isn't known, or null
+  // when the chain is known all the way to its root.
+  private unknownLink(session: string): string | null {
+    let current = session;
+    for (let depth = 0; depth < MAX_DEPTH; depth++) {
+      if (!this.parents.has(current)) return current;
+      const parent = this.parents.get(current);
+      if (!parent) return null;
+      current = parent;
+    }
+    return null;
+  }
+
+  // Learn `session`'s chain to its root, one lookup per unknown link. Each lookup
+  // records an answer, so this ends.
+  private async resolveChain(session: string): Promise<void> {
+    for (let depth = 0; depth < MAX_DEPTH && !this.stopped; depth++) {
+      const missing = this.unknownLink(session);
+      if (missing === null) return;
+      await this.lookup(missing);
+    }
+  }
+
+  // One request per session however many events wait on it. A session the service
+  // doesn't know, or can't be asked about, is kept as a root: it is then the
+  // contact's only if the terminal showed it, which is the case where calling it a
+  // root is right (a spawn's session and a shown one are roots).
+  private lookup(session: string): Promise<void> {
+    let pending = this.lookups.get(session);
+    if (pending) return pending;
+    pending = Promise.resolve()
+      .then(() => this.service.session(session))
+      .catch((): ServiceSession | null => null)
+      .then((info) => {
+        this.lookups.delete(session);
+        // A `session.created` that arrived meanwhile is as good an answer.
+        if (!this.parents.has(session)) this.parents.set(session, info?.parentID ?? null);
+      });
+    this.lookups.set(session, pending);
+    return pending;
+  }
+
+  private async releaseWhenKnown(session: string) {
+    await this.resolveChain(session);
+    if (this.stopped) return;
+    const events = this.held.get(session) ?? [];
+    this.held.delete(session);
+    for (const event of events) this.apply(event, session);
+  }
+
+  // ── Re-sync ───────────────────────────────────────────────────────────────
+
+  // After every (re)connect, a replaced service's included, the stream has missed
+  // whatever happened while it was down: a resumed turn's `execution.started` is
+  // published before any subscriber can reconnect (spike finding 2, service-restart),
+  // a dialog may have been answered elsewhere, a turn may have ended. The snapshot
+  // says how things stand; only the difference from what was already reported is
+  // raised, so a dialog still open chimes once, not twice.
+  private async resync(): Promise<void> {
+    if (this.stopped) return;
+    const gen = ++this.syncGen;
+    const touched = new Set<string>();
+    this.touched = touched;
+    const current = () => !this.stopped && gen === this.syncGen;
+    try {
+      const active = await this.read(() => this.service.activeSessions());
+      // Unreachable: nothing is known, so nothing changes.
+      if (!current() || !active) return;
+      // Families of everything running (a subagent may have been created while the
+      // stream was down) and of every shown session (a root's end has to know it is one).
+      await Promise.all([...active, ...this.shown].map((id) => this.resolveChain(id)));
+      if (!current()) return;
+
+      // Dialogs live only on running sessions (spike, "a session waiting on a
+      // permission is listed as running"); sessions with a dialog open are read too,
+      // to confirm it gone.
+      const sessions = new Set<string>();
+      for (const id of active) if (this.owned(id)) sessions.add(id);
+      for (const dialog of this.dialogs.values()) sessions.add(dialog.session);
+      const pending = new Map<string, Map<string, OpenDialog> | null>();
+      await Promise.all(
+        [...sessions].map(async (id) => {
+          const [permissions, forms] = await Promise.all([
+            this.read(() => this.service.pendingPermissions(id)),
+            this.read(() => this.service.pendingForms(id)),
+          ]);
+          pending.set(id, permissions && forms ? this.snapshotDialogs(id, permissions, forms) : null);
+        })
+      );
+      if (!current()) return;
+
+      // An owned root running before and not now ended while the stream was down. Its
+      // record says how; the end event itself is gone.
+      const ended = [...this.running].filter(
+        (id) => !active.has(id) && !touched.has(id) && this.owned(id) && this.isRoot(id)
+      );
+      const outcomes = new Map<string, ServiceSession["outcome"]>();
+      await Promise.all(
+        ended.map(async (id) => {
+          outcomes.set(id, (await this.read(() => this.service.session(id)))?.outcome);
+        })
+      );
+      if (!current()) return;
+
+      this.applySnapshot(active, pending, ended, outcomes, touched);
+    } finally {
+      if (gen === this.syncGen) this.touched = null;
+    }
+  }
+
+  private async read<T>(fn: () => Promise<T | null>): Promise<T | null> {
+    try {
+      return await fn();
+    } catch {
+      return null;
+    }
+  }
+
+  private snapshotDialogs(
+    session: string,
+    permissions: PermissionRequest[],
+    forms: FormInfo[]
+  ): Map<string, OpenDialog> {
+    const dialogs = new Map<string, OpenDialog>();
+    for (const request of permissions) {
+      if (request.sessionID === session) dialogs.set(request.id, permissionDialog(request));
+    }
+    for (const form of forms) {
+      if (form.sessionID === session) dialogs.set(form.id, formDialog(form));
+    }
+    return dialogs;
+  }
+
+  // Whether an event spoke for `session`, or for a session above it, during the
+  // re-sync: a root's end closes its subagents' dialogs too.
+  private spokenFor(session: string, touched: Set<string>): boolean {
+    let current: string | null | undefined = session;
+    for (let depth = 0; current && depth < MAX_DEPTH; depth++) {
+      if (touched.has(current)) return true;
+      current = this.parents.get(current);
+    }
+    return false;
+  }
+
+  private applySnapshot(
+    active: Set<string>,
+    pending: Map<string, Map<string, OpenDialog> | null>,
+    ended: string[],
+    outcomes: Map<string, ServiceSession["outcome"]>,
+    touched: Set<string>
+  ) {
+    // Turns, except where an event spoke since the read.
+    for (const id of this.running) {
+      if (!active.has(id) && !touched.has(id)) this.running.delete(id);
+    }
+    for (const id of active) {
+      if (touched.has(id)) continue;
+      this.running.add(id);
+      this.finishedBySync.delete(id);
+    }
+
+    // Roots whose turn ended while away take their dialogs with them. `succeeded` and
+    // `failed` are a finish as their events would have been; `interrupted` can't say
+    // which reason, and none of the silent ones should chime, so it stays silent, as
+    // does a record that couldn't be read.
+    let closed: PromptToolCall | undefined;
+    const finished: string[] = [];
+    const endedRoots = ended.filter((id) => !touched.has(id));
+    for (const id of endedRoots) {
+      closed = this.closeTree(id) ?? closed;
+      const outcome = outcomes.get(id);
+      if (outcome === "succeeded" || outcome === "failed") finished.push(id);
+    }
+
+    // Dialogs: those gone (answered elsewhere, or dropped with their turn) and those
+    // new to us (asked while the stream was down, or by a resumed turn under a new id).
+    // A read that failed leaves its session's dialogs as they were.
+    const fresh: [string, OpenDialog][] = [];
+    for (const [session, dialogs] of pending) {
+      if (!dialogs || this.spokenFor(session, touched)) continue;
+      for (const [id, dialog] of this.dialogs) {
+        if (dialog.session !== session || dialogs.has(id)) continue;
+        this.dialogs.delete(id);
+        closed = dialog.toolCall;
+      }
+      for (const [id, dialog] of dialogs) {
+        if (this.dialogs.has(id)) continue;
+        if (endedRoots.some((root) => this.inTree(dialog.session, root))) continue;
+        fresh.push([id, dialog]);
+      }
+    }
+
+    // In the order they happened: what closed, the turns that ended, then what is
+    // open now, which leaves the contact blocked if anything still is.
+    if (closed && this.dialogs.size === 0) this.clearPrompt(closed);
+    for (const id of finished) {
+      this.finishedBySync.add(id);
+      this.onActivity("waiting");
+    }
+    for (const [id, dialog] of fresh) this.raise(id, dialog);
+    if (finished.length > 0 && fresh.length === 0) this.reraiseOpenPrompt();
+  }
+
+  // ── Health ────────────────────────────────────────────────────────────────
+
+  private onStatus(status: ServiceStatus) {
+    if (this.stopped) return;
+    // The client says `unreachable` only after 15 s down (PRD Story 9's threshold), so
+    // it shows at once. `connecting` changes nothing: a short outage or a version
+    // replacement isn't worth a bar, and one already shown stays until `connected`.
+    if (status.state === "unreachable") this.serviceDown = true;
+    else if (status.state === "connected") this.serviceDown = false;
+    this.reportHealth();
+  }
+
+  private notePluginHeard() {
+    if (this.pluginHeard) return;
+    this.pluginHeard = true;
+    if (this.healthTimer !== null) {
+      this.timers.clearTimeout(this.healthTimer);
+      this.healthTimer = null;
+    }
+    if (!this.pluginMissing) return;
+    this.pluginMissing = false;
+    this.reportHealth();
+  }
+
+  // One state from both causes, said only when it changes. The service outranks the
+  // plugin: without the service nothing at all reaches Multi-Code, while a missing
+  // plugin still leaves the spawn's own session watched. So the bar names the service
+  // while it is down, and the plugin once the service is back if the plugin is still
+  // missing.
+  private reportHealth() {
+    const state: HealthState = this.serviceDown ? "service" : this.pluginMissing ? "plugin" : "ok";
+    if (state === this.reportedHealth) return;
+    this.reportedHealth = state;
+    if (state === "ok") this.onHooksHealth(true);
+    else this.onHooksHealth(false, state);
+  }
+}
+
+// The name and signature backends/opencode.ts still constructs the attention by,
+// until T-610 wires OpencodeAttention in with the spawn's context: with none, only
+// the sessions the TUI plugin reports as shown are the contact's.
+export class OpencodePluginAttention extends OpencodeAttention {
+  constructor(
+    onActivity: ActivityCallback,
+    timers?: HookTimers,
+    onHooksHealth: (ok: boolean, reason?: AlertsDegradedReason) => void = () => {}
+  ) {
+    super(onActivity, onHooksHealth, { instanceId: "", onSessionShown: () => {} }, { timers });
   }
 }
