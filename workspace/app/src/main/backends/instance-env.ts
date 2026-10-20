@@ -14,9 +14,10 @@ export const INSTANCE_ENV = "MULTICODE_INSTANCE_ID";
 export const SPAWN_ENV = "MULTICODE_SPAWN_ID";
 
 // OpenCode only: the path of the 0600 file holding `/alert`'s endpoint and token,
-// which Multi-Code's plugin reads at init (backends/opencodePlugin.ts). The path
+// which Multi-Code's TUI plugin reads at setup (backends/opencodePlugin.ts). The path
 // travels by env, the token never does. Set only on an OpenCode spawn that loads the
-// plugin, and stripped from OpenCode's inherited env otherwise.
+// plugin, and stripped from OpenCode's inherited env otherwise. Like the two ids
+// above, never given to the shared service a spawn starts (backends/opencode.ts).
 export const ALERT_FILE_ENV = "MULTICODE_ALERT_FILE";
 
 // An app opened from the Dock gets no locale at all, and passes none on. Claude Code
