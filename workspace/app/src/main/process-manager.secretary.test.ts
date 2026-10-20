@@ -483,7 +483,7 @@ describe("instances that never get one", () => {
   });
 });
 
-describe("an OpenCode instance (PRD v1.6)", () => {
+describe("an OpenCode instance (PRD v1.6, OpenCode 2 shapes)", () => {
   it("keeps its dialog's request and its finish, like a Claude one", () => {
     const manager = new ProcessManager();
     const id = create(manager, "opencode");
@@ -491,17 +491,19 @@ describe("an OpenCode instance (PRD v1.6)", () => {
     const report = latestSpawn(id).report;
     const detail = {
       tool: "Permission",
-      question: "Permission required: bash: rm -rf build",
-      options: [{ label: "Allow once" }, { label: "Allow always" }, { label: "Reject" }],
+      question: "Permission required: shell: rm -rf build",
+      options: [{ label: "Allow once" }, { label: "Always allow" }, { label: "Reject" }],
     };
+    const dialog = { kind: "permission" as const, sessionId: "ses_1", requestId: "per_1" };
     const call = {
-      toolName: "bash",
-      toolInput: { patterns: ["rm -rf build"], metadata: { command: "rm -rf build" } },
+      toolName: "shell",
+      toolInput: { resources: ["rm -rf build"], metadata: { command: "rm -rf build" }, save: ["rm *"] },
+      dialog,
     };
     report("prompt", detail, call);
     expect(manager.secretaryEventOf(id)).toMatchObject({
       kind: "needs-you",
-      prompt: { detail, toolName: "bash", toolInput: call.toolInput },
+      prompt: { detail, toolName: "shell", toolInput: call.toolInput, dialog },
     });
     report("prompt-cleared");
     expect(manager.secretaryEventOf(id)).toBeUndefined();

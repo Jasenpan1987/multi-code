@@ -48,9 +48,9 @@ export type AnswerResult = { ok: true } | { ok: false; reason: "gone" | "failed"
  *     once it is gone (or was never written, as when nobody typed in it) a fresh
  *     session starts instead, under that id where the backend allows it.
  *   - "fresh": a new, empty session.
- *   - "latest": the directory's most recent session (`--continue`), for a contact
- *     with no session of its own on record, as every contact had before
- *     contacts.json kept one.
+ *   - "latest": the directory's most recent session (Claude's `--continue`;
+ *     OpenCode's newest root session, named by id), for a contact with no session
+ *     of its own on record, as every contact had before contacts.json kept one.
  *
  * Without "own", two contacts on one project both open the directory's most recent
  * session after every restart, and then share it.
@@ -204,6 +204,14 @@ export interface Backend {
   spawn(cwd: string, opts?: SpawnOptions, session?: SessionStart): SpawnConfig;
 
   /**
+   * Start preparing, in the background, what this backend's first spawn will need,
+   * so `spawn` (which is synchronous) doesn't wait for it. Called when contacts of
+   * this backend are loaded. Optional: OpenCode reads the builder's login-shell
+   * environment here (backends/opencodeShellEnv.ts).
+   */
+  warm?(): void;
+
+  /**
    * Begin trying to discover the sessionId for an instance running in `cwd`.
    * Calls `onFound` once when the sessionId is determined; never calls it
    * if the agent never registers a session within a reasonable window.
@@ -230,10 +238,12 @@ export interface Backend {
    *   - "prompt-cleared": a previously reported prompt was answered (on either
    *     the desktop or a paired phone).
    *
-   * The agent reports its own state through what Multi-Code injects at spawn,
-   * Claude's hooks or OpenCode's plugin, delivered to the `/alert` endpoint and
-   * routed here by instance. Per process, not per session, so it survives `/clear`
-   * and `/new`. `pid` is the pty child's, which Claude keys its own registry on.
+   * The agent reports its own state: Claude through the hooks Multi-Code passes at
+   * spawn, delivered to the `/alert` endpoint and routed here by instance; OpenCode
+   * through its shared service's event stream, with Multi-Code's TUI plugin naming
+   * the session the terminal shows (also through `/alert`). Per process, not per
+   * session, so it survives `/clear` and `/new`. `pid` is the pty child's, which
+   * Claude keys its own registry on.
    * `onHooksHealth(false, reason)` says alerts can't work for this process (the
    * hooks or plugin don't seem to run, or OpenCode's service can't be reached),
    * `true` that they work again (PRD Story 6).
@@ -250,12 +260,11 @@ export interface Backend {
    * this CLI's option box expects, or null when the choice can't be made
    * safely (out of range, or a box this backend can't drive reliably).
    *
-   * This MUST be per-backend: the CLIs do not agree. Claude's boxes take the
-   * option's number directly, while OpenCode's ignore digits entirely and
-   * navigate with arrows — and its two dialog kinds even use different arrows
-   * (permission is a horizontal row, question is a vertical list). Sending the
-   * wrong family of keys doesn't error, it silently does nothing or picks the
-   * wrong option, which for a permission dialog means granting the wrong thing.
+   * This MUST be per-backend: the CLIs do not agree, and the wrong family of keys
+   * doesn't error, it silently does nothing or picks the wrong option, which for a
+   * permission dialog means granting the wrong thing. Claude's boxes take the
+   * option's number directly. OpenCode 2's are answered through its API instead
+   * (HookAttention.answer), so it returns null for every choice.
    *
    * `tool` is the PromptDetail.tool the backend itself reported, so each
    * backend can dispatch on values it defined.
@@ -273,7 +282,8 @@ export interface Backend {
    * the PTY is a fixed 120 columns and the CLIs paint absolutely-positioned
    * cells, so there is nothing to reflow. Both CLIs already keep a structured
    * record of the conversation for their own use (Claude a session JSONL,
-   * OpenCode a sqlite db), and reading that gives text a phone can wrap.
+   * OpenCode 2 its `session_message` table), and reading that gives text a phone
+   * can wrap.
    *
    * Returns an empty array when the session can't be read, which the phone
    * shows as "no transcript" while leaving the terminal view available.
@@ -299,7 +309,8 @@ export interface Backend {
    * Both CLIs record per-turn usage and lifetime totals, and only the former
    * answers this question — the totals reach millions of tokens against a
    * 200k–1M window. Claude keeps it in the session JSONL's assistant records
-   * (`message.usage`), OpenCode in its sqlite `message` rows (`data.tokens`).
+   * (`message.usage`), OpenCode 2 in its `session_message` assistant rows
+   * (`tokens`).
    */
   readContextUsage(sessionId: string): ContextUsage | null;
 

@@ -3,31 +3,26 @@ import crypto from "crypto";
 import os from "os";
 import path from "path";
 import { execFileSync } from "child_process";
-import Database from "better-sqlite3";
 import type {
   Backend,
   BackendAvailability,
-  BuilderTurn,
   HookAttention,
   SessionDiscovery,
   SessionStart,
   SpawnConfig,
   SpawnOptions,
 } from "./types";
-import {
-  keystrokeForPermission,
-  keystrokeForQuestion,
-  PERMISSION_TOOL,
-  QUESTION_TOOL_LABEL,
-} from "./opencodePrompt";
-import { OpencodePluginAttention } from "./opencodeAttention";
-import type { TranscriptEntry } from "../../shared/remote-protocol";
-import type { ContextUsage } from "../../shared/types";
-import { resolvePath } from "./resolvePath";
+import { OpencodeAttention } from "./opencodeAttention";
 import { debugTrace } from "../debug-trace";
+import { OPENCODE_UPGRADE_COMMAND } from "../../shared/types";
 import { ALERT_FILE_ENV, INSTANCE_ENV, SPAWN_ENV, withUtf8Locale } from "./instance-env";
 import { opencodeCliConfig, opencodeCliConfigPath } from "./opencodePlugin";
-import { latestRootSession } from "./opencodeDb";
+import {
+  latestRootSession,
+  readOpencodeBuilderTurn,
+  readOpencodeContextUsage,
+  readOpencodeTranscript,
+} from "./opencodeDb";
 import { registrationPath } from "./opencodeService";
 import { cachedOpencodeShellEnv, opencodeShellEnv, warmOpencodeShellEnv } from "./opencodeShellEnv";
 
@@ -50,10 +45,6 @@ function searchPathEntries(): string[] {
 }
 
 const SEARCH_PATH = searchPathEntries().join(":");
-
-const OPENCODE_DB = path.join(HOME, ".local/share/opencode/opencode.db");
-// The user's own config, where a model's context limit is stated exactly. Read only.
-const OPENCODE_CONFIG = path.join(HOME, ".config/opencode/opencode.json");
 
 // Claude Code's IDE-integration port. OpenCode's TUI reads it too and connects to
 // that socket as its editor (`packages/tui/src/context/editor.ts:117`), so a
@@ -120,9 +111,8 @@ export function findOpencodeBinary(env: Record<string, string | undefined>): str
 // ---------------------------------------------------------------- version
 
 // Multi-Code drives OpenCode 2 only (decisions.md, 2026-10-16 "OpenCode support moves
-// to 2.x only"). The one command that upgrades a 1.x install, also named by the New
-// Instance dialog.
-export const OPENCODE_UPGRADE_COMMAND = "curl -fsSL https://opencode.ai/v2/install | bash";
+// to 2.x only"); a 1.x install is refused with the upgrade command.
+export { OPENCODE_UPGRADE_COMMAND };
 
 export interface OpencodeVersion {
   version: string;
@@ -336,460 +326,6 @@ export function buildOpencodeSpawn(
   return { command: "/bin/sh", args: ["-c", SERVICE_START_SCRIPT, binary, ...args], env, sessionId };
 }
 
-// Open a read-only sqlite handle. Throws on failure (caller decides how to handle).
-// `dbPath` is overridable so tests can point a reader at a scratch database;
-// production always uses the real OpenCode store.
-function openDb(dbPath: string = OPENCODE_DB): Database.Database {
-  return new Database(dbPath, { readonly: true, fileMustExist: true });
-}
-
-
-// Find the most recently created session whose `directory` matches `cwd`.
-// Returns null if not found or if the db is currently inaccessible (e.g.
-// not yet created on first opencode launch).
-//
-// Both the stored and the requested path are resolved before comparing, because
-// OpenCode records the path it resolved rather than the one it was given. On
-// macOS `/tmp` is a symlink to `/private/tmp`, so an instance whose cwd is
-// `/tmp/x` writes `/private/tmp/x` and a plain string compare never matches —
-// session discovery then silently times out and the instance gets no prompt
-// detection at all.
-// `dbPath` is overridable for tests, like everywhere else in this file.
-export function findLatestSessionForCwd(
-  cwd: string,
-  isClaimed?: (sessionId: string) => boolean,
-  dbPath?: string
-): string | null {
-  let db: Database.Database | null = null;
-  try {
-    db = dbPath ? openDb(dbPath) : openDb();
-    const target = resolvePath(cwd);
-    // Query both spellings so the common case still hits the index: `cwd` as
-    // given, and its resolved form (what OpenCode actually stored). Only when
-    // neither matches literally does this fall back to resolving candidates.
-    const rows = db
-      .prepare(
-        "SELECT id, directory FROM session WHERE directory IN (?, ?) " +
-          "ORDER BY time_created DESC LIMIT 8"
-      )
-      .all(cwd, target) as Array<{ id: string; directory: string }>;
-    for (const row of rows) {
-      if (!isClaimed || !isClaimed(row.id)) return row.id;
-    }
-    return null;
-  } catch {
-    return null;
-  } finally {
-    db?.close();
-  }
-}
-
-// The newest session for `cwd` made at or after `since` (ms, like OpenCode's own
-// timestamps), or null.
-export function findSessionCreatedSince(
-  cwd: string,
-  since: number,
-  dbPath?: string
-): string | null {
-  let db: Database.Database | null = null;
-  try {
-    db = dbPath ? openDb(dbPath) : openDb();
-    const row = db
-      .prepare(
-        "SELECT id FROM session WHERE directory IN (?, ?) AND time_created >= ? " +
-          "ORDER BY time_created DESC LIMIT 1"
-      )
-      .get(cwd, resolvePath(cwd), since) as { id: string } | undefined;
-    return row?.id ?? null;
-  } catch {
-    return null;
-  } finally {
-    db?.close();
-  }
-}
-
-class OpencodeSessionDiscovery implements SessionDiscovery {
-  private interval: ReturnType<typeof setInterval> | null = null;
-
-  constructor(
-    cwd: string,
-    onFound: (sessionId: string) => void,
-    isClaimed?: (sessionId: string) => boolean
-  ) {
-    // Poll until the session appears, for as long as the instance lives.
-    // No attempt cap, for the same reason as the Claude backend: session
-    // rows can appear long after spawn, and giving up silently kills every
-    // notification for the instance's lifetime. The process manager cancels
-    // this handle on exit/restart/removal, so an uncapped poll can't leak.
-    this.interval = setInterval(() => {
-      const sessionId = findLatestSessionForCwd(cwd, isClaimed);
-      if (!sessionId) return;
-      if (isClaimed && isClaimed(sessionId)) return;
-
-      this.cancel();
-      onFound(sessionId);
-    }, 1000);
-  }
-
-  cancel() {
-    if (this.interval) {
-      clearInterval(this.interval);
-      this.interval = null;
-    }
-  }
-}
-
-// The tool OpenCode asks a question with, as its transcript names it.
-const QUESTION_TOOL = "question";
-
-// A tool part's state while the tool runs, which is how the transcript marks a call
-// still in flight.
-const IN_FLIGHT_STATUS = "running";
-
-// One-line description of an OpenCode tool call. Its tool names are lowercase
-// and its inputs use different keys than Claude's, so this can't be shared.
-function summarizeOpencodeTool(
-  tool: string,
-  input: Record<string, unknown> | undefined
-): string {
-  if (!input) return "";
-  const str = (value: unknown): string | undefined =>
-    typeof value === "string" && value.length > 0 ? value : undefined;
-  switch (tool) {
-    case "bash":
-      return str(input.command) ?? str(input.description) ?? "";
-    case "read":
-      return str(input.filePath) ?? "";
-    case "write":
-    case "edit":
-    case "apply_patch":
-      return str(input.filePath) ?? str(input.path) ?? "";
-    case "grep":
-      return str(input.pattern) ?? "";
-    case "glob":
-      return str(input.pattern) ?? "";
-    case "webfetch":
-      return str(input.url) ?? "";
-    case "task":
-      return str(input.description) ?? str(input.prompt) ?? "";
-    case QUESTION_TOOL: {
-      // Show what was asked. Without this the transcript renders a bare
-      // "question" line, which is the least useful entry on the screen given
-      // it's usually the one the agent is blocked on.
-      const questions = input.questions;
-      if (!Array.isArray(questions) || questions.length === 0) return "";
-      const first = questions[0] as Record<string, unknown>;
-      return str(first.question) ?? str(first.header) ?? "";
-    }
-    default:
-      return str(input.description) ?? str(input.command) ?? "";
-  }
-}
-
-// A message row's role; "assistant" when it can't be read.
-function messageRole(data: string): string {
-  try {
-    const message = JSON.parse(data) as { role?: unknown };
-    return typeof message.role === "string" ? message.role : "assistant";
-  } catch {
-    return "assistant";
-  }
-}
-
-// One part as a transcript entry, or null for bookkeeping (step-start /
-// step-finish / reasoning / patch / file / compaction). `role` is only read for a
-// text part, so a caller can defer parsing the message.
-function partEntry(part: Record<string, unknown>, role: () => string): TranscriptEntry | null {
-  if (part.type === "text") {
-    const text = typeof part.text === "string" ? part.text.trim() : "";
-    if (!text) return null;
-    return { kind: role() === "user" ? "user" : "assistant", text };
-  }
-  if (part.type === "tool" && typeof part.tool === "string") {
-    const state = part.state as Record<string, unknown> | undefined;
-    const input = state?.input as Record<string, unknown> | undefined;
-    return {
-      kind: "tool",
-      tool: part.tool,
-      text: summarizeOpencodeTool(part.tool, input),
-      pending: state?.status === IN_FLIGHT_STATUS ? true : undefined,
-    };
-  }
-  return null;
-}
-
-// Read the tail of an OpenCode session as reflowable lines.
-//
-// The `part` table holds the conversation broken into typed pieces, which maps
-// onto transcript entries directly. Rows are fetched newest-first (that's what
-// the index supports) and reversed, so the phone gets chronological order.
-export function readOpencodeTranscript(
-  sessionId: string,
-  limit: number
-): TranscriptEntry[] {
-  let db: Database.Database | null = null;
-  try {
-    db = openDb();
-    // Over-fetch: many rows are step markers or reasoning that get dropped, so
-    // fetching exactly `limit` would usually return fewer usable entries.
-    const rows = db
-      .prepare(
-        "SELECT p.data AS data, m.data AS message FROM part p " +
-          "JOIN message m ON p.message_id = m.id " +
-          "WHERE p.session_id = ? ORDER BY p.time_created DESC LIMIT ?"
-      )
-      .all(sessionId, limit * 6) as Array<{ data: string; message: string }>;
-
-    const entries: TranscriptEntry[] = [];
-    for (const row of rows) {
-      if (entries.length >= limit) break;
-      let part: Record<string, unknown>;
-      try {
-        part = JSON.parse(row.data);
-      } catch {
-        continue;
-      }
-
-      const entry = partEntry(part, () => messageRole(row.message));
-      if (entry) entries.push(entry);
-    }
-
-    return entries.reverse();
-  } catch {
-    return [];
-  } finally {
-    db?.close();
-  }
-}
-
-// For the language rule only, as on the Claude side: a bare "B" as the latest
-// message falls back to these, newest first.
-const EARLIER_MESSAGES = 3;
-
-// How many of a session's newest messages the builder-turn reader looks at. Each
-// step of an agent's turn is a message of its own, so a long turn runs to a few
-// hundred; past this the turn is read without the message that started it.
-export const BUILDER_TURN_SCAN_MESSAGES = 300;
-
-// One message of a session as the builder-turn reader takes it, newest first. The
-// parts are fetched only when asked for: an older assistant message's parts (its
-// tool output included) are never needed.
-export interface OpencodeTurnMessage {
-  role: string;
-  parts(): Record<string, unknown>[];
-}
-
-// What the builder typed in a user message: its text parts, minus the ones
-// OpenCode wrote itself. Those are marked `synthetic` ("<system-reminder>Note: The
-// user opened the file …", "Continue if you have next steps, or stop and ask …"
-// after a compaction); `ignored` is honoured the same way. Null when nothing is
-// left: a message of only synthetic text, a file or a compaction marker.
-export function opencodeTypedText(parts: Record<string, unknown>[]): string | null {
-  const text = parts
-    .filter(
-      (part) =>
-        part.type === "text" &&
-        typeof part.text === "string" &&
-        part.synthetic !== true &&
-        part.ignored !== true
-    )
-    .map((part) => part.text as string)
-    .join("\n")
-    .trim();
-  return text || null;
-}
-
-export function opencodeBuilderTurn(newestFirst: OpencodeTurnMessage[]): BuilderTurn {
-  const typed: { index: number; text: string }[] = [];
-  for (let i = 0; i < newestFirst.length && typed.length <= EARLIER_MESSAGES; i++) {
-    const message = newestFirst[i];
-    if (message.role !== "user") continue;
-    const text = opencodeTypedText(message.parts());
-    if (text !== null) typed.push({ index: i, text });
-  }
-
-  const [latest, ...earlier] = typed;
-  const since = newestFirst.slice(0, latest ? latest.index : newestFirst.length).reverse();
-  const turn: TranscriptEntry[] = [];
-  for (const message of since) {
-    for (const part of message.parts()) {
-      const entry = partEntry(part, () => message.role);
-      if (entry) turn.push(entry);
-    }
-  }
-  return {
-    builderLatestMessage: latest?.text,
-    builderEarlierMessages: earlier.reverse().map((message) => message.text),
-    turn,
-  };
-}
-
-// The builder's turn from OpenCode's database. Null when the session can't be read.
-// `dbPath` is overridable for tests, like everywhere else in this file.
-export function readOpencodeBuilderTurn(sessionId: string, dbPath?: string): BuilderTurn | null {
-  let db: Database.Database | null = null;
-  try {
-    db = dbPath ? openDb(dbPath) : openDb();
-    const rows = db
-      .prepare(
-        "SELECT id, data FROM message WHERE session_id = ? " +
-          "ORDER BY time_created DESC, id DESC LIMIT ?"
-      )
-      .all(sessionId, BUILDER_TURN_SCAN_MESSAGES) as Array<{ id: string; data: string }>;
-    if (rows.length === 0) return null;
-    const partsOf = db.prepare("SELECT data FROM part WHERE message_id = ? ORDER BY id");
-    const messages: OpencodeTurnMessage[] = rows.map((row) => {
-      let cached: Record<string, unknown>[] | null = null;
-      return {
-        role: messageRole(row.data),
-        parts: () => {
-          cached ??= (partsOf.all(row.id) as Array<{ data: string }>).flatMap((part) => {
-            try {
-              const parsed: unknown = JSON.parse(part.data);
-              return typeof parsed === "object" && parsed !== null
-                ? [parsed as Record<string, unknown>]
-                : [];
-            } catch {
-              return [];
-            }
-          });
-          return cached;
-        },
-      };
-    });
-    return opencodeBuilderTurn(messages);
-  } catch {
-    return null;
-  } finally {
-    db?.close();
-  }
-}
-
-// How full the window is, from the newest assistant message that reported usage.
-//
-// Summed from the input side only: `tokens.input` plus `tokens.cache.read` and
-// `tokens.cache.write`. The JSON also carries a pre-summed `tokens.total`, which
-// is deliberately not used because it includes `output` — output isn't occupying
-// the window on the next turn, and including it would make this number
-// incomparable with the claude backend's.
-//
-// Do NOT use the `session` table's `tokens_*` columns for this. Those are lifetime
-// totals: a real session was observed at `tokens_cache_read` of 17.1M against a
-// 200k–1M window, which would read as "impossibly full" every time.
-//
-// `dbPath` is overridable for tests, like everywhere else in this file.
-// This model's context window, from the user's opencode config.
-//
-// Exact rather than inferred, unlike the claude side: the config states
-// `provider.<providerID>.models.<modelID>.limit.context` outright (observed 1000000
-// for the Bedrock 1M models, 200000 for Haiku).
-//
-// Returns null for a model the config doesn't mention, which is the common case —
-// the config only carries models the user has overridden, while OpenCode itself
-// knows the rest from its bundled models.dev data, which we can't read. A bare token
-// count is the right answer there.
-export function readOpencodeContextWindow(
-  model: string | undefined,
-  providerId: string | undefined,
-  configPath: string = OPENCODE_CONFIG
-): number | null {
-  if (!model) return null;
-
-  let providers: Record<string, unknown>;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    providers = (parsed?.provider ?? {}) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-
-  // The transcript's providerID first, then any provider — the same model id under
-  // two providers would carry the same limit, and a session whose provider wasn't
-  // recorded still deserves an answer.
-  const order = providerId
-    ? [providerId, ...Object.keys(providers).filter((k) => k !== providerId)]
-    : Object.keys(providers);
-
-  for (const key of order) {
-    const provider = providers[key] as Record<string, unknown> | undefined;
-    const models = provider?.models as Record<string, unknown> | undefined;
-    const entry = models?.[model] as Record<string, unknown> | undefined;
-    const limit = entry?.limit as Record<string, unknown> | undefined;
-    const context = limit?.context;
-    if (typeof context === "number" && Number.isFinite(context) && context > 0) {
-      return context;
-    }
-  }
-  return null;
-}
-
-export function readOpencodeContextUsage(
-  sessionId: string,
-  dbPath?: string,
-  configPath: string = OPENCODE_CONFIG
-): ContextUsage | null {
-  let db: Database.Database | null = null;
-  try {
-    db = dbPath ? openDb(dbPath) : openDb();
-    // Newest first, then pick. The most recent row is frequently a user message
-    // carrying no usage at all, so `LIMIT 1` would report nothing for a session
-    // that has perfectly good numbers one row back.
-    const rows = db
-      .prepare(
-        "SELECT data, time_updated FROM message WHERE session_id = ? " +
-          "ORDER BY time_updated DESC LIMIT 40"
-      )
-      .all(sessionId) as Array<{ data: string; time_updated: number }>;
-
-    for (const row of rows) {
-      let message: Record<string, unknown>;
-      try {
-        message = JSON.parse(row.data);
-      } catch {
-        continue;
-      }
-      if (message.role !== "assistant") continue;
-
-      const tokens = message.tokens as Record<string, unknown> | undefined;
-      if (!tokens) continue;
-      const cache = tokens.cache as Record<string, unknown> | undefined;
-
-      const inputTokens =
-        finiteNumber(tokens.input) +
-        finiteNumber(cache?.read) +
-        finiteNumber(cache?.write);
-      // All zeros says nothing; keep walking back to a turn that does.
-      if (inputTokens <= 0) continue;
-
-      const model =
-        typeof message.modelID === "string" ? message.modelID : undefined;
-      return {
-        inputTokens,
-        updatedAt: finiteNumber(row.time_updated),
-        model,
-        contextWindow:
-          readOpencodeContextWindow(
-            model,
-            typeof message.providerID === "string"
-              ? message.providerID
-              : undefined,
-            configPath
-          ) ?? undefined,
-      };
-    }
-
-    return null;
-  } catch {
-    return null;
-  } finally {
-    db?.close();
-  }
-}
-
-function finiteNumber(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
 export const opencodeBackend: Backend = {
   name: "opencode",
   keepsSecretaryEvents: true,
@@ -804,18 +340,28 @@ export const opencodeBackend: Backend = {
     return buildOpencodeSpawn(cwd, opts, session);
   },
 
-  discoverSessionId(cwd, onFound, isClaimed): SessionDiscovery {
-    return new OpencodeSessionDiscovery(cwd, onFound, isClaimed);
+  // The login shell takes about 1.4 s; read now, the first start finds it cached.
+  warm() {
+    void warmOpencodeShellEnv();
   },
 
-  // From Multi-Code's plugin, which every OpenCode spawn loads (opencodePlugin.ts).
-  // Per process like Claude's, and `pid` is unused: the plugin's deliveries already
-  // carry the instance and spawn they belong to.
-  createHookAttention(_pid, onActivity, onHooksHealth): HookAttention {
-    return new OpencodePluginAttention(onActivity, undefined, onHooksHealth);
+  // Never needed: every spawn names its session up front (`--session`, the contact's
+  // own id or one minted here), so process-manager skips discovery. A handle that
+  // does nothing, for the interface.
+  discoverSessionId(): SessionDiscovery {
+    return { cancel() {} };
   },
 
-  readTranscript(sessionId, limit): TranscriptEntry[] {
+  // Finished and Needs-you from the shared service's event stream, the shown session
+  // from Multi-Code's TUI plugin (opencodeAttention.ts). Per process like Claude's;
+  // `pid` is unused: the plugin's deliveries carry the instance and spawn they belong
+  // to, and the service's events name their sessions.
+  createHookAttention(_pid, onActivity, onHooksHealth, context): HookAttention {
+    return new OpencodeAttention(onActivity, onHooksHealth, context);
+  },
+
+  // OpenCode 2's own tables, read-only (opencodeDb.ts).
+  readTranscript(sessionId, limit) {
     return readOpencodeTranscript(sessionId, limit);
   },
 
@@ -823,45 +369,25 @@ export const opencodeBackend: Backend = {
     return readOpencodeBuilderTurn(sessionId);
   },
 
-  readContextUsage(sessionId): ContextUsage | null {
+  readContextUsage(sessionId) {
     return readOpencodeContextUsage(sessionId);
   },
 
-  // The `session` table is a durable record, not a list of live processes, so the
-  // query discovery already uses answers this too — just without a claim filter,
-  // since here we want the directory's newest session whether or not another
-  // instance owns it.
+  // The directory's newest root session, whoever holds it: a read path, and what
+  // `sessionStartFor` checks against the claims before a "latest" spawn opens it.
   findLatestSessionId(cwd: string): string | null {
-    return findLatestSessionForCwd(cwd);
+    return latestRootSession(cwd);
   },
 
-  // OpenCode keeps no per-pid registry, so `pid` is unused and the newest session
-  // for the directory is the best available answer. Weaker than claude's, and the
-  // caller's claim check is what stops one instance adopting another's session in
-  // a directory with two of them.
-  //
-  // Only sessions made since this process started: a contact resumed by id is
-  // often in an older session than the directory's newest, and that newest one is
-  // somebody else's. A session this process makes itself (`/new`) is newer than
-  // its start. The session it opened is discovery's to find, not this.
-  findLiveSessionId(cwd: string, _pid: number, startedAt: number): string | null {
-    return findSessionCreatedSince(cwd, startedAt);
+  // The terminal reports the session it shows itself (the TUI plugin's route,
+  // `AttentionContext.onSessionShown`), so there is nothing to poll for.
+  findLiveSessionId(): string | null {
+    return null;
   },
 
-  keystrokeForChoice(tool, index, optionCount): string | null {
-    // The dialogs navigate on different axes, verified on a live TUI: permission
-    // is a horizontal row (left/right), a single-select question is a vertical
-    // list (up/down). Digits do nothing in either.
-    if (tool === PERMISSION_TOOL) {
-      return keystrokeForPermission(index, optionCount);
-    }
-    if (tool === QUESTION_TOOL_LABEL) {
-      return keystrokeForQuestion(index, optionCount);
-    }
-    // Multi-select and unknown dialogs: decline rather than fire keystrokes at a
-    // layout we haven't confirmed. For multi-select specifically, one tap can't
-    // express the toggle-then-confirm flow, and half-answering would leave the
-    // agent blocked while the phone showed the prompt as handled.
+  // OpenCode 2's dialogs are answered through its API by request id
+  // (HookAttention.answer, opencodeAnswer.ts), never by keystrokes.
+  keystrokeForChoice(): string | null {
     return null;
   },
 
@@ -884,8 +410,4 @@ export function opencodeAvailability(): BackendAvailability {
   const version = opencodeVersion(binary, env);
   if (version && version.major < 2) return { ok: false, reason: "outdated", version: version.version };
   return { ok: true };
-}
-
-export function isOpencodeAvailable(): boolean {
-  return findOpencodeBinary(opencodeBaseEnv(cachedOpencodeShellEnv())) !== null;
 }

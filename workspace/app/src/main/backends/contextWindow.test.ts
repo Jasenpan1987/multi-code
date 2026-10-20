@@ -1,4 +1,5 @@
-// Resolving how large a session's context window is, on both backends.
+// Resolving how large a Claude session's context window is. OpenCode 2's resolution
+// (its config, then its cached models.dev catalog) is tested in opencodeDb.test.ts.
 //
 // The rule the whole feature rests on: **return null rather than guess.** Neither CLI
 // records the window size in its transcript, so both of these read user config that
@@ -12,7 +13,6 @@ import os from "os";
 import path from "path";
 
 const { readClaudeContextWindow } = await import("./claude");
-const { readOpencodeContextWindow } = await import("./opencode");
 
 let dir = "";
 
@@ -104,109 +104,5 @@ describe("claude: readClaudeContextWindow", () => {
       env: { ANTHROPIC_DEFAULT_OPUS_MODEL: "" },
     });
     expect(readClaudeContextWindow("claude-opus-5", file)).toBe(null);
-  });
-});
-
-// ---------------------------------------------------------------- opencode
-
-describe("opencode: readOpencodeContextWindow", () => {
-  // The real shape on this machine, 2026-09-15.
-  const config = {
-    provider: {
-      "amazon-bedrock": {
-        models: {
-          "au.anthropic.claude-opus-4-8": {
-            limit: { context: 1_000_000, output: 128_000 },
-          },
-          "au.anthropic.claude-haiku-4-5-20251001-v1:0": {
-            limit: { context: 200_000, output: 64_000 },
-          },
-        },
-      },
-    },
-  };
-
-  it("reads the exact limit for a configured model", () => {
-    const file = writeJson("opencode.json", config);
-    expect(
-      readOpencodeContextWindow(
-        "au.anthropic.claude-opus-4-8",
-        "amazon-bedrock",
-        file
-      )
-    ).toBe(1_000_000);
-    expect(
-      readOpencodeContextWindow(
-        "au.anthropic.claude-haiku-4-5-20251001-v1:0",
-        "amazon-bedrock",
-        file
-      )
-    ).toBe(200_000);
-  });
-
-  it("finds the model without knowing its provider", () => {
-    const file = writeJson("opencode.json", config);
-    expect(
-      readOpencodeContextWindow("au.anthropic.claude-opus-4-8", undefined, file)
-    ).toBe(1_000_000);
-  });
-
-  it("still finds the model when the recorded provider is wrong", () => {
-    const file = writeJson("opencode.json", config);
-    expect(
-      readOpencodeContextWindow(
-        "au.anthropic.claude-opus-4-8",
-        "some-other-provider",
-        file
-      )
-    ).toBe(1_000_000);
-  });
-
-  // The common case: the config only carries models the user overrode, while
-  // OpenCode knows the rest from bundled data we can't read. Observed on this
-  // machine, where a live session was running `gpt-5.6-sol` with no config entry.
-  it("returns null for a model the config doesn't mention", () => {
-    const file = writeJson("opencode.json", config);
-    expect(readOpencodeContextWindow("gpt-5.6-sol", "openai", file)).toBe(null);
-  });
-
-  it("returns null for a model entry with no limit", () => {
-    const file = writeJson("opencode.json", {
-      provider: { p: { models: { m: {} } } },
-    });
-    expect(readOpencodeContextWindow("m", "p", file)).toBe(null);
-  });
-
-  it("returns null for a nonsensical limit rather than dividing by it", () => {
-    const file = writeJson("opencode.json", {
-      provider: {
-        p: {
-          models: {
-            zero: { limit: { context: 0 } },
-            text: { limit: { context: "1m" } },
-            negative: { limit: { context: -1 } },
-          },
-        },
-      },
-    });
-    expect(readOpencodeContextWindow("zero", "p", file)).toBe(null);
-    expect(readOpencodeContextWindow("text", "p", file)).toBe(null);
-    expect(readOpencodeContextWindow("negative", "p", file)).toBe(null);
-  });
-
-  it("returns null for a missing or unparseable config", () => {
-    expect(
-      readOpencodeContextWindow("m", "p", path.join(dir, "nope.json"))
-    ).toBe(null);
-    const broken = path.join(dir, "broken.json");
-    fs.writeFileSync(broken, "not json at all");
-    expect(readOpencodeContextWindow("m", "p", broken)).toBe(null);
-  });
-
-  it("returns null when the model is unknown", () => {
-    const file = writeJson("opencode.json", config);
-    expect(readOpencodeContextWindow(undefined, "amazon-bedrock", file)).toBe(
-      null
-    );
   });
 });

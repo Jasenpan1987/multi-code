@@ -4,6 +4,21 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-10-20 — OpenCode gets the builder's login-shell environment
+
+**Decision:** Multi-Code reads the builder's login-shell environment once per run (`$SHELL -l -i`, about 1.4 s, cached) and gives it to every OpenCode terminal it starts. When no shared OpenCode service is running, Multi-Code starts it first (`opencode service start`) with that environment minus Multi-Code's own variables (`MULTICODE_*`, `OPENCODE_CLI_CONFIG_CONTENT`), then starts the terminal. Claude's spawns are unchanged.
+
+**Why:** OpenCode 2's shared service keeps the environment of whoever starts it, for every client. Multi-Code opened from the Dock has a bare PATH without nvm, so a service it started couldn't run the builder's `npx`-launched MCP server (`documonster`) in any OpenCode window, VS Code and terminals included, until the service restarted. A service started this way matches one started from a terminal; VS Code resolves the shell environment the same way. The spike also showed that a service started by a Multi-Code terminal carries `MULTICODE_*` into the shells of every client's subagents.
+
+**Alternatives considered:** keep Multi-Code's own environment (no shell rc run, but the MCP failure above).
+
+**Consequences:** if the service dies while a Multi-Code terminal is attached, that terminal restarts it within about 5.5 s with its own environment (OpenCode's behaviour), which is the login-shell one plus Multi-Code's variables. Those are inert outside Multi-Code. The agent's shell in a Multi-Code contact's root session sees `MULTICODE_*`, as a Claude contact's Bash does.
+
+**Source:** builder, 2026-10-20, in session; docs/timeline/2026-10-20_opencode-v2-spike.md, G-604/G-605
+**Affects:** `backends/opencode.ts` spawn, docs/specs/opencode-v2/prd.md Stories 1 and 10
+
+---
+
 ## 2026-10-20 — A stopped OpenCode contact stays silent
 
 **Decision:** When an OpenCode contact is stopped while its turn still runs in the shared service, Multi-Code raises nothing for that session: no Finished, no Needs-you, no red badge, nothing on the phone or to the secretary. The next start reopens the session, with the result in it.

@@ -38,25 +38,6 @@ export const OPENCODE_PLUGIN_ENTRY = "tui.js";
 export const OPENCODE_INIT_EVENT = "multicode.init";
 export const OPENCODE_ROUTE_EVENT = "multicode.route";
 
-// 1.x leftover, kept only because the 1.x opencodeAttention.test.ts still imports it
-// until T-604 rewrites that test. Nothing forwards these any more; T-610 deletes it.
-export const OPENCODE_PLUGIN_EVENTS = [
-  "session.status",
-  "session.created",
-  "session.updated",
-  "session.error",
-  "permission.asked",
-  "permission.replied",
-  "permission.v2.asked",
-  "permission.v2.replied",
-  "question.asked",
-  "question.replied",
-  "question.rejected",
-  "question.v2.asked",
-  "question.v2.replied",
-  "question.v2.rejected",
-] as const;
-
 // Bounds on what the plugin queues and how long one post may take. Posts are
 // localhost and answered with a 204 before Multi-Code does anything, so these only
 // matter when Multi-Code is wedged: the queue drops instead of growing, and a hung

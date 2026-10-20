@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
-import type { BackendAvailability, BackendName } from "../../shared/types";
+import {
+  OPENCODE_UPGRADE_COMMAND,
+  type BackendAvailability,
+  type BackendName,
+} from "../../shared/types";
 
 const LAST_BACKEND_KEY = "multicode.lastBackend";
 
@@ -140,7 +144,7 @@ export function NewInstanceDialog({
             <div className="dialog-warning">
               OpenCode {opencode.version} found. Multi-Code needs
               OpenCode 2: run{" "}
-              <code>curl -fsSL https://opencode.ai/v2/install | bash</code>
+              <code>{OPENCODE_UPGRADE_COMMAND}</code>
             </div>
           )}
         </div>

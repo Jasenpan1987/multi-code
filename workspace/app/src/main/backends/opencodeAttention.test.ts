@@ -773,8 +773,28 @@ describe("the session the terminal shows", () => {
     const h = await live({ sessionId: "ses_a" });
     for (const id of ["ses_a", "ses_a", undefined, "ses_b", undefined, "ses_b", "ses_a"]) {
       h.attention.handle(route(id));
+      await flush();
     }
     expect(h.shown).toEqual(["ses_a", "ses_b", "ses_a"]);
+  });
+
+  it("only the route it settles on is reported when they come faster than a lookup", async () => {
+    const h = await live({ sessionId: "ses_a" });
+    for (const id of ["ses_a", "ses_b", "ses_a"]) h.attention.handle(route(id));
+    await flush();
+    expect(h.shown).toEqual(["ses_a"]);
+  });
+
+  it("a subagent's session the terminal shows is not taken as the contact's own", async () => {
+    // Its next start would otherwise reopen the middle of someone else's turn.
+    const h = await live({ sessionId: "ses_root" });
+    await h.publish(created("ses_child", "ses_root"));
+    h.attention.handle(route("ses_child"));
+    await flush();
+    expect(h.shown).toEqual([]);
+    h.attention.handle(route("ses_root"));
+    await flush();
+    expect(h.shown).toEqual(["ses_root"]);
   });
 
   it("a session shown for the first time is read: a turn under way finishes, a dialog open is raised", async () => {

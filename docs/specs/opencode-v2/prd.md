@@ -1,6 +1,6 @@
 # PRD: OpenCode 2
 
-**Version:** 1.0
+**Version:** 1.1
 **Last Updated:** 2026-10-20
 **Status:** draft
 **Owner:** Jasen
@@ -47,6 +47,7 @@ Multi-Code's OpenCode backend moves from OpenCode 1.x to 2.x, and 1.x support is
 - [ ] The TUI shows no tab bar inside Multi-Code; Ctrl+Z does not freeze the terminal
 - [ ] The user's own OpenCode settings apply inside Multi-Code as in a terminal: their config, providers, server plugins, and their own TUI plugins
 - [ ] OpenCode installed by the official script, by npm or by Homebrew is found when Multi-Code is launched from the Dock
+- [ ] An OpenCode terminal gets the builder's login-shell environment (PATH and the rest, as a new terminal tab would), so the agent's shell commands and `npx`-launched MCP servers find their tools when Multi-Code was opened from the Dock (builder, 2026-10-20)
 
 ---
 
@@ -76,7 +77,7 @@ Multi-Code's OpenCode backend moves from OpenCode 1.x to 2.x, and 1.x support is
 - [ ] A turn the service ends because it is restarting or being replaced raises no event; when the new service resumes it, the resumed turn's own end raises one
 - [ ] A permission dialog or question raises one Needs-you event within 1s, whether it comes from the root session or a subagent of it
 - [ ] A dialog answered anywhere (this terminal, another OpenCode client, the phone, the secretary) clears the Needs-you state; so does the turn ending without an answer
-- [ ] A subagent finishing never raises an event on its own
+- [ ] A subagent finishing never raises an event on its own; a root that carries on after a subagent's dialog was rejected and then finishes raises one Finished (spike finding 3)
 - [ ] Events of sessions that belong to no running Multi-Code contact (VS Code, a plain terminal, a stopped contact) raise nothing in Multi-Code
 - [ ] After the connection to the service drops and comes back, or the service is replaced, Multi-Code's view of each contact (busy, blocked on which dialog) matches the service again within 5s, without a duplicate chime for a dialog it already reported
 - [ ] A dialog left unanswered until OpenCode evicts the location (60 minutes) ends the turn; that end raises a Finished event. ⚠️ Assumption: the builder wants to know the turn died, as with an error
@@ -181,9 +182,9 @@ Multi-Code's OpenCode backend moves from OpenCode 1.x to 2.x, and 1.x support is
 **Acceptance Criteria:**
 - [ ] Multi-Code writes no file the user owns: not `~/.config/opencode/*`, not a project's `.opencode/`, not OpenCode's database or state files
 - [ ] Multi-Code's TUI plugin loads only in the terminals Multi-Code starts, and only reports; it never changes a session, a prompt or a dialog
-- [ ] A shared service that Multi-Code's terminal happened to start behaves for plain `opencode` exactly as one started from a terminal
+- [ ] When no shared service is running, Multi-Code starts it before the terminal, with the builder's login-shell environment and none of Multi-Code's own variables, so it behaves for plain `opencode` and VS Code exactly as one started from a terminal (builder, 2026-10-20)
 - [ ] The service's password is never logged, written to disk by Multi-Code, sent to the renderer or sent to a phone
-- [ ] Multi-Code never restarts, replaces or stops the shared service on its own
+- [ ] Multi-Code never restarts, replaces or stops the shared service; it starts one only when none is running and an OpenCode contact is starting
 
 ---
 
@@ -242,3 +243,4 @@ Tracked in docs/specs/opencode-v2/gaps.md. None blocks the design; G-601 to G-60
 ## Changelog
 
 - v1.0 (2026-10-20): First version.
+- v1.1 (2026-10-20): Story 1 and Story 10 gain the login-shell environment and Multi-Code starting a missing service itself (builder decision after the T-601 spike found the shared service keeps its starter's environment). Story 3's rules refined by the spike: a root that carries on after a subagent's Reject and succeeds chimes Finished.

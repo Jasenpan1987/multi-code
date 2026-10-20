@@ -703,6 +703,14 @@ export class ProcessManager {
 
   loadSavedContacts(): InstanceInfo[] {
     const saved = this.migrateManagerToTop(loadContacts());
+    // Whatever a backend's first spawn needs, prepared before anyone presses start.
+    for (const name of new Set(saved.map((c) => c.backend ?? DEFAULT_BACKEND))) {
+      try {
+        getBackend(name).warm?.();
+      } catch {
+        // Only a head start: the spawn prepares it itself if this failed.
+      }
+    }
     for (const contact of saved) {
       if (!this.instances.has(contact.id)) {
         this.instances.set(contact.id, {
@@ -904,7 +912,31 @@ export class ProcessManager {
       args,
       env,
       sessionId: openedSessionId,
+      refusal,
     } = backend.spawn(cwd, opts ?? undefined, session);
+
+    // The backend won't run this CLI (OpenCode 1.x): nothing is spawned, and the
+    // contact stays stopped with the reason on its page. It keeps the session it had,
+    // so upgrading and starting again picks the conversation up where it was.
+    if (refusal) {
+      debugTrace(`[spawn] ${id.slice(0, 8)} refused: ${refusal}`);
+      return {
+        id,
+        cwd,
+        alias,
+        status: "stopped",
+        startedAt: 0,
+        ptyProcess: null,
+        backend: backendName,
+        discovery: null,
+        hookAttention: null,
+        lastPtyByteAt: 0,
+        isManager,
+        runState: new RunStateTracker(),
+        ownSessionId: session.kind === "own" ? session.sessionId : undefined,
+        startError: refusal,
+      };
+    }
 
     const spawnId = crypto.randomUUID();
     const ptyProcess = pty.spawn(command, args, {
@@ -1450,8 +1482,7 @@ export class ProcessManager {
 
   // Instances a quit would cut off mid-task: a turn still running, or a dialog
   // waiting on the user. Idle ones are left out: they lose nothing, since the next
-  // start picks the session up with --continue, and counting them would mean asking
-  // on every quit.
+  // start reopens their session, and counting them would mean asking on every quit.
   unfinishedInstances(): { name: string; state: "busy" | "blocked" }[] {
     const unfinished: { name: string; state: "busy" | "blocked" }[] = [];
     for (const instance of this.instances.values()) {

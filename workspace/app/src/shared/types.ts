@@ -167,6 +167,10 @@ export type BackendAvailability =
   | { ok: false; reason: "missing" }
   | { ok: false; reason: "outdated"; version: string };
 
+// The one command that upgrades an OpenCode 1.x install to 2.x (it replaces
+// `~/.opencode/bin/opencode`). Named by the New Instance dialog and by a refused start.
+export const OPENCODE_UPGRADE_COMMAND = "curl -fsSL https://opencode.ai/v2/install | bash";
+
 // One tool call made by the manager agent, as shown in the toolbox's Manager
 // section. Refusals are entries too — `status: "error"` with the reason in
 // `result` — because a dispatch that was blocked is the thing the user most needs

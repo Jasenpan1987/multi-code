@@ -143,33 +143,3 @@ export function formToolCall(form: FormInfo): PromptToolCall {
   }));
   return { toolName: "question", toolInput: { questions }, dialog };
 }
-
-// ── OpenCode 1.x keystrokes ──────────────────────────────────────────────────
-//
-// Still named by backends/opencode.ts `keystrokeForChoice`, which T-610 deletes along
-// with these: OpenCode 2's dialogs are answered through the API above, and its keys
-// differ anyway (spike, G-603). Measured on 1.18.35 (T-411): a permission is a
-// horizontal row navigated with Right, a single-select question a vertical list
-// navigated with Down; digits do nothing in either.
-
-// The 1.x dialog's options, left to right. Not OpenCode 2's labels.
-const PERMISSION_LABELS = ["Allow once", "Allow always", "Reject"] as const;
-
-// Right arrows from the first option to `index`, then Enter. 1.x's "Allow always"
-// opened a confirmation screen, hence its second Enter. Null when the index is out
-// of range, so the caller declines rather than confirm whatever is highlighted.
-export function keystrokeForPermission(index: number, optionCount: number): string | null {
-  if (!Number.isInteger(index)) return null;
-  if (index < 0 || index >= optionCount) return null;
-  const confirm = PERMISSION_LABELS[index] === "Allow always" ? "\r" : "";
-  return "\x1b[C".repeat(index) + "\r" + confirm;
-}
-
-// Down arrows from the first option to `index`, then Enter. Single-select only: a 1.x
-// multi-select box toggles on Enter and submits from a second stage, so it is
-// reported under MULTI_QUESTION_TOOL_LABEL and gets no keys at all.
-export function keystrokeForQuestion(index: number, optionCount: number): string | null {
-  if (!Number.isInteger(index)) return null;
-  if (index < 0 || index >= optionCount) return null;
-  return "\x1b[B".repeat(index) + "\r";
-}

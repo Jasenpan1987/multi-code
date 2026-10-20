@@ -10,8 +10,6 @@ import {
   formDetail,
   formToolCall,
   isQuestionForm,
-  keystrokeForPermission,
-  keystrokeForQuestion,
   MULTI_QUESTION_TOOL_LABEL,
   PERMISSION_TOOL,
   permissionDetail,
@@ -204,31 +202,12 @@ describe("formToolCall", () => {
   });
 });
 
-// OpenCode 1.x's keystrokes, still behind opencodeBackend.keystrokeForChoice until
-// T-610 removes both. Measured on 1.18.35 (T-411).
-describe("1.x keystrokes", () => {
-  it("permission: one right arrow per step, Enter, and a second Enter on Allow always", () => {
-    expect(keystrokeForPermission(0, 3)).toBe("\r");
-    expect(keystrokeForPermission(1, 3)).toBe("\x1b[C\r\r");
-    expect(keystrokeForPermission(2, 3)).toBe("\x1b[C\x1b[C\r");
-  });
-
-  it("question: down arrows, not right arrows", () => {
-    expect(keystrokeForQuestion(0, 4)).toBe("\r");
-    expect(keystrokeForQuestion(3, 4)).toBe("\x1b[B\x1b[B\x1b[B\r");
-  });
-
-  it("declines out-of-range and non-integer indices", () => {
-    for (const [index, count] of [[3, 3], [-1, 3], [1.5, 3], [0, 0]]) {
-      expect(keystrokeForPermission(index, count)).toBeNull();
-      expect(keystrokeForQuestion(index, count)).toBeNull();
-    }
-  });
-
-  it("keystrokeForChoice routes each dialog to its own axis and refuses the rest", () => {
-    expect(opencodeBackend.keystrokeForChoice(PERMISSION_TOOL, 2, 3)).toBe("\x1b[C\x1b[C\r");
-    expect(opencodeBackend.keystrokeForChoice(QUESTION_TOOL_LABEL, 1, 3)).toBe("\x1b[B\r");
+// OpenCode 2's dialogs are answered through its API, so no option maps to keys:
+// a phone's tap must never reach the TUI as keystrokes (PRD Story 5).
+describe("keystrokeForChoice", () => {
+  it("is null for every dialog", () => {
+    expect(opencodeBackend.keystrokeForChoice(PERMISSION_TOOL, 0, 3)).toBeNull();
+    expect(opencodeBackend.keystrokeForChoice(QUESTION_TOOL_LABEL, 1, 3)).toBeNull();
     expect(opencodeBackend.keystrokeForChoice(MULTI_QUESTION_TOOL_LABEL, 0, 4)).toBeNull();
-    expect(opencodeBackend.keystrokeForChoice("SomethingNew", 0, 3)).toBeNull();
   });
 });

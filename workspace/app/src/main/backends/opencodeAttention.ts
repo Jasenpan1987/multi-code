@@ -47,6 +47,7 @@ import {
   type ServiceStatus,
 } from "./opencodeService";
 import { formDetail, formToolCall, permissionDetail, permissionToolCall } from "./opencodePrompt";
+import { OPENCODE_INIT_EVENT, OPENCODE_ROUTE_EVENT } from "./opencodePlugin";
 
 // How long after spawn without a word from Multi-Code's TUI plugin before it is taken
 // not to have loaded: a user config whose `plugins` couldn't be merged, a TUI that
@@ -54,11 +55,11 @@ import { formDetail, formToolCall, permissionDetail, permissionToolCall } from "
 // as the TUI starts (spike G-601, "TUI plugin probe").
 const PLUGIN_MISSING_MS = 10_000;
 
-// The plugin's deliveries (backends/opencodePlugin.ts, T-605). `multicode.route`
-// carries the shown session as the delivery's session id, none on the home screen,
-// and the route itself as `payload.route`.
-const PLUGIN_INIT_EVENT = "multicode.init";
-const PLUGIN_ROUTE_EVENT = "multicode.route";
+// The plugin's deliveries (backends/opencodePlugin.ts). `multicode.route` carries the
+// shown session as the delivery's session id, none on the home screen, and the route
+// itself as `payload.route`.
+const PLUGIN_INIT_EVENT = OPENCODE_INIT_EVENT;
+const PLUGIN_ROUTE_EVENT = OPENCODE_ROUTE_EVENT;
 
 // Bound on a parentID walk. Subagents nest a level or two; this only stops a cycle.
 const MAX_DEPTH = 32;
@@ -148,6 +149,9 @@ export class OpencodeAttention implements HookAttention {
   // finishes for this contact (PRD Story 3).
   private readonly shown = new Set<string>();
   private lastShown: string | undefined;
+  // The session last handed to `onSessionShown`, so a route that comes back to it
+  // before a lookup settles isn't reported twice.
+  private lastAdopted: string | undefined;
   // Session → its parent, null for a root. From `session.created`, the only event
   // carrying `parentID`, else asked of the service once per session (`GET
   // /api/session/:id`) and kept, "no such session" included. Parentage never changes.
@@ -230,12 +234,25 @@ export class OpencodeAttention implements HookAttention {
     this.shown.add(session);
     if (session !== this.lastShown) {
       this.lastShown = session;
-      this.context.onSessionShown(session);
+      void this.adoptIfRoot(session);
     }
     // A session shown for the first time may be mid-turn or blocked already (`/sessions`
     // into a session VS Code is running, or a start or dialog that beat the route here),
     // and those events were another owner's when they came. The snapshot says.
     if (first) void this.resync();
+  }
+
+  // The contact takes the shown session as its own (the one its next start reopens)
+  // only when it is a root. The TUI can show a subagent's session too, and reopening
+  // that would put the contact in the middle of someone else's turn. Its family is
+  // asked of the service once when unknown; a session it can't find counts as a root
+  // (lookup), which is right for the spawn's own and for one just created.
+  private async adoptIfRoot(session: string) {
+    if (!this.parents.has(session)) await this.lookup(session);
+    if (this.stopped || this.lastShown !== session || this.lastAdopted === session) return;
+    if (!this.isRoot(session)) return;
+    this.lastAdopted = session;
+    this.context.onSessionShown(session);
   }
 
   stop() {
@@ -684,18 +701,5 @@ export class OpencodeAttention implements HookAttention {
     this.reportedHealth = state;
     if (state === "ok") this.onHooksHealth(true);
     else this.onHooksHealth(false, state);
-  }
-}
-
-// The name and signature backends/opencode.ts still constructs the attention by,
-// until T-610 wires OpencodeAttention in with the spawn's context: with none, only
-// the sessions the TUI plugin reports as shown are the contact's.
-export class OpencodePluginAttention extends OpencodeAttention {
-  constructor(
-    onActivity: ActivityCallback,
-    timers?: HookTimers,
-    onHooksHealth: (ok: boolean, reason?: AlertsDegradedReason) => void = () => {}
-  ) {
-    super(onActivity, onHooksHealth, { instanceId: "", onSessionShown: () => {} }, { timers });
   }
 }

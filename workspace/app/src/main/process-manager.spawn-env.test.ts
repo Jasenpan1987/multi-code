@@ -10,6 +10,10 @@ interface Spawned {
 }
 const spawned: Spawned[] = [];
 let lastOpts: unknown = undefined;
+// Set to make the next spawns refused, as OpenCode 1.x's are.
+let refusal: string | undefined;
+// Which conversation each spawn was asked to open.
+const sessions: unknown[] = [];
 
 vi.mock("node-pty", () => ({
   spawn: (_cmd: string, _args: string[], o: { env: Record<string, string> }) => {
@@ -47,9 +51,17 @@ vi.mock("./store", () => ({ loadContacts: () => [], saveContacts: () => {} }));
 vi.mock("./backends", () => ({
   getBackend: (name: string) => ({
     name,
-    spawn: (_cwd: string, opts?: unknown) => {
+    spawn: (_cwd: string, opts?: unknown, session?: { kind: string; sessionId?: string }) => {
       lastOpts = opts;
-      return { command: name, args: [], env: { PATH: "/bin" } };
+      sessions.push(session);
+      if (refusal) return { command: name, args: [], env: {}, refusal };
+      // As OpenCode 2's does: every spawn names its session.
+      return {
+        command: name,
+        args: [],
+        env: { PATH: "/bin" },
+        sessionId: session?.kind === "own" ? session.sessionId : "ses_minted",
+      };
     },
     discoverSessionId: () => ({ cancel: () => {} }),
     createHookAttention: () => ({ handle: () => {}, stop: () => {} }),
@@ -67,6 +79,8 @@ const { ProcessManager } = await import("./process-manager");
 beforeEach(() => {
   spawned.length = 0;
   lastOpts = undefined;
+  refusal = undefined;
+  sessions.length = 0;
 });
 
 describe("spawn env", () => {
@@ -104,5 +118,33 @@ describe("spawn env", () => {
     manager.createInstance("/Users/x/code/repo", "repo");
     expect(spawned[0].opts).toBeUndefined();
     expect(spawned[0].env.MULTICODE_INSTANCE_ID).toBeTruthy();
+  });
+});
+
+describe("a refused spawn (OpenCode 1.x)", () => {
+  const REASON = "Multi-Code needs OpenCode 2 (found 1.18.35). Upgrade with: …";
+
+  it("starts nothing and leaves the contact stopped with the reason", () => {
+    const manager = new ProcessManager();
+    refusal = REASON;
+    const info = manager.createInstance("/Users/x/code/oc", "oc", "opencode");
+    expect(spawned).toHaveLength(0);
+    expect(info).toMatchObject({ status: "stopped", startError: REASON });
+    expect(manager.runStateOf(info.id)).toBeUndefined();
+  });
+
+  it("keeps the contact's own session through a refused start, and clears the reason once one runs", () => {
+    const manager = new ProcessManager();
+    const created = manager.createInstance("/Users/x/code/oc", "oc", "opencode");
+    refusal = REASON;
+    const refused = manager.restartInstance(created.id);
+    expect(refused).toMatchObject({ status: "stopped", startError: REASON });
+    expect(sessions.at(-1)).toEqual({ kind: "own", sessionId: "ses_minted" });
+    // Upgraded: the next start goes back to the same conversation.
+    refusal = undefined;
+    const started = manager.startInstance(created.id);
+    expect(sessions.at(-1)).toEqual({ kind: "own", sessionId: "ses_minted" });
+    expect(started).toMatchObject({ status: "running" });
+    expect(started?.startError).toBeUndefined();
   });
 });
