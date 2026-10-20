@@ -47,6 +47,25 @@ describe("promptInput", () => {
     });
   });
 
+  it("passes an option's description, which says how far OpenCode's Always allow reaches", () => {
+    const description = "Allow it, and save that for this project: calls like it are allowed from now on";
+    const dialog: Dialog = {
+      kind: "permission",
+      backend: "opencode",
+      toolName: "shell",
+      toolInput: { resources: ["pnpm test"] },
+      options: [
+        { effect: "allow-once", label: "Allow once" },
+        { effect: "allow-always", label: "Always allow", description },
+        { effect: "deny", label: "Reject" },
+      ],
+    };
+    const input = promptInput({ dialog, brief: "", earlier: [], reply: "always" }) as {
+      dialog: { options: { description?: string }[] };
+    };
+    expect(input.dialog.options[1].description).toBe(description);
+  });
+
   it("clips a long tool input, which can be a whole file", () => {
     const dialog: Dialog = {
       kind: "permission",

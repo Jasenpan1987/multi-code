@@ -17,7 +17,18 @@ const state: {
   opened: (session?: SessionStart) => string | undefined;
   latest: string | null;
   discoverCalls: number;
-} = { saved: [], spawns: [], opened: () => undefined, latest: null, discoverCalls: 0 };
+  // Backends that pick the newest session themselves at spawn (OpenCode).
+  picksLatest: Set<string>;
+  latestLookups: number;
+} = {
+  saved: [],
+  spawns: [],
+  opened: () => undefined,
+  latest: null,
+  discoverCalls: 0,
+  picksLatest: new Set(),
+  latestLookups: 0,
+};
 
 vi.mock("node-pty", () => ({
   spawn: () => ({
@@ -57,6 +68,7 @@ vi.mock("./store", () => ({
 vi.mock("./backends", () => ({
   getBackend: (name: string) => ({
     name,
+    picksLatestSession: state.picksLatest.has(name),
     spawn: (cwd: string, _opts?: unknown, session?: SessionStart) => {
       state.spawns.push({ cwd, session });
       return { command: name, args: [], env: {}, sessionId: state.opened(session) };
@@ -69,7 +81,10 @@ vi.mock("./backends", () => ({
     readTranscript: () => [],
     readContextUsage: () => null,
     keystrokeForChoice: () => null,
-    findLatestSessionId: () => state.latest,
+    findLatestSessionId: () => {
+      state.latestLookups++;
+      return state.latest;
+    },
     findLiveSessionId: () => null,
     buildResumeCommand: () => "x",
   }),
@@ -194,7 +209,36 @@ describe("a contact's own session", () => {
     const manager = new ProcessManager();
     manager.loadSavedContacts();
     manager.startInstance("old");
-    expect(state.spawns[0].session).toEqual({ kind: "latest" });
+    const session = state.spawns[0].session as { kind: string; isClaimed?: (id: string) => boolean };
+    expect(session.kind).toBe("latest");
+    // A backend that picks the session itself (OpenCode) checks its pick with this.
+    expect(session.isClaimed?.("from-before")).toBe(false);
+    const other = manager.createInstance(CWD, "HRR 2");
+    expect(session.isClaimed?.(other.sessionId!)).toBe(true);
+  });
+
+  it("leaves the pick to a backend that makes it at spawn, held newest or not", () => {
+    // OpenCode reads its database from the login shell's env, which the spawn
+    // resolves: a look made here could be in another database.
+    state.picksLatest = new Set(["opencode"]);
+    try {
+      state.saved = [{ id: "old", cwd: CWD, alias: "HRR", backend: "opencode" }];
+      const manager = new ProcessManager();
+      manager.loadSavedContacts();
+      const copy = manager.duplicateInstance("old")!;
+      manager.killInstance(copy.id);
+      state.latest = copy.sessionId!;
+      state.latestLookups = 0;
+      state.spawns = [];
+      manager.startInstance("old");
+      const session = state.spawns[0].session as { kind: string; isClaimed?: (id: string) => boolean };
+      expect(session.kind).toBe("latest");
+      expect(state.latestLookups).toBe(0);
+      // The backend's own pick is then checked: the copy's session is held.
+      expect(session.isClaimed?.(copy.sessionId!)).toBe(true);
+    } finally {
+      state.picksLatest = new Set();
+    }
   });
 });
 

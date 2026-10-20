@@ -229,11 +229,13 @@ probe method: `docs/timeline/2026-10-06_attention-alerts-investigation.md`.
 
 The CLIs report their own state: Claude Code through hooks (`Stop`, `PermissionRequest`,
 `StopFailure`) and the `status`/`waitingFor` fields of `~/.claude/sessions/<pid>.json`;
-OpenCode through plugin events (`session.status`, `permission.asked`, `question.asked`).
-Epic `attention-alerts` moved detection onto those, for Claude Code
-(`backends/claudeHooks.ts`, fixtures from the real CLI in
-`backends/__fixtures__/claude-hooks/`) and then OpenCode (`backends/opencodeAttention.ts`,
-fixtures in `backends/__fixtures__/opencode-plugin/`), both 2026-10-07. Change a rule there
+OpenCode 2 through its shared service's event stream (`session.execution.*`,
+`permission.asked`, `form.created` and their replies) plus Multi-Code's TUI plugin for the
+session each terminal shows. Epic `attention-alerts` moved detection onto those for Claude
+Code (`backends/claudeHooks.ts`, fixtures from the real CLI in
+`backends/__fixtures__/claude-hooks/`, 2026-10-07), and epic `opencode-v2` for OpenCode 2
+(`backends/opencodeAttention.ts`, fixtures recorded from 2.0.32 in
+`backends/__fixtures__/opencode-v2/`, 2026-10-20). Change a rule there
 only with a fixture that shows the CLI doing it, and fix a wrong alert by reading more of
 what the CLI reports, not by tuning a timing constant or adding a text match.
 
@@ -251,10 +253,23 @@ doesn't hand its parent's ids to everything it starts. A new reporter that sends
 instance id would have every delivery dropped.
 
 A reporter loaded through the environment must also take the ids out of its own process's
-env once read. OpenCode's plugin is named by `OPENCODE_CONFIG_CONTENT`, which the agent's
-bash tool inherits, so an `opencode` the agent runs would load it with the same ids and
-report its sessions as the instance's. Measured 2026-10-07 on 1.18.35: after the plugin
-deletes them, the bash tool sees none, and a nested `opencode run` stays silent.
+env once read. OpenCode's TUI plugin is named by `OPENCODE_CLI_CONFIG_CONTENT` and deletes
+the ids after setup, against a nested `opencode` and a service the TUI restarts. It can't
+stop the TUI from pushing its env to the session it shows (OpenCode 2 does that for every
+root session), so the agent's shell in a contact's root session sees `MULTICODE_*`, as a
+Claude contact's Bash does; the shared service itself is started without them
+(docs/timeline/2026-10-20_opencode-v2-spike.md, G-604/G-605).
+
+## OpenCode 2's shared service belongs to the user (added 2026-10-20)
+
+Every `opencode` of a user talks to one background service, and the service keeps the
+environment of whichever client started it. Multi-Code starts it only when none is
+running, from the builder's login-shell env minus its own variables, and never restarts,
+replaces or stops it. Its password (`~/.local/state/opencode/service.json`) stays inside
+`backends/opencodeService.ts`. The event stream has no replay: re-sync from the snapshot
+endpoints after every connect. OpenCode's database is read only, from `session_v2` and
+`session_message` ordered by `seq`; migrated 1.x rows keep 1.x tool names and keys, so
+readers accept both.
 
 
 ## Servers and model serving follow the vendor's documented method (added 2026-10-07)

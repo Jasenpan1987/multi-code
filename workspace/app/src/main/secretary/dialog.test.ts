@@ -10,7 +10,8 @@ import type { SecretaryEvent } from "../process-manager";
 import { answerMismatches, checkChoice, cleanText, dialogOf, isPlainYes } from "./dialog";
 import type { Dialog } from "./dialog";
 import { extractPromptDetail } from "../remote/promptExtract";
-import { permissionDetail as opencodePermissionDetail, questionDetail } from "../backends/opencodePrompt";
+import type { PromptDetail } from "../remote/promptExtract";
+import type { DialogRef } from "../backends/types";
 
 const DOWN = "\x1b[B";
 
@@ -76,19 +77,6 @@ describe("dialogOf", () => {
     expect(dialogOf(needsYou("AskUserQuestion", { questions: [q("Which?", nine)] }), "claude")).toBeNull();
   });
 
-  it("answers OpenCode's permission row and its single-select question, nothing else", () => {
-    const perm = opencodePermissionDetail({ permission: "bash", patterns: ["rm -rf build"] });
-    expect(dialogOf(needsYou("bash", { patterns: ["rm -rf build"] }, perm), "opencode")).toMatchObject({
-      kind: "permission",
-      options: [{ effect: "allow-once" }, { effect: "allow-always" }, { effect: "deny" }],
-    });
-    const single = { questions: [q("Which db?", ["Postgres", "SQLite"])] };
-    expect(dialogOf(needsYou("question", single, questionDetail(single)!), "opencode")).toMatchObject({
-      kind: "questions",
-    });
-    const multi = { questions: [{ ...q("Which?", ["A", "B"]), multiple: true }] };
-    expect(dialogOf(needsYou("question", multi, questionDetail(multi)!), "opencode")).toBeNull();
-  });
 });
 
 describe("a permission", () => {
@@ -239,28 +227,214 @@ describe("a question box", () => {
   });
 });
 
+// OpenCode 2 is answered through its API (opencode-v2 T-607): the shapes below are
+// the ones opencodePrompt.ts reports for it (T-604), the answers what the service's
+// reply endpoints take (docs/timeline/2026-10-20_opencode-v2-source-reading.md).
 describe("OpenCode", () => {
-  const perm = dialogOf(
-    needsYou("bash", {}, opencodePermissionDetail({ permission: "bash", patterns: ["ls"] })),
-    "opencode"
-  )!;
-  const single = { questions: [q("Which db?", ["Postgres", "SQLite"])] };
-  const question = dialogOf(needsYou("question", single, questionDetail(single)!), "opencode")!;
+  const PERMISSION_REF: DialogRef = { kind: "permission", sessionId: "ses_1", requestId: "per_1" };
+  const FORM_REF: DialogRef = { kind: "form", sessionId: "ses_1", requestId: "frm_1" };
+  const SHELL = { resources: ["rm -rf build"], metadata: { command: "rm -rf build" }, save: ["rm *"] };
 
-  it("uses the phone's verified keystrokes", () => {
-    expect(keysOf(perm, { effect: "allow-once" }).keys).toEqual(["\r"]);
-    expect(keysOf(perm, { effect: "deny" }).keys).toEqual(["\x1b[C\x1b[C\r"]);
-    expect(keysOf(question, { answers: [{ question: 1, picks: [2] }] }).keys).toEqual([`${DOWN}\r`]);
+  function opencodeEvent(
+    toolName: string,
+    toolInput: unknown,
+    detail: PromptDetail,
+    dialog: DialogRef | null
+  ): SecretaryEvent {
+    return {
+      kind: "needs-you",
+      seq: 7,
+      at: 1,
+      prompt: { detail, toolName, toolInput, ...(dialog ? { dialog } : {}) },
+    };
+  }
+
+  const permissionDetail = (labels: string[]): PromptDetail => ({
+    tool: "Permission",
+    question: "Permission required: shell: rm -rf build",
+    options: labels.map((label) => ({ label })),
+  });
+  const opencodePermission = (labels: string[], ref: DialogRef | null = PERMISSION_REF) =>
+    dialogOf(opencodeEvent("shell", SHELL, permissionDetail(labels), ref), "opencode");
+
+  // As T-604 reports a question form: one single-select question under "Question",
+  // anything else under "Question (multi-select)"; no "Type your own answer" row.
+  const questionBox = (questions: ReturnType<typeof q>[], ref: DialogRef | null = FORM_REF) => {
+    const toolInput = {
+      questions: questions.map(({ multiSelect, ...rest }) => ({ ...rest, multiple: multiSelect })),
+    };
+    const oneTap = questions.length === 1 && !questions[0].multiSelect;
+    const detail: PromptDetail = {
+      tool: oneTap ? "Question" : "Question (multi-select)",
+      question: questions[0].question,
+      options: questions[0].options,
+    };
+    return dialogOf(opencodeEvent("question", toolInput, detail, ref), "opencode");
+  };
+
+  const three = opencodePermission(["Allow once", "Always allow", "Reject"])!;
+  const two = opencodePermission(["Allow once", "Reject"])!;
+
+  describe("dialogOf", () => {
+    it("reads a three-option permission, saying how far Always allow reaches", () => {
+      expect(three).toMatchObject({
+        kind: "permission",
+        backend: "opencode",
+        toolName: "shell",
+        toolInput: SHELL,
+        options: [
+          { effect: "allow-once", label: "Allow once" },
+          {
+            effect: "allow-always",
+            label: "Always allow",
+            description: expect.stringContaining("save that for this project"),
+          },
+          { effect: "deny", label: "Reject" },
+        ],
+      });
+    });
+
+    it("reads a permission with nothing to save as Allow once / Reject", () => {
+      expect(two).toMatchObject({
+        options: [{ effect: "allow-once" }, { effect: "deny" }],
+      });
+    });
+
+    it("refuses a permission of any other shape", () => {
+      // OpenCode 1.x's label, an unknown one, an order it doesn't use, a lone option.
+      expect(opencodePermission(["Allow once", "Allow always", "Reject"])).toBeNull();
+      expect(opencodePermission(["Allow once", "Ask later", "Reject"])).toBeNull();
+      expect(opencodePermission(["Reject", "Allow once"])).toBeNull();
+      expect(opencodePermission(["Allow once"])).toBeNull();
+    });
+
+    it("reads a single question, a multi-select one and a box of two", () => {
+      expect(questionBox([q("Which db?", ["Postgres", "SQLite"])])).toMatchObject({
+        kind: "questions",
+        backend: "opencode",
+        questions: [{ question: "Which db?", multiSelect: false }],
+      });
+      expect(questionBox([q("Which extras?", ["Cache", "Queue"], true)])).toMatchObject({
+        questions: [{ multiSelect: true }],
+      });
+      expect(
+        questionBox([q("Which db?", ["Postgres", "SQLite"]), q("Which extras?", ["Cache", "Queue"], true)])
+      ).toMatchObject({
+        questions: [{ question: "Which db?" }, { question: "Which extras?", multiSelect: true }],
+      });
+    });
+
+    it("answers nothing the event names no request for, or names a request of the other kind", () => {
+      expect(opencodePermission(["Allow once", "Reject"], null)).toBeNull();
+      expect(opencodePermission(["Allow once", "Reject"], FORM_REF)).toBeNull();
+      expect(questionBox([q("Which db?", ["Postgres", "SQLite"])], null)).toBeNull();
+      expect(questionBox([q("Which db?", ["Postgres", "SQLite"])], PERMISSION_REF)).toBeNull();
+      // A form that isn't the question tool's (an MCP elicitation) has no detail to read.
+      const elicitation: PromptDetail = { tool: "Input needed", options: [] };
+      expect(dialogOf(opencodeEvent("form", {}, elicitation, FORM_REF), "opencode")).toBeNull();
+    });
   });
 
-  it("sends to the terminal what the TUI wasn't measured to take", () => {
-    expect(checkChoice(perm, { effect: "deny", feedback: "use ls -la" })).toEqual({
-      ok: false,
-      refuse: "unsupported",
+  describe("a permission", () => {
+    it("answers allow once and reject through the API, with no keys", () => {
+      expect(keysOf(three, { effect: "allow-once" })).toEqual({
+        keys: [],
+        answer: { kind: "permission", decision: "once" },
+      });
+      expect(keysOf(two, { effect: "deny" })).toEqual({
+        keys: [],
+        answer: { kind: "permission", decision: "reject" },
+      });
     });
-    expect(checkChoice(question, { answers: [{ question: 1, picks: [], text: "MySQL" }] })).toEqual({
-      ok: false,
-      refuse: "unsupported",
+
+    it("sends a reject's reason with it, cleaned, and nothing after", () => {
+      expect(keysOf(three, { effect: "deny", feedback: "Use ls -la\ninstead" })).toEqual({
+        keys: [],
+        answer: { kind: "permission", decision: "reject", message: "Use ls -la instead" },
+      });
+    });
+
+    it("answers always only after the builder's plain yes to the confirmation", () => {
+      expect(checkChoice(three, { effect: "allow-always", explicit: true })).toEqual({
+        ok: false,
+        ask: "confirm-always",
+      });
+      expect(checkChoice(three, { effect: "allow-always" })).toEqual({ ok: false, ask: "once-or-always" });
+      expect(keysOf(three, { effect: "allow-always", explicit: true }, true)).toEqual({
+        keys: [],
+        answer: { kind: "permission", decision: "always" },
+      });
+    });
+
+    it("refuses always where OpenCode offers none, and an effect a permission doesn't have", () => {
+      expect(checkChoice(two, { effect: "allow-always", explicit: true }, true)).toEqual({
+        ok: false,
+        refuse: "bad-choice",
+      });
+      expect(checkChoice(three, { effect: "approve" })).toEqual({ ok: false, refuse: "bad-choice" });
+    });
+  });
+
+  describe("a question box", () => {
+    it("one single-select question: the option's label as q0", () => {
+      const box = questionBox([q("Which db?", ["Postgres", "SQLite"])])!;
+      expect(keysOf(box, { answers: [{ question: 1, picks: [2] }] })).toEqual({
+        keys: [],
+        answer: { kind: "form", answer: { q0: "SQLite" } },
+      });
+    });
+
+    it("typed text instead of an option goes in as it is, cleaned", () => {
+      const box = questionBox([q("Which db?", ["Postgres", "SQLite"])])!;
+      expect(keysOf(box, { answers: [{ question: 1, picks: [], text: " MySQL,\n8.0 " }] })).toEqual({
+        keys: [],
+        answer: { kind: "form", answer: { q0: "MySQL, 8.0" } },
+      });
+    });
+
+    it("multi-select: the picked labels in option order, typed text last", () => {
+      const box = questionBox([q("Which extras?", ["Cache", "Queue", "Search"], true)])!;
+      expect(keysOf(box, { answers: [{ question: 1, picks: [3, 1], text: "Metrics" }] })).toEqual({
+        keys: [],
+        answer: { kind: "form", answer: { q0: ["Cache", "Search", "Metrics"] } },
+      });
+    });
+
+    it("two questions: one field each, in the box's order, however the reply ordered them", () => {
+      const box = questionBox([
+        q("Which db?", ["Postgres", "SQLite"]),
+        q("Which extras?", ["Cache", "Queue"], true),
+      ])!;
+      const planned = keysOf(box, {
+        answers: [
+          { question: 2, picks: [2] },
+          { question: 1, picks: [1] },
+        ],
+      });
+      expect(planned).toEqual({
+        keys: [],
+        answer: { kind: "form", answer: { q0: "Postgres", q1: ["Queue"] } },
+      });
+    });
+
+    it("holds the answers to the box as for Claude", () => {
+      const box = questionBox([
+        q("Which db?", ["Postgres", "SQLite"]),
+        q("Which extras?", ["Cache", "Queue"], true),
+      ])!;
+      expect(checkChoice(box, { answers: [{ question: 1, picks: [1] }] })).toEqual({
+        ok: false,
+        ask: "unanswered",
+      });
+      expect(
+        checkChoice(box, {
+          answers: [
+            { question: 1, picks: [1, 2] },
+            { question: 2, picks: [1] },
+          ],
+        })
+      ).toEqual({ ok: false, refuse: "bad-choice" });
+      expect(checkChoice(box, { effect: "allow-once" })).toEqual({ ok: false, refuse: "bad-choice" });
     });
   });
 });

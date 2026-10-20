@@ -150,7 +150,26 @@ export interface Instance {
   // Its hooks aren't reaching Multi-Code, so it raises no alerts. Shown as a bar on
   // its page. Only set while running.
   alertsDegraded?: boolean;
+  // Why, when `alertsDegraded`: Claude's hooks, OpenCode's TUI plugin, or OpenCode's
+  // background service.
+  alertsDegradedReason?: AlertsDegradedReason;
+  // Why the last start launched nothing (OpenCode 1.x), as one line for its page.
+  // Cleared by the next start that runs.
+  startError?: string;
 }
+
+export type AlertsDegradedReason = "hooks" | "plugin" | "service";
+
+// Whether a backend's CLI can be started, and if not, why: not on PATH, or a
+// version Multi-Code doesn't support (`version` as the CLI printed it).
+export type BackendAvailability =
+  | { ok: true }
+  | { ok: false; reason: "missing" }
+  | { ok: false; reason: "outdated"; version: string };
+
+// The one command that upgrades an OpenCode 1.x install to 2.x (it replaces
+// `~/.opencode/bin/opencode`). Named by the New Instance dialog and by a refused start.
+export const OPENCODE_UPGRADE_COMMAND = "curl -fsSL https://opencode.ai/v2/install | bash";
 
 // One tool call made by the manager agent, as shown in the toolbox's Manager
 // section. Refusals are entries too — `status: "error"` with the reason in
@@ -299,7 +318,7 @@ export interface ElectronAPI {
   // Blank resets the name to the folder's. Resolves to the renamed contact.
   setAlias: (id: string, alias: string) => Promise<Instance | null>;
   selectDirectory: () => Promise<string | null>;
-  isBackendAvailable: (backend: BackendName) => Promise<boolean>;
+  backendAvailability: (backend: BackendName) => Promise<BackendAvailability>;
   getGitStatus: (id: string) => Promise<GitStatus>;
   getResumeCommand: (id: string) => Promise<string | null>;
   readFile: (instanceId: string, path: string) => Promise<ReadFileResult>;
@@ -383,7 +402,7 @@ export interface ElectronAPI {
   onInstanceActivity: (callback: (id: string, type: string) => void) => () => void;
   onInstanceSessionId: (callback: (id: string, sessionId: string) => void) => () => void;
   onInstanceAlertsDegraded: (
-    callback: (id: string, degraded: boolean) => void
+    callback: (id: string, degraded: boolean, reason?: AlertsDegradedReason) => void
   ) => () => void;
   onShellOutput: (callback: (id: string, data: string) => void) => () => void;
   onShellExit: (callback: (id: string) => void) => () => void;

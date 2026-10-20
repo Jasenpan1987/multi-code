@@ -15,7 +15,7 @@ import { processManager } from "./process-manager";
 import { shellManager } from "./shell-manager";
 import { getGitStatus } from "./git-status";
 import { getFileDiff, isInsideCwd } from "./git-diff";
-import { isBackendAvailable, getBackend } from "./backends";
+import { backendAvailability, getBackend } from "./backends";
 import type { BackendName } from "./backends";
 import {
   loadSecretarySettings,
@@ -99,10 +99,12 @@ export function registerIpcHandlers() {
     }
   );
 
+  // Whether a backend's CLI can start, and why not: the New Instance dialog warns
+  // about a missing `opencode` and about one too old to run (1.x).
   ipcMain.handle(
-    "is-backend-available",
+    "backend-availability",
     (_event, backend: BackendName) => {
-      return isBackendAvailable(backend);
+      return backendAvailability(backend);
     }
   );
 

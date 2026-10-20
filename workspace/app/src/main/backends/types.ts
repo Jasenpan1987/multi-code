@@ -1,6 +1,8 @@
 import type { PromptDetail } from "../remote/promptExtract";
 import type { TranscriptEntry } from "../../shared/remote-protocol";
-import type { ContextUsage } from "../../shared/types";
+import type { AlertsDegradedReason, ContextUsage } from "../../shared/types";
+
+export type { AlertsDegradedReason, BackendAvailability } from "../../shared/types";
 
 export type BackendName = "claude" | "opencode";
 
@@ -9,10 +11,35 @@ export interface SpawnConfig {
   args: string[];
   env: Record<string, string>;
   // The session this spawn opens, when the backend knows it before the process
-  // starts: the one it resumes, or one it named itself. Absent for `--continue` and
-  // for a fresh OpenCode session, whose id only exists once the agent makes it.
+  // starts: the one it resumes, or one it named itself. Absent for Claude's
+  // `--continue`.
   sessionId?: string;
+  // Set when the backend won't start this CLI (OpenCode 1.x): one line for the
+  // contact's page saying why and what to do. Nothing is spawned.
+  refusal?: string;
 }
+
+/**
+ * A dialog a backend answers through the CLI's own API rather than keystrokes
+ * (OpenCode 2: docs/timeline/2026-10-20_opencode-v2-source-reading.md, "Answering
+ * dialogs through the API"). `requestId` is the permission request's or the form's
+ * id; `sessionId` the session that asked, a subagent's included.
+ */
+export interface DialogRef {
+  kind: "permission" | "form";
+  sessionId: string;
+  requestId: string;
+}
+
+// What to answer a DialogRef with. A form's answer maps field keys (`q0`, …) to the
+// picked option's label, a typed text, or a list for multi-select.
+export type DialogAnswer =
+  | { kind: "permission"; decision: "once" | "always" | "reject"; message?: string }
+  | { kind: "form"; answer: Record<string, string | string[]> };
+
+// `gone`: the dialog was already answered or no longer exists, so nothing was
+// answered. `failed`: the CLI couldn't be reached or refused the answer.
+export type AnswerResult = { ok: true } | { ok: false; reason: "gone" | "failed" };
 
 /**
  * Which conversation a spawn opens.
@@ -21,9 +48,14 @@ export interface SpawnConfig {
  *     once it is gone (or was never written, as when nobody typed in it) a fresh
  *     session starts instead, under that id where the backend allows it.
  *   - "fresh": a new, empty session.
- *   - "latest": the directory's most recent session (`--continue`), for a contact
- *     with no session of its own on record, as every contact had before
- *     contacts.json kept one.
+ *   - "latest": the directory's most recent session (Claude's `--continue`;
+ *     OpenCode's newest root session, named by id), for a contact with no session
+ *     of its own on record, as every contact had before contacts.json kept one.
+ *     `isClaimed` says whether another contact holds a session. A backend that
+ *     picks the session itself (OpenCode, by id) asks it about the one it picks,
+ *     when it picks it, and takes a fresh one when that is held: the newest may
+ *     have changed since process-manager looked, or it looked in another database
+ *     (OpenCode's paths come from the login shell, read by the spawn).
  *
  * Without "own", two contacts on one project both open the directory's most recent
  * session after every restart, and then share it.
@@ -31,7 +63,7 @@ export interface SpawnConfig {
 export type SessionStart =
   | { kind: "own"; sessionId: string }
   | { kind: "fresh" }
-  | { kind: "latest" };
+  | { kind: "latest"; isClaimed?: (sessionId: string) => boolean };
 
 /**
  * Extra spawn wiring. The manager gets the three Claude fields; every other
@@ -59,9 +91,9 @@ export interface SpawnOptions {
   // the user's own settings, and holds no permission rules — see config.ts. One
   // file, because the CLI applies only the last `--settings` it is given.
   settingsPath?: string;
-  // OpenCode's alert wiring: Multi-Code's plugin, loaded through
-  // OPENCODE_CONFIG_CONTENT, and the 0600 file it reads `/alert`'s endpoint and
-  // token from. Both in userData; see backends/opencodePlugin.ts.
+  // OpenCode's alert wiring: the directory of Multi-Code's TUI plugin, named in the
+  // TUI's OPENCODE_CLI_CONFIG_CONTENT, and the 0600 file it reads `/alert`'s
+  // endpoint and token from. Both in userData; see backends/opencodePlugin.ts.
   opencodePlugin?: { pluginPath: string; targetPath: string };
 }
 
@@ -103,6 +135,9 @@ export interface AlertDelivery {
 export interface PromptToolCall {
   toolName: string;
   toolInput: unknown;
+  // Present when the backend answers this dialog through its API; the answer paths
+  // then use it instead of keystrokes.
+  dialog?: DialogRef;
 }
 
 /**
@@ -128,12 +163,31 @@ export interface BuilderTurn {
 export type ActivityCallback = (
   type: string,
   detail?: PromptDetail,
-  toolCall?: PromptToolCall
+  toolCall?: PromptToolCall,
+  // `prompt` only: a dialog reported before is the one blocking the contact again,
+  // after the one shown closed or a turn ended around it (OpenCode, whose contact can
+  // have several open). Everything follows it as the live dialog; nothing chimes,
+  // vibrates or counts it a second time.
+  restated?: boolean
 ) => void;
 
 export interface HookAttention {
   handle(delivery: AlertDelivery): void;
   stop(): void;
+  // Answer a dialog through the CLI's own API. Absent for a backend whose dialogs
+  // are answered by keystrokes (Claude).
+  answer?(ref: DialogRef, answer: DialogAnswer): Promise<AnswerResult>;
+}
+
+// What createHookAttention is told about the process it watches.
+export interface AttentionContext {
+  // The contact; its alert deliveries carry it as a header.
+  instanceId: string;
+  // The session the spawn opened, when the backend knew it up front.
+  sessionId?: string;
+  // The terminal now shows this session (OpenCode's TUI plugin reports it). The
+  // caller claim-checks it and makes it the contact's own.
+  onSessionShown(sessionId: string): void;
 }
 
 export interface SessionDiscovery {
@@ -152,12 +206,29 @@ export interface Backend {
   readonly keepsSecretaryEvents: boolean;
 
   /**
+   * Whether the backend picks the directory's newest session itself when it spawns
+   * a "latest" start, checking its pick with the start's `isClaimed` (OpenCode: the
+   * database it reads is named by the login-shell env the spawn resolves). Then
+   * process-manager doesn't look first, and doesn't turn a held newest into
+   * "fresh": its look could be in another database.
+   */
+  readonly picksLatestSession?: boolean;
+
+  /**
    * Build the command line for a new instance. `opts` carries the manager's MCP
    * wiring for the manager, and the alert hooks' settings for every instance; a
    * backend that can't honour it should ignore it rather than fail, and say so in
    * its implementation. `session` picks the conversation; "latest" when absent.
    */
   spawn(cwd: string, opts?: SpawnOptions, session?: SessionStart): SpawnConfig;
+
+  /**
+   * Start preparing, in the background, what this backend's first spawn will need,
+   * so `spawn` (which is synchronous) doesn't wait for it. Called when contacts of
+   * this backend are loaded. Optional: OpenCode reads the builder's login-shell
+   * environment here (backends/opencodeShellEnv.ts).
+   */
+  warm?(): void;
 
   /**
    * Begin trying to discover the sessionId for an instance running in `cwd`.
@@ -186,17 +257,21 @@ export interface Backend {
    *   - "prompt-cleared": a previously reported prompt was answered (on either
    *     the desktop or a paired phone).
    *
-   * The agent reports its own state through what Multi-Code injects at spawn,
-   * Claude's hooks or OpenCode's plugin, delivered to the `/alert` endpoint and
-   * routed here by instance. Per process, not per session, so it survives `/clear`
-   * and `/new`. `pid` is the pty child's, which Claude keys its own registry on.
-   * `onHooksHealth(false)` says the hooks or plugin don't seem to run at all,
-   * `true` that one was heard after all (PRD Story 6).
+   * The agent reports its own state: Claude through the hooks Multi-Code passes at
+   * spawn, delivered to the `/alert` endpoint and routed here by instance; OpenCode
+   * through its shared service's event stream, with Multi-Code's TUI plugin naming
+   * the session the terminal shows (also through `/alert`). Per process, not per
+   * session, so it survives `/clear` and `/new`. `pid` is the pty child's, which
+   * Claude keys its own registry on.
+   * `onHooksHealth(false, reason)` says alerts can't work for this process (the
+   * hooks or plugin don't seem to run, or OpenCode's service can't be reached),
+   * `true` that they work again (PRD Story 6).
    */
   createHookAttention(
     pid: number,
     onActivity: ActivityCallback,
-    onHooksHealth: (ok: boolean) => void
+    onHooksHealth: (ok: boolean, reason?: AlertsDegradedReason) => void,
+    context: AttentionContext
   ): HookAttention;
 
   /**
@@ -204,12 +279,11 @@ export interface Backend {
    * this CLI's option box expects, or null when the choice can't be made
    * safely (out of range, or a box this backend can't drive reliably).
    *
-   * This MUST be per-backend: the CLIs do not agree. Claude's boxes take the
-   * option's number directly, while OpenCode's ignore digits entirely and
-   * navigate with arrows — and its two dialog kinds even use different arrows
-   * (permission is a horizontal row, question is a vertical list). Sending the
-   * wrong family of keys doesn't error, it silently does nothing or picks the
-   * wrong option, which for a permission dialog means granting the wrong thing.
+   * This MUST be per-backend: the CLIs do not agree, and the wrong family of keys
+   * doesn't error, it silently does nothing or picks the wrong option, which for a
+   * permission dialog means granting the wrong thing. Claude's boxes take the
+   * option's number directly. OpenCode 2's are answered through its API instead
+   * (HookAttention.answer), so it returns null for every choice.
    *
    * `tool` is the PromptDetail.tool the backend itself reported, so each
    * backend can dispatch on values it defined.
@@ -227,7 +301,8 @@ export interface Backend {
    * the PTY is a fixed 120 columns and the CLIs paint absolutely-positioned
    * cells, so there is nothing to reflow. Both CLIs already keep a structured
    * record of the conversation for their own use (Claude a session JSONL,
-   * OpenCode a sqlite db), and reading that gives text a phone can wrap.
+   * OpenCode 2 its `session_message` table), and reading that gives text a phone
+   * can wrap.
    *
    * Returns an empty array when the session can't be read, which the phone
    * shows as "no transcript" while leaving the terminal view available.
@@ -253,7 +328,8 @@ export interface Backend {
    * Both CLIs record per-turn usage and lifetime totals, and only the former
    * answers this question — the totals reach millions of tokens against a
    * 200k–1M window. Claude keeps it in the session JSONL's assistant records
-   * (`message.usage`), OpenCode in its sqlite `message` rows (`data.tokens`).
+   * (`message.usage`), OpenCode 2 in its `session_message` assistant rows
+   * (`tokens`).
    */
   readContextUsage(sessionId: string): ContextUsage | null;
 

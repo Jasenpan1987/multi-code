@@ -1,6 +1,6 @@
-import type { Backend, BackendName } from "./types";
+import type { Backend, BackendAvailability, BackendName } from "./types";
 import { claudeBackend } from "./claude";
-import { opencodeBackend, isOpencodeAvailable } from "./opencode";
+import { opencodeBackend, opencodeAvailability } from "./opencode";
 
 const registry = new Map<BackendName, Backend>([
   ["claude", claudeBackend],
@@ -15,16 +15,23 @@ export function getBackend(name: BackendName): Backend {
   return backend;
 }
 
-export function isBackendAvailable(name: BackendName): boolean {
-  if (name === "opencode") return isOpencodeAvailable();
-  // claude availability check left as TODO; existing flows assume claude works
-  return true;
+// Whether a backend's CLI can start here, with the reason when it can't: missing, or
+// a version Multi-Code doesn't support. Claude's isn't checked: every flow assumes it.
+export function backendAvailability(name: BackendName): BackendAvailability {
+  if (name === "opencode") return opencodeAvailability();
+  return { ok: true };
 }
 
 export type {
   AlertDelivery,
+  AlertsDegradedReason,
+  AnswerResult,
+  AttentionContext,
   Backend,
+  BackendAvailability,
   BackendName,
+  DialogAnswer,
+  DialogRef,
   SpawnConfig,
   SpawnOptions,
   HookAttention,

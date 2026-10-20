@@ -1,0 +1,936 @@
+{
+  "scenario": "service-restart",
+  "opencodeVersion": "2.0.32",
+  "notes": "Scratch config allows 'sleep *'. Prompt runs shell 'sleep 30'; during it `opencode service restart` (marks). Subscriber: stream EOF (no interrupted frame received), reconnect 523 ms later to the new registration (id f125a3de…, pid 2549, same url), server.connected, then the resumed turn's frames (it re-ran sleep 30) and ONE execution.succeeded. The resume's session.synthetic ('The server restarted while you were working…', metadata.notice restart; its DB row was written 353 ms before the reconnect) and its execution.started were published before the subscriber reconnected and never arrive. The TUI stayed attached.",
+  "frames": [
+    {
+      "t": 1019,
+      "event": {
+        "id": "evt_1554b6506001EqiimpUxabpZJX",
+        "created": 1792432366854,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "slug": "neon-sailor",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1050,
+      "event": {
+        "id": "evt_1554b6517001llW8pjZrkBRMlf",
+        "created": 1792432366871,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_1554b6502001NfiFEb3k0IvG0f",
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "Use your shell tool to run exactly this command: sleep 30 . When it finishes, reply with the word: awake",
+              "files": [],
+              "agents": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1050,
+      "event": {
+        "id": "evt_1554b65180012L2v0tPrpUvj4x",
+        "created": 1792432366872,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1050,
+      "event": {
+        "id": "evt_1554b651c001ROOzfD878ou3Hq",
+        "created": 1792432366876,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 1050,
+      "event": {
+        "id": "evt_1554b651d001Dm24fJKwaQww0n",
+        "created": 1792432366877,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "inboxID": "msg_1554b6502001NfiFEb3k0IvG0f"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2582,
+      "event": {
+        "id": "evt_1554b6b0f001IbTDppSDoUnRma",
+        "created": 1792432368399,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_1554b6522001m6n78V6iXQlizX",
+          "started": 1792432366885
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 5,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2582,
+      "event": {
+        "id": "evt_1554b6b16001uQnQa21sx1PyKv",
+        "created": 1792432368406,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554b6522001m6n78V6iXQlizX",
+          "id": "call_00_uvkeof2rz5qt0301voqpk9p9",
+          "name": "shell"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 6,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2586,
+      "event": {
+        "id": "evt_1554b6b1d001Zbg4QH0On5twjd",
+        "created": 1792432368413,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554b6522001m6n78V6iXQlizX",
+          "id": "call_00_uvkeof2rz5qt0301voqpk9p9",
+          "text": "{\"command\": \"sleep 30\", \"timeout\": 60000}"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 7,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2586,
+      "event": {
+        "id": "evt_1554b6b1f001GHsmxNn6irYCpk",
+        "created": 1792432368415,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554b6522001m6n78V6iXQlizX",
+          "id": "call_00_uvkeof2rz5qt0301voqpk9p9",
+          "input": {
+            "command": "sleep 30",
+            "timeout": 60000
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 8,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2586,
+      "event": {
+        "id": "evt_1554b6b20001IBDao4AkLKZUse",
+        "created": 1792432368416,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554b6522001m6n78V6iXQlizX"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 9,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2590,
+      "event": {
+        "id": "evt_1554b6b290014Kw6B437dcnADC",
+        "created": 1792432368425,
+        "type": "shell.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "info": {
+            "id": "sh_1554b6b26001c0gTng2UeSR02s",
+            "status": "running",
+            "command": "sleep 30",
+            "cwd": "/private/tmp/oc2-spike/projects/scen",
+            "shell": "/bin/zsh",
+            "file": "/tmp/oc2-spike/data/opencode/shell/846d1ad0ea32e1386513fcca3d9fb653b775476d/sh_1554b6b26001c0gTng2UeSR02s.out",
+            "metadata": {
+              "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs"
+            },
+            "time": {
+              "started": 1792432368422
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 2590,
+      "event": {
+        "id": "evt_1554b6b29002iDkPwn4tn2KnzB",
+        "created": 1792432368425,
+        "type": "session.tool.progress",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554b6522001m6n78V6iXQlizX",
+          "id": "call_00_uvkeof2rz5qt0301voqpk9p9",
+          "metadata": {
+            "shellID": "sh_1554b6b26001c0gTng2UeSR02s"
+          }
+        }
+      }
+    },
+    {
+      "t": 4745,
+      "event": {
+        "id": "evt_1554b7394001WLs2403sTWmK6x",
+        "created": 1792432370580,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "cost": 0,
+          "tokens": {
+            "input": 56,
+            "output": 6,
+            "reasoning": 80,
+            "cache": {
+              "read": 512,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 4745,
+      "event": {
+        "id": "evt_1554b7394002RBo5FkgoX9ge0A",
+        "created": 1792432370580,
+        "type": "session.renamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "title": "Sleep 30 command execution"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 11,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 5854,
+      "stream": "disconnect",
+      "reason": "eof"
+    },
+    {
+      "t": 6377,
+      "stream": "connect",
+      "status": 200,
+      "service": {
+        "id": "f125a3de-5fef-4ff8-91a6-95ad2022e250",
+        "version": "2.0.32",
+        "url": "http://127.0.0.1:49411",
+        "pid": 2549
+      }
+    },
+    {
+      "t": 6378,
+      "event": {
+        "id": "evt_1554b79f5001Z14ZJtUiC2ujIS",
+        "type": "server.connected",
+        "data": {}
+      }
+    },
+    {
+      "t": 8920,
+      "event": {
+        "id": "evt_1554b83db001dJkaWHLhfk7LHD",
+        "created": 1792432374747,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_1554b79d3001gbNl6hd5vKQrYD",
+          "started": 1792432372184
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 17,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 8920,
+      "event": {
+        "id": "evt_1554b83e00011xQkEYvgvA0gZr",
+        "created": 1792432374752,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554b79d3001gbNl6hd5vKQrYD",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 18,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 9023,
+      "event": {
+        "id": "evt_1554b84480016WNHMb5EvlA89d",
+        "created": 1792432374856,
+        "type": "session.reasoning.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554b79d3001gbNl6hd5vKQrYD",
+          "ordinal": 0,
+          "delta": "The sleep command was interrupted by the server restart. I should re-run it since it didn"
+        }
+      }
+    },
+    {
+      "t": 9168,
+      "event": {
+        "id": "evt_1554b84c9001LKSfKCp6NPg3Lk",
+        "created": 1792432374985,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554b79d3001gbNl6hd5vKQrYD",
+          "id": "call_00_gtbum4cdevzs9lcyabe3so7h",
+          "name": "shell"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 19,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 9172,
+      "event": {
+        "id": "evt_1554b84d30012kwVgPIZTE4ZsN",
+        "created": 1792432374995,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554b79d3001gbNl6hd5vKQrYD",
+          "ordinal": 0,
+          "text": "The sleep command was interrupted by the server restart. I should re-run it since it didn't complete. The user asked to run exactly `sleep 30` and then reply \"awake\". Let me rerun it.",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 20,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 9172,
+      "event": {
+        "id": "evt_1554b84d6001wzNW0k14meKZZ0",
+        "created": 1792432374998,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554b79d3001gbNl6hd5vKQrYD",
+          "id": "call_00_gtbum4cdevzs9lcyabe3so7h",
+          "text": "{\"command\": \"sleep 30\", \"timeout\": 60000}"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 21,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 9172,
+      "event": {
+        "id": "evt_1554b84d80018G2YXBgjgy32Gm",
+        "created": 1792432375000,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554b79d3001gbNl6hd5vKQrYD",
+          "id": "call_00_gtbum4cdevzs9lcyabe3so7h",
+          "input": {
+            "command": "sleep 30",
+            "timeout": 60000
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 22,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 9172,
+      "event": {
+        "id": "evt_1554b84da001M8vRzZ9I1Y1RP3",
+        "created": 1792432375002,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554b79d3001gbNl6hd5vKQrYD"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 23,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 9189,
+      "event": {
+        "id": "evt_1554b84ef0017jWvW7KRRf4my1",
+        "created": 1792432375023,
+        "type": "shell.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "info": {
+            "id": "sh_1554b84ed001ljcXkj2O13T23z",
+            "status": "running",
+            "command": "sleep 30",
+            "cwd": "/private/tmp/oc2-spike/projects/scen",
+            "shell": "/bin/zsh",
+            "file": "/tmp/oc2-spike/data/opencode/shell/846d1ad0ea32e1386513fcca3d9fb653b775476d/sh_1554b84ed001ljcXkj2O13T23z.out",
+            "metadata": {
+              "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs"
+            },
+            "time": {
+              "started": 1792432375021
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 9189,
+      "event": {
+        "id": "evt_1554b84f0001K3rYk3kUvfQwRi",
+        "created": 1792432375024,
+        "type": "session.tool.progress",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554b79d3001gbNl6hd5vKQrYD",
+          "id": "call_00_gtbum4cdevzs9lcyabe3so7h",
+          "metadata": {
+            "shellID": "sh_1554b84ed001ljcXkj2O13T23z"
+          }
+        }
+      }
+    },
+    {
+      "t": 39223,
+      "event": {
+        "id": "evt_1554bfa30001Nv7v21hZiAO9u9",
+        "created": 1792432405040,
+        "type": "session.tool.success",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554b79d3001gbNl6hd5vKQrYD",
+          "id": "call_00_gtbum4cdevzs9lcyabe3so7h",
+          "content": [
+            {
+              "type": "text",
+              "text": "(no output)"
+            }
+          ],
+          "metadata": {
+            "status": "completed",
+            "truncated": false,
+            "exit": 0
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 24,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 39223,
+      "event": {
+        "id": "evt_1554bfa33001koG0l5kFvaMYAz",
+        "created": 1792432405043,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554b79d3001gbNl6hd5vKQrYD",
+          "finish": "tool-calls",
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 139,
+            "output": 57,
+            "reasoning": 45,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 25,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 39223,
+      "event": {
+        "id": "evt_1554bfa350016PPDPUWNzXp1D8",
+        "created": 1792432405045,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "cost": 0,
+          "tokens": {
+            "input": 227,
+            "output": 120,
+            "reasoning": 125,
+            "cache": {
+              "read": 11008,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 39223,
+      "event": {
+        "id": "evt_1554bfa3a001cwE5fPWvtZ92fT",
+        "created": 1792432405050,
+        "type": "shell.exited",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "sh_1554b84ed001ljcXkj2O13T23z",
+          "exit": 0,
+          "status": "exited"
+        }
+      }
+    },
+    {
+      "t": 49021,
+      "event": {
+        "id": "evt_1554c2075001zpDxEYyLp944ge",
+        "created": 1792432414837,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_1554bfa3c001SYM7T5SHmL13LC",
+          "started": 1792432405057
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 26,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 49021,
+      "event": {
+        "id": "evt_1554c207a001ohTid5hOLSDyus",
+        "created": 1792432414842,
+        "type": "session.text.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554bfa3c001SYM7T5SHmL13LC",
+          "ordinal": 0
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 27,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 49021,
+      "event": {
+        "id": "evt_1554c207e001ut901SiugFh5I0",
+        "created": 1792432414846,
+        "type": "session.text.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554bfa3c001SYM7T5SHmL13LC",
+          "ordinal": 0,
+          "delta": "awake"
+        }
+      }
+    },
+    {
+      "t": 49021,
+      "event": {
+        "id": "evt_1554c207e002Z4gf3HWcUCGA1v",
+        "created": 1792432414846,
+        "type": "session.text.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554bfa3c001SYM7T5SHmL13LC",
+          "ordinal": 0,
+          "text": "awake"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 28,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 49021,
+      "event": {
+        "id": "evt_1554c2081001gI1nJldYATcQmd",
+        "created": 1792432414849,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554bfa3c001SYM7T5SHmL13LC"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 29,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 49021,
+      "event": {
+        "id": "evt_1554c20830018DLKs2FXceHXkU",
+        "created": 1792432414851,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "assistantMessageID": "msg_1554bfa3c001SYM7T5SHmL13LC",
+          "finish": "stop",
+          "rawFinish": "stop",
+          "cost": 0,
+          "tokens": {
+            "input": 127,
+            "output": 3,
+            "reasoning": 0,
+            "cache": {
+              "read": 5376,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 30,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 49021,
+      "event": {
+        "id": "evt_1554c20850017oRtfut27E46sW",
+        "created": 1792432414853,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "cost": 0,
+          "tokens": {
+            "input": 354,
+            "output": 123,
+            "reasoning": 125,
+            "cache": {
+              "read": 16384,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 49021,
+      "event": {
+        "id": "evt_1554c2086001pYDn2s5f7z031w",
+        "created": 1792432414854,
+        "type": "session.execution.succeeded",
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 31,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 49042,
+      "event": {
+        "id": "evt_1554c209d001Qk0wxlOZ9dckXI",
+        "created": 1792432414877,
+        "type": "session.viewed",
+        "data": {
+          "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "idle": 1792432414854
+        },
+        "durable": {
+          "aggregateID": "ses_eaab49affffeiBK1cNpR5BBiNs",
+          "seq": 32,
+          "version": 1
+        }
+      }
+    }
+  ],
+  "omitted": {
+    "repeatedDeltaFrames": {
+      "session.reasoning.delta": 1
+    }
+  },
+  "inputs": [
+    {
+      "t": 83,
+      "key": {
+        "text": "Use your shell tool to run exactly this command: sleep 30 . When it finishes, reply with the word: awake"
+      }
+    },
+    {
+      "t": 1006,
+      "key": "Enter"
+    }
+  ],
+  "http": [
+    {
+      "t": 5739,
+      "method": "GET",
+      "path": "/api/session/active",
+      "status": 200,
+      "response": {
+        "data": {
+          "ses_eaab49affffeiBK1cNpR5BBiNs": {
+            "type": "running"
+          }
+        }
+      }
+    }
+  ],
+  "pluginRoutes": [
+    {
+      "t": 1028,
+      "route": {
+        "type": "session",
+        "sessionID": "ses_eaab49affffeiBK1cNpR5BBiNs"
+      }
+    }
+  ],
+  "marks": [
+    {
+      "t": 5789,
+      "mark": "service restart issued"
+    },
+    {
+      "t": 6061,
+      "mark": "service restart returned"
+    }
+  ]
+}

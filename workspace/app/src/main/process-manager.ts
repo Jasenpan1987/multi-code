@@ -8,8 +8,11 @@ import { shellManager } from "./shell-manager";
 import { getBackend } from "./backends";
 import type {
   AlertDelivery,
+  AlertsDegradedReason,
+  AnswerResult,
   Backend,
   BackendName,
+  DialogRef,
   HookAttention,
   PromptToolCall,
   SessionDiscovery,
@@ -26,6 +29,7 @@ import { RunStateTracker, type RunState, type WriteVerdict } from "./run-state";
 import { INSTANCE_ENV, SPAWN_ENV } from "./backends/instance-env";
 import { KEY_GAP_MS } from "./secretary/dialog";
 import type { AnswerPlan } from "./secretary/dialog";
+import { answerForChoice } from "./backends/opencodeAnswer";
 
 export interface InstanceInfo {
   id: string;
@@ -44,6 +48,9 @@ export interface InstanceInfo {
   // This instance's hooks aren't reaching Multi-Code, so it raises no alerts (PRD
   // Story 6). The renderer shows a bar on its page.
   alertsDegraded?: boolean;
+  alertsDegradedReason?: AlertsDegradedReason;
+  // Why the last start launched nothing (SpawnConfig.refusal).
+  startError?: string;
 }
 
 /**
@@ -61,7 +68,8 @@ export interface SecretaryEvent {
   kind: "finished" | "needs-you";
   seq: number;
   at: number;
-  prompt?: { detail: PromptDetail; toolName: string; toolInput: unknown };
+  // `dialog` when the backend answers this dialog through its API (OpenCode).
+  prompt?: { detail: PromptDetail; toolName: string; toolInput: unknown; dialog?: DialogRef };
 }
 
 // `event` is the instance's new live event, or null when it was cleared.
@@ -147,6 +155,9 @@ interface ManagedInstance {
   // Its hooks don't run, so nothing will alert for it. Per process: a restart
   // builds a fresh instance and starts out trusting its hooks again.
   alertsDegraded?: boolean;
+  alertsDegradedReason?: AlertsDegradedReason;
+  // See InstanceInfo.startError.
+  startError?: string;
   // Minted per spawn and handed to the agent's hooks (SPAWN_ENV), so a late
   // delivery from the process a restart replaced can be told apart. Absent on a
   // contact that has never been spawned in this run.
@@ -161,16 +172,23 @@ interface ManagedInstance {
   // Writes that carried input, from anyone. answerDialog stops when one lands
   // between its own keys: the builder typed in the terminal, or the phone answered.
   inputWrites?: number;
+  // The dialog the agent last reported it is stopped on, with the request to answer
+  // when its backend answers through the CLI's API. Set on `prompt`, cleared on
+  // `prompt-cleared` and exit; a phone's tap is held to it (answerPhoneChoice).
+  livePrompt?: { detail: PromptDetail; dialog?: DialogRef };
 }
 
 // What answerDialog did. `answered`: the event it was asked about isn't the live
-// one any more, so nothing was written. `changed`: a new dialog came up while the
-// keys were going in, and the rest weren't written. `interrupted`: someone else's
-// input landed between its keys, and the rest weren't written. `stopped`: the
-// process went, or the caller called it off.
+// one any more, or the CLI said its dialog was already answered, so nothing was
+// written. `changed`: a new dialog came up while the keys were going in, and the rest
+// weren't written. `interrupted`: someone else's input landed between its keys, and
+// the rest weren't written. `stopped`: the process went, or the caller called it off.
+// `failed`: an answer through the CLI's API didn't go through (the CLI couldn't be
+// reached or refused it, or the event names no dialog to answer); it may or may not
+// have landed, so the builder should look.
 export type AnswerOutcome =
   | { ok: true; recorded?: PromptToolCall }
-  | { ok: false; reason: "answered" | "changed" | "interrupted" | "stopped" };
+  | { ok: false; reason: "answered" | "changed" | "interrupted" | "stopped" | "failed" };
 
 export interface AnswerTiming {
   keyGapMs: number;
@@ -308,14 +326,17 @@ export class ProcessManager {
     ownSessionId?: string
   ): SessionStart {
     if (ownSessionId) return { kind: "own", sessionId: ownSessionId };
+    const isClaimed = (sessionId: string) => this.isSessionClaimedBy(sessionId, id);
+    const impl = getBackend(backend);
+    if (impl.picksLatestSession) return { kind: "latest", isClaimed };
     let latest: string | null = null;
     try {
-      latest = getBackend(backend).findLatestSessionId(cwd);
+      latest = impl.findLatestSessionId(cwd);
     } catch {
       // Unreadable: --continue is what every start did before.
     }
-    if (latest && this.isSessionClaimedBy(latest, id)) return { kind: "fresh" };
-    return { kind: "latest" };
+    if (latest && isClaimed(latest)) return { kind: "fresh" };
+    return { kind: "latest", isClaimed };
   }
 
   setManagerSpawnOptions(opts: SpawnOptions | null) {
@@ -380,6 +401,11 @@ export class ProcessManager {
   // once the dialog is gone. For a question box, resolves with the call the CLI
   // reported when the box cleared, which holds its record of the answers. Aborting
   // `signal` (the brief was replaced, or Secretary Mode went off) stops the rest.
+  //
+  // A plan with an `answer` (OpenCode, opencode-v2 T-607) writes no keys: the answer
+  // goes once through the CLI's API to the request the event names, after the same
+  // checks. It names the request by id, so unlike a key it can't land in a dialog
+  // that came up meanwhile; the CLI says `gone` when the builder got there first.
   async answerDialog(
     id: string,
     seq: number,
@@ -392,6 +418,23 @@ export class ProcessManager {
     if (!instance || !ptyProcess || signal?.aborted) return { ok: false, reason: "stopped" };
     const event = instance.secretaryEvent;
     if (event?.kind !== "needs-you" || event.seq !== seq) return { ok: false, reason: "answered" };
+
+    if (plan.answer) {
+      const ref = event.prompt?.dialog;
+      const attention = instance.hookAttention;
+      if (!ref || ref.kind !== plan.answer.kind || !attention?.answer) {
+        return { ok: false, reason: "failed" };
+      }
+      let result: AnswerResult;
+      try {
+        result = await attention.answer(ref, plan.answer);
+      } catch {
+        result = { ok: false, reason: "failed" };
+      }
+      if (!result.ok) return { ok: false, reason: result.reason === "gone" ? "answered" : "failed" };
+      this.clearPhonePrompt(instance, ref);
+      return { ok: true };
+    }
 
     const same = () => this.instances.get(id) === instance && instance.ptyProcess === ptyProcess;
     // Registered before the first key, so a box that clears at once isn't missed.
@@ -468,6 +511,51 @@ export class ProcessManager {
     };
   }
 
+  // A paired phone tapped option `index` of the dialog it shows, `detail` being the
+  // buttons it was sent. Resolves true when that answered it, false when nothing was
+  // answered: the phone then says the choice is no longer available.
+  //
+  // A backend that answers through the CLI's API (OpenCode) gets no keys from a tap
+  // at all. The answer goes to the request the live prompt names, and only while the
+  // tapped buttons are that prompt's own: an index into an older dialog's options
+  // would pick the wrong thing. Otherwise (Claude) the backend's keys for the option
+  // are written, as typed.
+  async answerPhoneChoice(id: string, detail: PromptDetail, index: number): Promise<boolean> {
+    const instance = this.instances.get(id);
+    if (!instance) return false;
+    const attention = instance.hookAttention;
+    if (attention?.answer) {
+      const live = instance.livePrompt;
+      if (!live?.dialog || live.detail !== detail) return false;
+      const answer = answerForChoice(live.detail, live.dialog, index);
+      if (!answer) return false;
+      let result: AnswerResult;
+      try {
+        result = await attention.answer(live.dialog, answer);
+      } catch {
+        return false;
+      }
+      if (!result.ok) return false;
+      this.clearPhonePrompt(instance, live.dialog);
+      return true;
+    }
+    const keys = this.keystrokeForChoice(id, detail.tool, index, detail.options.length);
+    if (keys === null) return false;
+    this.writeToInstance(id, keys);
+    return true;
+  }
+
+  // After an answer through the API, drop the phone's badge and buttons as a key
+  // written from it does (writeToInstance). Only while that dialog is still the live
+  // one: the CLI may already have reported the next dialog while the answer was in
+  // flight, and its buttons must stay.
+  private clearPhonePrompt(instance: ManagedInstance, ref: DialogRef) {
+    if (this.instances.get(instance.id) !== instance) return;
+    const live = instance.livePrompt?.dialog;
+    if (live?.kind !== ref.kind || live.requestId !== ref.requestId) return;
+    remoteServer.clearActivity(instance.id);
+  }
+
   // What the secretary's brief writer reads for an instance: the name the builder
   // knows it by, the backend whose session it reads, and the session it is on now. The live session is re-checked
   // first rather than waiting for the next poll, so a turn that ends within
@@ -537,6 +625,7 @@ export class ProcessManager {
                     detail,
                     toolName: toolCall.toolName,
                     toolInput: toolCall.toolInput,
+                    ...(toolCall.dialog ? { dialog: toolCall.dialog } : {}),
                   },
                 }
               : {}),
@@ -617,6 +706,14 @@ export class ProcessManager {
 
   loadSavedContacts(): InstanceInfo[] {
     const saved = this.migrateManagerToTop(loadContacts());
+    // Whatever a backend's first spawn needs, prepared before anyone presses start.
+    for (const name of new Set(saved.map((c) => c.backend ?? DEFAULT_BACKEND))) {
+      try {
+        getBackend(name).warm?.();
+      } catch {
+        // Only a head start: the spawn prepares it itself if this failed.
+      }
+    }
     for (const contact of saved) {
       if (!this.instances.has(contact.id)) {
         this.instances.set(contact.id, {
@@ -818,7 +915,31 @@ export class ProcessManager {
       args,
       env,
       sessionId: openedSessionId,
+      refusal,
     } = backend.spawn(cwd, opts ?? undefined, session);
+
+    // The backend won't run this CLI (OpenCode 1.x): nothing is spawned, and the
+    // contact stays stopped with the reason on its page. It keeps the session it had,
+    // so upgrading and starting again picks the conversation up where it was.
+    if (refusal) {
+      debugTrace(`[spawn] ${id.slice(0, 8)} refused: ${refusal}`);
+      return {
+        id,
+        cwd,
+        alias,
+        status: "stopped",
+        startedAt: 0,
+        ptyProcess: null,
+        backend: backendName,
+        discovery: null,
+        hookAttention: null,
+        lastPtyByteAt: 0,
+        isManager,
+        runState: new RunStateTracker(),
+        ownSessionId: session.kind === "own" ? session.sessionId : undefined,
+        startError: refusal,
+      };
+    }
 
     const spawnId = crypto.randomUUID();
     const ptyProcess = pty.spawn(command, args, {
@@ -846,6 +967,9 @@ export class ProcessManager {
       isManager,
       runState: new RunStateTracker(),
       alertsDegraded: spawnedWithoutAlertHooks || undefined,
+      alertsDegradedReason: spawnedWithoutAlertHooks
+        ? backendName === "claude" ? "hooks" : "plugin"
+        : undefined,
       spawnId,
       // Known up front when the backend resumed it or named it. Otherwise
       // discovery finds it, and attachSession records it then.
@@ -855,15 +979,30 @@ export class ProcessManager {
 
     // Created at spawn, before any session exists: the hooks report from the
     // process's first moment, and keep reporting across /clear.
-    instance.hookAttention = backend.createHookAttention(
-      ptyProcess.pid,
-      (type, detail, toolCall) =>
-        this.reportActivity(instance, type, detail, toolCall),
-      (ok) => this.setAlertsDegraded(instance, !ok)
-    );
-
     const isSessionClaimed = (candidate: string): boolean =>
       this.isSessionClaimedBy(candidate, id);
+
+    instance.hookAttention = backend.createHookAttention(
+      ptyProcess.pid,
+      (type, detail, toolCall, restated) =>
+        this.reportActivity(instance, type, detail, toolCall, restated),
+      (ok, reason) => this.setAlertsDegraded(instance, !ok, reason),
+      {
+        instanceId: id,
+        sessionId: openedSessionId,
+        // The terminal moved to another session (`/new`, `/sessions`). Only while
+        // this record is the contact's current one, and never onto a session another
+        // contact holds.
+        onSessionShown: (sessionId) => {
+          if (this.instances.get(id) !== instance) return;
+          if (sessionId === instance.sessionId || isSessionClaimed(sessionId)) return;
+          debugTrace(
+            `[session-moved] ${id.slice(0, 8)} ${instance.sessionId ?? "none"} -> ${sessionId} (shown) at ${new Date().toISOString()}`
+          );
+          this.attachSession(instance, sessionId);
+        },
+      }
+    );
 
     // Nothing to discover when the backend said which session it opened. A guess
     // here could only be worse: the directory's newest unclaimed transcript.
@@ -899,6 +1038,7 @@ export class ProcessManager {
       instance.ptyProcess = null;
       instance.runState.onExit();
       // A dead process has no dialog to answer and no turn to report on.
+      instance.livePrompt = undefined;
       this.clearSecretaryEvent(instance);
       for (const waiter of (instance.dialogClearWaiters ?? []).slice()) waiter(undefined);
       this.teardownObservers(instance);
@@ -950,17 +1090,28 @@ export class ProcessManager {
     instance: ManagedInstance,
     type: string,
     detail?: PromptDetail,
-    toolCall?: PromptToolCall
+    toolCall?: PromptToolCall,
+    // A dialog reported before, blocking the contact again (ActivityCallback).
+    restated = false
   ) {
     const id = instance.id;
-    debugTrace(`[activity] ${id.slice(0, 8)} ${type} at ${new Date().toISOString()}`);
+    debugTrace(
+      `[activity] ${id.slice(0, 8)} ${type}${restated ? " (restated)" : ""} at ${new Date().toISOString()}`
+    );
     instance.runState.onActivity(type);
-    // Recorded for every activity except the bookkeeping one, so the manager can
+    // Recorded for every activity except the bookkeeping ones, so the manager can
     // tell a session that just finished from one that has been idle for hours.
-    if (type !== "prompt-cleared") instance.lastActivityAt = Date.now();
+    if (type !== "prompt-cleared" && !restated) instance.lastActivityAt = Date.now();
     // A finished turn is exactly when context usage moved, so refresh now instead
     // of waiting for the TTL. Cheap: once per turn, not per list call.
     if (type === "waiting") this.refreshContextUsage(instance);
+    // What a phone's tap answers. A newer dialog with nothing to offer replaces the
+    // older one all the same: those buttons are no longer what's on screen.
+    if (type === "prompt") {
+      instance.livePrompt = detail ? { detail, dialog: toolCall?.dialog } : undefined;
+    } else if (type === "prompt-cleared") {
+      instance.livePrompt = undefined;
+    }
     // Before anything else hears of it, so a write made in reaction to this
     // activity clears the event it raised instead of landing before it exists.
     this.updateSecretaryEvent(instance, type, detail, toolCall);
@@ -972,22 +1123,41 @@ export class ProcessManager {
     }
     // "prompt-cleared" exists for paired phones (drop the stale option buttons);
     // the desktop UI has nothing to do with it, so it isn't forwarded to the
-    // renderer.
-    if (type !== "prompt-cleared" && this.mainWindow && !this.mainWindow.isDestroyed()) {
+    // renderer. Nor is a restatement: the renderer chimes and counts every event it
+    // hears, and this dialog has had its chime.
+    if (
+      type !== "prompt-cleared" &&
+      !restated &&
+      this.mainWindow &&
+      !this.mainWindow.isDestroyed()
+    ) {
       this.mainWindow.webContents.send("instance-activity", id, type);
     }
-    remoteServer.broadcastActivity(id, type, detail);
+    remoteServer.broadcastActivity(id, type, detail, restated);
     this.emitActivity(id, type);
   }
 
-  private setAlertsDegraded(instance: ManagedInstance, degraded: boolean) {
-    if (!!instance.alertsDegraded === degraded) return;
+  private setAlertsDegraded(
+    instance: ManagedInstance,
+    degraded: boolean,
+    reason?: AlertsDegradedReason
+  ) {
+    const nextReason = degraded ? reason ?? "hooks" : undefined;
+    if (!!instance.alertsDegraded === degraded && instance.alertsDegradedReason === nextReason) {
+      return;
+    }
     instance.alertsDegraded = degraded || undefined;
+    instance.alertsDegradedReason = nextReason;
     debugTrace(
-      `[alert-hook] ${instance.id.slice(0, 8)} hooks ${degraded ? "not running: alerts off" : "running again"} at ${new Date().toISOString()}`
+      `[alert-hook] ${instance.id.slice(0, 8)} ${degraded ? `alerts off (${nextReason})` : "alerts on again"} at ${new Date().toISOString()}`
     );
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send("instance-alerts-degraded", instance.id, degraded);
+      this.mainWindow.webContents.send(
+        "instance-alerts-degraded",
+        instance.id,
+        degraded,
+        nextReason
+      );
     }
   }
 
@@ -1325,12 +1495,14 @@ export class ProcessManager {
 
   // Instances a quit would cut off mid-task: a turn still running, or a dialog
   // waiting on the user. Idle ones are left out: they lose nothing, since the next
-  // start picks the session up with --continue, and counting them would mean asking
-  // on every quit.
+  // start reopens their session, and counting them would mean asking on every quit.
   unfinishedInstances(): { name: string; state: "busy" | "blocked" }[] {
     const unfinished: { name: string; state: "busy" | "blocked" }[] = [];
     for (const instance of this.instances.values()) {
       if (!instance.ptyProcess) continue;
+      // OpenCode 2's turns run in its shared background service, which outlives
+      // the terminal: quitting cuts none of them off (opencode-v2 Story 11).
+      if (instance.backend === "opencode") continue;
       const state = instance.runState.state();
       if (state !== "busy" && state !== "blocked") continue;
       unfinished.push({
@@ -1370,6 +1542,8 @@ export class ProcessManager {
       isManager: instance.isManager,
       runState: instance.ptyProcess ? instance.runState.state() : undefined,
       alertsDegraded: instance.ptyProcess ? instance.alertsDegraded : undefined,
+      alertsDegradedReason: instance.ptyProcess ? instance.alertsDegradedReason : undefined,
+      startError: instance.startError,
     };
   }
 }

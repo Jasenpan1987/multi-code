@@ -3,6 +3,11 @@ import type { ReactNode } from "react";
 import type { Instance } from "../../shared/types";
 import { RenameSessionDialog } from "./RenameSessionDialog";
 
+// How long OpenCode's slash menu is given to draw before the Enter that runs the
+// command. The manager's run_command waits 120 ms; a quick action has nobody waiting
+// on it, so a little more.
+const SLASH_MENU_SETTLE_MS = 250;
+
 interface QuickActionsSectionProps {
   instance: Instance;
   active: boolean;
@@ -58,11 +63,19 @@ export function QuickActionsSection({
     }
   }, [instance.cwd]);
 
+  // Claude runs a slash command typed with its Enter in one write. OpenCode 2's slash
+  // menu takes that Enter and leaves the command in the box (T-611, B-1), so the Enter
+  // follows once the menu has drawn, as the manager's run_command does.
   const sendSlash = useCallback(
     (cmd: string) => {
-      window.electronAPI.writeToInstance(instance.id, `${cmd}\r`);
+      if (instance.backend !== "opencode") {
+        window.electronAPI.writeToInstance(instance.id, `${cmd}\r`);
+        return;
+      }
+      window.electronAPI.writeToInstance(instance.id, cmd);
+      setTimeout(() => window.electronAPI.writeToInstance(instance.id, "\r"), SLASH_MENU_SETTLE_MS);
     },
-    [instance.id]
+    [instance.id, instance.backend]
   );
 
   const handleResume = useCallback(async () => {
@@ -81,29 +94,17 @@ export function QuickActionsSection({
     }
   }, [instance.id, sessionId]);
 
-  // Rename the current CLI session. Our own dialog collects the name; how it
-  // reaches the agent differs per backend because their `/rename` commands work
-  // differently (this is the "our dialog, per-backend adapter" approach):
-  //   - claude:   `/rename <name>` takes the name inline — send it in one shot.
-  //   - opencode: `/rename` takes NO argument; it opens opencode's own inline
-  //               rename dialog. So we send `/rename\r` to open that dialog,
-  //               wait briefly for it to appear, then type the name + Enter.
-  // The alias (our contact display name, edited via the context menu) is a
-  // separate concept — this renames the agent's session itself.
+  // Rename the current CLI session. Our own dialog collects the name, and both
+  // CLIs take it inline as `/rename <name>`, so it goes in one write. (OpenCode 2's
+  // bare `/rename` would have its model make a title up instead.) The alias, our
+  // contact display name edited from the context menu, is a separate thing: this
+  // renames the agent's session itself.
   const handleRename = useCallback(
     (name: string) => {
-      const write = (data: string) =>
-        window.electronAPI.writeToInstance(instance.id, data);
-      if (instance.backend === "opencode") {
-        // Open opencode's rename dialog, then fill + submit once it's up.
-        write("/rename\r");
-        setTimeout(() => write(`${name}\r`), 250);
-      } else {
-        write(`/rename ${name}\r`);
-      }
+      window.electronAPI.writeToInstance(instance.id, `/rename ${name}\r`);
       setRenameOpen(false);
     },
-    [instance.id, instance.backend]
+    [instance.id]
   );
 
   if (!active) return null;
@@ -122,7 +123,7 @@ export function QuickActionsSection({
         disabled={!isRunning || isOpencode}
         title={
           isOpencode
-            ? "OpenCode does not have an inline cost command"
+            ? "OpenCode has no inline cost command; its /stats page shows usage"
             : isRunning
               ? undefined
               : "Instance is stopped"

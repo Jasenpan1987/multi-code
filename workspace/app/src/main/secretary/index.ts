@@ -30,10 +30,11 @@
 //
 // A Needs-you brief whose dialog can be answered in words takes replies (T-509,
 // PRD Story 6): each one is read by the reply interpreter, held to the dialog by
-// dialog.ts, and only then answered with keys through process-manager, which
-// writes nothing unless that event is still the live one. Asking back and
-// answering a question press nothing. The exchanges live on the job, so they go
-// with the brief and come back with a reopened card.
+// dialog.ts, and only then answered through process-manager, with keys for Claude
+// and through OpenCode's API for OpenCode (opencode-v2 T-607), which answers nothing
+// unless that event is still the live one. Asking back and answering a question
+// press nothing. The exchanges live on the job, so they go with the brief and come
+// back with a reopened card.
 
 import { BrowserWindow } from "electron";
 import { processManager } from "../process-manager";
@@ -152,6 +153,10 @@ const SAY = {
     "Someone typed in the terminal while I was pressing keys. I stopped. Please check the terminal.",
   ],
   stopped: ["这个会话已经停了。", "The session has stopped."],
+  notDelivered: [
+    "我没能确认答案送到了会话里。请看一下终端。",
+    "I couldn't confirm the answer reached the session. Please check the terminal.",
+  ],
 } as const;
 
 const ASK_BACK: Record<AskBack, readonly [string, string]> = {
@@ -174,6 +179,24 @@ const ASK_BACK: Record<AskBack, readonly [string, string]> = {
     "Some questions are still open. Please tell me the rest.",
   ],
 };
+
+// OpenCode's "Always allow" is saved for the project, with no expiry, so asking about
+// it says so rather than "never ask again".
+const OPENCODE_ASK_BACK: Partial<Record<AskBack, readonly [string, string]>> = {
+  "once-or-always": [
+    "只允许这一次，还是给这个项目记下来，以后都允许？",
+    "Allow it just this once, or save it for this project and allow it from now on?",
+  ],
+  "confirm-always": [
+    "确认一下：允许它，并且给这个项目记下来，以后这类操作都直接允许，不再问你，对吗？回答“是”我就照办。",
+    "To confirm: allow it, and save that for this project, so calls like it are allowed from now on without asking? Reply \"yes\" and I'll do it.",
+  ],
+};
+
+function askBackLine(dialog: Dialog, ask: AskBack): readonly [string, string] {
+  const opencode = dialog.kind === "permission" && dialog.backend === "opencode";
+  return (opencode ? OPENCODE_ASK_BACK[ask] : undefined) ?? ASK_BACK[ask];
+}
 
 function mismatchNote(zh: boolean, questions: string[]): string {
   const list = questions.join(zh ? "、" : "; ");
@@ -314,6 +337,7 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
     if (job.handled) return settle("refused", say(SAY.answered));
     const { dialog } = job;
     if (!dialog) return settle("refused", say(SAY.unsupported));
+    const askBack = (ask: AskBack) => say(askBackLine(dialog, ask));
 
     // The answer to "to confirm: …?" is read here, not by the model.
     const confirming = job.confirming;
@@ -344,14 +368,14 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
       if (checked.ask === "confirm-always" || checked.ask === "confirm-auto") {
         job.confirming = { choice: read.choice, message: read.message };
       }
-      return settle("asked", say(ASK_BACK[checked.ask]));
+      return settle("asked", askBack(checked.ask));
     }
     return press(checked, read.message);
 
-    // The keys of a checked choice, and what the card says after.
+    // The keys (or the API answer) of a checked choice, and what the card says after.
     async function press(checked: Checked, message: string): Promise<void> {
       if (!checked.ok) {
-        if ("ask" in checked) return settle("asked", say(ASK_BACK[checked.ask]));
+        if ("ask" in checked) return settle("asked", askBack(checked.ask));
         return settle("refused", say(checked.refuse === "unsupported" ? SAY.unsupported : SAY.badChoice));
       }
       let outcome: AnswerOutcome;
@@ -366,6 +390,7 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
           changed: SAY.changed,
           interrupted: SAY.interrupted,
           stopped: SAY.stopped,
+          failed: SAY.notDelivered,
         };
         return settle("refused", say(why[outcome.reason]));
       }

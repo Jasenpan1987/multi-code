@@ -6,71 +6,14 @@
 // it hadn't personally watched run, and every stopped contact showed
 // `context=unknown`.
 //
-// better-sqlite3 is mocked rather than loaded, as in contextUsage.test.ts.
+// Claude's lookup; OpenCode 2's (`latestRootSession`) is tested in opencodeDb.test.ts.
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
 
-interface SessionRow {
-  id: string;
-  directory: string;
-  time_created: number;
-}
-
-const mocks = vi.hoisted(() => ({
-  stores: new Map<string, SessionRow[]>(),
-}));
-
-vi.mock("better-sqlite3", () => {
-  class FakeStatement {
-    constructor(
-      private readonly sql: string,
-      private readonly rows: SessionRow[]
-    ) {}
-
-    all(...args: unknown[]) {
-      if (
-        this.sql.includes("SELECT id, directory FROM session") &&
-        this.sql.includes("ORDER BY time_created DESC")
-      ) {
-        const [cwd, resolved] = args as [string, string];
-        return this.rows
-          .filter((r) => r.directory === cwd || r.directory === resolved)
-          .sort((a, b) => b.time_created - a.time_created)
-          .slice(0, 8)
-          .map((r) => ({ id: r.id, directory: r.directory }));
-      }
-      throw new Error(`unhandled .all() SQL in fake: ${this.sql}`);
-    }
-  }
-
-  class FakeDatabase {
-    private readonly rows: SessionRow[];
-    constructor(dbPath: string | Buffer) {
-      const key = String(dbPath);
-      if (key.includes("does-not-exist")) {
-        throw new Error("unable to open database file");
-      }
-      let rows = mocks.stores.get(key);
-      if (!rows) {
-        rows = [];
-        mocks.stores.set(key, rows);
-      }
-      this.rows = rows;
-    }
-    prepare(sql: string) {
-      return new FakeStatement(sql, this.rows);
-    }
-    close() {}
-  }
-
-  return { default: FakeDatabase };
-});
-
 const { findLatestJsonlSessionId, encodeProjectDir } = await import("./claude");
-const { findLatestSessionForCwd } = await import("./opencode");
 
 // ---------------------------------------------------------------- claude
 
@@ -82,7 +25,6 @@ beforeEach(() => {
 
 afterEach(() => {
   fs.rmSync(projectsRoot, { recursive: true, force: true });
-  mocks.stores.clear();
 });
 
 // Writes a transcript for `cwd` with an explicit mtime, since mtime is what decides
@@ -144,52 +86,5 @@ describe("claude: findLatestJsonlSessionId", () => {
 
   it("does not throw when the projects root itself is missing", () => {
     expect(findLatestJsonlSessionId(cwd, "/nope/not/here")).toBe(null);
-  });
-});
-
-// ---------------------------------------------------------------- opencode
-
-describe("opencode: findLatestSessionForCwd", () => {
-  const dbPath = "/tmp/fake-opencode.db";
-  const cwd = "/Users/x/code/api";
-
-  function seed(...rows: SessionRow[]) {
-    mocks.stores.set(dbPath, rows);
-  }
-
-  it("finds the newest session for the directory", () => {
-    seed(
-      { id: "s-old", directory: cwd, time_created: 1000 },
-      { id: "s-new", directory: cwd, time_created: 9000 }
-    );
-    expect(findLatestSessionForCwd(cwd, undefined, dbPath)).toBe("s-new");
-  });
-
-  it("returns null when the directory has no sessions", () => {
-    seed({ id: "s-elsewhere", directory: "/Users/x/code/nope", time_created: 1 });
-    expect(findLatestSessionForCwd(cwd, undefined, dbPath)).toBe(null);
-  });
-
-  // The read path wants the directory's newest session whether or not a running
-  // instance already owns it — unlike discovery, which must skip claimed ids.
-  it("returns a session even when something else claims it", () => {
-    seed({ id: "s-claimed", directory: cwd, time_created: 5 });
-    expect(findLatestSessionForCwd(cwd, undefined, dbPath)).toBe("s-claimed");
-  });
-
-  it("still honours a claim filter when one is passed", () => {
-    seed(
-      { id: "s-claimed", directory: cwd, time_created: 9000 },
-      { id: "s-free", directory: cwd, time_created: 1000 }
-    );
-    expect(
-      findLatestSessionForCwd(cwd, (id) => id === "s-claimed", dbPath)
-    ).toBe("s-free");
-  });
-
-  it("returns null rather than throwing when the database is unreadable", () => {
-    expect(
-      findLatestSessionForCwd(cwd, undefined, "/tmp/does-not-exist.db")
-    ).toBe(null);
   });
 });

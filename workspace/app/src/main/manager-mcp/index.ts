@@ -104,9 +104,10 @@ function registerTools() {
 // start when it spawns.
 //
 // Also writes what every project session spawns with to report its state, the
-// alert settings for Claude and the plugin for OpenCode, and hands them to
-// process-manager: the port and token exist only once the server is listening, and
-// this runs before anything can spawn.
+// alert settings for Claude and the TUI plugin for OpenCode (its directory and the
+// file it reads `/alert`'s target from), and hands them to process-manager: the port
+// and token exist only once the server is listening, and this runs before anything
+// can spawn. shutdownManagerMcp removes them again.
 export async function startManagerMcpServer(): Promise<void> {
   registerTools();
   managerMcpServer.onAlertDelivery((delivery) => processManager.handleAlertDelivery(delivery));
@@ -121,7 +122,7 @@ export async function startManagerMcpServer(): Promise<void> {
   }
   const opencodePlugin = writeOpencodePlugin(alert);
   if (!opencodePlugin && info.running) {
-    debugTrace("[alert-hook] OpenCode plugin could not be written; OpenCode spawns without it");
+    debugTrace("[alert-hook] OpenCode TUI plugin could not be written; OpenCode spawns without it");
   }
   processManager.setSessionSpawnOptions(
     settingsPath || opencodePlugin
@@ -130,7 +131,7 @@ export async function startManagerMcpServer(): Promise<void> {
   );
 }
 
-// Where an instance's alert hooks or plugin deliver to, and the token they carry.
+// Where an instance's alert hooks or TUI plugin deliver to, and the token they carry.
 // Null when the server isn't listening; callers spawn without alert hooks then.
 export function getAlertTarget(): { endpoint: string; token: string } | null {
   const endpoint = managerMcpServer.getAlertEndpoint();

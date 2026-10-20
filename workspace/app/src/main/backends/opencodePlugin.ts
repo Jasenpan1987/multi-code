@@ -1,52 +1,42 @@
-// Multi-Code's OpenCode plugin: the source written into userData, the events it
-// forwards, and how an OpenCode spawn is told to load it.
+// Multi-Code's OpenCode TUI plugin: the source written into userData, the deliveries
+// it makes, and the per-process TUI settings (OPENCODE_CLI_CONFIG_CONTENT) that load
+// it.
 //
-// OpenCode's counterpart of the alert hooks every Claude instance runs
-// (manager-mcp/config.ts): it posts what OpenCode reports about its own sessions to
-// the same `/alert` endpoint, under the same headers, in a body parseAlertDelivery
-// already reads. Loaded only by the OpenCode processes Multi-Code starts, because
-// the only thing naming it is OPENCODE_CONFIG_CONTENT in that process's env; plain
-// `opencode` in a terminal never sees it (PRD Story 7).
+// OpenCode 2 runs every turn in one shared service per user; a TUI is only a client
+// (docs/knowledge/decisions.md, 2026-10-16 "OpenCode 2 runs the way its VS Code
+// extension runs it"). Multi-Code reads state from the service's event stream, and
+// nothing in that stream says which session a terminal shows: `/sessions` and
+// `/clear` publish no frame at all. So this plugin runs inside the TUI and reports
+// its route, and nothing else. It goes to the same `/alert` endpoint, under the same
+// headers, as Claude's alert hooks; T-604's attention reads the deliveries.
 //
-// Behaviour measured on OpenCode 1.18.35 with this seam (T-409,
-// docs/timeline/2026-10-06_attention-alerts-investigation.md, "OpenCode plugin
-// spike"): one init per process, the instance env visible, a broken sibling plugin
-// harmless, `--pure` loading no plugin at all.
+// Loaded only by the TUIs Multi-Code starts, because the only thing naming it is
+// OPENCODE_CLI_CONFIG_CONTENT in that process's env, which only the CLI/TUI process
+// reads; plain `opencode` and the shared service never see it (PRD Story 10).
+//
+// Measured on OpenCode 2.0.32 (T-601, docs/timeline/2026-10-20_opencode-v2-spike.md,
+// G-601): a directory entry loads `<dir>/tui.js` (`index.js` is the server entry and
+// does not load as a TUI plugin); `ctx.ui.router.current()` is `{type:"home"}` until
+// the first prompt creates the `--session` id, then `{type:"session", sessionID}`;
+// an effect inside a `ui.slot` reported each change 11-18 ms after Enter, against
+// 25-95 ms for 100 ms polling; `solid-js` imported from a plain file outside any
+// node_modules resolves to the host's copy.
 
+import fs from "fs";
+import os from "os";
+import path from "path";
 import { ALERT_FILE_ENV, INSTANCE_ENV, SPAWN_ENV } from "./instance-env";
+import { stripJsonc } from "./opencodeDb";
 
-// The plugin's file name in `<userData>/opencode/`.
-export const OPENCODE_PLUGIN_FILE = "multicode-plugin.js";
+// The plugin's directory in `<userData>/opencode/`, and its entry file in there.
+export const OPENCODE_PLUGIN_DIR = "tui";
+export const OPENCODE_PLUGIN_ENTRY = "tui.js";
 
-// The one delivery the plugin makes by itself, from its init, so an instance whose
-// plugin loaded can be told from one whose plugin never ran (PRD Story 6).
+// The plugin's deliveries. `multicode.init` once per setup, so a TUI whose plugin
+// loaded can be told from one whose plugin never ran (PRD Story 9); `multicode.route`
+// whenever the terminal's route changes, with `session_id` when it shows a session.
 export const OPENCODE_INIT_EVENT = "multicode.init";
-
-// The OpenCode events the plugin forwards: the ones attention logic acts on (T-411),
-// under both their current names and the v2 ones OpenCode is moving to (both are in
-// the 1.18.35 binary). An allowlist, not a denylist: OpenCode publishes an event per
-// streamed token, and a new noisy event in some later version must not become a POST
-// per token from inside the user's agent.
-//
-// `session.created`/`session.updated` are here for `info.parentID`, the only place a
-// child (subagent) session is marked. `session.idle` is not: it duplicates
-// `session.status {type:"idle"}`, which is what Finished keys on.
-export const OPENCODE_PLUGIN_EVENTS = [
-  "session.status",
-  "session.created",
-  "session.updated",
-  "session.error",
-  "permission.asked",
-  "permission.replied",
-  "permission.v2.asked",
-  "permission.v2.replied",
-  "question.asked",
-  "question.replied",
-  "question.rejected",
-  "question.v2.asked",
-  "question.v2.replied",
-  "question.v2.rejected",
-] as const;
+export const OPENCODE_ROUTE_EVENT = "multicode.route";
 
 // Bounds on what the plugin queues and how long one post may take. Posts are
 // localhost and answered with a 204 before Multi-Code does anything, so these only
@@ -55,129 +45,287 @@ export const OPENCODE_PLUGIN_EVENTS = [
 const MAX_QUEUED = 200;
 const POST_TIMEOUT_MS = 2000;
 
-// The plugin's source. Plain JS, imports only `fs`, because OpenCode runs it in a
-// Bun worker inside the user's TUI and nothing here may need installing or depend
-// on Bun. Rules it keeps, each because it runs inside someone else's agent:
-//   - Exactly one export, the plugin function: OpenCode calls every export as one.
+// A route is said once, when it changes, so a lost post (a timeout while Multi-Code
+// was busy, its server restarting) would leave the contact on the session before for
+// good. A failed one is sent again after a wait that doubles up to the max, for as
+// long as the terminal still shows that route and the plugin is live.
+const ROUTE_RETRY_MIN_MS = 500;
+const ROUTE_RETRY_MAX_MS = 30_000;
+
+// The plugin's source. Plain JS, importing only `fs` and the host's `solid-js`,
+// because OpenCode runs it inside the user's TUI and nothing here may need installing.
+// Rules it keeps, each because it runs inside someone else's terminal:
+//   - Report-only: it reads the route and posts it. It never navigates, prompts,
+//     answers or registers anything but one empty slot.
 //   - Inert unless Multi-Code started this process: no instance id, no reports.
-//   - Init does one small file read and returns. It blocks OpenCode's bootstrap.
-//   - The event hook never awaits the network: posts go on a FIFO and the hook
-//     returns at once. Every error is swallowed; nothing goes to stdout, which is
-//     the TUI's screen.
+//   - Setup does one small file read and returns. It holds up the TUI's start.
+//   - Nothing awaits the network: posts go on a FIFO and the effect returns at once.
+//     Every error is swallowed; nothing goes to stdout, which is the TUI's screen.
 //   - The token comes from the 0600 file the env names, never from the env itself.
+//   - The route is copied field by field: it is a store proxy, and a retained one
+//     would change under the queue.
 //
-// After reading its ids it deletes them from `process.env`. The agent's bash tool
-// inherits this env, so an `opencode` the agent runs would otherwise load this
-// plugin with the same ids and report its sessions as this instance's. The ids are
-// kept on globalThis for a later init in the same process.
+// After reading its ids it deletes them from `process.env`, so a service this TUI
+// restarts (OpenCode respawns a dead one from an attached TUI) doesn't inherit them
+// (measured in T-611: the respawned service had none). It can't take them out of the
+// env the TUI has already pushed for its root session: the agent's shell there still
+// sees them, as a Claude contact's Bash does (spike G-605, accepted). The ids are kept
+// on globalThis for a later setup in the same process.
 //
-// The newest init wins. A second init in one process would otherwise report every
-// event twice, and OpenCode drops a plugin's old hooks when it re-initialises, so
-// the old copy must not be the one left talking. `opencode run` initialises twice
-// (measured 2026-10-07). Every init posts through the one FIFO on globalThis, so
-// what the old copy had queued still goes out before anything the new one sends.
+// The newest setup wins. OpenCode reloads a local plugin when its file changes (a
+// second Multi-Code sharing userData rewrites it on start), and the old copy's effect
+// must not be the one left talking. Every setup posts through the one FIFO on
+// globalThis, so what the old copy had queued still goes out first.
 export function opencodePluginSource(): string {
-  return `// Multi-Code's OpenCode plugin. Written by Multi-Code into its own data folder on
-// every start and loaded only by the OpenCode instances it launches. Report-only:
-// forwards session, permission and question events to Multi-Code, changes nothing.
+  return `// Multi-Code's OpenCode TUI plugin. Written by Multi-Code into its own data folder on
+// every start and loaded only by the OpenCode terminals it launches. Report-only:
+// tells Multi-Code which session this terminal shows, changes nothing.
 import fs from "fs";
+import { createEffect } from "solid-js";
 
-const EVENTS = new Set(${JSON.stringify(OPENCODE_PLUGIN_EVENTS)});
+export default {
+  id: "multicode",
+  setup(ctx) {
+    try {
+      const state = (globalThis.__multicodeTui ??= {
+        instance: process.env.${INSTANCE_ENV},
+        spawn: process.env.${SPAWN_ENV},
+        file: process.env.${ALERT_FILE_ENV},
+        generation: 0,
+        queue: Promise.resolve(),
+        queued: 0,
+      });
+      delete process.env.${INSTANCE_ENV};
+      delete process.env.${SPAWN_ENV};
+      delete process.env.${ALERT_FILE_ENV};
+      if (!state.instance || !state.spawn || !state.file) return;
 
-export const MulticodeAlerts = async () => {
-  try {
-    const state = (globalThis.__multicodeAlerts ??= {
-      instance: process.env.${INSTANCE_ENV},
-      spawn: process.env.${SPAWN_ENV},
-      file: process.env.${ALERT_FILE_ENV},
-      generation: 0,
-      queue: Promise.resolve(),
-      queued: 0,
-    });
-    delete process.env.${INSTANCE_ENV};
-    delete process.env.${SPAWN_ENV};
-    delete process.env.${ALERT_FILE_ENV};
-    if (!state.instance || !state.spawn || !state.file) return {};
+      const target = JSON.parse(fs.readFileSync(state.file, "utf8"));
+      if (typeof target?.endpoint !== "string" || typeof target?.token !== "string") return;
+      const headers = {
+        "Authorization": "Bearer " + target.token,
+        "Content-Type": "application/json",
+        "X-Multicode-Instance": state.instance,
+        "X-Multicode-Spawn": state.spawn,
+      };
 
-    const target = JSON.parse(fs.readFileSync(state.file, "utf8"));
-    if (typeof target?.endpoint !== "string" || typeof target?.token !== "string") return {};
-    const headers = {
-      "Authorization": "Bearer " + target.token,
-      "Content-Type": "application/json",
-      "X-Multicode-Instance": state.instance,
-      "X-Multicode-Spawn": state.spawn,
-    };
+      const generation = ++state.generation;
+      let disposed = false;
+      // Resolves true once Multi-Code took it, false when it didn't. A newer setup's
+      // own posts speak for this TUI, and a disposed one says nothing more, so their
+      // posts are dropped and count as done.
+      const post = (body) => {
+        if (disposed || generation !== state.generation) return Promise.resolve(true);
+        if (state.queued >= ${MAX_QUEUED}) return Promise.resolve(false);
+        const payload = JSON.stringify(body);
+        state.queued++;
+        const sent = state.queue
+          .then(() => fetch(target.endpoint, {
+            method: "POST",
+            headers,
+            body: payload,
+            signal: AbortSignal.timeout(${POST_TIMEOUT_MS}),
+          }))
+          .then((res) => Promise.resolve(res.body?.cancel()).then(() => res.ok, () => res.ok))
+          .catch(() => false)
+          .finally(() => { state.queued--; });
+        state.queue = sent;
+        return sent;
+      };
 
-    const generation = ++state.generation;
-    const post = (body) => {
-      if (generation !== state.generation || state.queued >= ${MAX_QUEUED}) return;
-      const payload = JSON.stringify(body);
-      state.queued++;
-      state.queue = state.queue
-        .then(() => fetch(target.endpoint, {
-          method: "POST",
-          headers,
-          body: payload,
-          signal: AbortSignal.timeout(${POST_TIMEOUT_MS}),
-        }))
-        .then((res) => res.body?.cancel())
-        .catch(() => {})
-        .finally(() => { state.queued--; });
-    };
+      post({ hook_event_name: ${JSON.stringify(OPENCODE_INIT_EVENT)}, pid: process.pid });
 
-    post({ hook_event_name: ${JSON.stringify(OPENCODE_INIT_EVENT)}, pid: process.pid });
-    return {
-      event: async ({ event }) => {
+      let last;
+      let retry;
+      const report = () => {
         try {
-          if (!EVENTS.has(event?.type)) return;
-          const properties = event.properties ?? {};
-          post({
-            hook_event_name: event.type,
-            session_id: properties.sessionID ?? properties.info?.id,
-            pid: process.pid,
-            properties,
-          });
+          const current = ctx.ui.router.current();
+          const type = current?.type;
+          const sessionID = current?.sessionID;
+          if (typeof type !== "string") return;
+          const route = { type };
+          if (typeof sessionID === "string") route.sessionID = sessionID;
+          const key = type + "\\n" + (route.sessionID ?? "");
+          if (key === last) return;
+          last = key;
+          clearTimeout(retry);
+          const body = { hook_event_name: ${JSON.stringify(OPENCODE_ROUTE_EVENT)}, route };
+          if (type === "session" && route.sessionID) body.session_id = route.sessionID;
+          const send = (wait) =>
+            post(body).then((ok) => {
+              if (ok || disposed || last !== key) return;
+              retry = setTimeout(() => {
+                if (last === key) send(Math.min(wait * 2, ${ROUTE_RETRY_MAX_MS}));
+              }, wait);
+            });
+          send(${ROUTE_RETRY_MIN_MS});
         } catch {}
-      },
-    };
-  } catch {
-    return {};
-  }
+      };
+
+      // The built-in stats plugin's pattern: an effect owned by a slot that renders
+      // nothing, so it lives exactly as long as this plugin's setup.
+      const dispose = ctx.ui.slot({
+        append: "app",
+        render() {
+          createEffect(() => report());
+          return null;
+        },
+      });
+      return () => {
+        disposed = true;
+        clearTimeout(retry);
+        try {
+          if (typeof dispose === "function") dispose();
+        } catch {}
+      };
+    } catch {
+      return;
+    }
+  },
 };
 `;
 }
 
-// The OPENCODE_CONFIG_CONTENT an instance spawns with: the inherited value, if any,
-// with Multi-Code's plugin added to its `plugin` list. OpenCode deep-merges this
-// value over the user's config files and unions `plugin` across sources, so one
-// added entry leaves the rest of their config in force, their own plugins included.
-//
-// Only an entry identical to ours is dropped, so nothing of the user's is ever
-// removed. A parent Multi-Code's entry (a dev build launched from inside an OpenCode
-// session inherits that env) can't be told from a user's plugin by its path, and is
-// left in: both copies then load in one process, share the plugin's globalThis
-// state, and only the newest init reports.
-//
-// Null when the inherited value isn't a JSON object whose `plugin` is a list or
-// absent. Rewriting a value this can't read could change the user's config, so the
-// caller spawns with it untouched and without the plugin instead.
-export function withMulticodePlugin(
-  inherited: string | undefined,
-  pluginUrl: string
-): string | null {
-  let config: Record<string, unknown> = {};
-  if (inherited !== undefined && inherited.trim() !== "") {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(inherited);
-    } catch {
-      return null;
-    }
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
-    config = parsed as Record<string, unknown>;
+// ------------------------------------------------------------ TUI settings
+
+// Multi-Code's per-process TUI settings. Tabs off: Multi-Code's sidebar already lists
+// the sessions, and OpenCode turns them off itself inside hosts that manage several
+// terminals (`tabs.mode: auto` under Herdr). Ctrl+Z off: by default it suspends the
+// renderer, and in a pty child the frozen TUI can't be told from a busy one (spike,
+// G-601: `ps` still showed it running).
+const TUI_SETTINGS = { tabs: { mode: "off" }, keybinds: { "terminal.suspend": "none" } } as const;
+
+// The CLI config file OpenCode merges OPENCODE_CLI_CONFIG_CONTENT over:
+// `$OPENCODE_CONFIG_DIR` (when set), else `<XDG_CONFIG_HOME or ~/.config>/opencode`,
+// then `cli.json` (`packages/cli/src/index.ts`, `packages/util/src/global-roots.ts`).
+// Read only, never written.
+export function opencodeCliConfigPath(env: Record<string, string | undefined>): string {
+  const dir =
+    env.OPENCODE_CONFIG_DIR ||
+    path.join(env.XDG_CONFIG_HOME || path.join(env.HOME || os.homedir(), ".config"), "opencode");
+  return path.join(dir, "cli.json");
+}
+
+type PluginEntry = string | { package: string; options?: Record<string, unknown> };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// An entry as OpenCode resolves it: a `file://` URL as it is, a `./`, `../` or
+// absolute path against the CLI config's own directory, anything else (an npm spec,
+// `-id` to disable a plugin, `*`) untouched (`localSource` in
+// `packages/plugin/src/source.ts`, called with `dirname(cli.json)` from
+// `packages/tui/src/plugin/context.tsx`). Null for a shape OpenCode's schema rejects
+// (`Plugin` in `packages/tui/src/config/index.tsx`).
+function resolveEntry(entry: unknown, dir: string): PluginEntry | null {
+  const resolve = (spec: string) =>
+    !spec.startsWith("file://") && (spec.startsWith("./") || spec.startsWith("../") || path.isAbsolute(spec))
+      ? path.resolve(dir, spec)
+      : spec;
+  if (typeof entry === "string") return resolve(entry);
+  if (!isRecord(entry) || typeof entry.package !== "string") return null;
+  if (entry.options !== undefined && !isRecord(entry.options)) return null;
+  return { ...entry, package: resolve(entry.package) } as PluginEntry;
+}
+
+// A JSON object from JSONC text (comments and trailing commas, as OpenCode's
+// jsonc-parser accepts), or null.
+function parseObject(text: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(stripJsonc(text));
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
   }
-  const existing = config.plugin ?? [];
-  if (!Array.isArray(existing)) return null;
-  const others = existing.filter((entry) => entry !== pluginUrl);
-  return JSON.stringify({ ...config, plugin: [...others, pluginUrl] });
+}
+
+export interface CliConfigResult {
+  // The value for OPENCODE_CLI_CONFIG_CONTENT.
+  content: string;
+  // Whether Multi-Code's plugin is in it. False when there was none to add, or when
+  // the builder's own settings couldn't be read safely.
+  plugin: boolean;
+}
+
+// OPENCODE_CLI_CONFIG_CONTENT for one TUI: Multi-Code's settings merged into the
+// inherited value, if any, plus a `plugins` list that keeps the builder's own TUI
+// plugins and adds Multi-Code's last.
+//
+// The list has to be copied in: OpenCode deep-merges this value over `cli.json`, but
+// arrays replace (measured, spike G-601: env `plugins:[probe]` dropped a `cli.json`
+// plugin, `[dummy, probe]` loaded both). An inherited value's own `plugins` already
+// replaces the file's, so it is the one extended then. Plugins OpenCode discovers in
+// `<config>/plugins/` and `<project>/.opencode/plugins/` load whatever this says.
+//
+// When `cli.json` exists but can't be read or doesn't have the shape OpenCode accepts,
+// the list is not overridden and the plugin not added: the builder's TUI plugins keep
+// loading as in any terminal, and the contact shows "plugin didn't load" (T-604's
+// degraded state) instead. An inherited value that doesn't parse is left exactly as
+// it was, settings and all, for the same reason: a value this can't read can't be
+// rewritten without the risk of changing it. Never writes `cli.json`.
+//
+// A missing `cli.json` (a 1.x `tui.json` the TUI hasn't migrated yet included) has no
+// plugins to keep; the TUI's own migration then writes one for the next start.
+export function opencodeCliConfig(input: {
+  inherited: string | undefined;
+  cliJsonPath: string;
+  // The plugin directory, when this spawn should load it.
+  pluginDir?: string;
+  readFile?: (file: string) => string;
+}): CliConfigResult | null {
+  const readFile = input.readFile ?? ((file: string) => fs.readFileSync(file, "utf8"));
+
+  let config: Record<string, unknown> = {};
+  if (input.inherited !== undefined && input.inherited.trim() !== "") {
+    const parsed = parseObject(input.inherited);
+    if (!parsed) return null;
+    config = parsed;
+  }
+  const merged: Record<string, unknown> = {
+    ...config,
+    tabs: { ...(isRecord(config.tabs) ? config.tabs : {}), ...TUI_SETTINGS.tabs },
+    keybinds: { ...(isRecord(config.keybinds) ? config.keybinds : {}), ...TUI_SETTINGS.keybinds },
+  };
+  if (!input.pluginDir) return { content: JSON.stringify(merged), plugin: false };
+
+  const without = { content: JSON.stringify(merged), plugin: false };
+  const dir = path.dirname(input.cliJsonPath);
+  let theirs: unknown[] = [];
+  if (config.plugins !== undefined) {
+    if (!Array.isArray(config.plugins)) return without;
+    theirs = config.plugins;
+  } else {
+    let text: string | null = null;
+    try {
+      text = readFile(input.cliJsonPath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") return without;
+    }
+    if (text !== null) {
+      const file = parseObject(text);
+      if (!file) return without;
+      if (file.plugins !== undefined && !Array.isArray(file.plugins)) return without;
+      theirs = (file.plugins as unknown[] | undefined) ?? [];
+    }
+  }
+
+  const resolved: PluginEntry[] = [];
+  for (const entry of theirs) {
+    const next = resolveEntry(entry, dir);
+    if (!next) return without;
+    resolved.push(next);
+  }
+  // Only an entry identical to ours is dropped, so nothing of the builder's is
+  // removed. A parent Multi-Code's (a dev build started from inside an OpenCode
+  // contact inherits its env) has another path and stays; both copies then share the
+  // plugin's globalThis state, and only the newest setup reports.
+  const ours = path.resolve(input.pluginDir);
+  const others = resolved.filter(
+    (entry) => (typeof entry === "string" ? entry : entry.package) !== ours
+  );
+  return {
+    content: JSON.stringify({ ...merged, plugins: [...others, { package: ours }] }),
+    plugin: true,
+  };
 }

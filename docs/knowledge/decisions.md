@@ -4,6 +4,60 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-10-20 — OpenCode gets the builder's login-shell environment
+
+**Decision:** Multi-Code reads the builder's login-shell environment once per run (`$SHELL -l -i`, about 1.4 s, cached) and gives it to every OpenCode terminal it starts. When no shared OpenCode service is running, Multi-Code starts it first (`opencode service start`) with that environment minus Multi-Code's own variables (`MULTICODE_*`, `OPENCODE_CLI_CONFIG_CONTENT`), then starts the terminal. Claude's spawns are unchanged.
+
+**Why:** OpenCode 2's shared service keeps the environment of whoever starts it, for every client. Multi-Code opened from the Dock has a bare PATH without nvm, so a service it started couldn't run the builder's `npx`-launched MCP server (`documonster`) in any OpenCode window, VS Code and terminals included, until the service restarted. A service started this way matches one started from a terminal; VS Code resolves the shell environment the same way. The spike also showed that a service started by a Multi-Code terminal carries `MULTICODE_*` into the shells of every client's subagents.
+
+**Alternatives considered:** keep Multi-Code's own environment (no shell rc run, but the MCP failure above).
+
+**Consequences:** if the service dies while a Multi-Code terminal is attached, that terminal restarts it within about 5.5 s with its own environment (OpenCode's behaviour), which is the login-shell one plus Multi-Code's variables. Those are inert outside Multi-Code. The agent's shell in a Multi-Code contact's root session sees `MULTICODE_*`, as a Claude contact's Bash does.
+
+**Source:** builder, 2026-10-20, in session; docs/timeline/2026-10-20_opencode-v2-spike.md, G-604/G-605
+**Affects:** `backends/opencode.ts` spawn, docs/specs/opencode-v2/prd.md Stories 1 and 10
+
+---
+
+## 2026-10-20 — A stopped OpenCode contact stays silent
+
+**Decision:** When an OpenCode contact is stopped while its turn still runs in the shared service, Multi-Code raises nothing for that session: no Finished, no Needs-you, no red badge, nothing on the phone or to the secretary. The next start reopens the session, with the result in it.
+
+**Why:** Simplest of the two; alert tracking stays tied to the contact's terminal, as it is for Claude.
+
+**Alternatives considered:** keep alerting for a stopped contact's session (about half a day more: alert state would have to outlive the terminal process).
+
+**Source:** builder, 2026-10-20, in session
+**Affects:** docs/specs/opencode-v2/prd.md Story 11; the OpenCode attention logic
+
+---
+
+## 2026-10-16 — OpenCode 2 runs the way its VS Code extension runs it
+
+**Decision:** Multi-Code starts OpenCode 2 as OpenCode's own VS Code extension does: plain `opencode` in a terminal, attached to the user's shared background service. It adds only `--session ses_<id>` (an id Multi-Code picks) and per-process TUI settings through `OPENCODE_CLI_CONFIG_CONTENT`: tabs off, and a report-only TUI plugin that reports which session the TUI is showing. Multi-Code puts nothing into the server: no server plugin, no `OPENCODE_CONFIG_CONTENT`. It reads state from the service's event stream (`GET /api/event`, found through `~/.local/state/opencode/service.json`) and answers permission and question dialogs from the phone and the secretary through the service's API, not keystrokes. Stopping a contact closes its TUI only; a running turn finishes in the service, as it does when a VS Code terminal closes.
+
+**Why:** The builder sees Multi-Code as an enhanced terminal for the CLIs, so OpenCode should behave in it as in any terminal. A plugin in a TUI's env would leak into the shared service whenever that TUI is the one to start it, because the service inherits its starter's whole environment. Tabs are off following OpenCode's own precedent for hosts that manage several terminals (`tabs.mode: auto` turns them off inside Herdr), and because Multi-Code's sidebar already lists the sessions. An API answer names its request by id, so it cannot land in the wrong dialog, which a keystroke can.
+
+**Alternatives considered:** a private `--standalone` server per contact with the ported plugin (closest to V1, but N servers on one database, keystroke answers and no API); one Multi-Code-owned `opencode serve` with every TUI on `--server` (an extra process whose lifetime and environment Multi-Code must manage).
+
+**Consequences:** sessions from VS Code and from Multi-Code share one pool, and `/open` shows each other's. An OpenCode upgrade replaces the service, interrupting running turns, which the new service resumes. A permission left unanswered for 60 minutes gets its turn interrupted (`inactivity`). CLAUDE.md's report-only rule gains one exception when this is built: answering a dialog through the CLI's own API, as the builder would by keypress.
+
+**Source:** builder, 2026-10-16; docs/timeline/2026-10-16_backend-expansion-research.md ("process, session and tab model"); `sdks/vscode/src/extension.ts` in anomalyco/opencode v2.0.29
+**Affects:** `backends/opencode*.ts` (spawn, state, transcript), `secretary/dialog.ts`, the phone answer path, CLAUDE.md "Architecture" and "Session monitoring".
+
+---
+
+## 2026-10-16 — OpenCode support moves to 2.x only
+
+**Decision:** Multi-Code supports OpenCode 2.x and drops 1.x. No dual-version support.
+
+**Why:** OpenCode 2 changes every surface Multi-Code uses: the plugin API, event payloads, the database tables, and the TUI's dialogs. Supporting both was feasible for about two more days of work, but every later OpenCode TUI change would then need measuring twice. OpenCode 1.x is at its end: 1.19.0 (2026-10-11) mainly adds the upgrade path to 2, and the two versions cannot be installed side by side. The builder chose one version over a transition window.
+
+**Source:** builder, 2026-10-16; comparison of OpenCode v1.19.0 and v2.0.29 in docs/timeline/2026-10-16_backend-expansion-research.md
+**Affects:** `workspace/app/src/main/backends/opencode*.ts`, `secretary/dialog.ts`, the OpenCode quick actions; every OpenCode user of Multi-Code must upgrade to 2.x.
+
+---
+
 ## 2026-10-10 — A wider choice is confirmed with a bare yes before the secretary presses it
 
 **Decision:** When the reply interpreter decides the builder wants "don't ask again" on a permission, or "accept edits without asking" on a plan, the secretary presses nothing. It asks a fixed question naming that exact choice, and presses only if the very next reply is a bare yes ("是", "对", "yes", punctuation aside). Any other reply is read afresh. The model never picks keys: it names an effect or option numbers, and `secretary/dialog.ts` turns them into the key sequences measured on the CLI.

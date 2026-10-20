@@ -1,0 +1,817 @@
+{
+  "scenario": "permission-always",
+  "opencodeVersion": "2.0.32",
+  "notes": "Same dialog; Right, then Enter (Always allow). No confirmation step. permission.replied{always}; the rule shell 'touch *' is saved in the scratch DB `permission` table for this project.",
+  "frames": [
+    {
+      "t": 1023,
+      "event": {
+        "id": "evt_1553d0ff5001rPxnG1NPzSDCSw",
+        "created": 1792431427573,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "slug": "proud-cactus",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1023,
+      "event": {
+        "id": "evt_1553d0ff8001VZKzfputXPalvH",
+        "created": 1792431427576,
+        "type": "project.updated",
+        "data": {
+          "id": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "canonical": "/private/tmp/oc2-spike/projects/scen",
+          "time": {
+            "created": 1792431240537,
+            "updated": 1792431240537,
+            "active": 1792431427576
+          },
+          "sandboxes": []
+        }
+      }
+    },
+    {
+      "t": 1055,
+      "event": {
+        "id": "evt_1553d1008001PLfHhADKL4ix3Y",
+        "created": 1792431427592,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_1553d0ff10014J5ogXBBpLajAy",
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "Use your shell tool to run exactly this command: touch always.txt",
+              "files": [],
+              "agents": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1056,
+      "event": {
+        "id": "evt_1553d100a00154fskwLJoTO1Jm",
+        "created": 1792431427594,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1056,
+      "event": {
+        "id": "evt_1553d100e0010ir6C51pcTd4fE",
+        "created": 1792431427598,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 1056,
+      "event": {
+        "id": "evt_1553d100f001BGWz414DpRdvIh",
+        "created": 1792431427599,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "inboxID": "msg_1553d0ff10014J5ogXBBpLajAy"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3163,
+      "event": {
+        "id": "evt_1553d1852001eatZeb9BQuxLt0",
+        "created": 1792431429714,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "cost": 0,
+          "tokens": {
+            "input": 45,
+            "output": 111,
+            "reasoning": 0,
+            "cache": {
+              "read": 512,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 3163,
+      "event": {
+        "id": "evt_1553d1853001Qh4SckBodvHGvd",
+        "created": 1792431429715,
+        "type": "session.renamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "title": "Creating always.txt with touch command"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 6,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4192,
+      "event": {
+        "id": "evt_1553d1c560019Q6lyVagjVxCn9",
+        "created": 1792431430742,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_1553d10140014aA06JB29UIicG",
+          "started": 1792431427608
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 7,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4192,
+      "event": {
+        "id": "evt_1553d1c58001jXRFe7Guy0b8mL",
+        "created": 1792431430744,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "assistantMessageID": "msg_1553d10140014aA06JB29UIicG",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 8,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4294,
+      "event": {
+        "id": "evt_1553d1cbf001PVCz3OODVWMKnL",
+        "created": 1792431430847,
+        "type": "session.reasoning.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "assistantMessageID": "msg_1553d10140014aA06JB29UIicG",
+          "ordinal": 0,
+          "delta": "The"
+        }
+      }
+    },
+    {
+      "t": 4980,
+      "event": {
+        "id": "evt_1553d1f6a0010B0B9NKcpoTK3P",
+        "created": 1792431431530,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "assistantMessageID": "msg_1553d10140014aA06JB29UIicG",
+          "id": "call_3c99401f987d4997aa795d64",
+          "name": "shell"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 9,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 5010,
+      "event": {
+        "id": "evt_1553d1f85001l9ikpEVJXXQhyy",
+        "created": 1792431431557,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "assistantMessageID": "msg_1553d10140014aA06JB29UIicG",
+          "ordinal": 0,
+          "text": "The user wants me to run exactly `touch always.txt`. Simple.",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 10,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 5010,
+      "event": {
+        "id": "evt_1553d1f86001C6mcPlUs8vM4dY",
+        "created": 1792431431558,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "assistantMessageID": "msg_1553d10140014aA06JB29UIicG",
+          "id": "call_3c99401f987d4997aa795d64",
+          "text": "{\"command\": \"touch always.txt\"}"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 11,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 5010,
+      "event": {
+        "id": "evt_1553d1f870016vMWdbPIf7Ehse",
+        "created": 1792431431559,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "assistantMessageID": "msg_1553d10140014aA06JB29UIicG",
+          "id": "call_3c99401f987d4997aa795d64",
+          "input": {
+            "command": "touch always.txt"
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 12,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 5010,
+      "event": {
+        "id": "evt_1553d1f880017bqLKbDLvb4hhr",
+        "created": 1792431431560,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "assistantMessageID": "msg_1553d10140014aA06JB29UIicG"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 13,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 5010,
+      "event": {
+        "id": "evt_1553d1f8b002X1bSXjS7zgGRc3",
+        "created": 1792431431563,
+        "type": "permission.asked",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "per_1553d1f8b001EdpbvDQmgP53pP",
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "action": "shell",
+          "resources": [
+            "touch always.txt"
+          ],
+          "save": [
+            "touch *"
+          ],
+          "source": {
+            "type": "tool",
+            "messageID": "msg_1553d10140014aA06JB29UIicG",
+            "id": "call_3c99401f987d4997aa795d64"
+          }
+        }
+      }
+    },
+    {
+      "t": 5779,
+      "event": {
+        "id": "evt_1553d2284001I19svUX2cfOecO",
+        "created": 1792431432324,
+        "type": "provider.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 5780,
+      "event": {
+        "id": "evt_1553d228c001wHxj1WIABHGUm6",
+        "created": 1792431432332,
+        "type": "model.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects"
+        },
+        "data": {}
+      }
+    },
+    {
+      "t": 14000,
+      "event": {
+        "id": "evt_1553d42a8001wtlVlfCE1qL1lg",
+        "created": 1792431440552,
+        "type": "permission.replied",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "requestID": "per_1553d1f8b001EdpbvDQmgP53pP",
+          "reply": "always"
+        }
+      }
+    },
+    {
+      "t": 14002,
+      "event": {
+        "id": "evt_1553d42ab001niz0kzN4cRzmhV",
+        "created": 1792431440555,
+        "type": "shell.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "info": {
+            "id": "sh_1553d42aa001AdePaGTUd5Hcgc",
+            "status": "running",
+            "command": "touch always.txt",
+            "cwd": "/private/tmp/oc2-spike/projects/scen",
+            "shell": "/bin/zsh",
+            "file": "/tmp/oc2-spike/data/opencode/shell/846d1ad0ea32e1386513fcca3d9fb653b775476d/sh_1553d42aa001AdePaGTUd5Hcgc.out",
+            "metadata": {
+              "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri"
+            },
+            "time": {
+              "started": 1792431440554
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 14002,
+      "event": {
+        "id": "evt_1553d42ac001HTnLE6MJdXbT8q",
+        "created": 1792431440556,
+        "type": "session.tool.progress",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "assistantMessageID": "msg_1553d10140014aA06JB29UIicG",
+          "id": "call_3c99401f987d4997aa795d64",
+          "metadata": {
+            "shellID": "sh_1553d42aa001AdePaGTUd5Hcgc"
+          }
+        }
+      }
+    },
+    {
+      "t": 14020,
+      "event": {
+        "id": "evt_1553d42b1001Xgu5C3XADLdoNZ",
+        "created": 1792431440561,
+        "type": "session.tool.success",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "assistantMessageID": "msg_1553d10140014aA06JB29UIicG",
+          "id": "call_3c99401f987d4997aa795d64",
+          "content": [
+            {
+              "type": "text",
+              "text": "(no output)"
+            }
+          ],
+          "metadata": {
+            "status": "completed",
+            "truncated": false,
+            "exit": 0
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 14,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 14020,
+      "event": {
+        "id": "evt_1553d42b2001GbgixwuJbBGLPC",
+        "created": 1792431440563,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "assistantMessageID": "msg_1553d10140014aA06JB29UIicG",
+          "finish": "tool-calls",
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 3538,
+            "output": 54,
+            "reasoning": 0,
+            "cache": {
+              "read": 1792,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 15,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 14021,
+      "event": {
+        "id": "evt_1553d42b4001LZ8VEefsj674zS",
+        "created": 1792431440564,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "cost": 0,
+          "tokens": {
+            "input": 3583,
+            "output": 165,
+            "reasoning": 0,
+            "cache": {
+              "read": 2304,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 14021,
+      "event": {
+        "id": "evt_1553d42b8001EwtA6WIgqO6qPQ",
+        "created": 1792431440568,
+        "type": "shell.exited",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "sh_1553d42aa001AdePaGTUd5Hcgc",
+          "exit": 0,
+          "status": "exited"
+        }
+      }
+    },
+    {
+      "t": 27668,
+      "event": {
+        "id": "evt_1553d780b001ZU1kJbsetc5quD",
+        "created": 1792431454219,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_1553d42b9001x1WnC7NT18cOR9",
+          "started": 1792431440573
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 16,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 27669,
+      "event": {
+        "id": "evt_1553d780c001TObL46Bs7yEEvj",
+        "created": 1792431454221,
+        "type": "session.text.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "assistantMessageID": "msg_1553d42b9001x1WnC7NT18cOR9",
+          "ordinal": 0
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 17,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 27770,
+      "event": {
+        "id": "evt_1553d7873001gogjA4114ZiCJd",
+        "created": 1792431454323,
+        "type": "session.text.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "assistantMessageID": "msg_1553d42b9001x1WnC7NT18cOR9",
+          "ordinal": 0,
+          "delta": "Done. Created `always.txt` in `/private/tmp/oc2"
+        }
+      }
+    },
+    {
+      "t": 27810,
+      "event": {
+        "id": "evt_1553d7897001Nu3u2KkMgtGnHc",
+        "created": 1792431454359,
+        "type": "session.text.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "assistantMessageID": "msg_1553d42b9001x1WnC7NT18cOR9",
+          "ordinal": 0,
+          "text": "Done. Created `always.txt` in `/private/tmp/oc2-spike/projects/scen`."
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 18,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 27810,
+      "event": {
+        "id": "evt_1553d7898001bU73I5Q9FKt2Eq",
+        "created": 1792431454360,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "assistantMessageID": "msg_1553d42b9001x1WnC7NT18cOR9"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 19,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 27810,
+      "event": {
+        "id": "evt_1553d7899001eaGmm0n5lEwYXp",
+        "created": 1792431454361,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "assistantMessageID": "msg_1553d42b9001x1WnC7NT18cOR9",
+          "finish": "stop",
+          "rawFinish": "stop",
+          "cost": 0,
+          "tokens": {
+            "input": 21,
+            "output": 24,
+            "reasoning": 0,
+            "cache": {
+              "read": 5376,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 20,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 27810,
+      "event": {
+        "id": "evt_1553d789a001GUXs5A3l8O3ZUr",
+        "created": 1792431454362,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "cost": 0,
+          "tokens": {
+            "input": 3604,
+            "output": 189,
+            "reasoning": 0,
+            "cache": {
+              "read": 7680,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 27810,
+      "event": {
+        "id": "evt_1553d789a002kNmEyjmQrfhI53",
+        "created": 1792431454362,
+        "type": "session.execution.succeeded",
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 21,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 27826,
+      "event": {
+        "id": "evt_1553d78ab001Espv158Euh42X7",
+        "created": 1792431454379,
+        "type": "session.viewed",
+        "data": {
+          "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "idle": 1792431454362
+        },
+        "durable": {
+          "aggregateID": "ses_eaac2f00fffetXth1ilYFEWFri",
+          "seq": 22,
+          "version": 1
+        }
+      }
+    }
+  ],
+  "omitted": {
+    "repeatedDeltaFrames": {
+      "session.reasoning.delta": 2,
+      "session.text.delta": 1
+    }
+  },
+  "inputs": [
+    {
+      "t": 32,
+      "key": {
+        "text": "Use your shell tool to run exactly this command: touch always.txt"
+      }
+    },
+    {
+      "t": 1008,
+      "key": "Enter"
+    },
+    {
+      "t": 6295,
+      "key": "Right"
+    },
+    {
+      "t": 13997,
+      "key": "Enter"
+    }
+  ],
+  "pluginRoutes": [
+    {
+      "t": 1030,
+      "route": {
+        "type": "session",
+        "sessionID": "ses_eaac2f00fffetXth1ilYFEWFri"
+      }
+    }
+  ]
+}

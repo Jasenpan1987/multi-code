@@ -22,6 +22,7 @@ const { RemoteServer } = await import("./ws-server");
 const { REMOTE_PROTOCOL_VERSION } = await import("../../shared/remote-protocol");
 type TranscriptEntry =
   import("../../shared/remote-protocol").TranscriptEntry;
+type PromptDetail = import("./promptExtract").PromptDetail;
 
 type AnyRecord = Record<string, unknown>;
 
@@ -174,6 +175,10 @@ interface Fixture {
   hostPublicKey: string;
   writes: Array<{ id: string; data: string }>;
   prompts: Array<{ id: string; text: string }>;
+  // Every tap the server handed the host, with the prompt it held for it.
+  choices: Array<{ id: string; detail: PromptDetail; index: number }>;
+  // Replaces the Claude-like default, to play a host answering through an API.
+  answerChoice?: (id: string, detail: PromptDetail, index: number) => Promise<boolean>;
   // How many times the host's transcript source has been read. A getter, so it
   // reflects the live count rather than its value at fixture creation.
   readonly transcriptReads: number;
@@ -192,6 +197,15 @@ async function startServer(): Promise<Fixture> {
   // Counts reads so the throttling tests can assert how often the (real-world:
   // file/sqlite-backed) transcript source is hit.
   const reads = { count: 0 };
+  const choices: Fixture["choices"] = [];
+  const answerChoice = (id: string, detail: PromptDetail, index: number): Promise<boolean> => {
+    choices.push({ id, detail, index });
+    if (fixture.answerChoice) return fixture.answerChoice(id, detail, index);
+    const count = detail.options.length;
+    if (!(index >= 0 && index < count && count <= 9)) return Promise.resolve(false);
+    writes.push({ id, data: String(index + 1) });
+    return Promise.resolve(true);
+  };
 
   server.setHost({
     // Mirrors the real wiring in remote/index.ts, which fills `activity` from
@@ -208,13 +222,11 @@ async function startServer(): Promise<Fixture> {
     ],
     writeToInstance: (id, data) => writes.push({ id, data }),
     sendPrompt: (id, text) => prompts.push({ id, text }),
-    // Mirrors the claude backend (digit keys), which is what the fixture's
-    // instance declares. Per-backend routing itself is tested in the backend
+    // Mirrors the claude backend (digit keys, written before the call returns),
+    // which is what the fixture's instance declares, unless a test swaps it.
+    // Per-backend routing itself is tested in process-manager and the backend
     // suites; here it only needs to resolve to something.
-    keystrokeForChoice: (_id, _tool, index, optionCount) =>
-      index >= 0 && index < optionCount && optionCount <= 9
-        ? String(index + 1)
-        : null,
+    answerChoice,
     readTranscript: () => {
       reads.count++;
       return transcript;
@@ -235,6 +247,7 @@ async function startServer(): Promise<Fixture> {
     hostPublicKey: offer.hostPublicKey,
     writes,
     prompts,
+    choices,
     get transcriptReads() {
       return reads.count;
     },
@@ -622,15 +635,16 @@ describe("RemoteServer remote decisions", () => {
       question: "Pick one",
       options,
     });
-    await client.waitFor("prompt-state");
-    return client;
+    const prompt = await client.waitFor("prompt-state");
+    // The id a tap on these buttons names.
+    return Object.assign(client, { promptId: prompt.promptId as string });
   }
 
   it("translates a tapped option into the matching keystroke", async () => {
     const fx = await startServer();
     const client = await connectedWithPrompt(fx, 4);
 
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 2 });
+    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 2, promptId: client.promptId });
     await vi.waitFor(() => expect(fx.writes).toHaveLength(1));
     // Third option -> "3".
     expect(fx.writes[0]).toEqual({ id: "inst-1", data: "3" });
@@ -642,7 +656,7 @@ describe("RemoteServer remote decisions", () => {
     const fx = await startServer();
     const client = await connectedWithPrompt(fx, 3);
 
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 7 });
+    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 7, promptId: client.promptId });
     const error = await client.waitFor("error");
     expect(String(error.message)).toContain("no longer available");
     // The important part: nothing was typed into the agent's terminal.
@@ -660,9 +674,155 @@ describe("RemoteServer remote decisions", () => {
     fx.server.broadcastActivity("inst-1", "prompt-cleared");
     await client.waitFor("prompt-cleared");
 
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 0 });
+    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 0, promptId: client.promptId });
     await client.waitFor("error");
     expect(fx.writes).toEqual([]);
+
+    client.close();
+  });
+
+  it("refuses a tap on buttons a newer prompt has replaced, and takes one naming the live prompt", async () => {
+    const fx = await startServer();
+    const client = new TestClient(fx.url);
+    await client.handshake(fx.hostPublicKey);
+    client.send({ type: "auth", deviceToken: fx.token, deviceName: "phone" });
+    await client.waitFor("auth-ok");
+    await client.waitFor("instances");
+    const ask = (question: string) =>
+      fx.server.broadcastActivity("inst-1", "prompt", {
+        tool: "Permission",
+        question,
+        options: [{ label: "Allow once" }, { label: "Reject" }],
+      });
+    ask("A");
+    const first = await client.waitFor("prompt-state");
+    // A is answered at the desk and B comes up while the phone's tap on A travels.
+    fx.server.broadcastActivity("inst-1", "prompt-cleared");
+    ask("B");
+    const second = await client.waitFor("prompt-state");
+    expect(second.promptId).not.toBe(first.promptId);
+
+    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 0, promptId: first.promptId });
+    const error = await client.waitFor("error");
+    expect(String(error.message)).toContain("no longer available");
+    expect(fx.writes).toEqual([]);
+
+    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 0, promptId: second.promptId });
+    await vi.waitFor(() => expect(fx.writes).toHaveLength(1));
+
+    client.close();
+  });
+
+  it("gives a phone that subscribes late the live prompt's number", async () => {
+    const fx = await startServer();
+    const client = await connectedWithPrompt(fx, 2);
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    const replayed = await client.waitFor("prompt-state");
+    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 1, promptId: replayed.promptId });
+    await vi.waitFor(() => expect(fx.writes).toHaveLength(1));
+
+    client.close();
+  });
+
+  it("shows a restated dialog's buttons without a second vibration", async () => {
+    const fx = await startServer();
+    const client = await connectedWithPrompt(fx, 2);
+    fx.server.broadcastActivity(
+      "inst-1",
+      "prompt",
+      { tool: "Permission", question: "Still open", options: [{ label: "Allow once" }] },
+      true
+    );
+    const seen: string[] = [];
+    for (;;) {
+      const frame = await client.next();
+      seen.push(String(frame.type));
+      if (frame.type === "prompt-state") {
+        expect(frame.question).toBe("Still open");
+        break;
+      }
+    }
+    // The `activity` frame is what makes the phone vibrate.
+    expect(seen).not.toContain("activity");
+    expect(fx.server.activityFor("inst-1")).toBe("prompt");
+
+    client.close();
+  });
+
+  it("refuses a tap that names no prompt, as a phone page from before prompt ids sends", async () => {
+    const fx = await startServer();
+    const client = await connectedWithPrompt(fx, 3);
+
+    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 0 });
+    const error = await client.waitFor("error");
+    expect(String(error.message)).toContain("no longer available");
+    expect(fx.writes).toEqual([]);
+    expect(fx.choices).toEqual([]);
+
+    client.close();
+  });
+
+  it("names every prompt afresh, so a restart can't reuse a number a phone still holds", async () => {
+    const fx = await startServer();
+    const client = await connectedWithPrompt(fx, 2);
+    fx.server.broadcastActivity("inst-1", "prompt", { tool: "Permission", options: [{ label: "Allow once" }] });
+    const next = await client.waitFor("prompt-state");
+    expect(typeof client.promptId).toBe("string");
+    expect(next.promptId).not.toBe(client.promptId);
+    expect(String(next.promptId)).toMatch(/^[0-9a-f-]{36}$/);
+
+    client.close();
+  });
+
+  it("hands the host the prompt the phone was shown, so it answers that one", async () => {
+    const fx = await startServer();
+    const client = await connectedWithPrompt(fx, 3);
+
+    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 1, promptId: client.promptId });
+    await vi.waitFor(() => expect(fx.choices).toHaveLength(1));
+    expect(fx.choices[0]).toMatchObject({
+      id: "inst-1",
+      index: 1,
+      detail: { tool: "AskUserQuestion", question: "Pick one" },
+    });
+
+    client.close();
+  });
+
+  it("says the choice is gone when an answer through the CLI's API doesn't land", async () => {
+    const fx = await startServer();
+    // An OpenCode host: nothing is written, the answer resolves later.
+    fx.answerChoice = () => new Promise((resolve) => setTimeout(() => resolve(false), 20));
+    const client = await connectedWithPrompt(fx, 3);
+
+    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 0, promptId: client.promptId });
+    const error = await client.waitFor("error");
+    expect(String(error.message)).toContain("no longer available");
+    expect(fx.writes).toEqual([]);
+
+    // A host that throws says the same, rather than leave the phone waiting.
+    fx.answerChoice = () => Promise.reject(new Error("service unreachable"));
+    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 0, promptId: client.promptId });
+    await client.waitFor("error");
+
+    client.close();
+  });
+
+  it("sends no error when an answer through the CLI's API lands", async () => {
+    const fx = await startServer();
+    fx.answerChoice = () => Promise.resolve(true);
+    const client = await connectedWithPrompt(fx, 2);
+
+    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 1, promptId: client.promptId });
+    await vi.waitFor(() => expect(fx.choices).toHaveLength(1));
+    // Everything up to the reply to a ping sent after it: no error among it.
+    client.send({ type: "ping", at: 1 });
+    const seen: unknown[] = [];
+    for (let frame = await client.next(); ; frame = await client.next()) {
+      seen.push(frame.type);
+      if (frame.type === "pong") break;
+    }
+    expect(seen).not.toContain("error");
 
     client.close();
   });
