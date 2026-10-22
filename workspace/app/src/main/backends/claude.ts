@@ -9,7 +9,7 @@ import type {
   SpawnOptions,
 } from "./types";
 import { keystrokeForOption } from "../remote/promptExtract";
-import { ClaudeHookAttention } from "./claudeHooks";
+import { ClaudeHookAttention, ClaudeWorkingWatch } from "./claudeHooks";
 import type { TranscriptEntry } from "../../shared/remote-protocol";
 import { claudeTranscriptEntries, readBuilderTurn } from "./claudeTranscript";
 import type { ContextUsage } from "../../shared/types";
@@ -422,14 +422,24 @@ export const claudeBackend: Backend = {
   },
 
   // The CLI reports its own state through the alert hooks every instance is
-  // spawned with. Nothing here reads the transcript or the terminal for it.
-  createHookAttention(pid, onActivity, onHooksHealth) {
-    return new ClaudeHookAttention(
+  // spawned with, and whether a turn runs through its registry (ClaudeWorkingWatch).
+  // Nothing here reads the transcript or the terminal for it.
+  createHookAttention(pid, onActivity, onHooksHealth, context) {
+    const readStatus = () => readClaudeRegistryStatus(pid);
+    const attention = new ClaudeHookAttention(
       onActivity,
-      () => readClaudeRegistryStatus(pid),
+      readStatus,
       undefined,
       onHooksHealth
     );
+    const working = new ClaudeWorkingWatch(readStatus, context.onWorking);
+    return {
+      handle: (delivery) => attention.handle(delivery),
+      stop: () => {
+        attention.stop();
+        working.stop();
+      },
+    };
   },
 
   // Claude's option boxes accept the option's number directly, for every kind of
@@ -449,7 +459,7 @@ export const claudeBackend: Backend = {
     return jsonlPath ? readBuilderTurn(jsonlPath) : null;
   },
 
-  readContextUsage(sessionId): ContextUsage | null {
+  readContextUsage(sessionId): ContextUsage | "compacted" | null {
     const jsonlPath = findJsonlBySessionId(sessionId);
     if (!jsonlPath) return null;
     return readClaudeContextUsage(jsonlPath);
@@ -494,10 +504,16 @@ export function readClaudeTranscript(
 // served from cache, `cache_creation_input_tokens` what was written into it this
 // turn. Their sum is what the model actually read. `output_tokens` is excluded —
 // it isn't occupying the window on the next turn.
+//
+// A compaction writes no assistant turn, so walking back from one would find the
+// last turn before it, at the old size: a 405k session showed 40% for minutes after
+// `/compact` took it to 11k (manager transcript, 2026-09-24). Its `compact_boundary`
+// row carries the CLI's own figure for the new window, `compactMetadata.postTokens`,
+// which stands until the next turn reports; the turn before it still names the model.
 export function readClaudeContextUsage(
   jsonlPath: string,
   settingsPath: string = CLAUDE_SETTINGS_PATH
-): ContextUsage | null {
+): ContextUsage | "compacted" | null {
   let raw: string;
   try {
     raw = fs.readFileSync(jsonlPath, "utf8");
@@ -506,6 +522,8 @@ export function readClaudeContextUsage(
   }
 
   const lines = raw.split("\n");
+  // Set once the walk passes a compaction: the figure is its, the model the turn's.
+  let compacted: { inputTokens: number; updatedAt: number } | null = null;
   // Backwards, stopping at the first usable record. These files reach 8MB+, and
   // only the newest turn answers the question, so parsing forward to the end
   // would be most of the cost for none of the benefit.
@@ -517,6 +535,13 @@ export function readClaudeContextUsage(
     try {
       record = JSON.parse(line);
     } catch {
+      continue;
+    }
+    if (!compacted && record.type === "system" && record.subtype === "compact_boundary") {
+      const metadata = record.compactMetadata as Record<string, unknown> | undefined;
+      const postTokens = finiteNumber(metadata?.postTokens);
+      if (postTokens <= 0) return "compacted";
+      compacted = { inputTokens: postTokens, updatedAt: parseIsoMs(record.timestamp) };
       continue;
     }
     if (record.type !== "assistant") continue;
@@ -537,12 +562,13 @@ export function readClaudeContextUsage(
     return {
       inputTokens,
       updatedAt: parseIsoMs(record.timestamp),
+      ...compacted,
       model,
       contextWindow: readClaudeContextWindow(model, settingsPath) ?? undefined,
     };
   }
 
-  return null;
+  return compacted ?? null;
 }
 
 // How large this model's context window is, inferred from the user's own settings.

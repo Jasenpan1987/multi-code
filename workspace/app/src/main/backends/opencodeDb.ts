@@ -362,16 +362,18 @@ interface UsageRow {
 // the figure incomparable with the Claude backend's.
 //
 // A completed compaction newer than any such step means the window was rebuilt from
-// a summary, and the older figure is stale: null until the next step reports. The
-// compaction row's own `tokens` are the summarising request's, not the new window.
+// a summary, and the older figure is stale: `"compacted"` until the next step
+// reports. The row records no size for the new window (its fields are `status`,
+// `reason`, `summary`, `recent`, `time`), and its own `tokens`, when present, are the
+// summarising request's.
 //
 // Do NOT use `session_v2`'s `tokens_*` columns: those are lifetime totals.
 export function readOpencodeContextUsage(
   sessionId: string,
   dbPath?: string,
   configPath?: string
-): ContextUsage | null {
-  return withDb(dbPath, null, (db) => {
+): ContextUsage | "compacted" | null {
+  return withDb<ContextUsage | "compacted" | null>(dbPath, null, (db) => {
     const rows = db
       .prepare(
         "SELECT type, time_updated, json_extract(data, '$.status') AS status, " +
@@ -387,7 +389,7 @@ export function readOpencodeContextUsage(
 
     for (const row of rows) {
       if (row.type === "compaction") {
-        if (row.status === "completed") return null;
+        if (row.status === "completed") return "compacted";
         continue;
       }
       const inputTokens =

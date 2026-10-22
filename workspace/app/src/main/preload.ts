@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { ContextUsage } from "../shared/types";
 
 contextBridge.exposeInMainWorld("electronAPI", {
   // Instance management
@@ -109,6 +110,24 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("instance-exit", listener);
     return () => {
       ipcRenderer.removeListener("instance-exit", listener);
+    };
+  },
+  onInstanceContextUsage: (
+    callback: (id: string, usage: ContextUsage | null) => void
+  ) => {
+    const listener = (_event: unknown, id: string, usage: ContextUsage | null) =>
+      callback(id, usage);
+    ipcRenderer.on("instance-context-usage", listener);
+    return () => {
+      ipcRenderer.removeListener("instance-context-usage", listener);
+    };
+  },
+  onInstanceWorking: (callback: (id: string, working: boolean) => void) => {
+    const listener = (_event: unknown, id: string, working: boolean) =>
+      callback(id, working);
+    ipcRenderer.on("instance-working", listener);
+    return () => {
+      ipcRenderer.removeListener("instance-working", listener);
     };
   },
   onInstanceActivity: (callback: (id: string, type: string) => void) => {

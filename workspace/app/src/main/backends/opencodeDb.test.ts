@@ -33,6 +33,11 @@ import {
   summarizeOpencodeTool,
 } from "./opencodeDb";
 
+// The figure itself, for a test that expects one: a compaction marker reads as none.
+function known<T>(usage: T | "compacted"): T | undefined {
+  return usage === "compacted" ? undefined : usage;
+}
+
 // ---------------------------------------------------------------- fixture builder
 
 const DDL = [
@@ -810,23 +815,23 @@ describe("readOpencodeContextUsage", () => {
     });
   });
 
-  it("is null after a completed compaction, until a step reports again", () => {
-    expect(readOpencodeContextUsage("ses_compacted", dbFile, NO_CONFIG())).toBeNull();
-    expect(readOpencodeContextUsage("ses_after_compaction", dbFile, NO_CONFIG())?.inputTokens).toBe(
+  it("is a compaction marker after a completed compaction, until a step reports again", () => {
+    expect(readOpencodeContextUsage("ses_compacted", dbFile, NO_CONFIG())).toBe("compacted");
+    expect(known(readOpencodeContextUsage("ses_after_compaction", dbFile, NO_CONFIG()))?.inputTokens).toBe(
       8_005
     );
   });
 
   it("keeps the figure through a compaction still running or one that failed", () => {
-    expect(readOpencodeContextUsage("ses_compaction_pending", dbFile, NO_CONFIG())?.inputTokens).toBe(6);
+    expect(known(readOpencodeContextUsage("ses_compaction_pending", dbFile, NO_CONFIG()))?.inputTokens).toBe(6);
   });
 
   it("walks back past an all-zero step", () => {
-    expect(readOpencodeContextUsage("ses_zero_newest", dbFile, NO_CONFIG())?.inputTokens).toBe(7);
+    expect(known(readOpencodeContextUsage("ses_zero_newest", dbFile, NO_CONFIG()))?.inputTokens).toBe(7);
   });
 
   it("walks past unusable numbers and rows that aren't JSON", () => {
-    expect(readOpencodeContextUsage("ses_garbled_usage", dbFile, NO_CONFIG())?.inputTokens).toBe(11);
+    expect(known(readOpencodeContextUsage("ses_garbled_usage", dbFile, NO_CONFIG()))?.inputTokens).toBe(11);
   });
 
   it("omits the model and window when the step didn't name a model", () => {
@@ -1050,7 +1055,7 @@ describe.runIf(process.env.OPENCODE_DB_SMOKE === "1")("smoke: the builder's real
           earlier: turn.builderEarlierMessages.length,
           entries: turn.turn.length,
         },
-        usage: usage && {
+        usage: usage && usage !== "compacted" && {
           inputTokens: usage.inputTokens,
           model: usage.model,
           contextWindow: usage.contextWindow ?? null,

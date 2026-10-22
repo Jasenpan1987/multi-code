@@ -17,6 +17,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import type { AttentionContext } from "./backends/types";
+import type { ContextUsage } from "../shared/types";
 
 let userData = "";
 
@@ -28,10 +30,22 @@ const backendState: {
   liveCalls: { cwd: string; pid: number }[];
   // Every `instance-session-id` the renderer was sent, as [instance, session].
   sessionIdSends: [string, string][];
+  // Every `instance-context-usage`, as [instance, tokens or null].
+  contextSends: [string, number | null][];
+  // What the spawn's attention was handed, to speak as the agent.
+  attention: {
+    onActivity: (type: string) => void;
+    context: AttentionContext;
+  } | null;
+  // Replaces the default figures below when set.
+  usage: ((sessionId: string) => ContextUsage | "compacted" | null) | null;
 } = {
   liveSessionId: null,
   liveCalls: [],
   sessionIdSends: [],
+  contextSends: [],
+  attention: null,
+  usage: null,
 };
 
 const cb: { sessionFound: ((sessionId: string) => void) | null } = {
@@ -88,17 +102,26 @@ vi.mock("./backends", () => ({
       cb.sessionFound = onFound;
       return { cancel: () => {} };
     },
-    createHookAttention: () => ({ handle: () => {}, stop: () => {} }),
+    createHookAttention: (
+      _pid: number,
+      onActivity: (type: string) => void,
+      _health: unknown,
+      context: AttentionContext
+    ) => {
+      backendState.attention = { onActivity, context };
+      return { handle: () => {}, stop: () => {} };
+    },
     findLiveSessionId: (cwd: string, pid: number) => {
       backendState.liveCalls.push({ cwd, pid });
       return backendState.liveSessionId;
     },
     findLatestSessionId: () => null,
     readTranscript: () => [],
-    readContextUsage: (sessionId: string) => ({
-      inputTokens: sessionId === "ses-1" ? 300_000 : 12_000,
-      updatedAt: Date.now(),
-    }),
+    readContextUsage: (sessionId: string) =>
+      backendState.usage?.(sessionId) ?? {
+        inputTokens: sessionId === "ses-1" ? 300_000 : 12_000,
+        updatedAt: Date.now(),
+      },
     keystrokeForChoice: () => null,
     buildResumeCommand: () => "claude --resume x",
   }),
@@ -114,8 +137,11 @@ let instanceId = "";
 const fakeWindow = {
   isDestroyed: () => false,
   webContents: {
-    send: (channel: string, id: string, sessionId: string) => {
-      if (channel === "instance-session-id") backendState.sessionIdSends.push([id, sessionId]);
+    send: (channel: string, id: string, value: unknown) => {
+      if (channel === "instance-session-id") backendState.sessionIdSends.push([id, value as string]);
+      if (channel === "instance-context-usage") {
+        backendState.contextSends.push([id, (value as ContextUsage | null)?.inputTokens ?? null]);
+      }
     },
   },
 } as unknown as Parameters<InstanceType<typeof ProcessManager>["setMainWindow"]>[0];
@@ -126,6 +152,9 @@ beforeEach(() => {
   backendState.liveSessionId = null;
   backendState.liveCalls = [];
   backendState.sessionIdSends = [];
+  backendState.contextSends = [];
+  backendState.attention = null;
+  backendState.usage = null;
   cb.sessionFound = null;
   manager = new ProcessManager();
   manager.setMainWindow(fakeWindow);
@@ -260,5 +289,56 @@ describe("what the secretary's brief writer reads", () => {
 
   it("is null for an id that isn't an instance", () => {
     expect(manager.secretarySource("nope")).toBeNull();
+  });
+});
+
+describe("the context figure", () => {
+  const figure = () =>
+    manager.listInstances().find((i) => i.id === instanceId)?.contextUsage?.inputTokens;
+
+  it("goes while the terminal is home, and any session shown after brings it back", () => {
+    // A subagent's session included: it is never the contact's own, yet it ends
+    // the home screen all the same (cross-model review, 2026-10-22).
+    expect(figure()).toBe(300_000);
+    backendState.attention!.context.onHomeShown(true);
+    expect(figure()).toBeUndefined();
+    // Past the TTL: the poll doesn't bring the left session's figure back.
+    vi.advanceTimersByTime(30_000);
+    expect(figure()).toBeUndefined();
+    backendState.attention!.context.onHomeShown(false);
+    expect(figure()).toBe(300_000);
+    expect(backendState.contextSends).toEqual([
+      [instanceId, null],
+      [instanceId, 300_000],
+    ]);
+  });
+
+  it("a finish whose read finds the old figure is read again, and the renderer told", () => {
+    // The CLI writes its transcript behind its hooks (a /compact's PostCompact).
+    let tokens = 26_375;
+    backendState.usage = () => ({ inputTokens: tokens, updatedAt: 1 });
+    vi.advanceTimersByTime(30_000);
+    expect(figure()).toBe(26_375);
+    backendState.attention!.onActivity("waiting");
+    tokens = 6_001;
+    vi.advanceTimersByTime(1000);
+    expect(backendState.contextSends).toEqual([[instanceId, 6_001]]);
+    expect(figure()).toBe(6_001);
+  });
+
+  it("gives up reading again after the last delay", () => {
+    backendState.usage = () => ({ inputTokens: 26_375, updatedAt: 1 });
+    vi.advanceTimersByTime(30_000);
+    figure();
+    backendState.attention!.onActivity("waiting");
+    vi.advanceTimersByTime(60_000);
+    expect(backendState.contextSends).toEqual([]);
+  });
+
+  it("a compaction drops the figure instead of keeping it", () => {
+    expect(figure()).toBe(300_000);
+    backendState.usage = () => "compacted";
+    backendState.attention!.onActivity("waiting");
+    expect(figure()).toBeUndefined();
   });
 });

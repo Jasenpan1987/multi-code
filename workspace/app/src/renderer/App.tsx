@@ -283,7 +283,9 @@ export function App() {
     const cleanup = window.electronAPI.onInstanceExit((id) => {
       setInstances((prev) =>
         prev.map((inst) =>
-          inst.id === id ? { ...inst, status: "stopped" as const } : inst
+          inst.id === id
+            ? { ...inst, status: "stopped" as const, working: undefined }
+            : inst
         )
       );
       setHasOutput((prev) => {
@@ -311,6 +313,28 @@ export function App() {
 
   useEffect(() => {
     window.electronAPI.isDevBuild().then(setIsDev);
+  }, []);
+
+  // A context figure main changed outside a turn (OpenCode's home screen).
+  useEffect(() => {
+    return window.electronAPI.onInstanceContextUsage((id, usage) => {
+      setInstances((prev) =>
+        prev.map((inst) =>
+          inst.id === id ? { ...inst, contextUsage: usage ?? undefined } : inst
+        )
+      );
+    });
+  }, []);
+
+  // An instance that started or stopped working on a turn: its avatar moves.
+  useEffect(() => {
+    return window.electronAPI.onInstanceWorking((id, working) => {
+      setInstances((prev) =>
+        prev.map((inst) =>
+          inst.id === id ? { ...inst, working: working || undefined } : inst
+        )
+      );
+    });
   }, []);
 
   // An instance whose alerts stopped (or started) working, and why.

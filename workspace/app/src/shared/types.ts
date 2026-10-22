@@ -147,6 +147,10 @@ export interface Instance {
   // Finer-grained than `status`, and only present while running: whether it is idle,
   // working, blocked on a decision, or still starting up.
   runState?: "starting" | "idle" | "busy" | "blocked";
+  // A turn is running and nothing waits on the builder, from the agent's own
+  // reports. Only while running; drives the avatar's animation. Not `runState`'s
+  // `busy`, which any keystroke sets.
+  working?: boolean;
   // Its hooks aren't reaching Multi-Code, so it raises no alerts. Shown as a bar on
   // its page. Only set while running.
   alertsDegraded?: boolean;
@@ -396,6 +400,11 @@ export interface ElectronAPI {
   // Event listeners
   onPtyOutput: (callback: (id: string, data: string) => void) => () => void;
   onInstanceExit: (callback: (id: string, code: number) => void) => () => void;
+  onInstanceWorking: (callback: (id: string, working: boolean) => void) => () => void;
+  // A context figure that changed outside a turn; null when there is none to show.
+  onInstanceContextUsage: (
+    callback: (id: string, usage: ContextUsage | null) => void
+  ) => () => void;
   // Fires whenever an instance starts, including when the manager started it
   // through a tool rather than the user clicking play.
   onInstanceStarted: (callback: (instance: Instance) => void) => () => void;

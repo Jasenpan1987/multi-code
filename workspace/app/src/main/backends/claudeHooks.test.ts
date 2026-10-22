@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "fs";
 import path from "path";
-import { ClaudeHookAttention, type HookTimers } from "./claudeHooks";
+import { ClaudeHookAttention, ClaudeWorkingWatch, type HookTimers } from "./claudeHooks";
 import { parseAlertDelivery } from "../manager-mcp/server";
 import type { AlertDelivery, PromptToolCall } from "./types";
 import type { PromptDetail } from "../remote/promptExtract";
@@ -566,5 +566,52 @@ describe("a dialog clears on its own tool's finish", () => {
     expect(raised.map((r) => r.type)).toEqual(["prompt"]);
     attention.handle(delivery({ ...base, ...sub, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: "touch a" } }));
     expect(raised.map((r) => r.type)).toEqual(["prompt", "prompt-cleared"]);
+  });
+});
+
+describe("whether a turn is running, for the avatar", () => {
+  function watch() {
+    const timers = new VirtualTimers();
+    let status: string | null = null;
+    const said: boolean[] = [];
+    const w = new ClaudeWorkingWatch(() => status, (working) => said.push(working), timers);
+    return {
+      timers,
+      said,
+      watcher: w,
+      set: (next: string | null) => {
+        status = next;
+      },
+    };
+  }
+
+  it("follows the registry's busy, and says each change once", () => {
+    const h = watch();
+    h.timers.advanceTo(3000);
+    expect(h.said).toEqual([]);
+    h.set("busy");
+    h.timers.advanceTo(6000);
+    expect(h.said).toEqual([true]);
+    // An Esc interrupt sends no Stop; the registry leaving busy is enough.
+    h.set("idle");
+    h.timers.advanceTo(7000);
+    expect(h.said).toEqual([true, false]);
+  });
+
+  it("a dialog, a background shell or a missing entry is not working", () => {
+    const h = watch();
+    for (const status of ["busy", "waiting", "busy", "shell", "busy", null]) {
+      h.set(status);
+      h.timers.advanceTo(h.timers.now + 1000);
+    }
+    expect(h.said).toEqual([true, false, true, false, true, false]);
+  });
+
+  it("reads nothing once stopped", () => {
+    const h = watch();
+    h.watcher.stop();
+    h.set("busy");
+    h.timers.advanceTo(5000);
+    expect(h.said).toEqual([]);
   });
 });

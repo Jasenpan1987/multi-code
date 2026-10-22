@@ -228,16 +228,32 @@ function harness(opts: { sessionId?: string; service?: FakeService } = {}) {
   const raised: Raised[] = [];
   const health: [boolean, AlertsDegradedReason?][] = [];
   const shown: string[] = [];
+  const working: boolean[] = [];
+  const homes: boolean[] = [];
+  // Both callbacks about the screen, in the order they came.
+  const screen: string[] = [];
   const attention = new OpencodeAttention(
     (type, detail, toolCall, restated) =>
       raised.push({ type, detail, toolCall, ...(restated ? { restated } : {}) }),
     (ok, reason) => health.push(reason === undefined ? [ok] : [ok, reason]),
-    { instanceId: "inst-1", sessionId: opts.sessionId, onSessionShown: (id) => shown.push(id) },
+    {
+      instanceId: "inst-1",
+      sessionId: opts.sessionId,
+      onSessionShown: (id) => {
+        shown.push(id);
+        screen.push(`shown ${id}`);
+      },
+      onWorking: (w) => working.push(w),
+      onHomeShown: (home) => {
+        homes.push(home);
+        screen.push(`home ${home}`);
+      },
+    },
     { service, timers }
   );
   // A restatement (a dialog reported before, live again) reads as "restated".
   const types = () => raised.map((r) => (r.restated ? "restated" : r.type));
-  return { service, timers, raised, health, shown, attention, types };
+  return { service, timers, raised, health, shown, working, homes, screen, attention, types };
 }
 
 // Every promise the fakes resolve at once has settled by then.
@@ -583,6 +599,86 @@ describe("turns", () => {
   });
 });
 
+describe("working", () => {
+  it("from a turn's start to its end, however it ends", async () => {
+    const h = await live();
+    await h.publish(created("ses_root"), started("ses_root"));
+    expect(h.working).toEqual([true]);
+    await h.publish(interrupted("ses_root", "user"));
+    expect(h.working).toEqual([true, false]);
+    await h.publish(started("ses_root"), succeeded("ses_root"));
+    expect(h.working).toEqual([true, false, true, false]);
+  });
+
+  it("not while a dialog waits on the builder, and again once it is answered", async () => {
+    const h = await live();
+    await h.publish(created("ses_root"), started("ses_root"), asked("per_1", "ses_root"));
+    expect(h.working).toEqual([true, false]);
+    await h.publish(replied("per_1", "ses_root"));
+    expect(h.working).toEqual([true, false, true]);
+  });
+
+  it("a subagent running keeps the contact working until every turn has ended", async () => {
+    const h = await live();
+    await h.publish(
+      created("ses_root"),
+      started("ses_root"),
+      created("ses_child", "ses_root"),
+      started("ses_child"),
+      succeeded("ses_root")
+    );
+    expect(h.working).toEqual([true]);
+    await h.publish(succeeded("ses_child"));
+    expect(h.working).toEqual([true, false]);
+  });
+
+  it("another client's turn on the service is not the contact's", async () => {
+    const h = await live();
+    await h.publish(created("ses_vscode"), started("ses_vscode"));
+    expect(h.working).toEqual([]);
+  });
+
+  it("a session shown while its turn runs makes the contact working", async () => {
+    const h = await live();
+    await h.publish(created("ses_other"), started("ses_other"));
+    expect(h.working).toEqual([]);
+    h.attention.handle(route("ses_other"));
+    await flush();
+    expect(h.working).toEqual([true]);
+  });
+
+  it("a subagent whose creation was missed still keeps the contact working", async () => {
+    // Made before this subscription and idle at the snapshot, so nothing said whose
+    // it is; its start is the first word of it. The root ending first must not
+    // read as the contact idle while the subagent works.
+    const h = await live();
+    h.service.sessions.set("ses_child", { id: "ses_child", parentID: "ses_root" });
+    await h.publish(created("ses_root"), started("ses_root"), started("ses_child"));
+    await h.publish(succeeded("ses_root"));
+    expect(h.working).toEqual([true]);
+    await h.publish(succeeded("ses_child"));
+    expect(h.working).toEqual([true, false]);
+  });
+
+  it("a start whose family lookup fails leaves it to be asked again", async () => {
+    // Not recorded as a root: the re-sync after the service is back finds whose it
+    // is, and its dialog is the contact's.
+    const h = await live();
+    h.service.sessions.set("ses_child", { id: "ses_child", parentID: "ses_root" });
+    await h.publish(created("ses_root"), started("ses_root"));
+    h.service.reachable = false;
+    await h.publish(started("ses_child"));
+    h.service.reachable = true;
+    await h.publish(succeeded("ses_root"));
+    expect(h.working).toEqual([true, false]);
+    h.service.connect();
+    await flush();
+    expect(h.working).toEqual([true, false, true]);
+    await h.publish(asked("per_c", "ses_child"));
+    expect(h.types()).toEqual(["waiting", "prompt"]);
+  });
+});
+
 describe("dialogs", () => {
   it("a subagent's dialog raises Needs-you and is answered on its own session", async () => {
     const h = await live();
@@ -793,13 +889,36 @@ describe("whose sessions", () => {
 });
 
 describe("the session the terminal shows", () => {
-  it("is reported when it changes, and the home screen changes nothing", async () => {
+  it("is reported when it changes; the home screen keeps it, and is said on its own", async () => {
     const h = await live({ sessionId: "ses_a" });
-    for (const id of ["ses_a", "ses_a", undefined, "ses_b", undefined, "ses_b", "ses_a"]) {
+    for (const id of ["ses_a", "ses_a", undefined, "ses_b", undefined, undefined, "ses_b", "ses_a"]) {
       h.attention.handle(route(id));
       await flush();
     }
     expect(h.shown).toEqual(["ses_a", "ses_b", "ses_a"]);
+    expect(h.homes).toEqual([true, false, true, false]);
+  });
+
+  it("leaving home for a new session says which session first", async () => {
+    // So the caller reads the new session's figure, not the one it left.
+    const h = await live({ sessionId: "ses_a" });
+    h.attention.handle(route("ses_a"));
+    h.attention.handle(route());
+    await h.publish(created("ses_b"));
+    h.attention.handle(route("ses_b"));
+    await flush();
+    expect(h.screen).toEqual(["shown ses_a", "home true", "shown ses_b", "home false"]);
+  });
+
+  it("leaving home for a subagent's session is said too, without taking it", async () => {
+    const h = await live({ sessionId: "ses_root" });
+    await h.publish(created("ses_child", "ses_root"));
+    h.attention.handle(route("ses_root"));
+    h.attention.handle(route());
+    h.attention.handle(route("ses_child"));
+    await flush();
+    expect(h.shown).toEqual(["ses_root"]);
+    expect(h.homes).toEqual([true, false]);
   });
 
   it("only the route it settles on is reported when they come faster than a lookup", async () => {

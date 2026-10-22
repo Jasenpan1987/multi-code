@@ -193,6 +193,10 @@ export class OpencodeAttention implements HookAttention {
   // the secretary answers. When it closes and another is still open, that one is said
   // again (restate).
   private live: string | undefined;
+  // Last said to `onWorking`.
+  private working = false;
+  // Last said to `onHomeShown`.
+  private home = false;
 
   // ── Re-sync ──
   // Bumped by every re-sync and by stop(), so an older one's answers are dropped.
@@ -250,17 +254,30 @@ export class OpencodeAttention implements HookAttention {
       delivery.sessionId ?? (route.type === "session" ? str(route.sessionID) : undefined);
     // Home (`/new`, `/clear`, or a minted id before its first prompt): no session is
     // shown, and the one before stays the contact's until a prompt makes a new one.
-    if (!session) return;
+    // Forgetting the last one shown makes coming back to it a change, so leaving
+    // home is said for it too.
+    if (!session) {
+      this.lastShown = undefined;
+      if (!this.home) {
+        this.home = true;
+        this.context.onHomeShown(true);
+      }
+      return;
+    }
     const first = !this.shown.has(session);
     this.shown.add(session);
     if (session !== this.lastShown) {
       this.lastShown = session;
-      void this.adoptIfRoot(session);
+      // After the adoption, so the caller already knows which session is the
+      // contact's when it hears home is gone.
+      void this.adoptIfRoot(session).then(() => this.leaveHome(session));
     }
     // A session shown for the first time may be mid-turn or blocked already (`/sessions`
     // into a session VS Code is running, or a start or dialog that beat the route here),
     // and those events were another owner's when they came. The snapshot says.
     if (first) void this.resync();
+    // A session shown for the first time may be running already.
+    this.reportWorking();
   }
 
   // The contact takes the shown session as its own (the one its next start reopens)
@@ -274,6 +291,13 @@ export class OpencodeAttention implements HookAttention {
     if (!this.isRoot(session)) return;
     this.lastAdopted = session;
     this.context.onSessionShown(session);
+  }
+
+  // Said once per visit home, and only for the route the terminal is still on.
+  private leaveHome(session: string) {
+    if (this.stopped || !this.home || this.lastShown !== session) return;
+    this.home = false;
+    this.context.onHomeShown(false);
   }
 
   stop() {
@@ -331,6 +355,13 @@ export class OpencodeAttention implements HookAttention {
       return;
     }
     this.apply(event, session);
+    // A start needs no family to be applied, but working does: a session whose
+    // `session.created` was missed (made before this subscription, and not running
+    // at the last snapshot) is only the contact's once its parents are known.
+    if (event.type === STARTED && this.unknownLink(session) !== null) {
+      void this.learnChain(session).then(() => this.reportWorking());
+    }
+    this.reportWorking();
   }
 
   private apply(event: ServiceEvent, session: string) {
@@ -548,12 +579,34 @@ export class OpencodeAttention implements HookAttention {
     return pending;
   }
 
+  // resolveChain for a start, which only working waits on: a link the service
+  // doesn't answer for stays unknown rather than being recorded as a root, so the
+  // next event that needs the family, or the next re-sync, asks again. Recorded
+  // as a root, a lookup that failed for a moment would leave a subagent nobody's
+  // for good, its dialogs included (cross-model review, 2026-10-23). A lookup
+  // already in flight is waited for, and its answer stands.
+  private async learnChain(session: string): Promise<void> {
+    for (let depth = 0; depth < MAX_DEPTH && !this.stopped; depth++) {
+      const missing = this.unknownLink(session);
+      if (missing === null) return;
+      const pending = this.lookups.get(missing);
+      if (pending) {
+        await pending;
+        continue;
+      }
+      const info = await this.service.session(missing).catch((): ServiceSession | null => null);
+      if (!info) return;
+      if (!this.parents.has(missing)) this.parents.set(missing, info.parentID ?? null);
+    }
+  }
+
   private async releaseWhenKnown(session: string) {
     await this.resolveChain(session);
     if (this.stopped) return;
     const events = this.held.get(session) ?? [];
     this.held.delete(session);
     for (const event of events) this.apply(event, session);
+    this.reportWorking();
   }
 
   // ── Re-sync ───────────────────────────────────────────────────────────────
@@ -716,6 +769,22 @@ export class OpencodeAttention implements HookAttention {
     }
     for (const [id, dialog] of fresh) this.raise(id, dialog);
     if (fresh.length === 0 && (finished.length > 0 || !this.liveOpen())) this.restateNewest();
+    this.reportWorking();
+  }
+
+  // ── Working ───────────────────────────────────────────────────────────────
+
+  // For the contact list's avatar: a session of the contact's runs a turn and no
+  // dialog waits on the builder. A session waiting on a permission is listed as
+  // running (spike), so the dialogs are what make it not working, as Claude's
+  // registry reads `waiting` there. Said only on a change.
+  private reportWorking() {
+    if (this.stopped) return;
+    const working =
+      this.dialogs.size === 0 && [...this.running].some((session) => this.owned(session));
+    if (working === this.working) return;
+    this.working = working;
+    this.context.onWorking(working);
   }
 
   // ── Health ────────────────────────────────────────────────────────────────

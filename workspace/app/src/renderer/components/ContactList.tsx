@@ -3,7 +3,7 @@ import { ContextMenu } from "./ContextMenu";
 import { Avatar } from "./Avatar";
 import { RenameSessionDialog } from "./RenameSessionDialog";
 import { getTerminal } from "./TerminalView";
-import { formatContextPercent, formatTokens } from "./formatTokens";
+import { contextFillHue, formatContextPercent, formatTokens } from "./formatTokens";
 import { dropsBefore, pinManagerFirst } from "./contactOrder";
 import { hotkeyTargets, listenForContactHotkeys } from "./contactHotkeys";
 import type { ContextUsage, Instance } from "../../shared/types";
@@ -259,11 +259,10 @@ export function ContactList({
               onDragEnd={endDrag}
             >
               <Avatar
-                name={inst.name}
-                online={inst.status === "running"}
-                blink={unreadCounts.has(inst.id)}
                 backend={inst.backend}
-                isManager={inst.isManager}
+                online={inst.status === "running"}
+                working={inst.working}
+                alert={unreadCounts.has(inst.id)}
               />
               <span className="contact-name">{inst.name}</span>
               {showHotkeys && hotkeyIds.includes(inst.id) && (
@@ -278,6 +277,14 @@ export function ContactList({
                   // Only present when the window size is known, so the row can be
                   // tinted by fullness without pretending to know it otherwise.
                   data-fill={fillBand(inst.contextUsage)}
+                  style={
+                    {
+                      "--fill-hue": contextFillHue(
+                        inst.contextUsage.inputTokens,
+                        inst.contextUsage.contextWindow
+                      ),
+                    } as React.CSSProperties
+                  }
                 >
                   {contextLabel(inst.contextUsage)}
                 </span>

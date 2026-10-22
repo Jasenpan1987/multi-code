@@ -188,6 +188,16 @@ export interface AttentionContext {
   // The terminal now shows this session (OpenCode's TUI plugin reports it). The
   // caller claim-checks it and makes it the contact's own.
   onSessionShown(sessionId: string): void;
+  // The terminal shows no session (true): OpenCode's home screen, after `/new` or
+  // before a minted id's first prompt. The contact's session stays as it was (its
+  // next start reopens it), but nothing on screen is that session's. False once it
+  // shows a session again, any session, a subagent's included, and only after
+  // onSessionShown for it when the contact takes it as its own.
+  onHomeShown(home: boolean): void;
+  // A turn is running with nothing waiting on the builder (true), or not (false).
+  // Said on each change, for the contact list's avatar. Display only: the write
+  // gate keeps its own state (run-state.ts).
+  onWorking(working: boolean): void;
 }
 
 export interface SessionDiscovery {
@@ -330,8 +340,13 @@ export interface Backend {
    * 200k–1M window. Claude keeps it in the session JSONL's assistant records
    * (`message.usage`), OpenCode 2 in its `session_message` assistant rows
    * (`tokens`).
+   *
+   * `"compacted"` when the window was rebuilt from a summary after the newest turn
+   * that reported, and the CLI recorded no figure for the new window: what was
+   * shown before is stale, and nothing replaces it until the next turn. Unlike
+   * null, the caller drops the figure it had.
    */
-  readContextUsage(sessionId: string): ContextUsage | null;
+  readContextUsage(sessionId: string): ContextUsage | "compacted" | null;
 
   /**
    * The most recent session this CLI has recorded for `cwd`, from what is on

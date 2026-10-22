@@ -14,6 +14,11 @@ import path from "path";
 
 const { readClaudeContextUsage } = await import("./claude");
 
+// The figure itself, for a test that expects one: a compaction marker reads as none.
+function known<T>(usage: T | "compacted"): T | undefined {
+  return usage === "compacted" ? undefined : usage;
+}
+
 // A settings path that cannot exist, so the window lookup always answers "unknown".
 // Without this the reader picks up the developer's real ~/.claude/settings.json and
 // these assertions pass or fail depending on whose machine they run on. Window
@@ -88,7 +93,7 @@ describe("readClaudeContextUsage", () => {
       userTurn,
       assistant({ input_tokens: 2, cache_read_input_tokens: 4000 })
     );
-    expect(readClaudeContextUsage(file, NO_SETTINGS)?.inputTokens).toBe(4002);
+    expect(known(readClaudeContextUsage(file, NO_SETTINGS))?.inputTokens).toBe(4002);
   });
 
   it("walks back past an assistant turn with no usage", () => {
@@ -96,7 +101,7 @@ describe("readClaudeContextUsage", () => {
       assistant({ input_tokens: 5, cache_read_input_tokens: 500 }),
       { type: "assistant", message: { model: "x" }, timestamp: "2026-09-01T01:00:00.000Z" }
     );
-    expect(readClaudeContextUsage(file, NO_SETTINGS)?.inputTokens).toBe(505);
+    expect(known(readClaudeContextUsage(file, NO_SETTINGS))?.inputTokens).toBe(505);
   });
 
   it("walks back past an all-zero turn, which says nothing about fullness", () => {
@@ -109,7 +114,7 @@ describe("readClaudeContextUsage", () => {
         output_tokens: 0,
       })
     );
-    expect(readClaudeContextUsage(file, NO_SETTINGS)?.inputTokens).toBe(707);
+    expect(known(readClaudeContextUsage(file, NO_SETTINGS))?.inputTokens).toBe(707);
   });
 
   it("returns null when the session has no assistant turn yet", () => {
@@ -137,12 +142,12 @@ describe("readClaudeContextUsage", () => {
         "\n{not json\n"
     );
     written.push(file);
-    expect(readClaudeContextUsage(file, NO_SETTINGS)?.inputTokens).toBe(33);
+    expect(known(readClaudeContextUsage(file, NO_SETTINGS))?.inputTokens).toBe(33);
   });
 
   it("omits model when the record didn't name one", () => {
     const file = writeJsonl(assistant({ input_tokens: 100 }));
-    expect(readClaudeContextUsage(file, NO_SETTINGS)?.model).toBeUndefined();
+    expect(known(readClaudeContextUsage(file, NO_SETTINGS))?.model).toBeUndefined();
   });
 
   it("reports updatedAt 0 rather than now when the timestamp is unusable", () => {
@@ -151,7 +156,7 @@ describe("readClaudeContextUsage", () => {
       message: { usage: { input_tokens: 50 } },
       timestamp: "not-a-date",
     });
-    expect(readClaudeContextUsage(file, NO_SETTINGS)?.updatedAt).toBe(0);
+    expect(known(readClaudeContextUsage(file, NO_SETTINGS))?.updatedAt).toBe(0);
   });
 
   it("tolerates non-numeric usage values", () => {
@@ -160,6 +165,55 @@ describe("readClaudeContextUsage", () => {
       message: { usage: { input_tokens: "12", cache_read_input_tokens: 88 } },
       timestamp: "2026-09-01T00:00:01.000Z",
     });
-    expect(readClaudeContextUsage(file, NO_SETTINGS)?.inputTokens).toBe(88);
+    expect(known(readClaudeContextUsage(file, NO_SETTINGS))?.inputTokens).toBe(88);
+  });
+
+  // The shape of a real `/compact` (manager transcript, 2026-09-24): the boundary,
+  // then the summary and re-attached files as user rows, and no assistant turn.
+  const boundary = (postTokens?: number) => ({
+    type: "system",
+    subtype: "compact_boundary",
+    content: "Conversation compacted",
+    compactMetadata: { trigger: "manual", preTokens: 405_458, ...(postTokens ? { postTokens } : {}) },
+    timestamp: "2026-09-24T09:39:49.917Z",
+  });
+  const summary = { type: "user", isCompactSummary: true, message: { content: "summary" } };
+
+  it("after a compaction, shows the CLI's own figure for the new window", () => {
+    const file = writeJsonl(
+      userTurn,
+      assistant({ input_tokens: 4, cache_read_input_tokens: 404_429 }, { model: "claude-opus-5" }),
+      boundary(11_328),
+      summary,
+      { type: "attachment" }
+    );
+    expect(readClaudeContextUsage(file, NO_SETTINGS)).toEqual({
+      inputTokens: 11_328,
+      updatedAt: Date.parse("2026-09-24T09:39:49.917Z"),
+      // From the turn before: the boundary doesn't name the model.
+      model: "claude-opus-5",
+      contextWindow: undefined,
+    });
+  });
+
+  it("after a compaction that recorded no figure, says so instead of the old one", () => {
+    const file = writeJsonl(
+      userTurn,
+      assistant({ input_tokens: 404_433 }, { model: "claude-opus-5" }),
+      boundary(),
+      summary
+    );
+    expect(readClaudeContextUsage(file, NO_SETTINGS)).toBe("compacted");
+  });
+
+  it("a turn after the compaction is the figure again", () => {
+    // An automatic compaction runs inside a turn, which goes on and reports.
+    const file = writeJsonl(
+      assistant({ input_tokens: 404_433 }),
+      boundary(11_328),
+      summary,
+      assistant({ input_tokens: 41_452 })
+    );
+    expect(known(readClaudeContextUsage(file, NO_SETTINGS))?.inputTokens).toBe(41_452);
   });
 });

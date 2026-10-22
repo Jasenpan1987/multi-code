@@ -45,6 +45,10 @@ export interface InstanceInfo {
   isManager?: boolean;
   // Only meaningful while running; `status` already says stopped.
   runState?: RunState;
+  // A turn is running and nothing waits on the builder, from the agent's own
+  // reports (AttentionContext.onWorking). Only while running. Display only: the
+  // contact list's avatar moves.
+  working?: boolean;
   // This instance's hooks aren't reaching Multi-Code, so it raises no alerts (PRD
   // Story 6). The renderer shows a bar on its page.
   alertsDegraded?: boolean;
@@ -116,6 +120,12 @@ interface ManagedInstance {
   // Turns what the agent reports about itself (Claude's hooks, OpenCode's plugin)
   // into its activity. Null while stopped.
   hookAttention: HookAttention | null;
+  // See InstanceInfo.working. Reset when the process exits.
+  working?: boolean;
+  // The terminal shows no session (AttentionContext.onHomeShown), so the contact
+  // shows no context figure: the one it had is the session it left. Cleared when
+  // it shows a session again, and when the process exits.
+  homeShown?: boolean;
   // Timestamp (Date.now()) of the last PTY byte received from this instance. Feeds
   // the write-safety gate's "did that write land" check and `start_session`'s
   // readiness wait, never activity detection.
@@ -207,6 +217,19 @@ const ANSWER_TIMING: AnswerTiming = { keyGapMs: KEY_GAP_MS, followUpDelayMs: 600
 // instead of happening per call. A turn takes far longer than this to complete,
 // so nothing user-visible lags behind.
 const CONTEXT_USAGE_TTL_MS = 20_000;
+
+// After a finished turn whose read still found the old figure, how long to wait
+// before each further read. The CLI writes its transcript behind its hooks: a
+// manual `/compact`'s PostCompact arrived 11ms after its compact_boundary row's own
+// timestamp, yet the read made then found the pre-compaction 26k, and the same file
+// read later 6k (measured 2026-10-22, CLI 2.1.308). Without a re-read the old
+// figure stood until the TTL and the renderer's next poll, over a minute with the
+// window in the background.
+const CONTEXT_REREAD_MS = [1000, 5000];
+
+function sameUsage(a: ContextUsage | undefined, b: ContextUsage | undefined): boolean {
+  return a?.inputTokens === b?.inputTokens && a?.updatedAt === b?.updatedAt;
+}
 
 const DEFAULT_BACKEND: BackendName = "claude";
 
@@ -1001,6 +1024,23 @@ export class ProcessManager {
           );
           this.attachSession(instance, sessionId);
         },
+        // Home hides the figure; any session shown after it brings the contact's
+        // back, read now. By then a session the contact took is already attached.
+        onHomeShown: (home) => {
+          if (this.instances.get(id) !== instance || !!instance.homeShown === home) return;
+          instance.homeShown = home || undefined;
+          instance.contextUsageAt = undefined;
+          if (home) instance.contextUsage = undefined;
+          else this.refreshContextUsage(instance);
+          this.sendContextUsage(instance);
+        },
+        onWorking: (working) => {
+          if (this.instances.get(id) !== instance || !instance.ptyProcess) return;
+          instance.working = working || undefined;
+          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+            this.mainWindow.webContents.send("instance-working", id, working);
+          }
+        },
       }
     );
 
@@ -1039,6 +1079,12 @@ export class ProcessManager {
       instance.runState.onExit();
       // A dead process has no dialog to answer and no turn to report on.
       instance.livePrompt = undefined;
+      instance.working = undefined;
+      // Stopped, it shows its own session's figure again.
+      if (instance.homeShown) {
+        instance.homeShown = undefined;
+        instance.contextUsageAt = undefined;
+      }
       this.clearSecretaryEvent(instance);
       for (const waiter of (instance.dialogClearWaiters ?? []).slice()) waiter(undefined);
       this.teardownObservers(instance);
@@ -1104,7 +1150,7 @@ export class ProcessManager {
     if (type !== "prompt-cleared" && !restated) instance.lastActivityAt = Date.now();
     // A finished turn is exactly when context usage moved, so refresh now instead
     // of waiting for the TTL. Cheap: once per turn, not per list call.
-    if (type === "waiting") this.refreshContextUsage(instance);
+    if (type === "waiting") this.refreshContextUsageAfterTurn(instance);
     // What a phone's tap answers. A newer dialog with nothing to offer replaces the
     // older one all the same: those buttons are no longer what's on screen.
     if (type === "prompt") {
@@ -1458,6 +1504,7 @@ export class ProcessManager {
   }
 
   private refreshContextUsage(instance: ManagedInstance) {
+    if (instance.homeShown) return;
     const sessionId = this.readableSessionId(instance);
     if (!sessionId) return;
     instance.contextUsageAt = Date.now();
@@ -1465,11 +1512,48 @@ export class ProcessManager {
       const usage = getBackend(instance.backend).readContextUsage(sessionId);
       // Keep the last known figure when a read comes back empty. A stopped
       // instance still has a real transcript, and a transient failure (sqlite
-      // locked mid-write) shouldn't blank a number the user was reading.
-      if (usage) instance.contextUsage = usage;
+      // locked mid-write) shouldn't blank a number the user was reading. A
+      // compaction is the exception: the figure it leaves is known to be wrong.
+      if (usage === "compacted") instance.contextUsage = undefined;
+      else if (usage) instance.contextUsage = usage;
     } catch {
       // Backends are documented to return null rather than throw, but a
       // surprise here must not take down a list call.
+    }
+  }
+
+  // Read now; when that finds the figure unchanged, read again after each of
+  // CONTEXT_REREAD_MS until it moves, and tell the renderer when it does. The
+  // first read needs no telling: the renderer asks on the activity itself.
+  private refreshContextUsageAfterTurn(instance: ManagedInstance) {
+    const moved = () => {
+      const before = instance.contextUsage;
+      this.refreshContextUsage(instance);
+      return !sameUsage(before, instance.contextUsage);
+    };
+    if (moved()) return;
+    const retry = (attempt: number) => {
+      const delay = CONTEXT_REREAD_MS[attempt];
+      if (delay === undefined) return;
+      const timer = setTimeout(() => {
+        if (this.instances.get(instance.id) !== instance) return;
+        if (moved()) this.sendContextUsage(instance);
+        else retry(attempt + 1);
+      }, delay);
+      timer.unref?.();
+    };
+    retry(0);
+  }
+
+  // A figure that changed outside a turn, which the renderer would otherwise only
+  // pick up at its next poll.
+  private sendContextUsage(instance: ManagedInstance) {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send(
+        "instance-context-usage",
+        instance.id,
+        instance.contextUsage ?? null
+      );
     }
   }
 
@@ -1541,6 +1625,7 @@ export class ProcessManager {
       lastActivityAt: instance.lastActivityAt,
       isManager: instance.isManager,
       runState: instance.ptyProcess ? instance.runState.state() : undefined,
+      working: instance.ptyProcess ? instance.working : undefined,
       alertsDegraded: instance.ptyProcess ? instance.alertsDegraded : undefined,
       alertsDegradedReason: instance.ptyProcess ? instance.alertsDegradedReason : undefined,
       startError: instance.startError,

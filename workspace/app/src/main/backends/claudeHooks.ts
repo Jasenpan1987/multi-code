@@ -387,3 +387,51 @@ export class ClaudeHookAttention {
     }
   }
 }
+
+// How often the registry is read for whether a turn is running. It only drives the
+// contact list's avatar, so a second of lag is fine.
+const WORKING_POLL_MS = 1000;
+
+/**
+ * Whether the CLI is running a turn, for the contact list's avatar: its registry
+ * status is `busy`. Display only, never an alert: no chime or count depends on it,
+ * and the write gate keeps its own state (run-state.ts).
+ *
+ * The registry rather than the hooks, because the hooks can't say a turn is over
+ * when the builder interrupts it: an Esc sends no `Stop`. The registry leaves
+ * `busy` either way. A dialog reads `waiting`, so a blocked turn is not working.
+ */
+export class ClaudeWorkingWatch {
+  private working = false;
+  private timer: unknown = null;
+  private stopped = false;
+
+  constructor(
+    private readonly readRegistryStatus: () => string | null,
+    private readonly onWorking: (working: boolean) => void,
+    private readonly timers: HookTimers = realTimers
+  ) {
+    this.schedule();
+  }
+
+  stop() {
+    this.stopped = true;
+    if (this.timer !== null) {
+      this.timers.clearTimeout(this.timer);
+      this.timer = null;
+    }
+  }
+
+  private schedule() {
+    this.timer = this.timers.setTimeout(() => {
+      this.timer = null;
+      if (this.stopped) return;
+      const working = this.readRegistryStatus() === "busy";
+      if (working !== this.working) {
+        this.working = working;
+        this.onWorking(working);
+      }
+      this.schedule();
+    }, WORKING_POLL_MS);
+  }
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatContextPercent, formatTokens } from "./formatTokens";
+import { contextFillHue, formatContextPercent, formatTokens } from "./formatTokens";
 
 describe("formatTokens", () => {
   it("shows small counts exactly", () => {
@@ -47,10 +47,20 @@ describe("formatContextPercent", () => {
   it("expresses usage as a percentage of the window", () => {
     expect(formatContextPercent(500_000, 1_000_000)).toBe("50%");
     expect(formatContextPercent(180_000, 200_000)).toBe("90%");
-    expect(formatContextPercent(0, 200_000)).toBe("0%");
+    expect(formatContextPercent(0, 200_000)).toBe("0.0%");
   });
 
-  it("rounds to whole percent", () => {
+  it("keeps one decimal below 10%, where a million-token window barely moves", () => {
+    // A fresh Claude session and one a few turns later (measured 2026-10-22).
+    expect(formatContextPercent(22_352, 1_000_000)).toBe("2.2%");
+    expect(formatContextPercent(22_708, 1_000_000)).toBe("2.3%");
+    expect(formatContextPercent(20_000, 1_000_000)).toBe("2.0%");
+    expect(formatContextPercent(99_400, 1_000_000)).toBe("9.9%");
+    // Would round to "10.0%"; whole percent from there.
+    expect(formatContextPercent(99_600, 1_000_000)).toBe("10%");
+  });
+
+  it("rounds to whole percent from 10% up", () => {
     expect(formatContextPercent(624_000, 1_000_000)).toBe("62%");
     expect(formatContextPercent(626_000, 1_000_000)).toBe("63%");
   });
@@ -78,5 +88,26 @@ describe("formatContextPercent", () => {
   // the CLI compacts it, and hiding that is exactly what the user needs to see.
   it("reports over-full rather than clamping", () => {
     expect(formatContextPercent(226_000, 100_000)).toBe("226%");
+  });
+});
+
+describe("contextFillHue", () => {
+  it("is green up to half full", () => {
+    expect(contextFillHue(0, 1_000_000)).toBe(120);
+    expect(contextFillHue(500_000, 1_000_000)).toBe(120);
+  });
+
+  it("turns yellow by three quarters and red when full", () => {
+    expect(contextFillHue(625_000, 1_000_000)).toBeCloseTo(82.5);
+    expect(contextFillHue(750_000, 1_000_000)).toBe(45);
+    expect(contextFillHue(875_000, 1_000_000)).toBeCloseTo(22.5);
+    expect(contextFillHue(1_000_000, 1_000_000)).toBe(0);
+    expect(contextFillHue(2_260_000, 1_000_000)).toBe(0);
+  });
+
+  it("has no colour when the window is unknown", () => {
+    expect(contextFillHue(500_000, undefined)).toBeUndefined();
+    expect(contextFillHue(500_000, 0)).toBeUndefined();
+    expect(contextFillHue(NaN, 1_000_000)).toBeUndefined();
   });
 });

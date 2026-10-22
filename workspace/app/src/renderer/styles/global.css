@@ -330,10 +330,6 @@ body,
 }
 
 
-.avatar-manager {
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7), 0 0 0 3px #2d5a8a;
-}
-
 .new-instance-btn-bottom {
   width: 100%;
   padding: 14px 8px;
@@ -400,7 +396,7 @@ body,
   font-weight: bold;
 }
 
-/* Avatar */
+/* Avatar: the backend's mascot on its own, straight on the sidebar. */
 .avatar {
   width: 36px;
   height: 36px;
@@ -408,27 +404,42 @@ body,
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
-.avatar-circle {
-  border-radius: 50%;
+/* Stopped: the mascot goes grey and dark, the way an offline contact does. */
+.avatar.offline {
+  filter: grayscale(1) brightness(0.75);
 }
 
-.avatar-square {
-  border-radius: 5px;
+/* The parts that move are scaled and moved about their own box. */
+.mascot rect {
+  transform-box: fill-box;
 }
 
-.avatar.blink {
-  animation: blink-animation 0.5s infinite alternate;
+/* Working, Clawd walks: every other leg lifts, the arms bob in turn. Two frames,
+   like the pixel art it is. */
+.avatar.working .clawd-leg {
+  transform-origin: top;
+  animation: clawd-step 0.5s steps(1, end) infinite;
 }
 
-.avatar-initials {
-  font-size: 13px;
-  font-weight: bold;
-  color: #fff;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
-  letter-spacing: 0.5px;
+.avatar.working .clawd-arm {
+  animation: clawd-arm 0.5s steps(1, end) infinite;
+}
+
+.avatar.working .clawd-alt {
+  animation-delay: -0.25s;
+}
+
+/* Working, OpenCode's block jumps up and down inside the O. */
+.avatar.working .opencode-block {
+  animation: opencode-block 0.6s steps(1, end) infinite;
+}
+
+/* Unread: the avatar shakes in short bursts, with a pause between, until the
+   builder looks at the session. */
+.avatar.alert {
+  animation: avatar-shake 1.6s infinite;
 }
 
 .contact-name {
@@ -537,14 +548,21 @@ body,
 }
 
 /* Tinted only when the window size is known — `data-fill` is absent otherwise, so
-   an unknown denominator can never look like a comfortable one. */
-.contact-context[data-fill="medium"] {
-  color: #b06f1a;
+   an unknown denominator can never look like a comfortable one. Green to half full,
+   then through yellow to red (contextFillHue). */
+/* Lightness rises from green (30%) to red (40%): a dark yellow reads as olive and a
+   dark red as brown on the sidebar's light blue. */
+.contact-context[data-fill] {
+  color: hsl(var(--fill-hue) 85% calc(40% - var(--fill-hue) * 0.0833%));
 }
 
 .contact-context[data-fill="high"] {
-  color: #c62828;
   font-weight: bold;
+}
+
+/* Lighter on the manager's blue row. */
+.contact-item.manager .contact-context[data-fill] {
+  color: hsl(var(--fill-hue) 85% 78%);
 }
 
 .start-btn {
@@ -1819,12 +1837,50 @@ body,
 }
 
 /* Animations */
-@keyframes blink-animation {
-  from {
-    opacity: 1;
+@keyframes clawd-step {
+  50% {
+    transform: scaleY(0.5);
   }
-  to {
-    opacity: 0.2;
+}
+
+@keyframes clawd-arm {
+  50% {
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes opencode-block {
+  50% {
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes avatar-shake {
+  0%,
+  32%,
+  100% {
+    transform: translate(0, 0);
+  }
+  4% {
+    transform: translate(-2px, -1px);
+  }
+  8% {
+    transform: translate(2px, 1px);
+  }
+  12% {
+    transform: translate(-2px, 1px);
+  }
+  16% {
+    transform: translate(2px, -1px);
+  }
+  20% {
+    transform: translate(-2px, -1px);
+  }
+  24% {
+    transform: translate(2px, 1px);
+  }
+  28% {
+    transform: translate(-1px, 0);
   }
 }
 

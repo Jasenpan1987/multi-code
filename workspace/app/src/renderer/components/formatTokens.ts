@@ -24,8 +24,11 @@ function trimZero(value: string): string {
 // so it comes from config that can be missing or stale, and 45% shown for a session
 // actually at 226% is worse than no percentage at all.
 //
-// Rounded to whole percent: this sits beside a project name in a narrow column, and
-// nobody acts differently on 62% versus 62.4%.
+// One decimal below 10%, whole percent from there: this sits beside a project name
+// in a narrow column, and nobody acts differently on 62% versus 62.4%. Below 10% the
+// tenth is what moves: on a million-token window a whole percent is 10k tokens, so a
+// fresh session and a few turns later both read "2%". The `.0` stays, as in Claude
+// Code's own status line (`22.3k (2.0%)`).
 export function formatContextPercent(
   inputTokens: number,
   contextWindow: number | undefined
@@ -34,5 +37,25 @@ export function formatContextPercent(
     return "";
   }
   if (!Number.isFinite(inputTokens) || inputTokens < 0) return "";
-  return `${Math.round((inputTokens / contextWindow) * 100)}%`;
+  const percent = (inputTokens / contextWindow) * 100;
+  // 9.95 and up would print as "10.0%".
+  if (percent < 9.95) return `${percent.toFixed(1)}%`;
+  return `${Math.round(percent)}%`;
+}
+
+// The colour of a context figure, as an HSL hue: green while the window is at most
+// half full, through yellow at three quarters to red when full or over. Undefined
+// when the window isn't known, so an unknown denominator never looks comfortable.
+export function contextFillHue(
+  inputTokens: number,
+  contextWindow: number | undefined
+): number | undefined {
+  if (!contextWindow || !Number.isFinite(contextWindow) || contextWindow <= 0) {
+    return undefined;
+  }
+  if (!Number.isFinite(inputTokens) || inputTokens < 0) return undefined;
+  const ratio = inputTokens / contextWindow;
+  if (ratio <= 0.5) return 120;
+  if (ratio <= 0.75) return 120 - ((ratio - 0.5) / 0.25) * 75;
+  return Math.max(0, 45 - ((ratio - 0.75) / 0.25) * 45);
 }
