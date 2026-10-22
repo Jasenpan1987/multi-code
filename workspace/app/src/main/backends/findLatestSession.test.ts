@@ -28,12 +28,14 @@ afterEach(() => {
 });
 
 // Writes a transcript for `cwd` with an explicit mtime, since mtime is what decides
-// which session is the most recent.
-function writeTranscript(cwd: string, sessionId: string, mtimeMs: number) {
+// which session is the most recent. `entrypoint` as the CLI stamps it on each row:
+// `cli` from a terminal, `sdk-cli` from `claude -p`.
+function writeTranscript(cwd: string, sessionId: string, mtimeMs: number, entrypoint?: string) {
   const dir = path.join(projectsRoot, encodeProjectDir(cwd));
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${sessionId}.jsonl`);
-  fs.writeFileSync(file, '{"type":"user"}\n');
+  const row = entrypoint ? { type: "user", entrypoint } : { type: "user" };
+  fs.writeFileSync(file, JSON.stringify({ type: "queue-operation" }) + "\n" + JSON.stringify(row) + "\n");
   fs.utimesSync(file, mtimeMs / 1000, mtimeMs / 1000);
 }
 
@@ -53,6 +55,52 @@ describe("claude: findLatestJsonlSessionId", () => {
     writeTranscript(cwd, "ses-newest", now);
     writeTranscript(cwd, "ses-middle", now - 100_000);
     expect(findLatestJsonlSessionId(cwd, projectsRoot)).toBe("ses-newest");
+  });
+
+  // `--continue` doesn't open a `claude -p` or SDK run: a directory whose newest
+  // session is one would otherwise be continued into "No conversation found".
+  it("leaves out sessions started by claude -p or the SDK", () => {
+    const now = Date.now();
+    writeTranscript(cwd, "ses-terminal", now - 100_000, "cli");
+    writeTranscript(cwd, "ses-print", now, "sdk-cli");
+    writeTranscript(cwd, "ses-sdk", now - 50_000, "sdk-ts");
+    expect(findLatestJsonlSessionId(cwd, projectsRoot)).toBe("ses-terminal");
+  });
+
+  it("returns null when every session there is a claude -p run", () => {
+    writeTranscript(cwd, "ses-print", Date.now(), "sdk-cli");
+    expect(findLatestJsonlSessionId(cwd, projectsRoot)).toBe(null);
+  });
+
+  // A `claude -p` run opens with a queue row holding the whole prompt. Past 64 KB, no
+  // stamped row is left in the head, and the CLI reads the tail's instead.
+  it("knows a claude -p run whose prompt pushes every stamped row past the head", () => {
+    const now = Date.now();
+    writeTranscript(cwd, "ses-terminal", now - 100_000, "cli");
+    const dir = path.join(projectsRoot, encodeProjectDir(cwd));
+    const file = path.join(dir, "ses-big-prompt.jsonl");
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ type: "queue-operation", operation: "enqueue", content: "x".repeat(70 * 1024) }) +
+        "\n" +
+        JSON.stringify({ type: "user", parentUuid: null, entrypoint: "sdk-cli" }) +
+        "\n"
+    );
+    fs.utimesSync(file, now / 1000, now / 1000);
+    expect(findLatestJsonlSessionId(cwd, projectsRoot)).toBe("ses-terminal");
+  });
+
+  it("leaves out a background job's session, as the CLI's picker does", () => {
+    const now = Date.now();
+    writeTranscript(cwd, "ses-terminal", now - 100_000, "cli");
+    const dir = path.join(projectsRoot, encodeProjectDir(cwd));
+    const file = path.join(dir, "ses-daemon.jsonl");
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ type: "user", parentUuid: null, entrypoint: "cli", sessionKind: "daemon-worker" }) + "\n"
+    );
+    fs.utimesSync(file, now / 1000, now / 1000);
+    expect(findLatestJsonlSessionId(cwd, projectsRoot)).toBe("ses-terminal");
   });
 
   it("returns null for a directory that has never been used", () => {

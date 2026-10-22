@@ -45,13 +45,12 @@ export function encodeProjectDir(cwd: string): string {
   return resolvePath(cwd).replace(/\//g, "-");
 }
 
+// Whether `--continue` has a conversation to open here. Asked the way the lookup
+// below answers it, so a directory whose only history is a `claude -p` run starts a
+// fresh session instead of a `--continue` the CLI refuses ("No conversation found
+// to continue", then exit).
 function hasExistingSession(cwd: string): boolean {
-  const projectDir = path.join(PROJECTS_DIR, encodeProjectDir(cwd));
-  try {
-    return fs.readdirSync(projectDir).some((f) => f.endsWith(".jsonl"));
-  } catch {
-    return false;
-  }
+  return findLatestJsonlSessionId(cwd) !== null;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -190,7 +189,9 @@ function findJsonlByCwd(
   }
 }
 
-// The newest session this directory has on disk, by transcript mtime.
+// The newest session this directory has on disk, by transcript mtime, leaving out
+// the ones `--continue` and `/resume` leave out: runs of `claude -p` and the SDK,
+// and background jobs (isHeadlessRun).
 //
 // Deliberately *not* the `~/.claude/sessions/` registry that `findJsonlByCwd`
 // above reads: that only lists live processes, so it answers nothing for a stopped
@@ -207,15 +208,12 @@ export function findLatestJsonlSessionId(
   projectsRoot: string = PROJECTS_DIR
 ): string | null {
   const projectDir = path.join(projectsRoot, encodeProjectDir(cwd));
-  let best: { sessionId: string; mtimeMs: number } | null = null;
+  const sessions: { file: string; mtimeMs: number }[] = [];
   try {
     for (const file of fs.readdirSync(projectDir)) {
       if (!file.endsWith(".jsonl")) continue;
       try {
-        const { mtimeMs } = fs.statSync(path.join(projectDir, file));
-        if (mtimeMs > (best?.mtimeMs ?? -1)) {
-          best = { sessionId: file.slice(0, -".jsonl".length), mtimeMs };
-        }
+        sessions.push({ file, mtimeMs: fs.statSync(path.join(projectDir, file)).mtimeMs });
       } catch {
         // A file that vanished between readdir and stat. Skip it.
         continue;
@@ -225,7 +223,64 @@ export function findLatestJsonlSessionId(
     // No project directory: this cwd has never been used with claude.
     return null;
   }
-  return best?.sessionId ?? null;
+  // Newest first, and only as far as the first conversation: usually one read.
+  sessions.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  for (const { file } of sessions) {
+    if (!isHeadlessRun(path.join(projectDir, file))) return file.slice(0, -".jsonl".length);
+  }
+  return null;
+}
+
+// How much of a transcript's head and tail is read to learn how it was started, as
+// the CLI reads them for the same question (`readHeadAndTail`, 64 KB each).
+const ENTRYPOINT_SCAN_BYTES = 64 * 1024;
+
+// What the CLI hides from `--continue` and `/resume`, as Claude Code 2.1.308 decides
+// it (`isHiddenFromSessionPicker`): a session started by `claude -p` or the SDK, its
+// rows stamped `entrypoint` "sdk-cli", "sdk-ts" or "sdk-py" where a terminal's say
+// "cli"; and a background job's, whose first message row says `sessionKind` "daemon"
+// or "daemon-worker". Measured 2026-10-22: a directory whose only session was an
+// "sdk-cli" one got "No conversation found to continue", and the contact exited.
+const HIDDEN_ENTRYPOINTS = new Set(["sdk-cli", "sdk-ts", "sdk-py"]);
+const HIDDEN_SESSION_KINDS = new Set(["daemon", "daemon-worker"]);
+
+// The entrypoint is the head's first, else the tail's last: a `claude -p` run opens
+// with a queue row carrying the whole prompt, which can push every stamped row past
+// the head. A transcript that can't be read is taken for a conversation, as every
+// transcript was before.
+function isHeadlessRun(file: string): boolean {
+  let fd: number | null = null;
+  try {
+    fd = fs.openSync(file, "r");
+    const buf = Buffer.alloc(ENTRYPOINT_SCAN_BYTES);
+    const headBytes = fs.readSync(fd, buf, 0, buf.length, 0);
+    const head = buf.toString("utf8", 0, headBytes);
+    const size = fs.fstatSync(fd).size;
+    let tail = head;
+    if (size > ENTRYPOINT_SCAN_BYTES) {
+      const tailBytes = fs.readSync(fd, buf, 0, buf.length, size - ENTRYPOINT_SCAN_BYTES);
+      tail = buf.toString("utf8", 0, tailBytes);
+    }
+    const entrypoint = jsonStringField(head, "entrypoint") ?? lastJsonStringField(tail, "entrypoint");
+    if (entrypoint && HIDDEN_ENTRYPOINTS.has(entrypoint)) return true;
+    const firstMessage = head.split("\n").find((line) => line.includes('"parentUuid":')) ?? head;
+    return HIDDEN_SESSION_KINDS.has(jsonStringField(firstMessage, "sessionKind") ?? "");
+  } catch {
+    return false;
+  } finally {
+    if (fd !== null) fs.closeSync(fd);
+  }
+}
+
+// A string field read straight out of JSONL text, first or last occurrence, the way
+// the CLI reads it: no parse, since a head or tail cut mid-row isn't JSON. The values
+// asked for here are plain words, so escapes don't arise.
+function jsonStringField(text: string, field: string): string | undefined {
+  return new RegExp(`"${field}": ?"([^"\\\\]*)"`).exec(text)?.[1];
+}
+
+function lastJsonStringField(text: string, field: string): string | undefined {
+  return [...text.matchAll(new RegExp(`"${field}": ?"([^"\\\\]*)"`, "g"))].at(-1)?.[1];
 }
 
 // Markers the CLI sets on its own child processes. Multi-Code may itself have been

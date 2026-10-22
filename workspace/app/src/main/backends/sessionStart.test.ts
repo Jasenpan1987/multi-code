@@ -83,6 +83,22 @@ describe("claude spawn: which session", () => {
     expect(sessionId).toBeUndefined();
   });
 
+  it("names a new session where the only history is a claude -p run", () => {
+    // `--continue` would say "No conversation found to continue" and exit, and the
+    // contact would go offline the moment it started (2026-10-22, api-lib).
+    const cwd = project();
+    const dir = path.join(PROJECTS_DIR, cwd.replace(/\//g, "-"));
+    fs.writeFileSync(
+      path.join(dir, `${OWN}.jsonl`),
+      JSON.stringify({ type: "user", entrypoint: "sdk-cli", cwd }) + "\n"
+    );
+    const { args, sessionId } = claudeBackend.spawn(cwd, undefined, { kind: "latest" });
+    expect(args).not.toContain("--continue");
+    expect(args[0]).toBe("--session-id");
+    expect(args[1]).toMatch(UUID);
+    expect(sessionId).toBe(args[1]);
+  });
+
   it("is latest by default, and names a new session where there is no history", () => {
     const { args, sessionId } = claudeBackend.spawn(project());
     expect(args[0]).toBe("--session-id");
