@@ -16,9 +16,9 @@ When working with multiple coding-agent sessions across different projects simul
 - **Multi-Backend** — Each instance runs either **Claude Code** or **OpenCode**. Pick the backend when creating an instance; mix both freely, even in the same project directory
 - **Instance Management** — Spawn, restart, and remove agent sessions per project directory
 - **Full Terminal Fidelity** — Real PTY via node-pty, rendered in xterm.js. No chat abstraction, no message parsing
-- **Session Notifications** — Knows when an agent has finished or is waiting on you (Claude reports it through hooks Multi-Code passes at launch; OpenCode 2 through its own background service's event stream); plays audio, flashes the contact, and counts it on the contact's red badge and the macOS Dock icon
-- **Context usage at a glance** — Each contact row shows how full that session's context window is, as a percentage with a colour tint. Hover for the exact token count, the model, and when it was measured. Where the window size can't be established reliably, the row shows the raw token count instead of guessing a percentage. Stopped sessions show their last known usage too
-- **Follows `/clear` and `/new`** — When a running CLI moves to another session (`/clear`, `/new`, and for OpenCode also `/sessions` or one of its tabs), Multi-Code follows it, so context usage, notifications, and the manager's view keep tracking the live session
+- **Session Notifications** — Knows when an agent has finished or is waiting on you (Claude reports it through hooks Multi-Code passes at launch; OpenCode 2 through its own background service's event stream); plays audio, shakes the contact's avatar, and counts it on the contact's red badge and the macOS Dock icon
+- **Context usage at a glance** — Each contact row shows how full that session's context window is, as a percentage (one decimal below 10%, as in Claude Code's own status line), green up to half full, then through yellow to red. Hover for the exact token count, the model, and when it was measured. Where the window size can't be established reliably, the row shows the raw token count instead of guessing a percentage. Stopped sessions show their last known usage too
+- **Follows `/clear`, `/new` and `/compact`** — When a running CLI moves to another session (`/clear`, `/new`, and for OpenCode also `/sessions` or one of its tabs), Multi-Code follows it, so context usage, notifications, and the manager's view keep tracking the live session. While OpenCode sits on its home screen after `/new`, the row shows no figure. After a compaction the row shows Claude Code's own figure for the rebuilt window, or for OpenCode nothing until its next reply, never the size before
 - **OpenCode's own tabs** — OpenCode 2's tab bar shows inside Multi-Code as it does in a terminal, following your own `cli.json`. Click a tab to switch: `Ctrl+Tab` doesn't reach OpenCode in Multi-Code's terminal. OpenCode keeps tabs per project directory, so two OpenCode contacts on one project see each other's sessions as tabs; open the other contact's tab and both terminals show that session, and both alert for it
 - **Persistence** — Instance list (including each instance's backend) saved to disk, survives app restart
 - **Drag to reorder** — Drag contacts up and down the sidebar; the order is saved and survives a restart
@@ -69,8 +69,9 @@ When working with multiple coding-agent sessions across different projects simul
 
 ### Visual / UX
 - **Compact layout** — Dense sidebar, small avatars, and blue gradient chrome, so many sessions fit on one screen
+- **Avatars that show what an agent is doing** — Each contact's avatar is its backend's mascot: Claude Code's Clawd, or OpenCode's mark. Grey while stopped, lit while running, moving while a turn runs (Clawd walks, OpenCode's block jumps), and shaking in short bursts while the contact has unread alerts
 - **Themes** — Light, dark, and sepia, switched from the top-right toggle
-- **Backend at a glance** — Claude Code instances have **circular** avatars and blue window chrome; OpenCode instances have **rounded-square** avatars and green chrome. The header also names the backend
+- **Backend at a glance** — Claude Code instances show Clawd and blue window chrome; OpenCode instances show OpenCode's mark and green chrome. The header also names the backend
 - **Pinned manager** — The manager row always sits at the top of the list, styled apart from the projects
 - **Long names in a bubble** — A name too long for the sidebar shows in full in a bubble beside its row when you hover it
 - **Fold any pane** — The small arrow tabs on the pane edges fold the session list, the terminal or the toolbox to a thin strip; click the strip to bring it back. Fold the terminal and the toolbox fills the window, for reading a Markdown file at full width
@@ -228,7 +229,7 @@ Multi-Code positions itself as a **lightweight agent orchestration hub**: run mu
 2. Choose a **backend** — **Claude Code** or **OpenCode**. The picker defaults to whichever you used last. If you select OpenCode and its CLI isn't on your PATH, or is a 1.x version, an inline warning appears with what to do (you can still create the instance; a 1.x one won't start until upgraded)
 3. Select a project directory (absolute path)
 4. Optionally fill in an alias (display name in the contact list)
-5. Click Create — the app spawns the chosen CLI in that directory (`claude` or `opencode`), resuming a prior session if one exists. The instance's avatar is **circular for Claude Code, rounded-square for OpenCode**.
+5. Click Create — the app spawns the chosen CLI in that directory (`claude` or `opencode`), resuming a prior session if one exists. The instance's avatar is **Clawd for Claude Code, OpenCode's mark for OpenCode**.
 
 > The same directory can host both a Claude Code and an OpenCode instance at once — they run independently. Creating a duplicate of the *same* backend in the same directory still warns you (as before).
 
@@ -247,7 +248,7 @@ Multi-Code positions itself as a **lightweight agent orchestration hub**: run mu
 └──────────────┴─────────────────────┴─────────────────────┘
 ```
 
-- **Left** — Instance list. Green avatar = running, gray = stopped. Each row shows context usage. Drag rows to reorder (the manager stays pinned on top). Right-click for Rename… / Duplicate / Restart / Remove. Hold `Cmd` to see each project's `Cmd+1`…`Cmd+9` digit. Stopped instances show a ▶ button to restart.
+- **Left** — Instance list. Lit avatar = running, gray = stopped; it moves while the agent works and shakes while the contact has unread alerts. Each row shows context usage. Drag rows to reorder (the manager stays pinned on top). Right-click for Rename… / Duplicate / Restart / Remove. Hold `Cmd` to see each project's `Cmd+1`…`Cmd+9` digit. Stopped instances show a ▶ button to restart.
 - **Middle** — The main agent chat (real terminal — Claude Code or OpenCode's TUI). Light Aqua-blue background tuned for ANSI diff blocks.
 - **Right** — Toolbox, accordion-style: only one section is expanded at a time and fills the available vertical space. Git is expanded by default.
 - **Between middle and right** — A **draggable splitter**. Drag to resize. Each side has a 280px minimum.
@@ -345,7 +346,7 @@ The manager's role guidance lives in a `CLAUDE.md` in its folder. You can edit i
 Notifications work identically for both backends — only the source differs. Claude Code reports its own state through hooks: every `claude` Multi-Code starts gets a `--settings` file from Multi-Code's data folder whose hooks post to the app's local `/alert` endpoint. Nothing is written to your own Claude settings, so `claude` run in an ordinary terminal is unaffected. OpenCode 2 runs every session in one background service shared by all its windows (terminals, VS Code, Multi-Code), and Multi-Code listens to that service's event stream for finishes and dialogs. A small report-only plugin, loaded only into the terminals Multi-Code starts (named in that process's `OPENCODE_CLI_CONFIG_CONTENT`, next to your own `cli.json` plugins), tells it which session each terminal is showing. Nothing is written to `~/.config/opencode/` or a project's `.opencode/`. Stopping an OpenCode contact, or quitting Multi-Code, closes its terminal only: a turn still running finishes in that service, as when a VS Code terminal closes, and a stopped contact raises no alerts for it.
 
 - Agent finishes, or stops to wait on you (a permission prompt, a question, a plan approval) → plays the "ding" once, for every instance, including the one you're looking at
-- Avatar blinks, and the contact's red badge counts one more
+- Avatar shakes, in short bursts until you look, and the contact's red badge counts one more
 - The macOS Dock icon shows the total across all sessions (installed app only)
 - Typing, or clicking anywhere in a session's page, stops its chime and clears its red dot. Clicking a contact in the list does the same for that contact, and so does switching to it with `Cmd+1`…`Cmd+9`; the session you leave keeps its badge. Nothing clears on a timer or on window focus alone
 - A turn you interrupt with Esc, or a dialog you deny, doesn't chime
@@ -513,8 +514,8 @@ Everything Multi-Code keeps lives in Electron's user-data folder. On macOS that 
 1. User creates an instance by selecting a project directory and a backend (Claude Code / OpenCode)
 2. App spawns the backend CLI (`claude` / `opencode`, resuming a prior session if one exists) via node-pty in that directory. OpenCode gets your login shell's environment (read once per run), so its tools find what a terminal would; when OpenCode's background service isn't running yet, Multi-Code starts it first with that environment. Multi-Code also looks for OpenCode's service, database and config where that environment puts them (`XDG_*`, `OPENCODE_DB` set in your shell's rc files). Backends are pluggable behind a small `Backend` interface in `src/main/backends/`
 3. PTY stdout is piped in real-time to an xterm.js terminal in the renderer
-4. Each agent's state comes from the agent: Claude Code reports it through report-only hooks passed with `--settings` at launch (finished, waiting on a permission prompt or question), OpenCode 2 through its shared background service's event stream, with a report-only terminal plugin naming the session each terminal shows. Dialogs answered from the phone or the secretary go to OpenCode's API by request id. Neither writes anything into the user's own config
-5. On a finish or a needs-you: audio + flash + one more on the red badge and the Dock count, for every instance. The red dot stays until you type or click in that session, or select it
+4. Each agent's state comes from the agent: Claude Code reports it through report-only hooks passed with `--settings` at launch (finished, waiting on a permission prompt or question), OpenCode 2 through its shared background service's event stream, with a report-only terminal plugin naming the session each terminal shows. Dialogs answered from the phone or the secretary go to OpenCode's API by request id. Whether a turn is running, for the avatar, comes from the same places: the `status` in Claude Code's `~/.claude/sessions/<pid>.json`, read once a second, and OpenCode's turn events. Neither writes anything into the user's own config
+5. On a finish or a needs-you: audio + a shaking avatar + one more on the red badge and the Dock count, for every instance. The red dot stays until you type or click in that session, or select it
 6. Toolbox sections each manage their own lifecycle:
    - Git: shells out to `git` every 5s while expanded
    - Terminal: lazy-spawns a shell PTY on first expand, persists across collapses

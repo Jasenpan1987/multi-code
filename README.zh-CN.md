@@ -16,9 +16,9 @@
 - **多后端** — 每个实例跑 **Claude Code** 或 **OpenCode**。创建实例时选后端,可以任意混用,甚至同一个项目目录里两个都开
 - **实例管理** — 按项目目录 spawn / restart / remove agent 会话
 - **完整终端能力** — 用 node-pty 接真 PTY,xterm.js 渲染。不做 chat 抽象,不解析消息
-- **会话通知** — 知道 agent 什么时候做完、什么时候在等你(Claude 通过 Multi-Code 启动时传给它的 hooks 自己上报;OpenCode 2 通过它自己后台服务的事件流上报),播放声音、闪烁联系人,并记到联系人的红色未读数和 macOS Dock 图标上
-- **Context 用量一眼可见** — 每一行联系人都显示这个会话的 context 窗口用了百分之多少,并按用量上色。鼠标悬停能看到精确 token 数、模型和统计时间。窗口大小确定不了的时候只显示 token 数,不瞎猜百分比。已停止的会话也显示最后一次的用量
-- **跟得上 `/clear` 和 `/new`** — 运行中的 CLI 切到另一个 session 时(`/clear`、`/new`,OpenCode 还包括 `/sessions` 和它的标签页),Multi-Code 会跟过去,context 用量、通知和 Manager 看到的都是当前那个 session
+- **会话通知** — 知道 agent 什么时候做完、什么时候在等你(Claude 通过 Multi-Code 启动时传给它的 hooks 自己上报;OpenCode 2 通过它自己后台服务的事件流上报),播放声音、让联系人头像抖动,并记到联系人的红色未读数和 macOS Dock 图标上
+- **Context 用量一眼可见** — 每一行联系人都显示这个会话的 context 窗口用了百分之多少(不到 10% 时保留一位小数,跟 Claude Code 自己的状态栏一样),用量一半以内是绿色,再往上渐变成黄色、红色。鼠标悬停能看到精确 token 数、模型和统计时间。窗口大小确定不了的时候只显示 token 数,不瞎猜百分比。已停止的会话也显示最后一次的用量
+- **跟得上 `/clear`、`/new` 和 `/compact`** — 运行中的 CLI 切到另一个 session 时(`/clear`、`/new`,OpenCode 还包括 `/sessions` 和它的标签页),Multi-Code 会跟过去,context 用量、通知和 Manager 看到的都是当前那个 session。OpenCode 在 `/new` 之后停在首页时,这一行不显示数字。压缩之后,Claude Code 显示它自己记录的压缩后的数字,OpenCode 等下一次回复再显示,不会继续显示压缩前的数字
 - **OpenCode 自己的标签页** — OpenCode 2 的标签栏在 Multi-Code 里照常显示,跟在终端里一样,按你自己的 `cli.json` 设置。用鼠标点标签切换:在 Multi-Code 的终端里 `Ctrl+Tab` 传不到 OpenCode。OpenCode 按项目目录保存标签,所以同一个项目上的两个 OpenCode 联系人会看到彼此的 session;在一个联系人里点开另一个的标签,两个终端就显示同一个 session,两边都会为它提醒
 - **持久化** — 实例列表(含每个实例的后端)存盘,重启后恢复
 - **拖拽排序** — 在侧边栏上下拖动联系人,顺序会保存,重启后还在
@@ -69,8 +69,9 @@
 
 ### 视觉 / 体验
 - **紧凑布局** — 侧边栏排得密、头像小、蓝色渐变外框,一屏能放下很多会话
+- **头像能看出 agent 在干什么** — 每个联系人的头像是它后端的吉祥物:Claude Code 是 Clawd,OpenCode 是它的 O 图标。停止时是灰色,运行时亮着,正在跑一轮时会动(Clawd 走路,OpenCode 的方块上下跳),有未读提醒时一阵一阵地抖
 - **主题** — 亮色、暗色、护眼(sepia)三种,右上角切换
-- **一眼区分后端** — Claude Code 实例是**圆形**头像、蓝色窗口外框;OpenCode 实例是**圆角方形**头像、绿色外框。标题栏也会写明是哪个后端
+- **一眼区分后端** — Claude Code 实例的头像是 Clawd、蓝色窗口外框;OpenCode 实例的头像是它的 O 图标、绿色外框。标题栏也会写明是哪个后端
 - **Manager 置顶** — Manager 那一行永远在列表最上面,样式跟项目区分开
 - **长名字气泡** — 名字太长显示不下时,鼠标悬停会在那一行旁边弹出气泡,显示完整名字
 - **面板可收起** — 面板边上的小箭头可以把会话列表、终端或工具箱收成一条细边,点那条细边就展开回来。收起终端后工具箱会占满窗口,适合整屏读 Markdown
@@ -228,7 +229,7 @@ Multi-Code 的核心定位是**轻量级 agent 调度中心**:你可以并行管
 2. 选一个**后端**:**Claude Code** 或 **OpenCode**。选择器默认是你上次用的那个。如果选了 OpenCode 但它的 CLI 不在 PATH 里,或者是 1.x 版本,会出一条内联提示告诉你怎么办(仍然可以创建;1.x 的升级前启动不了)
 3. 选择项目目录(必须是绝对路径)
 4. 可选:填写一个 alias(联系人显示名)
-5. 点 Create,应用自动 spawn 选中的 CLI 在该目录(`claude` 或 `opencode`),有历史 session 就续上。实例头像**圆形是 Claude Code,圆角方形是 OpenCode**
+5. 点 Create,应用自动 spawn 选中的 CLI 在该目录(`claude` 或 `opencode`),有历史 session 就续上。实例头像**Clawd 是 Claude Code,O 图标是 OpenCode**
 
 > 同一个目录可以同时开一个 Claude Code 实例和一个 OpenCode 实例,互不干扰。同一目录里再创建**相同**后端的实例,还是会像以前那样给你警告。
 
@@ -247,7 +248,7 @@ Multi-Code 的核心定位是**轻量级 agent 调度中心**:你可以并行管
 └──────────────┴─────────────────────┴─────────────────────┘
 ```
 
-- **左**:实例列表。绿色头像 = running,灰色 = stopped。每一行显示 context 用量。可以拖动排序(Manager 固定在最上面)。右键菜单可 Rename… / Duplicate / Restart / Remove。按住 `Cmd` 能看到每个项目对应 `Cmd+1`…`Cmd+9` 的数字。停止的实例右侧有 ▶ 按钮启动
+- **左**:实例列表。头像亮着 = running,灰色 = stopped;agent 干活时头像会动,有未读提醒时会抖。每一行显示 context 用量。可以拖动排序(Manager 固定在最上面)。右键菜单可 Rename… / Duplicate / Restart / Remove。按住 `Cmd` 能看到每个项目对应 `Cmd+1`…`Cmd+9` 的数字。停止的实例右侧有 ▶ 按钮启动
 - **中**:agent 主聊天框(真终端,Claude Code 或 OpenCode 的 TUI)。底色白底 Aqua 风,适配深背景下的 ANSI diff 块
 - **右**:工具箱,手风琴式 —— 同时只能展开一个 section,展开的撑满纵向。Git 默认展开
 - **中右之间**:有一条**可拖动分栏**,左右调整聊天框 / 工具箱宽度。两侧最小 280px
@@ -345,7 +346,7 @@ Manager 的角色 guidance 放在它文件夹里的 `CLAUDE.md`。你可以改;�
 两种后端的通知行为完全一致,只是来源不同。Claude Code 通过 hooks 上报自己的状态:Multi-Code 启动的每个 `claude` 都带一个来自 Multi-Code 数据目录的 `--settings` 文件,里面的 hooks 把状态发到 app 本地的 `/alert` 接口。不会写你自己的 Claude 配置,所以在普通终端里跑 `claude` 不受影响。OpenCode 2 把所有会话放在一个后台服务里跑,所有窗口(终端、VS Code、Multi-Code)共用这一个服务。Multi-Code 订阅这个服务的事件流,从里面知道哪一轮做完了、哪里弹了框。另有一个只上报的小插件,只加载到 Multi-Code 自己启动的终端里(写在这个进程的 `OPENCODE_CLI_CONFIG_CONTENT` 里,跟你自己 `cli.json` 里的插件放在一起),告诉 Multi-Code 每个终端正在显示哪个会话。不会往 `~/.config/opencode/` 或项目的 `.opencode/` 里写任何东西。停止 OpenCode 联系人或者退出 Multi-Code,只是关掉它的终端:还在跑的那一轮会在后台服务里跑完,跟关掉 VS Code 终端一样;停止的联系人不会为它提醒。
 
 - Agent 做完了,或停下来等你(权限确认、提问、计划审批)→ 响一次"滴滴",每个实例都响,包括你正在看的那个
-- 头像闪烁,联系人的红色徽标上未读数加一
+- 头像一阵一阵地抖,直到你去看,联系人的红色徽标上未读数加一
 - macOS Dock 图标显示所有会话的未读总数(只有安装版)
 - 在某个会话的页面里打字或点任意位置,停掉它的提示音、清掉它的红点。在列表里点某个联系人,或者用 `Cmd+1`…`Cmd+9` 切到它,对那个联系人也一样;离开的那个会话红点不变。不会因为计时或窗口获得焦点就自动清掉
 - 你按 Esc 打断的一轮,或你拒绝的弹窗,不会响
@@ -463,8 +464,8 @@ Multi-Code 自己存的东西都在 Electron 的 userData 目录里。macOS 上�
 1. 用户选一个项目目录和后端(Claude Code / OpenCode)创建实例
 2. App 通过 node-pty 在该目录 spawn 对应后端 CLI(`claude` / `opencode`,有历史 session 就续上)。OpenCode 会拿到你登录 shell 的环境变量(每次运行读一次),所以它的工具跟在终端里一样找得到;OpenCode 后台服务还没起来时,Multi-Code 先用这份环境把它启动。Multi-Code 也按这份环境去找 OpenCode 的服务、数据库和配置(你在 shell 的 rc 文件里设的 `XDG_*`、`OPENCODE_DB`)。后端在 `src/main/backends/` 的一个小 `Backend` 接口后面可插拔
 3. PTY stdout 实时管道到 renderer 里的 xterm.js 终端
-4. 每个 agent 的状态来自 agent 自己:Claude Code 通过启动时用 `--settings` 传入的只上报 hooks 报告(做完了、在等权限确认或回答问题),OpenCode 2 通过它共用后台服务的事件流报告,再由一个只上报的终端插件说明每个终端显示的是哪个会话。手机和秘书的作答按请求 id 发给 OpenCode 的 API。两者都不往用户自己的配置里写任何东西
-5. 做完或等你时:声音 + 闪烁 + 红色未读数和 Dock 未读数各加一,每个实例都一样。红点一直留着,直到你在那个会话里打字、点击,或选中它
+4. 每个 agent 的状态来自 agent 自己:Claude Code 通过启动时用 `--settings` 传入的只上报 hooks 报告(做完了、在等权限确认或回答问题),OpenCode 2 通过它共用后台服务的事件流报告,再由一个只上报的终端插件说明每个终端显示的是哪个会话。手机和秘书的作答按请求 id 发给 OpenCode 的 API。头像用的"是否正在跑一轮"也来自同样的地方:Claude Code 的 `~/.claude/sessions/<pid>.json` 里的 `status`(每秒读一次),OpenCode 的回合事件。两者都不往用户自己的配置里写任何东西
+5. 做完或等你时:声音 + 头像抖动 + 红色未读数和 Dock 未读数各加一,每个实例都一样。红点一直留着,直到你在那个会话里打字、点击,或选中它
 6. 工具箱 sections 各自管理生命周期:
    - Git:展开期间每 5s 调用 `git`
    - Terminal:第一次展开时 lazy-spawn 一个 shell PTY,之后保活
