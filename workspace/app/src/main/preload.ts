@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { ContextUsage } from "../shared/types";
 
 contextBridge.exposeInMainWorld("electronAPI", {
@@ -77,6 +77,21 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // Manager activity feed
   getManagerActivity: () => ipcRenderer.invoke("manager-activity-list"),
+
+  // File drop
+  getDropFolder: (instanceId: string) =>
+    ipcRenderer.invoke("file-drop-get-folder", instanceId),
+  setDropFolder: (instanceId: string, folder: string) =>
+    ipcRenderer.invoke("file-drop-set-folder", instanceId, folder),
+  describeDropped: (paths: string[]) =>
+    ipcRenderer.invoke("file-drop-describe", paths),
+  pickDropFolder: (message: string, startFolder: string) =>
+    ipcRenderer.invoke("file-drop-pick-folder", message, startFolder),
+  copyDropped: (instanceId: string, sources: string[], targetDir: string) =>
+    ipcRenderer.invoke("file-drop-copy", instanceId, sources, targetDir),
+  // Here rather than in main: only the renderer's own File knows its path. The
+  // sandboxed preload may load webUtils.
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
 
   // Compose box: clipboard image -> temp file (renderer has no fs access)
   saveClipboardImage: () => ipcRenderer.invoke("save-clipboard-image"),
