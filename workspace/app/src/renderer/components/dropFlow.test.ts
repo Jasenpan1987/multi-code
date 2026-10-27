@@ -1,0 +1,259 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  allOnDisk,
+  changeDefaultMessage,
+  dropStep,
+  dropTitle,
+  HELD_KEY_WINDOW_MS,
+  holdKeys,
+  shownNames,
+  somewhereElseMessage,
+  swallowHeldKeyRepeats,
+} from "./dropFlow";
+import type { DroppedItem } from "../../shared/types";
+
+const file = (name: string): DroppedItem => ({ name, isDirectory: false });
+const folder = (name: string): DroppedItem => ({ name, isDirectory: true });
+
+describe("allOnDisk", () => {
+  it("takes a drop whose every item has a path", () => {
+    expect(allOnDisk(["/Users/me/report.docx", "/Users/me/assets"])).toBe(true);
+  });
+
+  it("refuses a drop with one item that has no file on disk", () => {
+    expect(allOnDisk(["/Users/me/report.docx", ""])).toBe(false);
+  });
+
+  it("refuses a drop with no files at all", () => {
+    expect(allOnDisk([])).toBe(false);
+  });
+});
+
+describe("dropTitle", () => {
+  it("counts one file", () => {
+    expect(dropTitle([file("report.docx")], "multi-code")).toBe(
+      "Put 1 file in multi-code?"
+    );
+  });
+
+  it("counts several files", () => {
+    expect(dropTitle([file("a.csv"), file("b.png")], "multi-code")).toBe(
+      "Put 2 files in multi-code?"
+    );
+  });
+
+  it("counts folders alone as folders", () => {
+    expect(dropTitle([folder("assets")], "p")).toBe("Put 1 folder in p?");
+    expect(dropTitle([folder("a"), folder("b"), folder("c")], "p")).toBe(
+      "Put 3 folders in p?"
+    );
+  });
+
+  it("names files first, then folders, for a mix in any order", () => {
+    expect(dropTitle([folder("assets"), file("report.docx")], "fd-project")).toBe(
+      "Put 1 file and 1 folder in fd-project?"
+    );
+    expect(
+      dropTitle([file("a"), folder("b"), file("c"), folder("d"), folder("e")], "p")
+    ).toBe("Put 2 files and 3 folders in p?");
+  });
+
+  it("keeps the project's name as it is", () => {
+    expect(dropTitle([file("a")], "My Project (old)")).toBe(
+      "Put 1 file in My Project (old)?"
+    );
+  });
+});
+
+describe("shownNames", () => {
+  it("lists every name up to five, a folder with a trailing slash", () => {
+    expect(shownNames([file("report.docx"), folder("assets")])).toEqual({
+      names: ["report.docx", "assets/"],
+      more: 0,
+    });
+  });
+
+  it("lists exactly five with nothing more", () => {
+    const items = ["1", "2", "3", "4", "5"].map(file);
+    expect(shownNames(items)).toEqual({ names: ["1", "2", "3", "4", "5"], more: 0 });
+  });
+
+  it("stops at five, in the drop's order, and counts the rest", () => {
+    const items = ["1", "2", "3", "4", "5", "6", "7"].map(file);
+    expect(shownNames(items)).toEqual({ names: ["1", "2", "3", "4", "5"], more: 2 });
+  });
+});
+
+describe("dropStep", () => {
+  const project = { name: "fd-project", cwd: "/tmp/fd-project" };
+
+  it("opens the picker at the project when there is no default yet", () => {
+    expect(dropStep({ path: null, exists: false, display: null }, project)).toEqual({
+      kind: "pick",
+      message: "No default folder for fd-project yet. Choose where dropped files go.",
+      start: "/tmp/fd-project",
+    });
+  });
+
+  it("says which default is gone, as the dialog would show it, and opens at the project", () => {
+    expect(
+      dropStep({ path: "/tmp/fd-project/inbox", exists: false, display: "inbox/" }, project)
+    ).toEqual({
+      kind: "pick",
+      message: "The default folder inbox/ no longer exists. Choose where dropped files go.",
+      start: "/tmp/fd-project",
+    });
+  });
+
+  it("asks in the dialog when the default is there", () => {
+    expect(
+      dropStep({ path: "/tmp/fd-project/inbox", exists: true, display: "inbox/" }, project)
+    ).toEqual({ kind: "confirm", folder: "/tmp/fd-project/inbox", display: "inbox/" });
+  });
+});
+
+describe("the dialog's picker messages", () => {
+  it("says the default stays for Somewhere else", () => {
+    expect(somewhereElseMessage("docs/sources/inbox/")).toBe(
+      "Choose where these files go. The default folder stays docs/sources/inbox/."
+    );
+  });
+
+  it("names the project for Change default path", () => {
+    expect(changeDefaultMessage("multi-code")).toBe(
+      "Choose the new default folder for multi-code. These files go there too."
+    );
+  });
+});
+
+// Like a key event: Node has EventTarget and Event, not KeyboardEvent.
+function key(type: string, code: string, repeat = false, target?: unknown): Event {
+  const e = new Event(type, { cancelable: true });
+  Object.defineProperty(e, "code", { value: code });
+  Object.defineProperty(e, "key", { value: code });
+  Object.defineProperty(e, "repeat", { value: repeat });
+  // What it was aimed at, for holdKeys' `allow`; Node's has no tree to set it.
+  if (target !== undefined) Object.defineProperty(e, "target", { value: target });
+  return e;
+}
+
+// The guard first: on a window its capture listener runs before the terminal's;
+// Node's EventTarget, with no tree, runs listeners in the order they were added.
+// What reaches the "terminal" after it, as "<code>" or "<code>*" for a repeat.
+function behindGuard(guard: (target: EventTarget) => unknown) {
+  const target = new EventTarget();
+  const reached: string[] = [];
+  guard(target);
+  for (const type of ["keydown", "keypress"]) {
+    target.addEventListener(type, (e) => {
+      const k = e as KeyboardEvent;
+      reached.push(`${type === "keypress" ? "press:" : ""}${k.code}${k.repeat ? "*" : ""}`);
+    });
+  }
+  return { target, reached, send: (e: Event) => (target.dispatchEvent(e), e) };
+}
+
+describe("swallowHeldKeyRepeats", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("swallows the repeats of a held key until it is released", () => {
+    const { reached, send } = behindGuard(swallowHeldKeyRepeats);
+    expect(send(key("keydown", "Enter", true)).defaultPrevented).toBe(true);
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual([]);
+
+    send(key("keyup", "Enter"));
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual(["Enter*"]);
+  });
+
+  it("keeps swallowing a held Enter when Shift is let go of it", () => {
+    const { reached, send } = behindGuard(swallowHeldKeyRepeats);
+    send(key("keydown", "Enter", true));
+    send(key("keyup", "ShiftLeft"));
+    expect(send(key("keydown", "Enter", true)).defaultPrevented).toBe(true);
+    expect(reached).toEqual([]);
+
+    send(key("keyup", "Enter"));
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual(["Enter*"]);
+  });
+
+  it("keeps swallowing when Shift is let go before the first repeat", () => {
+    const { reached, send } = behindGuard(swallowHeldKeyRepeats);
+    send(key("keyup", "ShiftLeft"));
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual([]);
+  });
+
+  it("stops at a fresh press of the held key, which goes through", () => {
+    const { reached, send } = behindGuard(swallowHeldKeyRepeats);
+    send(key("keydown", "Enter", true));
+    send(key("keydown", "Enter"));
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual(["Enter", "Enter*"]);
+  });
+
+  it("lets a key pressed since through, repeats and all, and still swallows the held one", () => {
+    const { reached, send } = behindGuard(swallowHeldKeyRepeats);
+    send(key("keydown", "Enter", true));
+    send(key("keydown", "KeyA"));
+    send(key("keydown", "KeyA", true));
+    send(key("keyup", "KeyA"));
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual(["KeyA", "KeyA*"]);
+  });
+
+  it("ends only when every held key is released", () => {
+    const { reached, send } = behindGuard(swallowHeldKeyRepeats);
+    send(key("keydown", "Enter", true));
+    send(key("keydown", "Escape", true));
+    send(key("keyup", "Escape"));
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual([]);
+    send(key("keyup", "Enter"));
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual(["Enter*"]);
+  });
+
+  it("goes away when no repeat comes in time: nothing was held", () => {
+    const { reached, send } = behindGuard(swallowHeldKeyRepeats);
+    vi.advanceTimersByTime(HELD_KEY_WINDOW_MS);
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual(["Enter*"]);
+  });
+
+  it("stays while a held key repeats past that time", () => {
+    const { reached, send } = behindGuard(swallowHeldKeyRepeats);
+    send(key("keydown", "Enter", true));
+    vi.advanceTimersByTime(HELD_KEY_WINDOW_MS * 2);
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual([]);
+  });
+});
+
+describe("holdKeys", () => {
+  const DIALOG = { in: "dialog" };
+  const allow = (to: EventTarget | null) => (to as unknown) === DIALOG;
+
+  it("keeps every key from everything but what it allows", () => {
+    let release = () => {};
+    const { reached, send } = behindGuard((t) => (release = holdKeys(t, allow)));
+    expect(send(key("keydown", "Enter")).defaultPrevented).toBe(true);
+    send(key("keypress", "Enter"));
+    send(key("keydown", "KeyX", true));
+    expect(reached).toEqual([]);
+
+    send(key("keydown", "Enter", false, DIALOG));
+    expect(reached).toEqual(["Enter"]);
+
+    release();
+    send(key("keydown", "KeyX"));
+    expect(reached).toEqual(["Enter", "KeyX"]);
+  });
+});
