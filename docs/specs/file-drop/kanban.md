@@ -59,7 +59,7 @@ shows their real paths.
 ### T-701: Copy engine with Finder-style names
 
 - **Type:** feature
-- **Status:** ready
+- **Status:** done
 - **Story:** 4
 - **Description:** New main-process module `workspace/app/src/main/file-drop.ts`, with no
   `electron` import so plain vitest can run it. One async function copies a list of
@@ -90,7 +90,7 @@ shows their real paths.
 ### T-702: Default-folder storage, IPC and preload
 
 - **Type:** integration
-- **Status:** backlog
+- **Status:** done
 - **Story:** 2, 3, 5
 - **Description:** Wire T-701 and the per-project default folder to the renderer.
   - **Storage:** add `dropFolders: Record<string, string>` (project directory → absolute
@@ -127,7 +127,7 @@ shows their real paths.
 ### T-703: Drop overlay over the whole window
 
 - **Type:** feature
-- **Status:** ready
+- **Status:** done
 - **Story:** 1
 - **Description:** Window-level drag listeners (a hook in `renderer/hooks/`, used from
   `App.tsx`) and an overlay component in `renderer/components/`.
@@ -163,7 +163,7 @@ shows their real paths.
 ### T-704: Drop flow and the confirmation dialog
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Story:** 1, 2, 3, 5
 - **Description:** What happens between the drop (T-703) and the copy (T-702).
   1. Get each file's path with `getPathForFile`. If any is `""`, copy nothing and report
@@ -219,9 +219,21 @@ shows their real paths.
   - Goes away by itself after a few seconds (longer when something failed). It never
     takes keyboard focus from the terminal.
   - A pure function turns copy results into the lines, so it can be unit-tested.
-  - Replace the logging that T-703 and T-704 left in its place.
+  - Replace the logging that T-703 and T-704 left in its place: render the
+    `dropReport` state in `App.tsx` (`DropReport` in `renderer/components/dropFlow.ts`:
+    `copying` / `copied` with outcomes / `only-finder` / `error`), replacing the effect
+    that `console.debug`s it.
+  - A failed outcome with `partial: true` reads "partly copied" and shows its `display`.
+  - "Copying…" only after a short delay, so an instant copy doesn't flash it.
+  - Overlapping drops: tag each report with its drop, so one drop's `copied` can't
+    replace another's `copying`.
+  - **Added 2026-10-28 from T-704:** a deadline on the lookups before the dialog
+    (`getDropFolder`, `describeDropped`). The keyboard is held from the drop until the
+    dialog or picker has it, so a lookup that never returns (a dead network volume)
+    would hold it forever. Past the deadline, abandon the drop, report an error, and
+    give the keyboard back (`returnDropKeys`).
 - **Acceptance:** unit test for the lines (all copied, one renamed, one failed and the
-  rest copied, folder into itself, only-Finder). By CDP: after a seeded drop, the
+  rest copied, partly copied, folder into itself, only-Finder). By CDP: after a seeded drop, the
   message shows the relative path, then disappears; typing still reaches the terminal
   while it shows.
 - **Blocks:** T-706
@@ -266,3 +278,5 @@ shows their real paths.
 
 - 2026-10-28: Generated from PRD v1.1. Breaking the PRD down found that the overlay
   can't tell a Finder file from a browser image (PRD v1.1 changelog).
+- 2026-10-28: T-701 done (GPT review, 2 rounds: no deletes, no `fs.cp`, folder-into-itself by device and inode). T-703 done (GPT: no findings; in-page drags ignored). T-702 done (GPT: no findings). Merged into `feat/file-drop`, plus 2da48c2 for a clash between them. T-704 started; it also carries `partial`/`destination` into the copy IPC and brings the window to the front on a drop.
+- 2026-10-28: T-704 done (GPT review: two ways a key could reach the terminal around a drop, both fixed in 1a66b0e) and merged (255f73e). T-705 gained four items from T-704's report, including a deadline on the pre-dialog lookups. Builder stopped for the day; next is T-705.
