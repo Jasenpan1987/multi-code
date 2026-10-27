@@ -557,9 +557,19 @@ export function registerIpcHandlers() {
     }
   );
 
+  // A drop from Finder leaves Finder the active app (macOS doesn't switch on a
+  // drop), so the Enter meant for the dialog or the picker that follows would go to
+  // Finder. Stealing is fine here: the builder just dropped files on this window.
+  ipcMain.handle("file-drop-focus-window", (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    if (process.platform === "darwin") app.focus({ steal: true });
+    win.focus();
+  });
+
   // On the window the drop landed on rather than the focused one, unlike
-  // select-directory: a drop from Finder need not bring Multi-Code forward, and
-  // with no focused window the picker would never open and read as a cancel.
+  // select-directory: with no focused window the picker would never open and read
+  // as a cancel.
   ipcMain.handle(
     "file-drop-pick-folder",
     async (event, message: string, startFolder: string): Promise<string | null> => {
@@ -597,8 +607,15 @@ export function registerIpcHandlers() {
       const outcomes: DropCopyOutcome[] = [];
       for (const result of await copyIntoFolder(sources, targetDir)) {
         if (!result.ok) {
-          debugTrace(`[file-drop]   failed ${JSON.stringify(result.source)}: ${result.reason}`);
-          outcomes.push(result);
+          debugTrace(
+            `[file-drop]   failed ${JSON.stringify(result.source)}: ${result.reason}${result.destination ? ` (kept ${JSON.stringify(result.destination)})` : ""}`
+          );
+          // Only a folder copy stops partway, so what it kept is a folder.
+          outcomes.push(
+            result.destination
+              ? { ...result, display: displayPath(result.destination, projectDir, home, true) }
+              : result
+          );
           continue;
         }
         debugTrace(

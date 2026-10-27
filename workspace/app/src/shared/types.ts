@@ -321,9 +321,18 @@ export interface DroppedItem {
 // `display` is the same path as the message shows it (`docs/sources/inbox/report
 // 2.docx`, a folder with a trailing `/`). `renamed`: the name was taken, so the copy
 // got a number. `reason` is short and plain: "no permission", "no longer exists".
+// `partial`: a folder copy stopped partway; what it copied stays at `destination`
+// (and `display`), and the reason starts "partly copied: ".
 export type DropCopyOutcome =
   | { ok: true; source: string; destination: string; renamed: boolean; display: string }
-  | { ok: false; source: string; reason: string };
+  | {
+      ok: false;
+      source: string;
+      reason: string;
+      partial?: true;
+      destination?: string;
+      display?: string;
+    };
 
 export interface ElectronAPI {
   // Instance management
@@ -425,6 +434,9 @@ export interface ElectronAPI {
   // Resolves to the folder as getDropFolder now reports it.
   setDropFolder: (instanceId: string, folder: string) => Promise<DropFolder>;
   describeDropped: (paths: string[]) => Promise<DroppedItem[]>;
+  // Makes Multi-Code the active app with the calling window in front, so the
+  // dialog or picker a drop opens gets the keyboard rather than Finder.
+  focusDropWindow: () => Promise<void>;
   // The native folder picker, able to make a new folder. `message` is the line shown
   // above it; it opens in `startFolder`. Null when cancelled.
   pickDropFolder: (message: string, startFolder: string) => Promise<string | null>;
