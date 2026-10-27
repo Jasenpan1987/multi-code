@@ -256,6 +256,16 @@ export async function copyIntoFolder(
 // How a drop's folders and copies are shown
 // ---------------------------------------------------------------------------
 
+// Whether `target` is `folder` or inside it, by the path strings alone. Enough for
+// showing a path; the copy's own guard, isSameOrInside, goes by device and inode.
+function isPathInside(folder: string, target: string): boolean {
+  const rel = path.relative(folder, target);
+  return (
+    rel === "" ||
+    (rel !== ".." && !rel.startsWith(".." + path.sep) && !path.isAbsolute(rel))
+  );
+}
+
 /**
  * A path as the drop dialog and message show it: relative to the project when it is
  * inside it (`docs/sources/inbox/`, the project itself `./`), otherwise absolute with
@@ -272,12 +282,12 @@ export function displayPath(
   const full = path.resolve(target);
   const slash = isFolder ? "/" : "";
   const project = path.resolve(projectDir);
-  if (isSameOrInside(project, full)) {
+  if (isPathInside(project, full)) {
     const rel = path.relative(project, full);
     return rel === "" ? "./" : rel + slash;
   }
   // "/" as home would turn every path into `~/…`; no home at all, the same.
-  if (home && path.resolve(home) !== path.sep && isSameOrInside(path.resolve(home), full)) {
+  if (home && path.resolve(home) !== path.sep && isPathInside(path.resolve(home), full)) {
     const rel = path.relative(path.resolve(home), full);
     return rel === "" ? "~/" : `~/${rel}${slash}`;
   }
