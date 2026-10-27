@@ -3233,3 +3233,73 @@ body,
   border-color: #4a4a4a;
   color: #6ba3d6;
 }
+
+/* ============ File drop ============
+   Over the whole window while files are dragged onto it (useFileDrop). Above the
+   dialogs and the diff window, though it never shows while one is open. Its
+   contents take no pointer events, so the overlay itself is the one drag target
+   and crossing its text doesn't fire enter/leave pairs. Themed like the compose
+   box. */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  /* The title strip is a window-drag region; not while files are coming. */
+  -webkit-app-region: no-drag;
+}
+
+.drop-overlay * {
+  pointer-events: none;
+}
+
+.drop-card {
+  width: min(440px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  background: var(--compose-bg);
+  color: var(--compose-fg);
+  border: 2px dashed var(--compose-focus-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  text-align: center;
+}
+
+/* Nowhere to drop: no dashed drop-zone edge. */
+.drop-card[data-kind="refused"] {
+  border-style: solid;
+  border-color: var(--compose-border);
+}
+
+.drop-card-label,
+.drop-card-path {
+  font-size: 11px;
+  color: var(--compose-hint-fg);
+}
+
+.drop-card-name {
+  font-size: 15px;
+  font-weight: bold;
+  color: var(--compose-chip-fg);
+  overflow-wrap: anywhere;
+}
+
+.drop-card-path {
+  font-family: Menlo, Monaco, "Courier New", monospace;
+  overflow-wrap: anywhere;
+}
+
+.drop-card-title {
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.drop-card-why {
+  font-size: 12px;
+  line-height: 1.4;
+}
