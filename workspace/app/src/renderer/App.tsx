@@ -21,11 +21,13 @@ import {
 } from "./components/secretaryBrief";
 import type { BriefMap, OpenCard } from "./components/secretaryBrief";
 import { DiffWindow } from "./components/DiffWindow";
+import { DropOverlay } from "./components/DropOverlay";
 import { cleanupShellTerminal } from "./components/TerminalSection";
 import { Toolbox } from "./components/Toolbox";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { VersionBadge } from "./components/VersionBadge";
 import { useNotifications } from "./hooks/useNotifications";
+import { useFileDrop } from "./hooks/useFileDrop";
 import { ThemeContext } from "./hooks/useTheme";
 import { playMessageSound, playCoughSound, stopMessageSound } from "./audio/sounds";
 import {
@@ -653,6 +655,14 @@ export function App() {
   const selectedInstance = selectedId
     ? instances.find((i) => i.id === selectedId)
     : null;
+
+  // Files dragged onto the window go into the selected contact's project (epic
+  // file-drop). Logged until T-704 brings the confirmation and the copy.
+  const handleFileDrop = useCallback((files: File[], target: Instance) => {
+    console.debug("[file-drop]", target.name, target.cwd, files.map((f) => f.name));
+  }, []);
+  const fileDrop = useFileDrop(selectedInstance ?? null, handleFileDrop);
+
   // Backend of the currently selected instance drives the outer-chrome skin
   // (blue for claude, green for opencode). Backend is per-instance, so this
   // rides selection rather than the global <html data-theme>. Falls back to
@@ -1003,6 +1013,8 @@ export function App() {
           onAskAgent={handleAskAgent}
         />
       )}
+
+      <DropOverlay state={fileDrop} />
     </div>
     </ThemeContext.Provider>
   );
