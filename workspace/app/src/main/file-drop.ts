@@ -22,6 +22,11 @@ export interface DropFailed {
   source: string;
   // Short and plain, to stand after the file's name in a message: "no permission".
   reason: string;
+  // Set when a folder copy stopped partway. What it copied stays (Multi-Code never
+  // deletes anything), in the folder at `destination`, and the reason starts
+  // "partly copied: ".
+  partial?: true;
+  destination?: string;
 }
 
 export type DropCopyResult = DropCopied | DropFailed;
@@ -29,17 +34,23 @@ export type DropCopyResult = DropCopied | DropFailed;
 // Far past any real clash; only stops the loop if EEXIST somehow never ends.
 const MAX_NUMBER = 9999;
 
+// A folder's name has an extension only when it looks like one (`report.pages`, a
+// package), so a folder named `v1.2` becomes `v1.2 2`, not `v1 2.2`.
+const FOLDER_EXTENSION = /^\.[A-Za-z][A-Za-z0-9]*$/;
+
 /**
  * The name Finder gives the nth copy: `report 2.docx`. The number goes before the
  * last extension only (`a.tar 2.gz`); a name with none, or a dotfile, gets it at the
  * end (`assets 2`, `.env 2`). n = 1 is the name itself. Exported for the tests.
  */
-export function numberedName(name: string, n: number): string {
+export function numberedName(name: string, n: number, isFolder = false): string {
   if (n < 2) return name;
   const dot = name.lastIndexOf(".");
-  // No dot, only a leading one (".env"), or a trailing one: no extension.
-  if (dot <= 0 || dot === name.length - 1) return `${name} ${n}`;
-  return `${name.slice(0, dot)} ${n}${name.slice(dot)}`;
+  // No dot, or only a leading one (".env"): no extension.
+  const ext = dot > 0 ? name.slice(dot) : "";
+  const hasExt = isFolder ? FOLDER_EXTENSION.test(ext) : ext.length > 1;
+  if (!hasExt) return `${name} ${n}`;
+  return `${name.slice(0, dot)} ${n}${ext}`;
 }
 
 function errorCode(err: unknown): string | undefined {
@@ -74,10 +85,11 @@ function isSameOrInside(folder: string, target: string): boolean {
 async function claimName(
   targetDir: string,
   name: string,
+  isFolder: boolean,
   claim: (destination: string) => Promise<void>
 ): Promise<{ destination: string; renamed: boolean } | null> {
   for (let n = 1; n <= MAX_NUMBER; n++) {
-    const destination = path.join(targetDir, numberedName(name, n));
+    const destination = path.join(targetDir, numberedName(name, n, isFolder));
     try {
       await claim(destination);
       return { destination, renamed: n > 1 };
@@ -88,29 +100,39 @@ async function claimName(
   return null;
 }
 
-// Fill a folder claimName just made with mkdir, the one way to take a folder name
-// atomically. cp with errorOnExist refuses a folder that exists, even this empty one,
-// so each entry is copied into it on its own. Symlinks are copied as links with their
-// target unchanged, as Finder does.
-async function fillFolder(source: string, destination: string, mode: number): Promise<void> {
-  try {
-    for (const entry of await fs.promises.readdir(source)) {
-      await fs.promises.cp(path.join(source, entry), path.join(destination, entry), {
-        recursive: true,
-        errorOnExist: true,
-        force: false,
-        verbatimSymlinks: true,
-        mode: fs.constants.COPYFILE_EXCL,
-      });
-    }
-    // cp sets a folder's mode only when it makes the folder itself.
-    await fs.promises.chmod(destination, mode & 0o7777);
-  } catch (err) {
-    // Half a folder would pass for the whole one. The folder is new (mkdir just made
-    // it) and holds only what this copy put there, so take it back.
-    await fs.promises.rm(destination, { recursive: true, force: true }).catch(() => {});
-    throw err;
+// Make one entry at `destination`, which must not exist yet: an empty folder (its
+// contents come after), an exclusive copy of a file, or the link itself with its
+// target unchanged, as Finder copies one. Each fails with EEXIST rather than replace
+// what is there.
+async function createEntry(source: string, destination: string, stat: fs.Stats): Promise<void> {
+  if (stat.isDirectory()) {
+    await fs.promises.mkdir(destination);
+  } else if (stat.isFile()) {
+    await fs.promises.copyFile(source, destination, fs.constants.COPYFILE_EXCL);
+  } else if (stat.isSymbolicLink()) {
+    await fs.promises.symlink(await fs.promises.readlink(source), destination);
+  } else {
+    // A socket or a pipe: copyFile would block reading a pipe forever.
+    throw new Error(`${path.basename(source)} is not a file or folder`);
   }
+}
+
+// Copy a folder's contents into `destination`, a folder createEntry just made, and
+// give it the source's mode last, so a read-only source folder can still be filled.
+// This walk stands in for fs.promises.cp, which replaces a link already at a
+// destination whatever its options say (Node 22 and 24: onLink, then copyLink
+// unlinks it). Here every create is exclusive, and a name taken inside the new
+// folder (something else wrote into it meanwhile) is an error, not a rename.
+async function fillFolder(source: string, destination: string, mode: number): Promise<void> {
+  // In name order, so a copy that stops partway has a predictable part.
+  for (const entry of (await fs.promises.readdir(source)).sort()) {
+    const from = path.join(source, entry);
+    const to = path.join(destination, entry);
+    const stat = await fs.promises.lstat(from);
+    await createEntry(from, to, stat);
+    if (stat.isDirectory()) await fillFolder(from, to, stat.mode);
+  }
+  await fs.promises.chmod(destination, mode & 0o7777);
 }
 
 async function copyOne(
@@ -123,32 +145,34 @@ async function copyOne(
   }
   try {
     const stat = await fs.promises.lstat(source);
-    const name = path.basename(source);
-    let claimed: { destination: string; renamed: boolean } | null;
-
-    if (stat.isDirectory()) {
-      const realSource = await fs.promises.realpath(source);
-      if (isSameOrInside(realSource, realTarget)) {
-        return { ok: false, source, reason: "can't copy a folder into itself" };
-      }
-      claimed = await claimName(targetDir, name, (d) => fs.promises.mkdir(d));
-      if (claimed) await fillFolder(source, claimed.destination, stat.mode);
-    } else if (stat.isFile()) {
-      claimed = await claimName(targetDir, name, (d) =>
-        fs.promises.copyFile(source, d, fs.constants.COPYFILE_EXCL)
-      );
-    } else if (stat.isSymbolicLink()) {
-      // The link itself, not what it points to, as Finder copies one.
-      const linkTarget = await fs.promises.readlink(source);
-      claimed = await claimName(targetDir, name, (d) =>
-        fs.promises.symlink(linkTarget, d)
-      );
-    } else {
-      // A socket or a pipe: copyFile would block reading a pipe forever.
+    const isFolder = stat.isDirectory();
+    if (!isFolder && !stat.isFile() && !stat.isSymbolicLink()) {
       return { ok: false, source, reason: "not a file or folder" };
     }
+    if (isFolder && isSameOrInside(await fs.promises.realpath(source), realTarget)) {
+      return { ok: false, source, reason: "can't copy a folder into itself" };
+    }
 
+    const claimed = await claimName(targetDir, path.basename(source), isFolder, (d) =>
+      createEntry(source, d, stat)
+    );
     if (!claimed) return { ok: false, source, reason: "too many copies with this name" };
+
+    if (isFolder) {
+      try {
+        await fillFolder(source, claimed.destination, stat.mode);
+      } catch (err) {
+        // What was copied stays: Multi-Code never deletes, and the folder may by now
+        // hold something that isn't ours. The result says it is incomplete.
+        return {
+          ok: false,
+          source,
+          reason: `partly copied: ${plainReason(err)}`,
+          partial: true,
+          destination: claimed.destination,
+        };
+      }
+    }
     return { ok: true, source, ...claimed };
   } catch (err) {
     return { ok: false, source, reason: plainReason(err) };

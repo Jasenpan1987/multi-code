@@ -3,6 +3,7 @@
 // its own temp directory, never in HOME or the repo.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { execFileSync } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -72,6 +73,21 @@ describe("numberedName", () => {
 
   it("leaves the name alone for the first copy", () => {
     expect(numberedName("report.docx", 1)).toBe("report.docx");
+  });
+
+  it("takes any last extension on a file", () => {
+    expect(numberedName("archive.7z", 2)).toBe("archive 2.7z");
+    expect(numberedName("photos.2024", 2)).toBe("photos 2.2024");
+  });
+
+  it("takes a folder's extension only when it starts with a letter", () => {
+    expect(numberedName("report.pages", 2, true)).toBe("report 2.pages");
+    expect(numberedName("Tool.app", 2, true)).toBe("Tool 2.app");
+    expect(numberedName("v1.2", 2, true)).toBe("v1.2 2");
+    expect(numberedName("archive.7z", 2, true)).toBe("archive.7z 2");
+    expect(numberedName("my.notes-old", 2, true)).toBe("my.notes-old 2");
+    expect(numberedName(".github", 2, true)).toBe(".github 2");
+    expect(numberedName("assets", 2, true)).toBe("assets 2");
   });
 });
 
@@ -291,7 +307,7 @@ describe("copyIntoFolder", () => {
   });
 
   it.skipIf(process.getuid?.() === 0)(
-    "takes back a folder it could only half copy, and copies the rest",
+    "keeps a folder it could only partly copy, says so, and copies the rest",
     async () => {
       const assets = path.join(src, "assets");
       write(path.join(assets, "a.txt"), "a");
@@ -302,12 +318,116 @@ describe("copyIntoFolder", () => {
       const results = await copyIntoFolder([assets, file], target);
 
       expect(results).toEqual([
-        { ok: false, source: assets, reason: "no permission" },
+        {
+          ok: false,
+          source: assets,
+          reason: "partly copied: no permission",
+          partial: true,
+          destination: path.join(target, "assets"),
+        },
         { ok: true, source: file, destination: path.join(target, "report.docx"), renamed: false },
       ]);
-      expect(fs.readdirSync(target)).toEqual(["report.docx"]);
+      // Nothing is deleted: what was copied before the failure is still there.
+      expect(snapshot(path.join(target, "assets"))).toEqual({ "a.txt": "a" });
     }
   );
+
+  // Something else writes into the new folder while it is being filled. fs.promises.cp
+  // would unlink a link found there whatever its options; every create here is
+  // exclusive, so theirs stays and the copy reports it stopped.
+  it.each([
+    ["link", (at: string, outside: string) => fs.symlinkSync(outside, at)],
+    ["file", (at: string) => fs.writeFileSync(at, "theirs")],
+    ["folder", (at: string) => write(path.join(at, "theirs.txt"), "theirs")],
+  ])("never replaces a %s that appears inside the folder it is filling", async (kind, plant) => {
+    const outside = write(path.join(root, "outside.txt"), "untouched");
+    const assets = path.join(src, "assets");
+    const entry = path.join(assets, "entry");
+    fs.mkdirSync(assets);
+    // The link must resolve: cp only reached its unlink for a link that does.
+    if (kind === "link") fs.symlinkSync(write(path.join(src, "real.txt"), "real"), entry);
+    else if (kind === "file") write(entry, "ours");
+    else write(path.join(entry, "ours.txt"), "ours");
+
+    const copied = path.join(target, "assets");
+    const realMkdir = fs.promises.mkdir;
+    vi.spyOn(fs.promises, "mkdir").mockImplementation((async (
+      dir: fs.PathLike,
+      options?: fs.MakeDirectoryOptions
+    ) => {
+      const made = await realMkdir(dir, options);
+      if (dir === copied) plant(path.join(copied, "entry"), outside);
+      return made;
+    }) as typeof fs.promises.mkdir);
+    const theirs = () => snapshot(copied);
+    const results = await copyIntoFolder([assets], target);
+
+    expect(results).toEqual([
+      expect.objectContaining({ ok: false, partial: true, destination: copied }),
+    ]);
+    expect(results[0].ok === false && results[0].reason).toMatch(/^partly copied: /);
+    expect(theirs()).toEqual(
+      kind === "link"
+        ? { entry: `-> ${outside}` }
+        : kind === "file"
+          ? { entry: "theirs" }
+          : { entry: "dir", "entry/theirs.txt": "theirs" }
+    );
+    expect(read(outside)).toBe("untouched");
+  });
+
+  it("refuses a pipe, alone or inside a folder, without waiting on it", async () => {
+    const pipe = path.join(src, "pipe");
+    execFileSync("mkfifo", [pipe]);
+    const assets = path.join(src, "assets");
+    write(path.join(assets, "a.txt"), "a");
+    execFileSync("mkfifo", [path.join(assets, "b-pipe")]);
+
+    const results = await copyIntoFolder([pipe, assets], target);
+
+    expect(results).toEqual([
+      { ok: false, source: pipe, reason: "not a file or folder" },
+      {
+        ok: false,
+        source: assets,
+        reason: "partly copied: b-pipe is not a file or folder",
+        partial: true,
+        destination: path.join(target, "assets"),
+      },
+    ]);
+    expect(fs.readdirSync(target)).toEqual(["assets"]);
+  });
+
+  it("copies a read-only folder whole and keeps it read-only", async () => {
+    const docs = path.join(src, "docs");
+    write(path.join(docs, "sub", "a.md"), "a");
+    fs.chmodSync(path.join(docs, "sub"), 0o555);
+    fs.chmodSync(docs, 0o555);
+
+    const [result] = await copyIntoFolder([docs], target);
+
+    expect(result).toMatchObject({ ok: true, destination: path.join(target, "docs") });
+    expect(snapshot(path.join(target, "docs"))).toEqual({ sub: "dir", "sub/a.md": "a" });
+    expect(fs.statSync(path.join(target, "docs")).mode & 0o777).toBe(0o555);
+    expect(fs.statSync(path.join(target, "docs", "sub")).mode & 0o777).toBe(0o555);
+  });
+
+  it("numbers a clashing folder by the folder rule", async () => {
+    write(path.join(src, "v1.2", "notes.md"), "new");
+    write(path.join(src, "report.pages", "index.xml"), "new");
+    fs.mkdirSync(path.join(target, "v1.2"));
+    fs.mkdirSync(path.join(target, "report.pages"));
+
+    const results = await copyIntoFolder(
+      [path.join(src, "v1.2"), path.join(src, "report.pages")],
+      target
+    );
+
+    expect(results.map((r) => r.ok && path.basename(r.destination))).toEqual([
+      "v1.2 2",
+      "report 2.pages",
+    ]);
+  });
 
   it("copies a link as a link", async () => {
     const real = write(path.join(src, "real.txt"), "real");
