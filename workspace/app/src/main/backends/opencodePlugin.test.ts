@@ -23,6 +23,7 @@ import {
   opencodePluginSource,
 } from "./opencodePlugin";
 import type { AlertDelivery } from "./types";
+import { OPENCODE_VIEW_KEYS } from "../../shared/replyStart";
 
 type Route = { type: string; sessionID?: string; [key: string]: unknown };
 type Claim = { append?: string; render: () => unknown };
@@ -433,8 +434,15 @@ describe("opencodeCliConfig", () => {
   const pluginDir = "/Users/x/Library/Application Support/multi-code/opencode/tui";
   const cliJsonPath = "/Users/x/.config/opencode/cli.json";
   const ours = { package: pluginDir };
-  // Ctrl+Z off and nothing else: tabs follow the builder's own settings (2026-10-20).
-  const settings = { keybinds: { "terminal.suspend": "none" } };
+  // Ctrl+Z off and the two view keys, after OpenCode's defaults for those commands:
+  // tabs follow the builder's own settings (2026-10-20).
+  const last = OPENCODE_VIEW_KEYS["session.last"].stroke;
+  const previous = OPENCODE_VIEW_KEYS["session.message.previous"].stroke;
+  const viewKeys = {
+    "session.last": ["ctrl+alt+g", "end", last],
+    "session.message.previous": [previous],
+  };
+  const settings = { keybinds: { "terminal.suspend": "none", ...viewKeys } };
   const missing = () => {
     throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
   };
@@ -528,17 +536,69 @@ describe("opencodeCliConfig", () => {
       inherited,
       cliJsonPath,
       pluginDir,
-      readFile: () => {
-        throw new Error("cli.json must not be read when the env names the plugins");
-      },
+      readFile: file(JSON.stringify({ plugins: ["not-these"] })),
     });
     expect(parse(result)).toEqual({
       theme: { name: "nord" },
       // The builder's tab settings pass through untouched.
       tabs: { scope: "global", mode: "on" },
-      keybinds: { "app.exit": "ctrl+q", "terminal.suspend": "none" },
+      keybinds: { "app.exit": "ctrl+q", "terminal.suspend": "none", ...viewKeys },
       plugins: ["/Users/x/.config/opencode/env-plugin", ours],
     });
+  });
+
+  it("adds each view key after the builder's own keys for that command, from cli.json", () => {
+    const result = opencodeCliConfig({
+      inherited: undefined,
+      cliJsonPath,
+      pluginDir,
+      readFile: file(
+        JSON.stringify({
+          keybinds: { "session.last": "ctrl+e, end", "session.message.previous": ["alt+up"], "app.exit": "x" },
+        })
+      ),
+    });
+    // Only the two commands are copied: cli.json's other keys apply by themselves.
+    expect(parse(result).keybinds).toEqual({
+      "terminal.suspend": "none",
+      "session.last": ["ctrl+e", "end", last],
+      "session.message.previous": ["alt+up", previous],
+    });
+  });
+
+  it("takes the inherited value's keys for a command over cli.json's", () => {
+    const result = opencodeCliConfig({
+      inherited: JSON.stringify({ keybinds: { "session.last": false, "session.message.previous": "none" } }),
+      cliJsonPath,
+      pluginDir,
+      readFile: file(JSON.stringify({ keybinds: { "session.last": "ctrl+e" } })),
+    });
+    expect(parse(result).keybinds).toEqual({
+      "terminal.suspend": "none",
+      "session.last": [last],
+      "session.message.previous": [previous],
+    });
+  });
+
+  it("keeps a binding object as one key, and falls back to the default for a value OpenCode rejects", () => {
+    const result = opencodeCliConfig({
+      inherited: undefined,
+      cliJsonPath,
+      pluginDir,
+      readFile: file(
+        JSON.stringify({ keybinds: { "session.last": 42, "session.message.previous": { key: "alt+p" } } })
+      ),
+    });
+    expect(parse(result).keybinds).toEqual({
+      "terminal.suspend": "none",
+      "session.last": ["ctrl+alt+g", "end", last],
+      "session.message.previous": [{ key: "alt+p" }, previous],
+    });
+  });
+
+  it("uses OpenCode's defaults for the view commands when cli.json can't be read", () => {
+    const result = opencodeCliConfig({ inherited: undefined, cliJsonPath, pluginDir, readFile: file("{ bad") });
+    expect(parse(result).keybinds).toEqual(settings.keybinds);
   });
 
   it("copies cli.json's plugins under an inherited value that has none", () => {

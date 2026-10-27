@@ -5,7 +5,7 @@ import { RenameSessionDialog } from "./RenameSessionDialog";
 import { getTerminal } from "./TerminalView";
 import { contextFillHue, formatContextPercent, formatTokens } from "./formatTokens";
 import { dropsBefore, pinManagerFirst } from "./contactOrder";
-import { hotkeyTargets, listenForContactHotkeys } from "./contactHotkeys";
+import { hotkeyTargets, listenForContactHotkeys, nextUnread } from "./contactHotkeys";
 import type { ContextUsage, Instance } from "../../shared/types";
 
 // The row shows an abbreviated count, plus a percentage **only when the window size
@@ -107,18 +107,26 @@ export function ContactList({
     top: number;
   } | null>(null);
 
-  // Cmd+1…9 and the digits shown while Cmd is held; see contactHotkeys.
+  // Cmd+1…9 and the digits shown while Cmd is held, and Option+Shift+Up/Down;
+  // see contactHotkeys.
   const [showHotkeys, setShowHotkeys] = useState(false);
   const hotkeyIds = hotkeyTargets(instances);
   // For the key listener, subscribed once.
-  const hotkeyRef = useRef({ hotkeyIds, onSelect });
-  hotkeyRef.current = { hotkeyIds, onSelect };
+  const hotkeyRef = useRef({ hotkeyIds, instances, unreadCounts, selectedId, onSelect });
+  hotkeyRef.current = { hotkeyIds, instances, unreadCounts, selectedId, onSelect };
 
   // Before the folded return: the keys still switch with the list folded away.
   useEffect(
     () =>
       listenForContactHotkeys(window, {
         targets: () => hotkeyRef.current.hotkeyIds,
+        unreadTarget: (step) => {
+          const { instances: all, unreadCounts: unread, selectedId: shown } =
+            hotkeyRef.current;
+          // The order the list draws, manager on top.
+          const order = pinManagerFirst(all).map((i) => i.id);
+          return nextUnread(order, unread, shown, step);
+        },
         select: (id) => {
           hotkeyRef.current.onSelect(id);
           // A click on a row takes focus out of the terminal, a key doesn't: the

@@ -27,6 +27,8 @@ import os from "os";
 import path from "path";
 import { ALERT_FILE_ENV, INSTANCE_ENV, SPAWN_ENV } from "./instance-env";
 import { stripJsonc } from "./opencodeDb";
+import { OPENCODE_VIEW_KEYS } from "../../shared/replyStart";
+import type { OpencodeViewCommand } from "../../shared/replyStart";
 
 // The plugin's directory in `<userData>/opencode/`, and its entry file in there.
 export const OPENCODE_PLUGIN_DIR = "tui";
@@ -194,6 +196,42 @@ export default {
 // told from a busy one (spike, G-601: `ps` still showed it running).
 const TUI_SETTINGS = { keybinds: { "terminal.suspend": "none" } } as const;
 
+// The two commands that show a finished turn's conclusion get one more key each
+// (shared/replyStart.ts, OPENCODE_VIEW_KEYS). A value here replaces the builder's for
+// that command rather than merging with it, so theirs is copied in first: from the
+// inherited value, else cli.json, else OpenCode's default
+// (packages/tui/src/config/keybind.ts, 2.0.32).
+const VIEW_KEY_DEFAULTS: Record<OpencodeViewCommand, string> = {
+  "session.last": "ctrl+alt+g,end",
+  "session.message.previous": "none",
+};
+
+// A binding value with one more stroke: `false` and "none" have no keys, a string
+// lists them comma-separated, an array lists them, a stroke or binding object is one.
+function withStroke(value: unknown, stroke: object): unknown[] | null {
+  if (value === false || value === "none") return [stroke];
+  if (typeof value === "string") {
+    return [...value.split(",").map((key) => key.trim()).filter(Boolean), stroke];
+  }
+  if (Array.isArray(value)) return [...value, stroke];
+  if (isRecord(value)) return [value, stroke];
+  return null;
+}
+
+function viewKeybinds(
+  own: Record<string, unknown>,
+  fromCliJson: () => Record<string, unknown>
+): Record<string, unknown[]> {
+  const out: Record<string, unknown[]> = {};
+  for (const [command, { stroke }] of Object.entries(OPENCODE_VIEW_KEYS)) {
+    const name = command as OpencodeViewCommand;
+    const theirs = name in own ? own[name] : (fromCliJson()[name] ?? VIEW_KEY_DEFAULTS[name]);
+    // One OpenCode wouldn't accept either: the default, so the command keeps its keys.
+    out[name] = withStroke(theirs, stroke) ?? withStroke(VIEW_KEY_DEFAULTS[name], stroke)!;
+  }
+  return out;
+}
+
 // The CLI config file OpenCode merges OPENCODE_CLI_CONFIG_CONTENT over:
 // `$OPENCODE_CONFIG_DIR` (when set), else `<XDG_CONFIG_HOME or ~/.config>/opencode`,
 // then `cli.json` (`packages/cli/src/index.ts`, `packages/util/src/global-roots.ts`).
@@ -281,9 +319,30 @@ export function opencodeCliConfig(input: {
     if (!parsed) return null;
     config = parsed;
   }
+  // cli.json, read at most once: null when there is none, "bad" when there is one
+  // that can't be read safely.
+  let cliJson: Record<string, unknown> | null | "bad" | undefined;
+  const readCliJson = () => {
+    if (cliJson !== undefined) return cliJson;
+    let text: string;
+    try {
+      text = readFile(input.cliJsonPath);
+    } catch (err) {
+      cliJson = (err as NodeJS.ErrnoException)?.code === "ENOENT" ? null : "bad";
+      return cliJson;
+    }
+    cliJson = parseObject(text) ?? "bad";
+    return cliJson;
+  };
+  const cliJsonKeybinds = () => {
+    const file = readCliJson();
+    return file && file !== "bad" && isRecord(file.keybinds) ? file.keybinds : {};
+  };
+
+  const own = isRecord(config.keybinds) ? config.keybinds : {};
   const merged: Record<string, unknown> = {
     ...config,
-    keybinds: { ...(isRecord(config.keybinds) ? config.keybinds : {}), ...TUI_SETTINGS.keybinds },
+    keybinds: { ...own, ...TUI_SETTINGS.keybinds, ...viewKeybinds(own, cliJsonKeybinds) },
   };
   if (!input.pluginDir) return { content: JSON.stringify(merged), plugin: false };
 
@@ -294,15 +353,9 @@ export function opencodeCliConfig(input: {
     if (!Array.isArray(config.plugins)) return without;
     theirs = config.plugins;
   } else {
-    let text: string | null = null;
-    try {
-      text = readFile(input.cliJsonPath);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") return without;
-    }
-    if (text !== null) {
-      const file = parseObject(text);
-      if (!file) return without;
+    const file = readCliJson();
+    if (file === "bad") return without;
+    if (file) {
       if (file.plugins !== undefined && !Array.isArray(file.plugins)) return without;
       theirs = (file.plugins as unknown[] | undefined) ?? [];
     }

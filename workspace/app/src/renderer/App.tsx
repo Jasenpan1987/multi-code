@@ -6,6 +6,8 @@ import {
   TerminalView,
   cleanupTerminal,
   getTerminal,
+  cancelReplyJump,
+  showReplyOnFinish,
 } from "./components/TerminalView";
 import { ComposeBox } from "./components/ComposeBox";
 import { SecretaryCard } from "./components/SecretaryCard";
@@ -257,6 +259,18 @@ export function App() {
     return cleanup;
   }, [instances, notify]);
 
+  // A finished turn: its terminal shows the conclusion from the first line, so the
+  // builder coming back at the chime starts reading there. Claude Code's classic
+  // renderer and OpenCode; see shared/replyStart.ts.
+  const instancesRef = useRef(instances);
+  instancesRef.current = instances;
+  useEffect(() => {
+    return window.electronAPI.onInstanceActivity((id, type) => {
+      if (type !== "waiting") return;
+      showReplyOnFinish(id, instancesRef.current.find((i) => i.id === id)?.backend);
+    });
+  }, []);
+
   // Acknowledging the shown instance: any key press, or a click in its page.
   // Stops its chime and clears its red dot. Window focus alone clears nothing.
   //
@@ -326,9 +340,11 @@ export function App() {
     });
   }, []);
 
-  // An instance that started or stopped working on a turn: its avatar moves.
+  // An instance that started or stopped working on a turn: its avatar moves. A turn
+  // starting also ends any wait to show the last one's conclusion.
   useEffect(() => {
     return window.electronAPI.onInstanceWorking((id, working) => {
+      if (working) cancelReplyJump(id);
       setInstances((prev) =>
         prev.map((inst) =>
           inst.id === id ? { ...inst, working: working || undefined } : inst

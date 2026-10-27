@@ -280,6 +280,11 @@ export class OpencodeAttention implements HookAttention {
     this.reportWorking();
   }
 
+  // What the terminal shows now: a root, a subagent's session, or nothing (home).
+  shownSession(): string | undefined {
+    return this.lastShown;
+  }
+
   // The contact takes the shown session as its own (the one its next start reopens)
   // only when it is a root. The TUI can show a subagent's session too, and reopening
   // that would put the contact in the middle of someone else's turn. Its family is
@@ -442,7 +447,7 @@ export class OpencodeAttention implements HookAttention {
     // after a Reject inside the subagent (subagent-reject-noreason), and finishes with
     // its own end.
     const finished = finishing && !alreadyFinished && this.isRoot(session);
-    if (finished) this.onActivity("waiting");
+    if (finished) this.onActivity("waiting", undefined, undefined, undefined, session);
     // Another root's dialog still blocks the contact. Said again after a finish, or the
     // finish reads as the whole contact being idle, and the write gate would let an
     // automated write land in that dialog as its answer; and when the dialog the phone
@@ -765,7 +770,7 @@ export class OpencodeAttention implements HookAttention {
     if (closed && this.dialogs.size === 0) this.clearPrompt(closed);
     for (const id of finished) {
       this.finishedBySync.add(id);
-      this.onActivity("waiting");
+      this.onActivity("waiting", undefined, undefined, undefined, id);
     }
     for (const [id, dialog] of fresh) this.raise(id, dialog);
     if (fresh.length === 0 && (finished.length > 0 || !this.liveOpen())) this.restateNewest();

@@ -1,4 +1,5 @@
 import type { RemoteStatus } from "./remote-protocol";
+import type { OpencodeViewCommand } from "./replyStart";
 
 export type BackendName = "claude" | "opencode";
 
@@ -325,6 +326,8 @@ export interface ElectronAPI {
   backendAvailability: (backend: BackendName) => Promise<BackendAvailability>;
   getGitStatus: (id: string) => Promise<GitStatus>;
   getResumeCommand: (id: string) => Promise<string | null>;
+  // What the instance's latest turn concluded with; see shared/replyStart.ts.
+  readReplyConclusion: (id: string) => Promise<string | null>;
   readFile: (instanceId: string, path: string) => Promise<ReadFileResult>;
   // `relPath` is repo-relative, as it comes out of the Git section. Paths that
   // escape the instance's cwd are refused in the main process.
@@ -389,6 +392,8 @@ export interface ElectronAPI {
 
   // Terminal I/O
   writeToInstance: (id: string, data: string) => void;
+  // A key that moves an OpenCode terminal's view, not input; see shared/replyStart.ts.
+  sendViewKey: (id: string, command: OpencodeViewCommand) => void;
   resizeInstance: (id: string, cols: number, rows: number) => void;
 
   // Shell terminal (toolbox Terminal section)

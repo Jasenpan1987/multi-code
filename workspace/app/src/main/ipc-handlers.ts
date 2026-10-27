@@ -35,6 +35,8 @@ import type {
   ReadFileResult,
   SpeechKeyChange,
 } from "../shared/types";
+import { OPENCODE_VIEW_KEYS, replyConclusion } from "../shared/replyStart";
+import type { OpencodeViewCommand } from "../shared/replyStart";
 import { remoteServer } from "./remote/ws-server";
 import { setRemoteEnabled } from "./remote";
 import { hasTailscaleEndpoint } from "./remote/endpoints";
@@ -265,6 +267,17 @@ export function registerIpcHandlers() {
     return getBackend(instance.backend).buildResumeCommand(instance.sessionId);
   });
 
+  // The conclusion of the instance's latest turn, so its terminal can show it from
+  // the first line (shared/replyStart.ts). Null when the instance, its session or
+  // its transcript is unknown, the turn that ended isn't the session on screen, or
+  // the turn said nothing.
+  ipcMain.handle("read-reply-conclusion", async (_event, id: string): Promise<string | null> => {
+    const source = processManager.replySource(id);
+    if (!source) return null;
+    const read = await getBackend(source.backend).readBuilderTurn(source.sessionId);
+    return read ? replyConclusion(read.turn) : null;
+  });
+
   // Markdown view: read a markdown file for the renderer, which has no fs
   // access. The path may be absolute (POSIX or Windows), `~`-relative to the
   // home dir, or relative to the instance's cwd. Returns a discriminated-union
@@ -405,6 +418,13 @@ export function registerIpcHandlers() {
 
   ipcMain.on("pty-input", (_event, id: string, data: string) => {
     processManager.writeToInstance(id, data);
+  });
+
+  // A key that moves an OpenCode terminal's view; only the commands named in
+  // OPENCODE_VIEW_KEYS, never bytes of the renderer's own.
+  ipcMain.on("view-key", (_event, id: string, command: unknown) => {
+    if (typeof command !== "string" || !Object.hasOwn(OPENCODE_VIEW_KEYS, command)) return;
+    processManager.sendViewKey(id, command as OpencodeViewCommand);
   });
 
   ipcMain.on("pty-resize", (_event, id: string, cols: number, rows: number) => {

@@ -168,7 +168,10 @@ export type ActivityCallback = (
   // after the one shown closed or a turn ended around it (OpenCode, whose contact can
   // have several open). Everything follows it as the live dialog; nothing chimes,
   // vibrates or counts it a second time.
-  restated?: boolean
+  restated?: boolean,
+  // `waiting` only: the session whose turn ended, from a backend whose terminal can be
+  // showing another of the contact's sessions meanwhile (OpenCode's tabs).
+  endedSession?: string
 ) => void;
 
 export interface HookAttention {
@@ -177,6 +180,10 @@ export interface HookAttention {
   // Answer a dialog through the CLI's own API. Absent for a backend whose dialogs
   // are answered by keystrokes (Claude).
   answer?(ref: DialogRef, answer: DialogAnswer): Promise<AnswerResult>;
+  // The session the terminal shows now, a subagent's included; undefined on a home
+  // screen. Absent for a backend whose terminal shows only the contact's session
+  // (Claude).
+  shownSession?(): string | undefined;
 }
 
 // What createHookAttention is told about the process it watches.

@@ -4,6 +4,8 @@ import {
   hotkeyDigit,
   hotkeyTargets,
   listenForContactHotkeys,
+  nextUnread,
+  unreadStep,
 } from "./contactHotkeys";
 
 describe("hotkeyTargets", () => {
@@ -50,6 +52,65 @@ describe("hotkeyDigit", () => {
   });
 });
 
+describe("unreadStep", () => {
+  const chord = (code: string, mods: Partial<Record<string, boolean>> = {}) => ({
+    code,
+    metaKey: false,
+    ctrlKey: false,
+    altKey: true,
+    shiftKey: true,
+    ...mods,
+  });
+
+  it("reads Option+Shift+Down as the next and Option+Shift+Up as the previous", () => {
+    expect(unreadStep(chord("ArrowDown"))).toBe(1);
+    expect(unreadStep(chord("ArrowUp"))).toBe(-1);
+  });
+
+  it("ignores the arrows without both Option and Shift, or with Cmd or Ctrl", () => {
+    expect(unreadStep(chord("ArrowDown", { altKey: false }))).toBeNull();
+    expect(unreadStep(chord("ArrowDown", { shiftKey: false }))).toBeNull();
+    expect(unreadStep(chord("ArrowDown", { metaKey: true }))).toBeNull();
+    expect(unreadStep(chord("ArrowUp", { ctrlKey: true }))).toBeNull();
+    expect(unreadStep(chord("ArrowLeft"))).toBeNull();
+  });
+});
+
+describe("nextUnread", () => {
+  const order = ["m", "a", "b", "c", "d"];
+
+  it("finds the nearest contact with unread alerts below or above the shown one", () => {
+    const unread = new Map([["a", 1], ["d", 2]]);
+    expect(nextUnread(order, unread, "b", 1)).toBe("d");
+    expect(nextUnread(order, unread, "b", -1)).toBe("a");
+  });
+
+  it("goes round the end of the list", () => {
+    const unread = new Map([["a", 1]]);
+    expect(nextUnread(order, unread, "c", 1)).toBe("a");
+    expect(nextUnread(order, new Map([["d", 1]]), "a", -1)).toBe("d");
+  });
+
+  it("skips the shown contact, so a lone unread one there gives nothing", () => {
+    expect(nextUnread(order, new Map([["b", 1]]), "b", 1)).toBeNull();
+    expect(nextUnread(order, new Map(), "b", -1)).toBeNull();
+  });
+
+  it("starts from the top for Down and the bottom for Up with nothing shown", () => {
+    const unread = new Map([["a", 1], ["c", 1]]);
+    expect(nextUnread(order, unread, null, 1)).toBe("a");
+    expect(nextUnread(order, unread, null, -1)).toBe("c");
+  });
+
+  it("takes a shown contact that is no longer listed as nothing shown", () => {
+    expect(nextUnread(order, new Map([["m", 1]]), "gone", 1)).toBe("m");
+  });
+
+  it("gives nothing for an empty list", () => {
+    expect(nextUnread([], new Map([["a", 1]]), null, 1)).toBeNull();
+  });
+});
+
 describe("listenForContactHotkeys", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
@@ -59,12 +120,15 @@ describe("listenForContactHotkeys", () => {
     const target = new EventTarget();
     const state = {
       targets: ["a", "b", "c"],
+      // What Option+Shift+Down and Up would show.
+      unread: { next: "c" as string | null, previous: "a" as string | null },
       paused: false,
       shown: false,
       selected: [] as string[],
     };
     const stop = listenForContactHotkeys(target, {
       targets: () => state.targets,
+      unreadTarget: (step) => (step === 1 ? state.unread.next : state.unread.previous),
       select: (id) => state.selected.push(id),
       showHints: (shown) => {
         state.shown = shown;
@@ -90,9 +154,69 @@ describe("listenForContactHotkeys", () => {
       cmdUp: () => send("keyup", "Meta", "MetaLeft", false),
       cmd: (key: string, code: string) => send("keydown", key, code, true),
       plain: (key: string, code: string) => send("keydown", key, code, false),
+      // Option+Shift plus an arrow, from the element `from` stands in for: its
+      // `closest` matches the selectors in `inside`.
+      optShift: (code: "ArrowDown" | "ArrowUp", inside: string[] = []) => {
+        const e = Object.assign(new Event("keydown", { cancelable: true }), {
+          key: code,
+          code,
+          metaKey: false,
+          ctrlKey: false,
+          altKey: true,
+          shiftKey: true,
+        });
+        const from = {
+          closest: (selector: string) =>
+            selector.split(",").some((s) => inside.includes(s.trim())) ? {} : null,
+        };
+        Object.defineProperty(e, "target", { value: from });
+        target.dispatchEvent(e);
+        return e;
+      },
       blur: () => target.dispatchEvent(new Event("blur")),
     };
   }
+
+  it("shows the next or previous unread contact for Option+Shift+Down or Up", () => {
+    const t = setup();
+    const e = t.optShift("ArrowDown");
+    t.optShift("ArrowUp");
+    expect(t.state.selected).toEqual(["c", "a"]);
+    expect(e.defaultPrevented).toBe(true);
+    expect(e.cancelBubble).toBe(true);
+  });
+
+  it("swallows Option+Shift+Down with no unread contact to show", () => {
+    const t = setup();
+    t.state.unread.next = null;
+    const e = t.optShift("ArrowDown");
+    expect(t.state.selected).toEqual([]);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it("takes the keys from the terminal's own textarea", () => {
+    const t = setup();
+    const e = t.optShift("ArrowDown", ["textarea", ".xterm"]);
+    expect(t.state.selected).toEqual(["c"]);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it("leaves them to a text field, where they select to a paragraph's end", () => {
+    const t = setup();
+    const inBox = t.optShift("ArrowDown", ["textarea"]);
+    const inInput = t.optShift("ArrowUp", ["input"]);
+    expect(t.state.selected).toEqual([]);
+    expect(inBox.defaultPrevented).toBe(false);
+    expect(inInput.defaultPrevented).toBe(false);
+  });
+
+  it("leaves Option+Shift+Down to an open dialog", () => {
+    const t = setup();
+    t.state.paused = true;
+    const e = t.optShift("ArrowDown");
+    expect(t.state.selected).toEqual([]);
+    expect(e.defaultPrevented).toBe(false);
+  });
 
   it("shows the digits only once Cmd has been held for the delay", () => {
     const t = setup();

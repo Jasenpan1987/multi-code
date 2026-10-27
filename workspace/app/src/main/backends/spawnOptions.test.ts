@@ -26,6 +26,15 @@ import {
   type OpencodeSpawnHost,
 } from "./opencode";
 import type { SessionStart } from "./types";
+import { OPENCODE_VIEW_KEYS } from "../../shared/replyStart";
+
+// Multi-Code's keys in every OpenCode terminal it starts: Ctrl+Z off, and the two
+// view keys after OpenCode's defaults for those commands (opencodePlugin.ts).
+const TUI_KEYBINDS = {
+  "terminal.suspend": "none",
+  "session.last": ["ctrl+alt+g", "end", OPENCODE_VIEW_KEYS["session.last"].stroke],
+  "session.message.previous": [OPENCODE_VIEW_KEYS["session.message.previous"].stroke],
+};
 
 // A directory with no prior claude session, so the spawn opens a new one under an
 // id of its own (`--session-id <uuid>`) rather than `--continue`, and the
@@ -200,7 +209,7 @@ describe("opencode spawn", () => {
     // No `tabs` key: the builder's cli.json (or OpenCode's default) decides, as in any
     // terminal (builder, 2026-10-20).
     expect(JSON.parse(env.OPENCODE_CLI_CONFIG_CONTENT)).toEqual({
-      keybinds: { "terminal.suspend": "none" },
+      keybinds: TUI_KEYBINDS,
       plugins: [{ package: opencodePlugin.pluginPath }],
     });
     expect(env.MULTICODE_ALERT_FILE).toBe(opencodePlugin.targetPath);
@@ -231,7 +240,7 @@ describe("opencode spawn", () => {
       readFile: () => "{ broken",
     }));
     expect(JSON.parse(env.OPENCODE_CLI_CONFIG_CONTENT)).toEqual({
-      keybinds: { "terminal.suspend": "none" },
+      keybinds: TUI_KEYBINDS,
     });
     expect(env.MULTICODE_ALERT_FILE).toBeUndefined();
   });
@@ -251,7 +260,7 @@ describe("opencode spawn", () => {
     }));
     expect(JSON.parse(env.OPENCODE_CLI_CONFIG_CONTENT)).toEqual({
       theme: { name: "nord" },
-      keybinds: { "terminal.suspend": "none" },
+      keybinds: TUI_KEYBINDS,
       plugins: [{ package: opencodePlugin.pluginPath }],
     });
   });

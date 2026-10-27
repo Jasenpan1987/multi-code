@@ -220,6 +220,7 @@ interface Raised {
   detail?: PromptDetail;
   toolCall?: PromptToolCall;
   restated?: boolean;
+  endedSession?: string;
 }
 
 function harness(opts: { sessionId?: string; service?: FakeService } = {}) {
@@ -233,8 +234,14 @@ function harness(opts: { sessionId?: string; service?: FakeService } = {}) {
   // Both callbacks about the screen, in the order they came.
   const screen: string[] = [];
   const attention = new OpencodeAttention(
-    (type, detail, toolCall, restated) =>
-      raised.push({ type, detail, toolCall, ...(restated ? { restated } : {}) }),
+    (type, detail, toolCall, restated, endedSession) =>
+      raised.push({
+        type,
+        detail,
+        toolCall,
+        ...(restated ? { restated } : {}),
+        ...(endedSession ? { endedSession } : {}),
+      }),
     (ok, reason) => health.push(reason === undefined ? [ok] : [ok, reason]),
     {
       instanceId: "inst-1",
@@ -417,7 +424,13 @@ describe("replaying OpenCode 2's own events", () => {
     });
     // The clearing carries the closed request's call, for the secretary's waiters.
     expect(raised[1]).toEqual({ type: "prompt-cleared", detail: undefined, toolCall: call });
-    expect(raised[2]).toEqual({ type: "waiting", detail: undefined, toolCall: undefined });
+    // The turn's own root, the session the replayed TUI shows.
+    expect(raised[2]).toEqual({
+      type: "waiting",
+      detail: undefined,
+      toolCall: undefined,
+      endedSession: expect.stringMatching(/^ses_/),
+    });
   });
 
   it("permission-no-save: two options, then the question form with its own ref", async () => {
@@ -550,6 +563,30 @@ describe("turns", () => {
     const h = await live();
     await h.publish(created("ses_root"), started("ses_root"), failed("ses_root"));
     expect(h.types()).toEqual(["waiting"]);
+  });
+
+  it("says which session is on screen, a subagent's included, and none at home", async () => {
+    // A finish of the root while a subagent's session is shown must not move that
+    // view (process-manager replySource): the contact's own session stays the root.
+    const h = await live();
+    await h.publish(created("ses_root"), created("ses_child", "ses_root"));
+    h.attention.handle(route("ses_root"));
+    await flush();
+    expect(h.attention.shownSession()).toBe("ses_root");
+    h.attention.handle(route("ses_child"));
+    await flush();
+    expect(h.attention.shownSession()).toBe("ses_child");
+    h.attention.handle(route());
+    await flush();
+    expect(h.attention.shownSession()).toBeUndefined();
+  });
+
+  it("a finish names the session whose turn ended", async () => {
+    // The terminal may be showing another of the contact's sessions by then (a tab),
+    // which a reply jump must not move (read-reply-conclusion).
+    const h = await live();
+    await h.publish(created("ses_root"), started("ses_root"), succeeded("ses_root"));
+    expect(h.raised.map((r) => [r.type, r.endedSession])).toEqual([["waiting", "ses_root"]]);
   });
 
   it("an interrupt by the builder, a shutdown or a superseded runner raises nothing", async () => {

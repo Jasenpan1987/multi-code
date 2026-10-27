@@ -49,8 +49,24 @@ describe("keyAcknowledgesShownInstance", () => {
     expect(keyAcknowledgesShownInstance(key("c", "KeyC", true))).toBe(true);
   });
 
+  it("does not count a modifier on its own, which comes down before its key", () => {
+    // Option and Shift before the arrow of Option+Shift+Down, Cmd before a digit.
+    expect(keyAcknowledgesShownInstance({ ...key("Alt", "AltLeft", false), altKey: true })).toBe(false);
+    expect(keyAcknowledgesShownInstance({ ...key("Shift", "ShiftLeft", false), shiftKey: true })).toBe(false);
+    expect(keyAcknowledgesShownInstance({ ...key("Control", "ControlLeft", false), ctrlKey: true })).toBe(false);
+  });
+
   it("does not count the switch keys, which act like a click in the contact list", () => {
     expect(keyAcknowledgesShownInstance(key("Meta", "MetaLeft", true))).toBe(false);
     expect(keyAcknowledgesShownInstance(key("2", "Digit2", true))).toBe(false);
+    const optShift = { ...key("ArrowDown", "ArrowDown", false), altKey: true, shiftKey: true };
+    expect(keyAcknowledgesShownInstance(optShift)).toBe(false);
+    expect(keyAcknowledgesShownInstance({ ...optShift, key: "ArrowUp", code: "ArrowUp" })).toBe(
+      false
+    );
+  });
+
+  it("counts a plain arrow, which goes to the terminal", () => {
+    expect(keyAcknowledgesShownInstance(key("ArrowDown", "ArrowDown", false))).toBe(true);
   });
 });

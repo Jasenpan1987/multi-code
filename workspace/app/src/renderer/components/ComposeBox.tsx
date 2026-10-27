@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { sendComposed } from "./composeSend";
+import { cancelReplyJump, getTerminal } from "./TerminalView";
 import type { SavedClipboardImage } from "../../shared/types";
 
 interface ComposeBoxProps {
@@ -102,6 +103,11 @@ export function ComposeBox({ instanceId, onClose, seed }: ComposeBoxProps) {
       text,
       images.map((i) => i.path)
     );
+    // As typing in the terminal does: what comes next is the reply to this, not
+    // wherever the screen was left (the last conclusion, say), and a jump to the
+    // last one still waiting for the screen must not land after it.
+    cancelReplyJump(instanceId);
+    getTerminal(instanceId)?.scrollToBottom();
     onClose();
   };
 

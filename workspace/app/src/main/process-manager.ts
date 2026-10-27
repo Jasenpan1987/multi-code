@@ -24,6 +24,8 @@ import { remoteServer } from "./remote/ws-server";
 import type { TranscriptEntry } from "../shared/remote-protocol";
 import type { ContextUsage } from "../shared/types";
 import { moveInOrder } from "../shared/reorder";
+import { OPENCODE_VIEW_KEYS } from "../shared/replyStart";
+import type { OpencodeViewCommand } from "../shared/replyStart";
 import { debugTrace } from "./debug-trace";
 import { RunStateTracker, type RunState, type WriteVerdict } from "./run-state";
 import { INSTANCE_ENV, SPAWN_ENV } from "./backends/instance-env";
@@ -138,6 +140,9 @@ interface ManagedInstance {
   // prompt). Distinct from lastPtyByteAt, which moves on every repaint of the
   // spinner. Absent until the first activity.
   lastActivityAt?: number;
+  // The session whose turn last ended, when the backend says (OpenCode). Its terminal
+  // can be showing another of the contact's sessions by then.
+  endedSession?: string;
   // The coordinator instance. Spawned with the manager MCP tools attached; at most
   // one exists.
   isManager?: boolean;
@@ -1007,8 +1012,8 @@ export class ProcessManager {
 
     instance.hookAttention = backend.createHookAttention(
       ptyProcess.pid,
-      (type, detail, toolCall, restated) =>
-        this.reportActivity(instance, type, detail, toolCall, restated),
+      (type, detail, toolCall, restated, endedSession) =>
+        this.reportActivity(instance, type, detail, toolCall, restated, endedSession),
       (ok, reason) => this.setAlertsDegraded(instance, !ok, reason),
       {
         instanceId: id,
@@ -1138,7 +1143,8 @@ export class ProcessManager {
     detail?: PromptDetail,
     toolCall?: PromptToolCall,
     // A dialog reported before, blocking the contact again (ActivityCallback).
-    restated = false
+    restated = false,
+    endedSession?: string
   ) {
     const id = instance.id;
     debugTrace(
@@ -1150,7 +1156,10 @@ export class ProcessManager {
     if (type !== "prompt-cleared" && !restated) instance.lastActivityAt = Date.now();
     // A finished turn is exactly when context usage moved, so refresh now instead
     // of waiting for the TTL. Cheap: once per turn, not per list call.
-    if (type === "waiting") this.refreshContextUsageAfterTurn(instance);
+    if (type === "waiting") {
+      this.refreshContextUsageAfterTurn(instance);
+      instance.endedSession = endedSession;
+    }
     // What a phone's tap answers. A newer dialog with nothing to offer replaces the
     // older one all the same: those buttons are no longer what's on screen.
     if (type === "prompt") {
@@ -1280,6 +1289,33 @@ export class ProcessManager {
       // report it. Harmless when nothing was pending.
       remoteServer.clearActivity(id);
     }
+  }
+
+  // Where to read the conclusion of a turn that just ended, to show it in the
+  // terminal (read-reply-conclusion): the contact's session, and only when it is
+  // both the one that ended and the one on screen. Null otherwise: another of the
+  // contact's sessions ended (an OpenCode tab in the background), or the terminal
+  // shows a session that isn't the contact's: a subagent's (the contact's stays the
+  // root), one another contact holds (never taken over), or home.
+  replySource(id: string): { backend: BackendName; sessionId: string } | null {
+    const instance = this.instances.get(id);
+    if (!instance?.sessionId) return null;
+    const attention = instance.hookAttention;
+    const onScreen = attention?.shownSession ? attention.shownSession() : instance.sessionId;
+    if (onScreen !== instance.sessionId) return null;
+    if (instance.endedSession && instance.endedSession !== instance.sessionId) return null;
+    return { backend: instance.backend, sessionId: instance.sessionId };
+  }
+
+  // One of the keys that move an OpenCode terminal's view to a finished turn's
+  // conclusion (shared/replyStart.ts). Not input, so none of what a write means
+  // follows: the run state, the secretary's event and the phone's badge stay as they
+  // are. False for anything but a running OpenCode instance.
+  sendViewKey(id: string, command: OpencodeViewCommand): boolean {
+    const instance = this.instances.get(id);
+    if (!instance?.ptyProcess || instance.backend !== "opencode") return false;
+    instance.ptyProcess.write(OPENCODE_VIEW_KEYS[command].bytes);
+    return true;
   }
 
   // Send a whole prompt as one unit, the way the desktop compose box does:

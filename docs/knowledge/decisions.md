@@ -4,6 +4,36 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-10-27 — Multi-Code moves an OpenCode terminal's view with keys it binds there
+
+**Decision:** To show a finished turn's conclusion from its first line in OpenCode, Multi-Code binds one more key each to OpenCode's own `session.last` and `session.message.previous`, only in the terminals it starts (`OPENCODE_CLI_CONFIG_CONTENT`, after the builder's own keys for those commands), and sends those keys itself. The keys are Cmd+Ctrl+Option+Shift+F11/F12, which no keyboard can send into Multi-Code's terminal. They go through their own IPC, not as input: the run state, the secretary's event and the phone's badge stay as they are. The TUI plugin stays report-only.
+
+**Why:** OpenCode draws on the alternate screen and scrolls itself, so the terminal can't be scrolled the way Claude's classic renderer is. Its "previous message" command, pressed at the bottom, puts the last message with text (the conclusion) at the top. Multi-Code already passes a per-process key setting there (Ctrl+Z off).
+
+**Alternatives considered:** the TUI plugin runs the commands itself (`ctx.keymap.dispatch`): no writes to the terminal, but the plugin would navigate, against its report-only rule.
+
+**Consequences:** before pressing anything Multi-Code reads OpenCode's screen: a conclusion already on screen, or "Jump to latest ↓" (the builder scrolled up during the turn) on a terminal shown as the turn ended, means no keys. A look that finds no conclusion afterwards goes back to the bottom. A turn ending moves nothing unless it is the contact's own session and that session is on screen: OpenCode's finish names its session, so a background tab finishing, or the terminal on a subagent's session, one another contact holds, or home, gets no keys. A jump still waiting for the screen stops when the builder presses a key, clicks or scrolls in the terminal, or the next turn starts; mouse motion, focus reports and xterm's replies to OpenCode's queries don't stop it. Measured on 2.0.32 with an isolated service: shown, out of sight, the turn after a jump, a short answer and a mid-turn PageUp all behaved as above.
+
+**Source:** builder, 2026-10-27, in session (option A over B)
+**Affects:** `shared/replyStart.ts`, `backends/opencodePlugin.ts` (TUI settings), `process-manager.ts` (`sendViewKey`), `renderer/components/TerminalView.tsx`
+
+---
+
+## 2026-10-23 — A finished turn lands on its conclusion; Claude needs its classic renderer
+
+**Decision:** When a turn finishes, its terminal shows the conclusion (the first thing the agent said after its last tool call) from its first line, and the steps stay above it for the builder to scroll to. Shown and at the bottom: at once. Out of sight: once it shows. Scrolled up by the builder: not at all. For Claude Code this works only with its classic renderer (`"tui": "default"`), which the builder sets in their own settings; Multi-Code doesn't set it.
+
+**Why:** Coming back at the chime, the builder scrolled up by hand through hundreds of tool calls to find where the reply began. Claude's fullscreen renderer is the alternate screen and has no command to show a message; its `/focus` hides the steps, which the builder doesn't want.
+
+**Alternatives considered:** a reader overlay built from the transcript (the steps folded away); keeping fullscreen and driving Claude's scroll with wheel input read back from the screen (writes into the session, and a miss when Markdown is drawn differently).
+
+**Consequences:** classic mode flickers. Terminals keep 5,000 lines of scrollback. A jump parks the screen; a message sent from the compose box, the phone or the manager doesn't move it, so a turn ending with the screen still parked jumps again, and the compose box goes to the bottom on send as typing does.
+
+**Source:** builder, 2026-10-23, in session
+**Affects:** `shared/replyStart.ts`, `renderer/components/TerminalView.tsx`, `renderer/components/ComposeBox.tsx`, `main/ipc-handlers.ts` (`read-reply-conclusion`)
+
+---
+
 ## 2026-10-20 — OpenCode's tabs stay on inside Multi-Code
 
 **Decision:** Multi-Code no longer passes `tabs.mode: "off"` to the OpenCode terminals it starts. Tabs follow the builder's own `cli.json`, or OpenCode's default (`auto`, which is on outside Herdr), as in any terminal. The rest of the 2026-10-16 decision stands; Ctrl+Z stays off.

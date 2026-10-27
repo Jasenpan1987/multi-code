@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getGitStatus: (id: string) => ipcRenderer.invoke("get-git-status", id),
   getResumeCommand: (id: string) =>
     ipcRenderer.invoke("get-resume-command", id),
+  readReplyConclusion: (id: string) =>
+    ipcRenderer.invoke("read-reply-conclusion", id),
   readFile: (instanceId: string, path: string) =>
     ipcRenderer.invoke("read-file", instanceId, path),
   // `side` is a DiffSide; typed loose here like `backend` above, and validated
@@ -84,6 +86,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Terminal I/O
   writeToInstance: (id: string, data: string) =>
     ipcRenderer.send("pty-input", id, data),
+  sendViewKey: (id: string, command: string) =>
+    ipcRenderer.send("view-key", id, command),
   resizeInstance: (id: string, cols: number, rows: number) =>
     ipcRenderer.send("pty-resize", id, cols, rows),
 
