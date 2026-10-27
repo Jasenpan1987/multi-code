@@ -7,7 +7,7 @@ import { execFileSync } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { copyIntoFolder, numberedName, plainReason } from "./file-drop";
+import { copyIntoFolder, isSameOrInside, numberedName, plainReason } from "./file-drop";
 
 let root = "";
 let src = "";
@@ -88,6 +88,53 @@ describe("numberedName", () => {
     expect(numberedName("my.notes-old", 2, true)).toBe("my.notes-old 2");
     expect(numberedName(".github", 2, true)).toBe(".github 2");
     expect(numberedName("assets", 2, true)).toBe("assets 2");
+  });
+});
+
+describe("isSameOrInside", () => {
+  // Fake ids, so the case that matters can be made anywhere: two different paths
+  // for one folder, as a macOS firmlink gives.
+  const ids: Record<string, bigint> = {
+    "/": 1n,
+    "/Users": 2n,
+    "/Users/me": 3n,
+    "/Users/me/project": 4n,
+    "/Users/me/project/inbox": 5n,
+    "/Users/me/other": 6n,
+    "/System": 7n,
+    "/System/Volumes": 8n,
+    "/System/Volumes/Data": 9n,
+    "/System/Volumes/Data/Users": 2n,
+    "/System/Volumes/Data/Users/me": 3n,
+    "/System/Volumes/Data/Users/me/project": 4n,
+    "/System/Volumes/Data/Users/me/project/inbox": 5n,
+  };
+  const idOf = async (p: string) => {
+    if (!(p in ids)) throw new Error(`unexpected stat of ${p}`);
+    return { dev: 1n, ino: ids[p] };
+  };
+
+  it("finds the folder in the target's parents under another path", async () => {
+    const inbox = "/System/Volumes/Data/Users/me/project/inbox";
+    expect(await isSameOrInside("/Users/me/project", inbox, idOf)).toBe(true);
+    expect(await isSameOrInside("/Users/me/project/inbox", inbox, idOf)).toBe(true);
+  });
+
+  it("says no for a sibling, and for a parent's other child", async () => {
+    expect(await isSameOrInside("/Users/me/other", "/Users/me/project/inbox", idOf)).toBe(
+      false
+    );
+    expect(await isSameOrInside("/Users/me/project/inbox", "/Users/me/project", idOf)).toBe(
+      false
+    );
+  });
+
+  it("tells apart a folder on another disk that has the same inode number", async () => {
+    const withUsb = async (p: string) =>
+      p === "/Volumes/USB/project" ? { dev: 2n, ino: ids["/Users/me/project"] } : idOf(p);
+    expect(
+      await isSameOrInside("/Volumes/USB/project", "/Users/me/project/inbox", withUsb)
+    ).toBe(false);
   });
 });
 
@@ -262,6 +309,46 @@ describe("copyIntoFolder", () => {
       reason: "can't copy a folder into itself",
     });
     expect(fs.readdirSync(path.join(project, "inbox"))).toEqual([]);
+  });
+
+  // The real case behind the device-and-inode check: on macOS the temp folder can
+  // also be reached through the Data volume, and realpath keeps the two apart. A
+  // path compare missed it, and the walk copied its own output into itself.
+  it.skipIf(process.platform !== "darwin")(
+    "refuses a folder into itself through the Data volume's path for it",
+    async () => {
+      const project = fs.realpathSync(src);
+      write(path.join(project, "inbox", "old.txt"), "old");
+      const viaData = path.join("/System/Volumes/Data", project, "inbox");
+      expect(fs.realpathSync(viaData)).not.toBe(path.join(project, "inbox"));
+
+      const [result] = await copyIntoFolder([project], viaData);
+
+      expect(result).toEqual({ ok: false, source: project, reason: "can't copy a folder into itself" });
+      expect(fs.readdirSync(path.join(project, "inbox"))).toEqual(["old.txt"]);
+    }
+  );
+
+  it("stops if the walk ever meets the copy it is making", async () => {
+    const assets = path.join(src, "assets");
+    write(path.join(assets, "a.txt"), "a");
+    fs.mkdirSync(path.join(assets, "loop"));
+    const copied = path.join(target, "assets");
+    // As a bind mount would: assets/loop is, on disk, the copy itself.
+    const realLstat = fs.promises.lstat;
+    vi.spyOn(fs.promises, "lstat").mockImplementation(((p: fs.PathLike, options?: any) =>
+      realLstat(p === path.join(assets, "loop") ? copied : p, options)) as typeof fs.promises.lstat);
+
+    const [result] = await copyIntoFolder([assets], target);
+
+    expect(result).toEqual({
+      ok: false,
+      source: assets,
+      reason: "partly copied: can't copy a folder into itself",
+      partial: true,
+      destination: copied,
+    });
+    expect(snapshot(copied)).toEqual({ "a.txt": "a" });
   });
 
   it("copies a folder into its own parent as a numbered sibling", async () => {

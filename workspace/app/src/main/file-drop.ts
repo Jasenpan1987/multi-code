@@ -66,14 +66,37 @@ export function plainReason(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-// Both paths already realpath'd, so a symlinked parent or a different letter case
-// (macOS's default disk ignores case) can't hide that one is inside the other.
-function isSameOrInside(folder: string, target: string): boolean {
-  const rel = path.relative(folder, target);
-  return (
-    rel === "" ||
-    (rel !== ".." && !rel.startsWith(".." + path.sep) && !path.isAbsolute(rel))
-  );
+export interface FileId {
+  dev: bigint;
+  ino: bigint;
+}
+
+// Which folder a path is, whatever path names it. bigint, because a 64-bit inode
+// number can be past what a JS number holds exactly.
+async function fileId(p: string): Promise<FileId> {
+  const { dev, ino } = await fs.promises.stat(p, { bigint: true });
+  return { dev, ino };
+}
+
+const SAME_FOLDER = "can't copy a folder into itself";
+
+/**
+ * Whether `realTarget` (a realpath) is `folder` or inside it, compared by device and
+ * inode up the target's parents to `/`, not by path: macOS gives one folder two
+ * realpaths through a firmlink (`/Users/…` and `/System/Volumes/Data/Users/…`).
+ * `idOf` is a parameter for the tests. Exported for the tests.
+ */
+export async function isSameOrInside(
+  folder: string,
+  realTarget: string,
+  idOf: (p: string) => Promise<FileId> = fileId
+): Promise<boolean> {
+  const { dev, ino } = await idOf(folder);
+  for (let dir = realTarget; ; dir = path.dirname(dir)) {
+    const id = await idOf(dir);
+    if (id.dev === dev && id.ino === ino) return true;
+    if (path.dirname(dir) === dir) return false;
+  }
 }
 
 /**
@@ -104,7 +127,11 @@ async function claimName(
 // contents come after), an exclusive copy of a file, or the link itself with its
 // target unchanged, as Finder copies one. Each fails with EEXIST rather than replace
 // what is there.
-async function createEntry(source: string, destination: string, stat: fs.Stats): Promise<void> {
+async function createEntry(
+  source: string,
+  destination: string,
+  stat: fs.Stats | fs.BigIntStats
+): Promise<void> {
   if (stat.isDirectory()) {
     await fs.promises.mkdir(destination);
   } else if (stat.isFile()) {
@@ -123,14 +150,27 @@ async function createEntry(source: string, destination: string, stat: fs.Stats):
 // destination whatever its options say (Node 22 and 24: onLink, then copyLink
 // unlinks it). Here every create is exclusive, and a name taken inside the new
 // folder (something else wrote into it meanwhile) is an error, not a rename.
-async function fillFolder(source: string, destination: string, mode: number): Promise<void> {
+//
+// `copyId` is the copy's own top folder. Links are never followed, so the walk can
+// only reach it through a real folder entry, which isSameOrInside rules out before
+// the copy starts. The check here is for what that can't see: a bind mount, a
+// hard-linked folder, or a firmlink between a folder and its parent.
+async function fillFolder(
+  source: string,
+  destination: string,
+  mode: number,
+  copyId: FileId
+): Promise<void> {
   // In name order, so a copy that stops partway has a predictable part.
   for (const entry of (await fs.promises.readdir(source)).sort()) {
     const from = path.join(source, entry);
     const to = path.join(destination, entry);
-    const stat = await fs.promises.lstat(from);
+    const stat = await fs.promises.lstat(from, { bigint: true });
+    if (stat.isDirectory() && stat.dev === copyId.dev && stat.ino === copyId.ino) {
+      throw new Error(SAME_FOLDER);
+    }
     await createEntry(from, to, stat);
-    if (stat.isDirectory()) await fillFolder(from, to, stat.mode);
+    if (stat.isDirectory()) await fillFolder(from, to, Number(stat.mode), copyId);
   }
   await fs.promises.chmod(destination, mode & 0o7777);
 }
@@ -149,8 +189,8 @@ async function copyOne(
     if (!isFolder && !stat.isFile() && !stat.isSymbolicLink()) {
       return { ok: false, source, reason: "not a file or folder" };
     }
-    if (isFolder && isSameOrInside(await fs.promises.realpath(source), realTarget)) {
-      return { ok: false, source, reason: "can't copy a folder into itself" };
+    if (isFolder && (await isSameOrInside(source, realTarget))) {
+      return { ok: false, source, reason: SAME_FOLDER };
     }
 
     const claimed = await claimName(targetDir, path.basename(source), isFolder, (d) =>
@@ -160,7 +200,8 @@ async function copyOne(
 
     if (isFolder) {
       try {
-        await fillFolder(source, claimed.destination, stat.mode);
+        const copyId = await fileId(claimed.destination);
+        await fillFolder(source, claimed.destination, stat.mode, copyId);
       } catch (err) {
         // What was copied stays: Multi-Code never deletes, and the folder may by now
         // hold something that isn't ours. The result says it is incomplete.
