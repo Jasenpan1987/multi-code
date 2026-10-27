@@ -251,3 +251,35 @@ export async function copyIntoFolder(
   }
   return results;
 }
+
+// ---------------------------------------------------------------------------
+// How a drop's folders and copies are shown
+// ---------------------------------------------------------------------------
+
+/**
+ * A path as the drop dialog and message show it: relative to the project when it is
+ * inside it (`docs/sources/inbox/`, the project itself `./`), otherwise absolute with
+ * the home directory as `~` (`~/Downloads/`). A folder ends in `/`. All three paths are
+ * absolute. `home` is passed in so tests never read the real one, and because the
+ * renderer has none to use: main formats every path the renderer shows.
+ */
+export function displayPath(
+  target: string,
+  projectDir: string,
+  home: string,
+  isFolder: boolean
+): string {
+  const full = path.resolve(target);
+  const slash = isFolder ? "/" : "";
+  const project = path.resolve(projectDir);
+  if (isSameOrInside(project, full)) {
+    const rel = path.relative(project, full);
+    return rel === "" ? "./" : rel + slash;
+  }
+  // "/" as home would turn every path into `~/…`; no home at all, the same.
+  if (home && path.resolve(home) !== path.sep && isSameOrInside(path.resolve(home), full)) {
+    const rel = path.relative(path.resolve(home), full);
+    return rel === "" ? "~/" : `~/${rel}${slash}`;
+  }
+  return full === path.sep ? full : full + slash;
+}

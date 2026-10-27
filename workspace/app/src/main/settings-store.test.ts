@@ -1,6 +1,7 @@
 // The secretary's settings: the two new fields round-trip through settings.json,
 // and the speech key lives only in its own 0600 file. Whatever the renderer gets
 // back (settings-get and every secretary:* reply) must not contain the key.
+// Each project's default drop folder rides in the same file.
 
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
@@ -21,6 +22,8 @@ const {
   loadSpeechServer,
   setSecretaryMode,
   setSpeechServer,
+  loadDropFolder,
+  setDropFolder,
 } = await import("./settings-store");
 
 const settingsFile = path.join(userData, "settings.json");
@@ -44,6 +47,7 @@ describe("secretary settings", () => {
       remoteEnabled: false,
       secretaryMode: false,
       speechServerUrl: "",
+      dropFolders: {},
     });
     expect(loadSecretarySettings()).toEqual({
       secretaryMode: false,
@@ -75,7 +79,90 @@ describe("secretary settings", () => {
       remoteEnabled: false,
       secretaryMode: false,
       speechServerUrl: "",
+      dropFolders: {},
     });
+  });
+});
+
+describe("drop folders", () => {
+  it("default to none, for an old settings.json too", () => {
+    expect(loadSettings().dropFolders).toEqual({});
+    fs.writeFileSync(settingsFile, JSON.stringify({ theme: "dark" }));
+    expect(loadSettings().dropFolders).toEqual({});
+    expect(loadDropFolder("/Users/me/code/app")).toBeNull();
+  });
+
+  it("keep only entries whose folder is an absolute path", () => {
+    fs.writeFileSync(
+      settingsFile,
+      JSON.stringify({
+        dropFolders: {
+          "/Users/me/code/app": "/Users/me/code/app/docs/inbox",
+          "/Users/me/code/num": 42,
+          "/Users/me/code/rel": "docs/inbox",
+          "/Users/me/code/empty": "",
+          "/Users/me/code/obj": { path: "/x" },
+        },
+      })
+    );
+    expect(loadSettings().dropFolders).toEqual({
+      "/Users/me/code/app": "/Users/me/code/app/docs/inbox",
+    });
+  });
+
+  it("are dropped whole when the field is not an object", () => {
+    for (const bad of ["/x", 7, null, ["/a", "/b"]]) {
+      fs.writeFileSync(settingsFile, JSON.stringify({ dropFolders: bad }));
+      expect(loadSettings().dropFolders).toEqual({});
+    }
+  });
+
+  it("save next to the other settings and the other projects, and survive a reload", () => {
+    saveSettings({ ...loadSettings(), theme: "sepia", remoteEnabled: true });
+    setSecretaryMode(true);
+    setDropFolder("/Users/me/code/a", "/Users/me/code/a/inbox");
+    setDropFolder("/Users/me/code/b", "/Users/me/Downloads");
+    setDropFolder("/Users/me/code/a", "/Users/me/code/a/docs/sources");
+
+    expect(loadSettings()).toMatchObject({
+      theme: "sepia",
+      remoteEnabled: true,
+      secretaryMode: true,
+      dropFolders: {
+        "/Users/me/code/a": "/Users/me/code/a/docs/sources",
+        "/Users/me/code/b": "/Users/me/Downloads",
+      },
+    });
+    expect(JSON.parse(fs.readFileSync(settingsFile, "utf8")).dropFolders).toEqual({
+      "/Users/me/code/a": "/Users/me/code/a/docs/sources",
+      "/Users/me/code/b": "/Users/me/Downloads",
+    });
+    // And the other way: the theme handler's merge keeps them.
+    saveSettings({ ...loadSettings(), theme: "dark" });
+    expect(loadDropFolder("/Users/me/code/b")).toBe("/Users/me/Downloads");
+  });
+
+  it("are keyed by the directory string exactly", () => {
+    setDropFolder("/Users/me/code/a", "/Users/me/code/a/inbox");
+    expect(loadDropFolder("/Users/me/code/a/")).toBeNull();
+    expect(loadDropFolder("/Users/me/code")).toBeNull();
+    // A key that names something on every object is still only an entry.
+    expect(loadDropFolder("constructor")).toBeNull();
+    setDropFolder("__proto__", "/tmp/x");
+    expect(loadDropFolder("__proto__")).toBe("/tmp/x");
+    expect(loadDropFolder("/Users/me/code/a")).toBe("/Users/me/code/a/inbox");
+  });
+
+  it("refuse a folder that is not an absolute path, saving nothing", () => {
+    expect(() => setDropFolder("/Users/me/code/a", "inbox")).toThrow();
+    expect(() => setDropFolder("/Users/me/code/a", 7 as never)).toThrow();
+    expect(() => setDropFolder("", "/tmp/x")).toThrow();
+    expect(fs.existsSync(settingsFile)).toBe(false);
+  });
+
+  it("never let a caller's change reach the defaults", () => {
+    loadSettings().dropFolders["/x"] = "/y";
+    expect(loadSettings().dropFolders).toEqual({});
   });
 });
 

@@ -18,6 +18,10 @@ export interface Settings {
   // The speech server's base address; "" means none, and briefs are text only.
   // Its key is deliberately not a field here: see SPEECH_KEY_PATH.
   speechServerUrl: string;
+  // Each project's default drop folder: the contact's directory as stored → an
+  // absolute folder, which may be outside the project. Kept here, never in the
+  // project. Two contacts on one project share their entry.
+  dropFolders: Record<string, string>;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -25,6 +29,7 @@ const DEFAULT_SETTINGS: Settings = {
   remoteEnabled: false,
   secretaryMode: false,
   speechServerUrl: "",
+  dropFolders: {},
 };
 
 const SETTINGS_PATH = path.join(app.getPath("userData"), "settings.json");
@@ -36,6 +41,19 @@ const SPEECH_KEY_PATH = path.join(app.getPath("userData"), "speech-key");
 
 function isThemeName(value: unknown): value is ThemeName {
   return value === "light" || value === "dark" || value === "sepia";
+}
+
+// Only entries whose folder is an absolute path; anything else in the file is
+// dropped rather than handed to a picker or a copy. fromEntries, so a key such as
+// "__proto__" stays an ordinary entry.
+function dropFoldersOf(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] =>
+        typeof entry[1] === "string" && path.isAbsolute(entry[1])
+    )
+  );
 }
 
 export function loadSettings(): Settings {
@@ -51,12 +69,14 @@ export function loadSettings(): Settings {
         secretaryMode: data?.secretaryMode === true,
         speechServerUrl:
           typeof data?.speechServerUrl === "string" ? data.speechServerUrl : "",
+        dropFolders: dropFoldersOf(data?.dropFolders),
       };
     }
   } catch {
     // fall through to defaults
   }
-  return { ...DEFAULT_SETTINGS };
+  // A fresh object, so a caller adding an entry can't change the defaults.
+  return { ...DEFAULT_SETTINGS, dropFolders: {} };
 }
 
 export function saveSettings(settings: Settings) {
@@ -65,6 +85,32 @@ export function saveSettings(settings: Settings) {
     fs.mkdirSync(dir, { recursive: true });
   }
   fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2));
+}
+
+// ---------------------------------------------------------------------------
+// File drop
+// ---------------------------------------------------------------------------
+
+// The project's default drop folder, or null before its first drop sets one.
+export function loadDropFolder(projectDir: string): string | null {
+  const { dropFolders } = loadSettings();
+  return Object.hasOwn(dropFolders, projectDir) ? dropFolders[projectDir] : null;
+}
+
+// Merged into what is saved, so every other setting and every other project's
+// folder stays as it was.
+export function setDropFolder(projectDir: string, folder: string): void {
+  if (typeof projectDir !== "string" || projectDir === "") {
+    throw new TypeError("project directory must be a non-empty string");
+  }
+  if (typeof folder !== "string" || !path.isAbsolute(folder)) {
+    throw new TypeError("drop folder must be an absolute path");
+  }
+  const current = loadSettings();
+  saveSettings({
+    ...current,
+    dropFolders: { ...current.dropFolders, [projectDir]: folder },
+  });
 }
 
 // ---------------------------------------------------------------------------
