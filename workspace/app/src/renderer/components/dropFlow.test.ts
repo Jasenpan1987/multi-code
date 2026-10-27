@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   allOnDisk,
   changeDefaultMessage,
   dropStep,
   dropTitle,
+  HELD_KEY_WINDOW_MS,
+  holdKeys,
   shownNames,
   somewhereElseMessage,
   swallowHeldKeyRepeats,
@@ -124,43 +126,134 @@ describe("the dialog's picker messages", () => {
   });
 });
 
-describe("swallowHeldKeyRepeats", () => {
-  // Like a key event: Node has EventTarget and Event, not KeyboardEvent.
-  const key = (type: string, repeat = false) => {
-    const e = new Event(type, { cancelable: true });
-    Object.defineProperty(e, "repeat", { value: repeat });
-    return e;
-  };
+// Like a key event: Node has EventTarget and Event, not KeyboardEvent.
+function key(type: string, code: string, repeat = false, target?: unknown): Event {
+  const e = new Event(type, { cancelable: true });
+  Object.defineProperty(e, "code", { value: code });
+  Object.defineProperty(e, "key", { value: code });
+  Object.defineProperty(e, "repeat", { value: repeat });
+  // What it was aimed at, for holdKeys' `allow`; Node's has no tree to set it.
+  if (target !== undefined) Object.defineProperty(e, "target", { value: target });
+  return e;
+}
 
-  // The guard first: on a window its capture listener runs before the terminal's;
-  // Node's EventTarget, with no tree, runs listeners in the order they were added.
-  function setup() {
-    const target = new EventTarget();
-    const reached: string[] = [];
-    swallowHeldKeyRepeats(target);
-    target.addEventListener("keydown", (e) =>
-      reached.push((e as KeyboardEvent).repeat ? "repeat" : "press")
-    );
-    return { target, reached };
+// The guard first: on a window its capture listener runs before the terminal's;
+// Node's EventTarget, with no tree, runs listeners in the order they were added.
+// What reaches the "terminal" after it, as "<code>" or "<code>*" for a repeat.
+function behindGuard(guard: (target: EventTarget) => unknown) {
+  const target = new EventTarget();
+  const reached: string[] = [];
+  guard(target);
+  for (const type of ["keydown", "keypress"]) {
+    target.addEventListener(type, (e) => {
+      const k = e as KeyboardEvent;
+      reached.push(`${type === "keypress" ? "press:" : ""}${k.code}${k.repeat ? "*" : ""}`);
+    });
   }
+  return { target, reached, send: (e: Event) => (target.dispatchEvent(e), e) };
+}
 
-  it("swallows the repeats of a held key until it is released", () => {
-    const { target, reached } = setup();
-    const held = key("keydown", true);
-    target.dispatchEvent(held);
-    target.dispatchEvent(key("keydown", true));
-    expect(reached).toEqual([]);
-    expect(held.defaultPrevented).toBe(true);
-
-    target.dispatchEvent(key("keyup"));
-    target.dispatchEvent(key("keydown", true));
-    expect(reached).toEqual(["repeat"]);
+describe("swallowHeldKeyRepeats", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
-  it("lets a fresh press through, and its repeats after it", () => {
-    const { target, reached } = setup();
-    target.dispatchEvent(key("keydown"));
-    target.dispatchEvent(key("keydown", true));
-    expect(reached).toEqual(["press", "repeat"]);
+  it("swallows the repeats of a held key until it is released", () => {
+    const { reached, send } = behindGuard(swallowHeldKeyRepeats);
+    expect(send(key("keydown", "Enter", true)).defaultPrevented).toBe(true);
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual([]);
+
+    send(key("keyup", "Enter"));
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual(["Enter*"]);
+  });
+
+  it("keeps swallowing a held Enter when Shift is let go of it", () => {
+    const { reached, send } = behindGuard(swallowHeldKeyRepeats);
+    send(key("keydown", "Enter", true));
+    send(key("keyup", "ShiftLeft"));
+    expect(send(key("keydown", "Enter", true)).defaultPrevented).toBe(true);
+    expect(reached).toEqual([]);
+
+    send(key("keyup", "Enter"));
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual(["Enter*"]);
+  });
+
+  it("keeps swallowing when Shift is let go before the first repeat", () => {
+    const { reached, send } = behindGuard(swallowHeldKeyRepeats);
+    send(key("keyup", "ShiftLeft"));
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual([]);
+  });
+
+  it("stops at a fresh press of the held key, which goes through", () => {
+    const { reached, send } = behindGuard(swallowHeldKeyRepeats);
+    send(key("keydown", "Enter", true));
+    send(key("keydown", "Enter"));
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual(["Enter", "Enter*"]);
+  });
+
+  it("lets a key pressed since through, repeats and all, and still swallows the held one", () => {
+    const { reached, send } = behindGuard(swallowHeldKeyRepeats);
+    send(key("keydown", "Enter", true));
+    send(key("keydown", "KeyA"));
+    send(key("keydown", "KeyA", true));
+    send(key("keyup", "KeyA"));
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual(["KeyA", "KeyA*"]);
+  });
+
+  it("ends only when every held key is released", () => {
+    const { reached, send } = behindGuard(swallowHeldKeyRepeats);
+    send(key("keydown", "Enter", true));
+    send(key("keydown", "Escape", true));
+    send(key("keyup", "Escape"));
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual([]);
+    send(key("keyup", "Enter"));
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual(["Enter*"]);
+  });
+
+  it("goes away when no repeat comes in time: nothing was held", () => {
+    const { reached, send } = behindGuard(swallowHeldKeyRepeats);
+    vi.advanceTimersByTime(HELD_KEY_WINDOW_MS);
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual(["Enter*"]);
+  });
+
+  it("stays while a held key repeats past that time", () => {
+    const { reached, send } = behindGuard(swallowHeldKeyRepeats);
+    send(key("keydown", "Enter", true));
+    vi.advanceTimersByTime(HELD_KEY_WINDOW_MS * 2);
+    send(key("keydown", "Enter", true));
+    expect(reached).toEqual([]);
+  });
+});
+
+describe("holdKeys", () => {
+  const DIALOG = { in: "dialog" };
+  const allow = (to: EventTarget | null) => (to as unknown) === DIALOG;
+
+  it("keeps every key from everything but what it allows", () => {
+    let release = () => {};
+    const { reached, send } = behindGuard((t) => (release = holdKeys(t, allow)));
+    expect(send(key("keydown", "Enter")).defaultPrevented).toBe(true);
+    send(key("keypress", "Enter"));
+    send(key("keydown", "KeyX", true));
+    expect(reached).toEqual([]);
+
+    send(key("keydown", "Enter", false, DIALOG));
+    expect(reached).toEqual(["Enter"]);
+
+    release();
+    send(key("keydown", "KeyX"));
+    expect(reached).toEqual(["Enter", "KeyX"]);
   });
 });

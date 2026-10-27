@@ -27,6 +27,7 @@ import {
   allOnDisk,
   changeDefaultMessage,
   dropStep,
+  holdKeys,
   somewhereElseMessage,
   swallowHeldKeyRepeats,
 } from "./components/dropFlow";
@@ -692,17 +693,37 @@ export function App() {
   // A drop between its release and its dialog or first picker. Another drop then
   // is ignored, as one is while the dialog is open.
   const dropBusyRef = useRef(false);
-  // Where the keys were when the files were dropped: the terminal, usually, or the
-  // compose box.
-  const dropFocusRef = useRef<HTMLElement | null>(null);
+  // The keyboard while a drop holds it: where it was when the files were dropped
+  // (the terminal, usually, or the compose box), and the hold's release.
+  const dropKeysRef = useRef<{ was: HTMLElement | null; release: () => void } | null>(
+    null
+  );
 
-  // The dialog or picker is gone: the keys go back where they were, else to the
-  // shown terminal as after the other dialogs, and never a held key's repeats.
-  const restoreDropFocus = useCallback(() => {
-    const was = dropFocusRef.current;
-    dropFocusRef.current = null;
+  // At once on a drop, before anything is awaited: the folder lookup can be slow,
+  // and a key typed meanwhile must reach no terminal or compose box. Only the
+  // drop's dialog gets keys until the hold is given back.
+  const takeDropKeys = useCallback(() => {
+    const was = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    was?.blur();
+    dropKeysRef.current = {
+      was,
+      release: holdKeys(
+        window,
+        (to) => to instanceof Element && to.closest(".file-drop-dialog") !== null
+      ),
+    };
+  }, []);
+
+  // The dialog or picker is gone, or the drop failed before either: the keys go
+  // back where they were, else to the shown terminal as after the other dialogs,
+  // and never a held key's repeats.
+  const returnDropKeys = useCallback(() => {
+    const keys = dropKeysRef.current;
+    if (!keys) return;
+    dropKeysRef.current = null;
+    keys.release();
     swallowHeldKeyRepeats(window);
-    if (was?.isConnected && was !== document.body) was.focus();
+    if (keys.was?.isConnected && keys.was !== document.body) keys.was.focus();
     else if (selectedIdRef.current) getTerminal(selectedIdRef.current)?.focus();
   }, []);
 
@@ -731,8 +752,7 @@ export function App() {
         return;
       }
       dropBusyRef.current = true;
-      dropFocusRef.current =
-        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      takeDropKeys();
       void (async () => {
         const api = window.electronAPI;
         try {
@@ -742,7 +762,7 @@ export function App() {
           if (step.kind === "pick") {
             const picked = await api
               .pickDropFolder(step.message, step.start)
-              .finally(restoreDropFocus);
+              .finally(returnDropKeys);
             if (picked !== null) void copyDrop(target, sources, picked, true);
             return;
           }
@@ -756,20 +776,21 @@ export function App() {
             picking: false,
           });
         } catch (err) {
+          returnDropKeys();
           setDropReport({ kind: "error", message: ipcErrorMessage(err) });
         } finally {
           dropBusyRef.current = false;
         }
       })();
     },
-    [copyDrop, restoreDropFocus]
+    [copyDrop, takeDropKeys, returnDropKeys]
   );
   const fileDrop = useFileDrop(selectedInstance ?? null, handleFileDrop);
 
   const closeDropPrompt = useCallback(() => {
     setDropPrompt(null);
-    restoreDropFocus();
-  }, [restoreDropFocus]);
+    returnDropKeys();
+  }, [returnDropKeys]);
 
   const putDropHere = () => {
     if (!dropPrompt || dropPrompt.picking) return;

@@ -97,28 +97,79 @@ export function changeDefaultMessage(project: string): string {
   return `Choose the new default folder for ${project}. These files go there too.`;
 }
 
+// Capture, so these run before the terminal's and the compose box's own listeners.
+// As an object: Node's EventTarget, which the tests use, removes nothing for a bare
+// `true`.
+const CAPTURE = { capture: true };
+
+/**
+ * Keys reach nothing but what `allow` lets through until the returned release is
+ * called. A drop holds the keyboard from its release until its dialog or picker has
+ * it: the folder lookup can be slow (a network volume), and an Enter meanwhile must
+ * reach no terminal or compose box, even one that takes the focus back.
+ */
+export function holdKeys(
+  target: EventTarget,
+  allow: (to: EventTarget | null) => boolean
+): () => void {
+  const onKey = (e: Event) => {
+    if (allow(e.target)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  };
+  target.addEventListener("keydown", onKey, CAPTURE);
+  target.addEventListener("keypress", onKey, CAPTURE);
+  return () => {
+    target.removeEventListener("keydown", onKey, CAPTURE);
+    target.removeEventListener("keypress", onKey, CAPTURE);
+  };
+}
+
+// How long a key held from before has to start repeating. macOS's slowest "Delay
+// until repeat" is under two seconds; with no repeat by then, nothing was held.
+export const HELD_KEY_WINDOW_MS = 3000;
+
 /**
  * After a dialog or picker that a key closed, a key still held from it repeats into
  * whatever has the focus next: the session's terminal, where an Enter can answer a
- * question the builder never saw. Repeats are swallowed until the key is released,
- * or until a fresh press shows it was.
+ * question the builder never saw. A repeat of a key not pressed since is such a
+ * key. Its repeats are swallowed until that key is released or pressed again,
+ * whatever other keys do meanwhile (Shift let go of a held Shift+Enter). Keys
+ * pressed since go through, repeats and all. Keys are told apart by `code`, the
+ * physical key, which a modifier doesn't change as it does `key`.
  */
 export function swallowHeldKeyRepeats(target: EventTarget): void {
+  const pressedSince = new Set<string>();
+  const held = new Set<string>();
+  const keyOf = (e: Event) => {
+    const k = e as KeyboardEvent;
+    return k.code || k.key;
+  };
+  const release = (key: string) => {
+    if (held.delete(key) && held.size === 0) stop();
+  };
   const onDown = (e: Event) => {
-    if ((e as KeyboardEvent).repeat) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
+    const key = keyOf(e);
+    if (!(e as KeyboardEvent).repeat) {
+      pressedSince.add(key);
+      release(key);
       return;
     }
-    stop();
+    if (pressedSince.has(key)) return;
+    held.add(key);
+    e.preventDefault();
+    e.stopImmediatePropagation();
   };
-  // Capture, so the terminal never sees a swallowed repeat. As an object: Node's
-  // EventTarget, which the tests use, removes nothing for a bare `true`.
-  const capture = { capture: true };
+  const onUp = (e: Event) => release(keyOf(e));
   const stop = () => {
-    target.removeEventListener("keydown", onDown, capture);
-    target.removeEventListener("keyup", stop, capture);
+    clearTimeout(timer);
+    target.removeEventListener("keydown", onDown, CAPTURE);
+    target.removeEventListener("keyup", onUp, CAPTURE);
   };
-  target.addEventListener("keydown", onDown, capture);
-  target.addEventListener("keyup", stop, capture);
+  // Nothing held: no repeat came in time.
+  const timer = setTimeout(() => {
+    if (held.size === 0) stop();
+  }, HELD_KEY_WINDOW_MS);
+  target.addEventListener("keydown", onDown, CAPTURE);
+  target.addEventListener("keyup", onUp, CAPTURE);
 }
