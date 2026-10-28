@@ -2,7 +2,7 @@
 
 **Generated:** 2026-10-28
 **Source:** `docs/specs/file-drop/prd.md` v1.1 · `docs/specs/file-drop/gaps.md`
-**Total Tasks:** 6 (T-701..T-706)
+**Total Tasks:** 9 (T-701..T-709; T-707, T-708 from QA, T-709 from the builder's test)
 **Milestones:** M1 (drop files into a project) · M2 (QA and the builder's Finder test)
 
 Task ids start at T-701 so they never collide with earlier epics (the highest is T-611).
@@ -245,8 +245,11 @@ shows their real paths.
 ### T-706: QA and the builder's Finder test
 
 - **Type:** qa
-- **Status:** in-progress (steps 1–2 done: `qa-report-m1.md`, 35/44 pass, 0 fail, 9 for
-  the builder; step 3: `test-plan-m1.md`)
+- **Status:** done (`qa-report-m1.md`: 35/44 pass, 0 fail, 9 for the builder;
+  `test-plan-m1.md`. The builder's Finder test, 2026-10-28: two files dragged from
+  `~/Downloads`, first-drop picker and "Somewhere else…" used; the trace shows real paths
+  (G-211 closed). The builder skipped the rest: folders are out (PRD v1.2), and the
+  multi-file and limit cases were left to CDP)
 - **Story:** all
 - **Description:**
   1. Run `pnpm test`, `pnpm lint`, `pnpm type`.
@@ -301,7 +304,7 @@ shows their real paths.
 ### T-709: Drop limits, and files only
 
 - **Type:** feature
-- **Status:** ready
+- **Status:** done
 - **Story:** 6 (PRD v1.2); changes 1, 3, 4
 - **Description:** The builder asked, after the first Finder test (2026-10-28): at most
   10 files and 1 GB in total per drop, folders not accepted, and past a limit nothing is
@@ -352,3 +355,4 @@ shows their real paths.
 - 2026-10-28: T-705 done and merged (58cb29b). review-loop on the whole epic: main area clean after 2 rounds, renderer clean after 3; fixes uncommitted (private folder modes; input held at its sources during a drop). QA (T-706 steps 1–3): 35 of 44 criteria pass, 0 fail, 9 for the builder's test. Filed T-707, T-708 from QA issues 1 and 3; issues 2 (five-line cap) and 4 (`/tmp` vs `/private/tmp` display) left as they are.
 - 2026-10-28: T-707, T-708 done (GPT: no findings). Committed together with the review-loop fixes.
 - 2026-10-28: Builder's first Finder test passed for files (real paths in the trace). Builder asked for drop limits and no folders: PRD v1.2, T-709 added.
+- 2026-10-28: T-709 done (GPT: one finding, rejected: a file another program grows after the check isn't bounded; comments now say the limit is checked as the copy starts) and merged (99ce8e0). Final review-loop round on both areas: clean, no regressions; the earlier symlink-swap disagreement has no code path left. T-706 done. Epic complete on `feat/file-drop`.
