@@ -205,7 +205,7 @@ shows their real paths.
 ### T-705: The message after a drop
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done
 - **Story:** 1, 4
 - **Description:** A small message component in `renderer/components/`, shown by
   `App.tsx` near the bottom of the window. Multi-Code has no toast today, so this is
