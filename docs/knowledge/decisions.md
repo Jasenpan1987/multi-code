@@ -4,6 +4,17 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-10-28 — A drop takes at most 10 files and 1 GB, and no folders
+
+**Decision:** One drop copies at most 10 files and at most 1 GB (1,000,000,000 bytes, as Finder counts) in total. Folders are not accepted. Past either limit, or with a folder in it, the whole drop is refused: nothing is copied, and the message says to place the files in Finder, naming the default folder when there is one. The main process enforces the same limits on its own.
+
+**Why:** Asked by the builder after the first real Finder test. A big or unusual drop is better done in Finder, where progress and conflicts are visible; the builder never drops folders. Refusing the whole drop avoids a half-placed batch the builder would have to sort out.
+
+**Source:** 2026-10-28, builder's Finder test of the file-drop epic (PRD v1.2, Story 6).
+**Affects:** the drop flow and its message; the copy IPC; folder copying is removed from the copy engine.
+
+---
+
 ## 2026-10-28 — A file dropped on Multi-Code is copied into the project, and nothing more
 
 **Decision:** A file (or folder) dragged from Finder onto any part of the window is copied into the selected session's project, to that project's default folder or to a folder picked for this drop only. Multi-Code never types into the session afterwards; the builder tells the session, as today. v1 takes Finder drags only, and every file type.

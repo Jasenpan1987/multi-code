@@ -1,5 +1,5 @@
 # QA Report: file-drop M1
-**Date:** 2026-10-29
+**Date:** 2026-10-28
 **Scope:** milestone M1 (T-701..T-705), against PRD v1.1
 **Build:** `fd/qa-m1` = `feat/file-drop` at 58cb29b, `pnpm build`, isolated dev build
 (`--user-data-dir=/tmp/fd-qa-userdata`, page CDP 9464, main inspector 9465,
@@ -140,7 +140,7 @@ Issue 2).
 | # | Criterion / case | What went wrong | Severity (critical/high/medium/low) | Suggested fix |
 |---|------------------|-----------------|-------------------------------------|---------------|
 | 1 | Story 4 "names the file and the reason"; edge 7 | Steps: drop a folder `partial/` holding `a.txt`, `b-locked.txt` (chmod 000) and `c.txt`. Expected: the message tells the builder what wasn't copied. Actual: "inbox/partial/ (partly copied: no permission)". The file that failed isn't named, and the walk stops at the first error, so the readable `c.txt` after it is missing too and nothing says so. `fillFolder` throws on the first failing entry (`main/file-drop.ts:158`), and `copyOne` turns it into one `partly copied:` reason (`:211`) | low | Put the failing entry's path, relative to the dropped folder, in the reason ("partly copied: b-locked.txt: no permission"). Optionally go on past unreadable entries and count what was skipped |
-| 2 | Story 4 "shows each file's new path" | With six or more items, only five lines show and the rest read "+N more copied". Nothing in the UI reveals the hidden paths: hover only holds the card, a click dismisses it. The PRD says each file. The five-line cap was a T-705 call (decisions, 2026-10-29) | low | Builder to confirm the cap. If each path must be reachable: expand the card on hover or click, or allow more lines |
+| 2 | Story 4 "shows each file's new path" | With six or more items, only five lines show and the rest read "+N more copied". Nothing in the UI reveals the hidden paths: hover only holds the card, a click dismisses it. The PRD says each file. The five-line cap was a T-705 call (decisions, 2026-10-28) | low | Builder to confirm the cap. If each path must be reachable: expand the card on hover or click, or allow more lines |
 | 3 | Deadline message (T-705) | When the window-focus call is what stalls (main busy), the message reads "Nothing copied: reading the default folder took over 10 seconds". `waitingOn` starts as `"folder"` before `focusDropWindow` is awaited (`renderer/App.tsx:783`, `:793`). Seen in `t705-fixes` B | low | Start `waitingOn` at its own value for the focus step, or use wording that names no step |
 | 4 | Story 3 target display; edge 28 | `displayPath` compares path strings (`main/file-drop.ts:261`, `:276`). A project stored through a link (`/tmp/fd-qa-project`) with its default in resolved form (`/private/tmp/fd-qa-project/inbox`) shows `→ /private/tmp/fd-qa-project/inbox/` and full paths in the message, where `inbox/` is expected. Reproduced by seeding (`qa-symlink.mjs`). Not checked: whether the real panel returns resolved paths. Contacts made through "+ New" use the same panel, so they probably match | low | Compare `realpath`s in `displayPath` (main has `fs`), falling back to the strings. Or record the case and move on |
 

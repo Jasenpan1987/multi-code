@@ -1,5 +1,5 @@
 # Manual Test Plan: file-drop M1
-**Date:** 2026-10-29 · **Tester:** Jasen (builder) · **Environment:** macOS, an isolated dev
+**Date:** 2026-10-28 · **Tester:** Jasen (builder) · **Environment:** macOS, an isolated dev
 build of `feat/file-drop` (58cb29b or later), `--user-data-dir=/private/tmp/fd-test-userdata`,
 `MULTICODE_DEBUG=1`. About 5 minutes.
 

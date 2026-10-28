@@ -298,6 +298,45 @@ shows their real paths.
 - **Blocks:** none
 - **Blocked by:** none
 
+### T-709: Drop limits, and files only
+
+- **Type:** feature
+- **Status:** ready
+- **Story:** 6 (PRD v1.2); changes 1, 3, 4
+- **Description:** The builder asked, after the first Finder test (2026-10-28): at most
+  10 files and 1 GB in total per drop, folders not accepted, and past a limit nothing is
+  copied; the message says to place the files in Finder.
+  - **Renderer flow (`App.tsx`, `dropFlow.ts`):** check the limits before the dialog and
+    before the first-drop picker. The count needs no IPC (`files.length`); folders and
+    the total size come from `describeDropped`, which therefore runs before
+    `getDropFolder`'s picker/dialog branch, inside the existing deadline. Past a limit:
+    give the keyboard back, report, stop.
+  - **Messages (`dropNotice.ts`):** one line each for too many files, too large, and a
+    folder in the drop; each names the default folder's `display` when there is one,
+    else "the project folder". Format the total in GB/MB as Finder does (decimal).
+  - **Main (`ipc-handlers.ts`, `file-drop.ts`):** `describeDropped` also returns each
+    item's size (lstat; a symlink counts as itself). The copy IPC refuses past the limits
+    and refuses folders on its own (copies nothing). Limits are shared constants
+    (`shared/`), `MAX_DROP_FILES = 10`, `MAX_DROP_BYTES = 1_000_000_000`.
+  - **Remove folder copying** from the engine: `fillFolder`, the walk, `isSameOrInside`,
+    the folder naming rule, `partial`, and their tests, since nothing can reach them now
+    (keep `numberedName` for files; keep `displayPath`'s folder form, the default folder
+    still shows as `docs/`). The engine refuses a directory with a plain reason. Remove
+    the renderer's partial-copy line and amber state, and folder wording in the dialog
+    title. Update `CLAUDE.md` only if it mentions folder drops (it shouldn't).
+  - Keep every keyboard guarantee from T-704 and the review loop (`holdInput`, held-key
+    repeats, focus restore).
+- **Acceptance:** unit tests: 10 files pass, 11 refused; exactly 1 GB passes, 1 byte
+  more refused (sizes faked in describe results, no big files on disk); a folder
+  anywhere in the drop refuses the whole drop; main's copy IPC refuses the same cases;
+  message lines with and without a default folder. CDP on an isolated build: 11 files →
+  message, no dialog, nothing on disk; a folder → message; 2 files → dialog as before.
+  Full suite, lint, type pass.
+- **Blocks:** builder re-test
+- **Blocked by:** none
+- **Notes:** T-707's partial-folder wording goes away with folder copying; that is
+  expected.
+
 ## Legend
 
 - **Blocks:** This task must complete before the listed tasks can start
@@ -310,5 +349,6 @@ shows their real paths.
   can't tell a Finder file from a browser image (PRD v1.1 changelog).
 - 2026-10-28: T-701 done (GPT review, 2 rounds: no deletes, no `fs.cp`, folder-into-itself by device and inode). T-703 done (GPT: no findings; in-page drags ignored). T-702 done (GPT: no findings). Merged into `feat/file-drop`, plus 2da48c2 for a clash between them. T-704 started; it also carries `partial`/`destination` into the copy IPC and brings the window to the front on a drop.
 - 2026-10-28: T-704 done (GPT review: two ways a key could reach the terminal around a drop, both fixed in 1a66b0e) and merged (255f73e). T-705 gained four items from T-704's report, including a deadline on the pre-dialog lookups. Builder stopped for the day; next is T-705.
-- 2026-10-29: T-705 done and merged (58cb29b). review-loop on the whole epic: main area clean after 2 rounds, renderer clean after 3; fixes uncommitted (private folder modes; input held at its sources during a drop). QA (T-706 steps 1–3): 35 of 44 criteria pass, 0 fail, 9 for the builder's test. Filed T-707, T-708 from QA issues 1 and 3; issues 2 (five-line cap) and 4 (`/tmp` vs `/private/tmp` display) left as they are.
-- 2026-10-29: T-707, T-708 done (GPT: no findings). Committed together with the review-loop fixes.
+- 2026-10-28: T-705 done and merged (58cb29b). review-loop on the whole epic: main area clean after 2 rounds, renderer clean after 3; fixes uncommitted (private folder modes; input held at its sources during a drop). QA (T-706 steps 1–3): 35 of 44 criteria pass, 0 fail, 9 for the builder's test. Filed T-707, T-708 from QA issues 1 and 3; issues 2 (five-line cap) and 4 (`/tmp` vs `/private/tmp` display) left as they are.
+- 2026-10-28: T-707, T-708 done (GPT: no findings). Committed together with the review-loop fixes.
+- 2026-10-28: Builder's first Finder test passed for files (real paths in the trace). Builder asked for drop limits and no folders: PRD v1.2, T-709 added.

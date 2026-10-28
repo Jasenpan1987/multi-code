@@ -1,6 +1,6 @@
 # PRD: File Drop
 
-**Version:** 1.1
+**Version:** 1.2
 **Last Updated:** 2026-10-28
 **Status:** approved
 **Owner:** Jasen
@@ -41,7 +41,7 @@ entries)
 **So that** they go into the project I am working on, without opening VS Code
 
 **Acceptance Criteria:**
-- [ ] Dragging files or folders from Finder over any part of the window (sidebar, terminal, toolbox) shows an overlay over the whole window. It names the target: the selected contact's display name and its project directory.
+- [ ] Dragging files from Finder over any part of the window (sidebar, terminal, toolbox) shows an overlay over the whole window. It names the target: the selected contact's display name and its project directory.
 - [ ] The overlay goes away when the drag leaves the window or is released with Esc, and nothing happens.
 - [ ] Releasing over the window starts Story 2 (no default folder yet) or Story 3 (a default folder is set).
 - [ ] With the Manager selected, or no contact selected, the overlay says files can't be dropped there and why. Releasing does nothing.
@@ -85,7 +85,7 @@ entries)
 
 **Acceptance Criteria:**
 - [ ] A drop in a project with a default folder opens a dialog in the middle of the window, in the style of the existing Multi-Code dialogs.
-- [ ] The dialog's title says how many files and folders, and which project: "Put 2 files in multi-code?".
+- [ ] The dialog's title says how many files, and which project: "Put 2 files in multi-code?". *(v1.2: was "how many files and folders"; folders are no longer accepted, Story 6.)*
 - [ ] The dialog shows the target folder: relative to the project when inside it (`docs/sources/inbox/`), otherwise the full path, with `~` for the home directory.
 - [ ] The dialog lists the dropped names, up to five, then "+N more".
 - [ ] **Put here** (the primary button, and Enter) copies the files to the default folder.
@@ -124,12 +124,12 @@ entries)
 **Acceptance Criteria:**
 - [ ] Files are copied. The originals stay where they were.
 - [ ] Every file type is accepted (Word, Excel, TXT, CSV, Markdown, PNG, SVG, and any other).
-- [ ] A dropped folder is copied whole, with everything inside it.
-- [ ] When the target already has that name, the copy is renamed as Finder does: `report 2.docx`, then `report 3.docx`; a folder becomes `assets 2`. Nothing in the target is ever overwritten.
+- ~~A dropped folder is copied whole, with everything inside it.~~ *Deprecated in v1.2: folders are refused (Story 6).*
+- [ ] When the target already has that name, the copy is renamed as Finder does: `report 2.docx`, then `report 3.docx`; a folder becomes `assets 2`. Nothing in the target is ever overwritten. *(v1.2: the folder example no longer applies.)*
 - [ ] Several files in one drop are confirmed once and copied together.
 - [ ] After the copy, a short message shows each file's new path relative to the project, for example `docs/sources/inbox/report.docx`. A renamed copy shows its new name.
 - [ ] The message goes away by itself after a few seconds, and does not take the keyboard from the terminal.
-- [ ] A folder dropped into itself or into one of its own subfolders is refused, and the message says so.
+- ~~A folder dropped into itself or into one of its own subfolders is refused, and the message says so.~~ *Deprecated in v1.2: folders are refused (Story 6).*
 - [ ] When a file can't be copied (no permission, disk full), the message names the file and the reason.
 - [ ] A large copy does not freeze the window. While it runs, the message says it is copying.
 
@@ -152,6 +152,26 @@ entries)
 
 ---
 
+### Story 6: Limits on one drop *(added in v1.2)*
+
+**As a** Multi-Code user
+**I want** a drop to take files only, at most 10 of them and at most 1 GB in total
+**So that** a big or unusual drop goes through Finder, where I can see what is happening
+
+**Acceptance Criteria:**
+- [ ] A drop of more than 10 files copies nothing: no dialog, no picker. The message says how many were dropped, that the limit is 10, and to place them in Finder.
+- [ ] A drop of more than 1 GB in total copies nothing. The message gives the total, says the limit is 1 GB, and says to place them in Finder. 1 GB is 1,000,000,000 bytes, as Finder counts.
+- [ ] A drop with a folder in it copies nothing, files included. The message says folders can't be dropped, and to place them in Finder.
+- [ ] When the project has a default folder, these messages name it (`docs/`), so the builder knows where to put the files. Without one, they say "the project folder".
+- [ ] The limits are checked before the dialog or the first-drop picker.
+- [ ] The main process refuses the same cases on its own, so a copy request past the limits copies nothing.
+- [ ] Exactly 10 files, or exactly 1 GB, are accepted.
+
+**Notes:**
+- Decided by the builder on 2026-10-28: past a limit the whole drop is refused, not copied in part; folders are not needed.
+
+---
+
 ## Non-Functional Requirements
 
 - **Performance:** The overlay appears as soon as a drag enters the window. Copying runs without blocking the UI or the terminals.
@@ -167,7 +187,7 @@ entries)
 
 ## Dependencies
 
-- G-211: a real Finder drag, of a file and of a folder, confirmed by the builder by hand when the work is nearly done. Until then, only a synthetic CDP drop has been tried.
+- G-211: a real Finder drag confirmed by the builder by hand. Files confirmed on 2026-10-28; the folder half no longer applies (v1.2).
 
 ## Out of Scope
 
@@ -179,6 +199,8 @@ entries)
 - Limiting file types.
 - A settings page that lists or edits every project's default folder. The default changes only through "Change default path…".
 - Uploading files from the phone (phone link).
+- Dropping folders (v1.2, decided by the builder on 2026-10-28). A folder is refused with a message to place it in Finder.
+- More than 10 files, or more than 1 GB, in one drop (v1.2). The drop is refused with a message to place the files in Finder.
 
 ## Open Questions
 
@@ -194,3 +216,4 @@ Key blockers: none. G-211 (real Finder drag) is deferred to the builder's test a
 ## Changelog
 
 - v1.1 (2026-10-28): Story 1, a drop with no file on disk is reported after the drop, not by the overlay. Reason: found while breaking the PRD into tasks; during a drag the page cannot see where the files come from.
+- v1.2 (2026-10-28): Added Story 6 (at most 10 files and 1 GB per drop; folders refused; past a limit nothing is copied). Folder criteria in Story 4 deprecated. Reason: the builder's request after the first Finder test.
