@@ -5,8 +5,8 @@
 
 import type { DropCopyOutcome, DropFolder, DroppedItem } from "../../shared/types";
 
-// What a drop came to, for the message after it (T-705). Each one replaces the one
-// before.
+// What a drop came to, for the message after it (DropMessage). Each one replaces the
+// same drop's one before.
 export type DropReport =
   // The copy is running.
   | { kind: "copying" }
@@ -18,7 +18,8 @@ export type DropReport =
   // A call to main failed; nothing more was done. The error's own message.
   | { kind: "error"; message: string };
 
-// The dialog lists this many names, then "+N more".
+// The dialog lists this many names, then "+N more"; the message after the copy,
+// this many outcomes.
 export const MAX_SHOWN_NAMES = 5;
 
 // getPathForFile gives "" for an item with no file on disk. A drop with none at
@@ -95,6 +96,60 @@ export function somewhereElseMessage(folderDisplay: string): string {
 
 export function changeDefaultMessage(project: string): string {
   return `Choose the new default folder for ${project}. These files go there too.`;
+}
+
+// How long a drop may wait on main before its dialog or picker shows (the window
+// brought forward, the default folder looked up, the dropped items described). The
+// keyboard is held all that time. A sleeping disk wakes well within it; a network
+// volume that has gone away can keep a lookup waiting for minutes.
+export const DROP_LOOKUP_DEADLINE_MS = 10_000;
+
+export class DeadlineError extends Error {
+  constructor(ms: number) {
+    super(`gave up after ${ms} ms`);
+    this.name = "DeadlineError";
+  }
+}
+
+/**
+ * What `work` comes to, unless `ms` pass first: then a DeadlineError, and `work`'s
+ * signal is aborted so it can stop before its next step. A call to main can't be
+ * called off, and what it comes to after the deadline is dropped, so `work` must
+ * only look things up: what it finds is acted on by whoever awaited this, and only
+ * in time.
+ */
+export function withDeadline<T>(
+  work: (signal: AbortSignal) => Promise<T>,
+  ms: number
+): Promise<T> {
+  const controller = new AbortController();
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      controller.abort();
+      reject(new DeadlineError(ms));
+    }, ms);
+    work(controller.signal).then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
+// What a drop's lookups were waiting on when they ran out of time.
+export type DropLookup = "folder" | "items";
+
+export function lookupTooSlowMessage(
+  waitingOn: DropLookup,
+  ms = DROP_LOOKUP_DEADLINE_MS
+): string {
+  const what = waitingOn === "folder" ? "the default folder" : "the dropped files";
+  return `Nothing copied: reading ${what} took over ${Math.round(ms / 1000)} seconds`;
 }
 
 // Capture, so these run before the terminal's and the compose box's own listeners.

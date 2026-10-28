@@ -21,17 +21,24 @@ import {
 } from "./components/secretaryBrief";
 import type { BriefMap, OpenCard } from "./components/secretaryBrief";
 import { DiffWindow } from "./components/DiffWindow";
+import { DropMessage } from "./components/DropMessage";
 import { DropOverlay } from "./components/DropOverlay";
 import { FileDropDialog } from "./components/FileDropDialog";
 import {
   allOnDisk,
   changeDefaultMessage,
+  DeadlineError,
+  DROP_LOOKUP_DEADLINE_MS,
   dropStep,
   holdKeys,
+  lookupTooSlowMessage,
   somewhereElseMessage,
   swallowHeldKeyRepeats,
+  withDeadline,
 } from "./components/dropFlow";
-import type { DropReport } from "./components/dropFlow";
+import type { DropLookup, DropReport } from "./components/dropFlow";
+import { COPYING_DELAY_MS, withDropReport } from "./components/dropNotice";
+import type { DropNotice } from "./components/dropNotice";
 import { ipcErrorMessage } from "./components/secretaryText";
 import { cleanupShellTerminal } from "./components/TerminalSection";
 import { Toolbox } from "./components/Toolbox";
@@ -107,12 +114,14 @@ export function App() {
   const [secretaryMode, setSecretaryMode] = useState(false);
   const [briefs, setBriefs] = useState<BriefMap>({});
   const [card, setCard] = useState<OpenCard | null>(null);
-  // File drop (epic file-drop). What the last drop came to, for the message under
-  // the window (T-705): the copy running, its outcomes, or why nothing was copied.
-  const [dropReport, setDropReport] = useState<DropReport | null>(null);
+  // File drop (epic file-drop). What the last few drops came to, for the message at
+  // the bottom of the window: the copy running, its outcomes, or why nothing was
+  // copied.
+  const [dropNotices, setDropNotices] = useState<DropNotice[]>([]);
   // The drop waiting on its dialog (PRD Story 3): its paths, what they are, and the
   // default folder offered. `picking`: one of the dialog's pickers is open.
   const [dropPrompt, setDropPrompt] = useState<{
+    drop: number;
     target: Instance;
     sources: string[];
     items: DroppedItem[];
@@ -685,10 +694,14 @@ export function App() {
   // file-drop): through the picker while the project has no default folder, else
   // through the dialog. Nothing on the way writes to the session.
 
-  // Logged until T-705 shows it.
-  useEffect(() => {
-    if (dropReport) console.debug("[file-drop]", JSON.stringify(dropReport));
-  }, [dropReport]);
+  // Drops are numbered as they come, so each one's report goes to its own message.
+  const dropCountRef = useRef(0);
+  const reportDrop = useCallback((drop: number, report: DropReport) => {
+    setDropNotices((notices) => withDropReport(notices, drop, report));
+  }, []);
+  const dismissDrop = useCallback((drop: number) => {
+    setDropNotices((notices) => notices.filter((n) => n.drop !== drop));
+  }, []);
 
   // A drop between its release and its dialog or first picker. Another drop then
   // is ignored, as one is while the dialog is open.
@@ -730,60 +743,90 @@ export function App() {
   // Into `folder`, saved first as the project's default when asked. Never rejects:
   // every outcome, failures included, goes to the report.
   const copyDrop = useCallback(
-    async (target: Instance, sources: string[], folder: string, asDefault: boolean) => {
+    async (
+      drop: number,
+      target: Instance,
+      sources: string[],
+      folder: string,
+      asDefault: boolean
+    ) => {
+      // "Copying…" only once the copy takes a moment; a quick one goes straight to
+      // where the files went.
+      const slow = setTimeout(() => reportDrop(drop, { kind: "copying" }), COPYING_DELAY_MS);
       try {
         if (asDefault) await window.electronAPI.setDropFolder(target.id, folder);
-        setDropReport({ kind: "copying" });
         const outcomes = await window.electronAPI.copyDropped(target.id, sources, folder);
-        setDropReport({ kind: "copied", outcomes });
+        reportDrop(drop, { kind: "copied", outcomes });
       } catch (err) {
-        setDropReport({ kind: "error", message: ipcErrorMessage(err) });
+        reportDrop(drop, { kind: "error", message: ipcErrorMessage(err) });
+      } finally {
+        clearTimeout(slow);
       }
     },
-    []
+    [reportDrop]
   );
 
   const handleFileDrop = useCallback(
     (files: File[], target: Instance) => {
       if (dropBusyRef.current) return;
+      const drop = ++dropCountRef.current;
       const sources = files.map((f) => window.electronAPI.getPathForFile(f));
       if (!allOnDisk(sources)) {
-        setDropReport({ kind: "only-finder" });
+        reportDrop(drop, { kind: "only-finder" });
         return;
       }
       dropBusyRef.current = true;
       takeDropKeys();
       void (async () => {
         const api = window.electronAPI;
+        // For the message, should the lookups run out of time.
+        let waitingOn: DropLookup = "folder";
         try {
-          // Before the dialog or picker: Finder may still be the active app.
-          await api.focusDropWindow();
-          const step = dropStep(await api.getDropFolder(target.id), target);
-          if (step.kind === "pick") {
+          // Everything up to the dialog or picker, while the keyboard is held, under
+          // one deadline: a lookup that never returns must not keep the keys. Only
+          // lookups in here; a late answer is dropped, and acts on nothing.
+          const next = await withDeadline(async (signal) => {
+            // Before the dialog or picker: Finder may still be the active app.
+            await api.focusDropWindow();
+            signal.throwIfAborted();
+            const step = dropStep(await api.getDropFolder(target.id), target);
+            signal.throwIfAborted();
+            if (step.kind === "pick") return step;
+            waitingOn = "items";
+            return { ...step, items: await api.describeDropped(sources) };
+          }, DROP_LOOKUP_DEADLINE_MS);
+          // The picker has no deadline: the builder may take their time.
+          if (next.kind === "pick") {
             const picked = await api
-              .pickDropFolder(step.message, step.start)
+              .pickDropFolder(next.message, next.start)
               .finally(returnDropKeys);
-            if (picked !== null) void copyDrop(target, sources, picked, true);
+            if (picked !== null) void copyDrop(drop, target, sources, picked, true);
             return;
           }
-          const items = await api.describeDropped(sources);
           setDropPrompt({
+            drop,
             target,
             sources,
-            items,
-            folder: step.folder,
-            display: step.display,
+            items: next.items,
+            folder: next.folder,
+            display: next.display,
             picking: false,
           });
         } catch (err) {
           returnDropKeys();
-          setDropReport({ kind: "error", message: ipcErrorMessage(err) });
+          reportDrop(drop, {
+            kind: "error",
+            message:
+              err instanceof DeadlineError
+                ? lookupTooSlowMessage(waitingOn)
+                : ipcErrorMessage(err),
+          });
         } finally {
           dropBusyRef.current = false;
         }
       })();
     },
-    [copyDrop, takeDropKeys, returnDropKeys]
+    [copyDrop, reportDrop, takeDropKeys, returnDropKeys]
   );
   const fileDrop = useFileDrop(selectedInstance ?? null, handleFileDrop);
 
@@ -795,7 +838,13 @@ export function App() {
   const putDropHere = () => {
     if (!dropPrompt || dropPrompt.picking) return;
     closeDropPrompt();
-    void copyDrop(dropPrompt.target, dropPrompt.sources, dropPrompt.folder, false);
+    void copyDrop(
+      dropPrompt.drop,
+      dropPrompt.target,
+      dropPrompt.sources,
+      dropPrompt.folder,
+      false
+    );
   };
 
   // The dialog's two pickers, both starting in the default folder. The dialog stays
@@ -811,9 +860,11 @@ export function App() {
       const picked = await window.electronAPI
         .pickDropFolder(message, prompt.folder)
         .finally(closeDropPrompt);
-      if (picked !== null) void copyDrop(prompt.target, prompt.sources, picked, asDefault);
+      if (picked !== null) {
+        void copyDrop(prompt.drop, prompt.target, prompt.sources, picked, asDefault);
+      }
     } catch (err) {
-      setDropReport({ kind: "error", message: ipcErrorMessage(err) });
+      reportDrop(prompt.drop, { kind: "error", message: ipcErrorMessage(err) });
     }
   };
 
@@ -1181,6 +1232,7 @@ export function App() {
         />
       )}
 
+      <DropMessage notices={dropNotices} onDismiss={dismissDrop} />
       <DropOverlay state={fileDrop} />
     </div>
     </ThemeContext.Provider>
