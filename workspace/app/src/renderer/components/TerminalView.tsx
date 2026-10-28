@@ -71,6 +71,20 @@ function isAtBottom(terminal: Terminal): boolean {
   return buf.baseY - buf.viewportY <= AT_BOTTOM_SLACK;
 }
 
+/**
+ * Sizes the scroll area from the terminal's real height. xterm 5.5 sizes it from
+ * the viewport's height as output arrives, and out of sight (display: none) that
+ * height is 0: the area comes out a screen short, and the wheel stops a screen
+ * above the bottom until the next line of output. Call it once the terminal shows.
+ * Not in xterm's public API; nothing happens if a later xterm moves it.
+ */
+export function syncScrollArea(terminal: Terminal): void {
+  const core = (terminal as unknown as {
+    _core?: { viewport?: { syncScrollArea(immediate: boolean): void } };
+  })._core;
+  core?.viewport?.syncScrollArea(true);
+}
+
 export function getTerminal(instanceId: string): Terminal | undefined {
   return terminals.get(instanceId)?.terminal;
 }
@@ -446,7 +460,8 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
     // the next PTY redraw — most easily reproduced by scrolling to the bottom
     // and then losing the prompt. scrollToBottom forces the viewport back onto
     // the last buffer line. If the user has deliberately scrolled up (to read
-    // or select), leave the viewport where it is.
+    // or select), leave the viewport where it is. The scroll area is resized
+    // too: output that came while hidden left it a screen short.
     const refit = () => {
       // Not while its pane is folded away: hidden, it measures a few columns
       // wide, and fitting it would shrink the session to that. Unfolding refits.
@@ -457,6 +472,7 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
       } catch {
         // ignore — container may not be ready yet
       }
+      syncScrollArea(terminal);
       if (atBottom) terminal.scrollToBottom();
       // A turn that finished while this terminal was out of sight.
       const pending = pendingReplyJumps.get(instanceId);

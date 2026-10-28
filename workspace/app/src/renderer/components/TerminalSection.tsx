@@ -5,6 +5,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 import { THEMES, getCurrentTheme } from "../themes";
 import { useTheme } from "../hooks/useTheme";
+import { syncScrollArea } from "./TerminalView";
 
 interface TerminalSectionProps {
   instanceId: string;
@@ -111,10 +112,15 @@ export function TerminalSection({ instanceId, active }: TerminalSectionProps) {
     }
 
     // Fit + push size to PTY. Neither fit runs while the toolbox is folded away:
-    // hidden, the container measures a few columns wide. Unfolding refits.
+    // hidden, the container measures a few columns wide. Unfolding refits. Each
+    // fit also resizes the scroll area, which output that came while hidden
+    // left a screen short.
     requestAnimationFrame(() => {
       try {
-        if (container.offsetWidth > 0) entry.fitAddon.fit();
+        if (container.offsetWidth > 0) {
+          entry.fitAddon.fit();
+          syncScrollArea(entry.terminal);
+        }
       } catch {
         // ignore — container may not be ready in some edge cases
       }
@@ -126,7 +132,10 @@ export function TerminalSection({ instanceId, active }: TerminalSectionProps) {
     });
 
     const handleResize = () => {
-      if (container.offsetWidth > 0) entry.fitAddon.fit();
+      if (container.offsetWidth > 0) {
+        entry.fitAddon.fit();
+        syncScrollArea(entry.terminal);
+      }
     };
     window.addEventListener("resize", handleResize);
     window.addEventListener("layout-resize", handleResize);
