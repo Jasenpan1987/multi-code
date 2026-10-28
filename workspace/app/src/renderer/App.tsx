@@ -39,6 +39,7 @@ import {
 import type { DropLookup, DropReport } from "./components/dropFlow";
 import { COPYING_DELAY_MS, withDropReport } from "./components/dropNotice";
 import type { DropNotice } from "./components/dropNotice";
+import { MAX_DROP_FILES } from "../shared/dropLimits";
 import { ipcErrorMessage } from "./components/secretaryText";
 import { cleanupShellTerminal } from "./components/TerminalSection";
 import { Toolbox } from "./components/Toolbox";
@@ -692,7 +693,8 @@ export function App() {
 
   // Files dragged onto the window go into the selected contact's project (epic
   // file-drop): through the picker while the project has no default folder, else
-  // through the dialog. Nothing on the way writes to the session.
+  // through the dialog. A drop past the limits (shared/dropLimits.ts) gets only a
+  // message. Nothing on the way writes to the session.
 
   // Drops are numbered as they come, so each one's report goes to its own message.
   const dropCountRef = useRef(0);
@@ -785,20 +787,29 @@ export function App() {
         // then: the call can reach it after the renderer has handed the keys back.
         const until = Date.now() + DROP_LOOKUP_DEADLINE_MS;
         try {
-          // Everything up to the dialog or picker, while the keyboard is held, under
-          // one deadline: a lookup that never returns must not keep the keys. Only
-          // lookups in here; a late answer is dropped, and acts on nothing.
-          const next = await withDeadline(async (signal) => {
+          // Everything up to the dialog, the picker or the past-limit message, while
+          // the keyboard is held, under one deadline: a lookup that never returns
+          // must not keep the keys. Only lookups in here; a late answer is dropped,
+          // and acts on nothing.
+          const { folder, items } = await withDeadline(async (signal) => {
             // Before the dialog or picker: Finder may still be the active app.
             await api.focusDropWindow(until);
             signal.throwIfAborted();
             waitingOn = "folder";
-            const step = dropStep(await api.getDropFolder(target.id), target);
+            const folder = await api.getDropFolder(target.id);
             signal.throwIfAborted();
-            if (step.kind === "pick") return step;
+            // The limits (Story 6), before the picker and the dialog. Folders and
+            // the total size need the items; too many are refused by the count.
+            if (sources.length > MAX_DROP_FILES) return { folder, items: [] };
             waitingOn = "items";
-            return { ...step, items: await api.describeDropped(sources) };
+            return { folder, items: await api.describeDropped(sources) };
           }, DROP_LOOKUP_DEADLINE_MS);
+          const next = dropStep(folder, target, sources.length, items);
+          if (next.kind === "refuse") {
+            returnDropKeys();
+            reportDrop(drop, next.report);
+            return;
+          }
           // The picker has no deadline: the builder may take their time.
           if (next.kind === "pick") {
             const picked = await api
@@ -811,7 +822,7 @@ export function App() {
             drop,
             target,
             sources,
-            items: next.items,
+            items,
             folder: next.folder,
             display: next.display,
             picking: false,

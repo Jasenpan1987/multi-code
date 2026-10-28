@@ -15,12 +15,13 @@ import {
 } from "./dropFlow";
 import type { DroppedItem } from "../../shared/types";
 
-const file = (name: string): DroppedItem => ({ name, isDirectory: false });
-const folder = (name: string): DroppedItem => ({ name, isDirectory: true });
+const file = (name: string, size = 1): DroppedItem => ({ name, isDirectory: false, size });
+const folder = (name: string): DroppedItem => ({ name, isDirectory: true, size: 96 });
+const files = (n: number) => Array.from({ length: n }, (_, i) => file(`${i + 1}.md`));
 
 describe("allOnDisk", () => {
   it("takes a drop whose every item has a path", () => {
-    expect(allOnDisk(["/Users/me/report.docx", "/Users/me/assets"])).toBe(true);
+    expect(allOnDisk(["/Users/me/report.docx", "/Users/me/data.csv"])).toBe(true);
   });
 
   it("refuses a drop with one item that has no file on disk", () => {
@@ -45,20 +46,8 @@ describe("dropTitle", () => {
     );
   });
 
-  it("counts folders alone as folders", () => {
-    expect(dropTitle([folder("assets")], "p")).toBe("Put 1 folder in p?");
-    expect(dropTitle([folder("a"), folder("b"), folder("c")], "p")).toBe(
-      "Put 3 folders in p?"
-    );
-  });
-
-  it("names files first, then folders, for a mix in any order", () => {
-    expect(dropTitle([folder("assets"), file("report.docx")], "fd-project")).toBe(
-      "Put 1 file and 1 folder in fd-project?"
-    );
-    expect(
-      dropTitle([file("a"), folder("b"), file("c"), folder("d"), folder("e")], "p")
-    ).toBe("Put 2 files and 3 folders in p?");
+  it("counts up to the limit", () => {
+    expect(dropTitle(files(10), "p")).toBe("Put 10 files in p?");
   });
 
   it("keeps the project's name as it is", () => {
@@ -69,9 +58,9 @@ describe("dropTitle", () => {
 });
 
 describe("shownNames", () => {
-  it("lists every name up to five, a folder with a trailing slash", () => {
-    expect(shownNames([file("report.docx"), folder("assets")])).toEqual({
-      names: ["report.docx", "assets/"],
+  it("lists every name up to five", () => {
+    expect(shownNames([file("report.docx"), file("data.csv")])).toEqual({
+      names: ["report.docx", "data.csv"],
       more: 0,
     });
   });
@@ -89,9 +78,13 @@ describe("shownNames", () => {
 
 describe("dropStep", () => {
   const project = { name: "fd-project", cwd: "/tmp/fd-project" };
+  const none = { path: null, exists: false, display: null };
+  const inbox = { path: "/tmp/fd-project/inbox", exists: true, display: "inbox/" };
+  const gone = { ...inbox, exists: false };
+  const two = [file("a.md"), file("b.md")];
 
   it("opens the picker at the project when there is no default yet", () => {
-    expect(dropStep({ path: null, exists: false, display: null }, project)).toEqual({
+    expect(dropStep(none, project, 2, two)).toEqual({
       kind: "pick",
       message: "No default folder for fd-project yet. Choose where dropped files go.",
       start: "/tmp/fd-project",
@@ -99,9 +92,7 @@ describe("dropStep", () => {
   });
 
   it("says which default is gone, as the dialog would show it, and opens at the project", () => {
-    expect(
-      dropStep({ path: "/tmp/fd-project/inbox", exists: false, display: "inbox/" }, project)
-    ).toEqual({
+    expect(dropStep(gone, project, 2, two)).toEqual({
       kind: "pick",
       message: "The default folder inbox/ no longer exists. Choose where dropped files go.",
       start: "/tmp/fd-project",
@@ -109,9 +100,64 @@ describe("dropStep", () => {
   });
 
   it("asks in the dialog when the default is there", () => {
-    expect(
-      dropStep({ path: "/tmp/fd-project/inbox", exists: true, display: "inbox/" }, project)
-    ).toEqual({ kind: "confirm", folder: "/tmp/fd-project/inbox", display: "inbox/" });
+    expect(dropStep(inbox, project, 2, two)).toEqual({
+      kind: "confirm",
+      folder: "/tmp/fd-project/inbox",
+      display: "inbox/",
+    });
+  });
+
+  // Story 6: the limits come before the dialog and before the first-drop picker.
+  it("takes 10 files and refuses 11, by the count alone, before the dialog or the picker", () => {
+    expect(dropStep(inbox, project, 10, files(10)).kind).toBe("confirm");
+    expect(dropStep(none, project, 10, files(10)).kind).toBe("pick");
+    for (const f of [inbox, none]) {
+      expect(dropStep(f, project, 11, [])).toMatchObject({
+        kind: "refuse",
+        report: { kind: "past-limit", limit: { kind: "too-many" }, count: 11 },
+      });
+    }
+  });
+
+  it("takes exactly 1 GB in all and refuses 1 byte more", () => {
+    const at = [file("a.mov", 999_999_999), file("b.txt", 1)];
+    const past = [file("a.mov", 999_999_999), file("b.txt", 2)];
+    expect(dropStep(inbox, project, 2, at).kind).toBe("confirm");
+    expect(dropStep(inbox, project, 2, past)).toEqual({
+      kind: "refuse",
+      report: {
+        kind: "past-limit",
+        limit: { kind: "too-large", bytes: 1_000_000_001 },
+        count: 2,
+        folder: "inbox/",
+      },
+    });
+    expect(dropStep(none, project, 2, past).kind).toBe("refuse");
+  });
+
+  it("refuses a folder anywhere in the drop, files and all", () => {
+    for (const items of [[folder("assets")], [file("a.md"), folder("assets"), file("b.md")]]) {
+      expect(dropStep(inbox, project, items.length, items)).toMatchObject({
+        kind: "refuse",
+        report: { limit: { kind: "folder" }, count: items.length },
+      });
+      expect(dropStep(none, project, items.length, items).kind).toBe("refuse");
+    }
+  });
+
+  it("names the default folder to put them in, else the project folder", () => {
+    const folderOf = (f: Parameters<typeof dropStep>[0]) => {
+      const step = dropStep(f, project, 1, [folder("assets")]);
+      return step.kind === "refuse" ? step.report.folder : "not refused";
+    };
+    expect(folderOf(inbox)).toBe("inbox/");
+    expect(folderOf({ ...inbox, path: "/Users/me/Downloads", display: "~/Downloads/" })).toBe(
+      "~/Downloads/"
+    );
+    // None yet, gone, or the project itself: the project folder.
+    expect(folderOf(none)).toBeNull();
+    expect(folderOf(gone)).toBeNull();
+    expect(folderOf({ path: "/tmp/fd-project", exists: true, display: "./" })).toBeNull();
   });
 });
 

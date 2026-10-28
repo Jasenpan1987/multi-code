@@ -1,9 +1,21 @@
 // What a drop on a project does between its release (useFileDrop) and the copy
-// (file-drop PRD Stories 1 to 3): the words its picker and dialog show, and what
-// every drop comes to. Nothing here reads the document, so it is tested apart from
-// FileDropDialog and App.
+// (file-drop PRD Stories 1 to 3 and 6): the words its picker and dialog show, and
+// what every drop comes to. Nothing here reads the document, so it is tested apart
+// from FileDropDialog and App.
 
+import { pastDropLimit } from "../../shared/dropLimits";
+import type { PastDropLimit } from "../../shared/dropLimits";
 import type { DropCopyOutcome, DropFolder, DroppedItem } from "../../shared/types";
+
+// A drop past a limit (Story 6): nothing was copied. `count` is how many paths were
+// dropped; `folder` is the default folder to put them in by hand, as main shows it,
+// or null for the project folder.
+export interface PastLimitReport {
+  kind: "past-limit";
+  limit: PastDropLimit;
+  count: number;
+  folder: string | null;
+}
 
 // What a drop came to, for the message after it (DropMessage). Each one replaces the
 // same drop's one before.
@@ -15,6 +27,7 @@ export type DropReport =
   // An item had no file on disk (an image dragged out of a browser): nothing was
   // copied.
   | { kind: "only-finder" }
+  | PastLimitReport
   // A call to main failed; nothing more was done. The error's own message.
   | { kind: "error"; message: string };
 
@@ -28,35 +41,28 @@ export function allOnDisk(paths: string[]): boolean {
   return paths.length > 0 && paths.every((p) => p !== "");
 }
 
-function count(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
-}
-
-/** "Put 2 files in multi-code?", "Put 1 file and 1 folder in multi-code?" */
+/** "Put 1 file in multi-code?", "Put 2 files in multi-code?" A drop is files only. */
 export function dropTitle(items: DroppedItem[], project: string): string {
-  const folders = items.filter((i) => i.isDirectory).length;
-  const files = items.length - folders;
-  const parts: string[] = [];
-  if (files > 0 || folders === 0) parts.push(count(files, "file"));
-  if (folders > 0) parts.push(count(folders, "folder"));
-  return `Put ${parts.join(" and ")} in ${project}?`;
+  return `Put ${items.length} file${items.length === 1 ? "" : "s"} in ${project}?`;
 }
 
 /**
- * The names the dialog lists, in the drop's order, a folder's with a trailing `/`
- * as everywhere else a drop shows one; and how many more there are past those.
+ * The names the dialog lists, in the drop's order, and how many more there are past
+ * those.
  */
 export function shownNames(
   items: DroppedItem[],
   max = MAX_SHOWN_NAMES
 ): { names: string[]; more: number } {
   return {
-    names: items.slice(0, max).map((i) => (i.isDirectory ? `${i.name}/` : i.name)),
+    names: items.slice(0, max).map((i) => i.name),
     more: Math.max(0, items.length - max),
   };
 }
 
 export type DropStep =
+  // Past a limit: no picker and no dialog, only the message.
+  | { kind: "refuse"; report: PastLimitReport }
   // The picker, at once and with no dialog first, starting in the project. What is
   // picked becomes the default.
   | { kind: "pick"; message: string; start: string }
@@ -64,13 +70,24 @@ export type DropStep =
   | { kind: "confirm"; folder: string; display: string };
 
 /**
- * What a drop on a project opens, from its default folder: the picker when it has
- * none yet (Story 2) or the default is gone, else the dialog (Story 3).
+ * What a drop on a project opens: nothing when it is past a limit (Story 6), else,
+ * from its default folder, the picker when it has none yet (Story 2) or the default
+ * is gone, else the dialog (Story 3). `count` is how many paths were dropped and
+ * `items` what describeDropped said of them, or [] when `count` alone is too many.
  */
 export function dropStep(
   folder: DropFolder,
-  project: { name: string; cwd: string }
+  project: { name: string; cwd: string },
+  count: number,
+  items: DroppedItem[]
 ): DropStep {
+  const limit = pastDropLimit(count, items);
+  if (limit) {
+    return {
+      kind: "refuse",
+      report: { kind: "past-limit", limit, count, folder: pastLimitFolder(folder) },
+    };
+  }
   if (folder.path === null) {
     return {
       kind: "pick",
@@ -89,6 +106,15 @@ export function dropStep(
   return { kind: "confirm", folder: folder.path, display };
 }
 
+// Where a drop past a limit is to be put by hand: the default folder as the dialog
+// would show it, or null (the project folder) when there is none, it is gone, or it
+// is the project itself (`./`).
+function pastLimitFolder(folder: DropFolder): string | null {
+  if (folder.path === null || !folder.exists) return null;
+  const display = folder.display ?? folder.path;
+  return display === "./" ? null : display;
+}
+
 // The dialog's two pickers. Both start in the default folder.
 export function somewhereElseMessage(folderDisplay: string): string {
   return `Choose where these files go. The default folder stays ${folderDisplay}.`;
@@ -98,10 +124,11 @@ export function changeDefaultMessage(project: string): string {
   return `Choose the new default folder for ${project}. These files go there too.`;
 }
 
-// How long a drop may wait on main before its dialog or picker shows (the window
-// brought forward, the default folder looked up, the dropped items described). The
-// keyboard is held all that time. A sleeping disk wakes well within it; a network
-// volume that has gone away can keep a lookup waiting for minutes.
+// How long a drop may wait on main before its dialog, its picker or its past-limit
+// message shows (the window brought forward, the default folder looked up, the
+// dropped items described). The keyboard is held all that time. A sleeping disk
+// wakes well within it; a network volume that has gone away can keep a lookup
+// waiting for minutes.
 export const DROP_LOOKUP_DEADLINE_MS = 10_000;
 
 export class DeadlineError extends Error {

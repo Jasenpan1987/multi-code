@@ -1,7 +1,9 @@
-// The message after a drop (file-drop PRD Story 4): what a drop's report says, how
-// long it stays, and which drops' messages show at once. Nothing here reads the
-// document or the clock, so it is tested apart from DropMessage and App.
+// The message after a drop (file-drop PRD Stories 4 and 6): what a drop's report
+// says, how long it stays, and which drops' messages show at once. Nothing here reads
+// the document or the clock, so it is tested apart from DropMessage and App.
 
+import { finderSize, MAX_DROP_BYTES, MAX_DROP_FILES } from "../../shared/dropLimits";
+import type { PastDropLimit } from "../../shared/dropLimits";
 import type { DropCopyOutcome } from "../../shared/types";
 import { MAX_SHOWN_NAMES } from "./dropFlow";
 import type { DropReport } from "./dropFlow";
@@ -27,7 +29,7 @@ export const HIDE_FAILED_AFTER_MS = 12000;
 // The least it stays once the pointer leaves it: hovering holds it.
 export const LINGER_MS = 2000;
 
-export type DropLineTone = "busy" | "ok" | "partial" | "failed" | "more";
+export type DropLineTone = "busy" | "ok" | "failed" | "more";
 
 export interface DropLine {
   tone: DropLineTone;
@@ -38,8 +40,8 @@ export interface DropLine {
 
 export interface DropMessageText {
   lines: DropLine[];
-  // The whole message's: the copy running, everything copied, something copied
-  // only in part, or something not copied at all.
+  // The whole message's: the copy running, everything copied, or something not
+  // copied.
   tone: Exclude<DropLineTone, "more">;
 }
 
@@ -58,15 +60,33 @@ function outcomeLine(outcome: DropCopyOutcome): DropLine {
       path: true,
     };
   }
-  if (outcome.partial) {
-    // Where what was copied is; the reason starts "partly copied: ".
-    return {
-      tone: "partial",
-      text: `${outcome.display ?? baseName(outcome.source)} (${outcome.reason})`,
-      path: true,
-    };
-  }
   return { tone: "failed", text: `${baseName(outcome.source)}: ${outcome.reason}`, path: true };
+}
+
+/**
+ * What a drop past a limit says: what it was past, and to put the files where they
+ * were going with Finder instead. `folder` is the default folder as main shows it
+ * (`docs/`), null for the project folder.
+ */
+export function pastLimitText(
+  limit: PastDropLimit,
+  count: number,
+  folder: string | null
+): string {
+  let what: string;
+  if (limit.kind === "too-many") {
+    what = `${count} files, up to ${MAX_DROP_FILES} at a time`;
+  } else if (limit.kind === "too-large") {
+    const most = finderSize(MAX_DROP_BYTES);
+    const total = finderSize(limit.bytes);
+    // A byte or a few past it still rounds to the limit: "1 GB, up to 1 GB" would
+    // read as within it.
+    what = `${total === most ? `more than ${most}` : total}, up to ${most} at a time`;
+  } else {
+    what = "folders can't be dropped";
+  }
+  const them = count === 1 ? "it" : "them";
+  return `Nothing copied: ${what}. Put ${them} in ${folder ?? "the project folder"} with Finder.`;
 }
 
 /**
@@ -81,6 +101,17 @@ export function dropMessage(report: DropReport, max = MAX_SHOWN_NAMES): DropMess
     case "only-finder":
       return {
         lines: [{ tone: "failed", text: "Only files from Finder can be dropped", path: false }],
+        tone: "failed",
+      };
+    case "past-limit":
+      return {
+        lines: [
+          {
+            tone: "failed",
+            text: pastLimitText(report.limit, report.count, report.folder),
+            path: false,
+          },
+        ],
         tone: "failed",
       };
     case "error":
@@ -104,16 +135,7 @@ export function dropMessage(report: DropReport, max = MAX_SHOWN_NAMES): DropMess
           path: false,
         });
       }
-      const tone =
-        failedAt.length === 0
-          ? "ok"
-          : failedAt.every((i) => {
-                const o = outcomes[i];
-                return !o.ok && o.partial === true;
-              })
-            ? "partial"
-            : "failed";
-      return { lines, tone };
+      return { lines, tone: failedAt.length === 0 ? "ok" : "failed" };
     }
   }
 }

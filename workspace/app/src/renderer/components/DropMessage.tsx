@@ -1,8 +1,8 @@
-// Where a drop's files went, or why they didn't (file-drop PRD Story 4), at the
-// bottom right of the window, a card per drop. Each goes by itself; the pointer on
-// it holds it, a click puts it away. It never takes the keyboard: nothing in it can
-// be focused, and a press on it leaves the focus where it was, so typing goes on
-// reaching the terminal.
+// Where a drop's files went, or why they didn't (file-drop PRD Stories 4 and 6), at
+// the bottom right of the window, a card per drop. Each goes by itself; the pointer
+// on it holds it, a click puts it away. It never takes the keyboard: nothing in it
+// can be focused, and a press on it leaves the focus where it was, so typing goes
+// on reaching the terminal.
 
 import { useEffect, useRef, useState } from "react";
 import { dropMessage, hideAfterMs, LINGER_MS } from "./dropNotice";
@@ -12,7 +12,6 @@ import type { DropReport } from "./dropFlow";
 const MARKS: Record<DropLineTone, string> = {
   busy: "",
   ok: "✓",
-  partial: "!",
   failed: "✕",
   more: "",
 };

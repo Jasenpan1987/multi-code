@@ -310,29 +310,23 @@ export interface DropFolder {
   display: string | null;
 }
 
-// One dropped path, for the dialog's title ("Put 2 files…") and its list. A path
-// that is gone counts as a file; its copy then reports it.
+// One dropped path, for the drop's limits (shared/dropLimits.ts) and the dialog's
+// title ("Put 2 files…") and list. lstat's: a link is not a folder, and its size is
+// its own. A path that is gone counts as an empty file; its copy then reports it.
 export interface DroppedItem {
   name: string;
   isDirectory: boolean;
+  // Bytes.
+  size: number;
 }
 
 // One dropped path's copy, in the drop's order. `destination` is absolute and
 // `display` is the same path as the message shows it (`docs/sources/inbox/report
-// 2.docx`, a folder with a trailing `/`). `renamed`: the name was taken, so the copy
-// got a number. `reason` is short and plain: "no permission", "no longer exists".
-// `partial`: a folder copy stopped partway; what it copied stays at `destination`
-// (and `display`), and the reason starts "partly copied: ".
+// 2.docx`). `renamed`: the name was taken, so the copy got a number. `reason` is
+// short and plain: "no permission", "no longer exists".
 export type DropCopyOutcome =
   | { ok: true; source: string; destination: string; renamed: boolean; display: string }
-  | {
-      ok: false;
-      source: string;
-      reason: string;
-      partial?: true;
-      destination?: string;
-      display?: string;
-    };
+  | { ok: false; source: string; reason: string };
 
 export interface ElectronAPI {
   // Instance management
@@ -441,8 +435,11 @@ export interface ElectronAPI {
   // The native folder picker, able to make a new folder. `message` is the line shown
   // above it; it opens in `startFolder`. Null when cancelled.
   pickDropFolder: (message: string, startFolder: string) => Promise<string | null>;
-  // Copies, never moves or overwrites; one outcome per source. Never rejects for a
-  // file that fails, only for a contact that can't take drops.
+  // Copies, never moves or overwrites; one outcome per source. A drop past the
+  // limits (shared/dropLimits.ts) when the copy starts copies nothing: every outcome
+  // fails. The limits steer big drops to Finder; they don't bound a file another
+  // program grows during the copy. Never rejects for a file that fails, only for a
+  // contact that can't take drops.
   copyDropped: (
     instanceId: string,
     sources: string[],
