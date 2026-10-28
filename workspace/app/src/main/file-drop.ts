@@ -157,8 +157,9 @@ export async function copyIntoFolder(
   sources: string[],
   targetDir: string
 ): Promise<DropCopyResult[]> {
-  // The renderer checks this first; main does again, on its own. A drop that is too
-  // many isn't looked at further.
+  // The renderer checks this first; main does again, on its own, as the copy starts.
+  // A drop that is too many isn't looked at further. The limits steer big drops to
+  // Finder; a file another program grows meanwhile is copied as it then is.
   const items =
     sources.length > MAX_DROP_FILES ? [] : await Promise.all(sources.map(describePath));
   const past = pastDropLimit(sources.length, items);

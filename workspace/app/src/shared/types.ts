@@ -436,8 +436,10 @@ export interface ElectronAPI {
   // above it; it opens in `startFolder`. Null when cancelled.
   pickDropFolder: (message: string, startFolder: string) => Promise<string | null>;
   // Copies, never moves or overwrites; one outcome per source. A drop past the
-  // limits (shared/dropLimits.ts) copies nothing: every outcome fails. Never rejects
-  // for a file that fails, only for a contact that can't take drops.
+  // limits (shared/dropLimits.ts) when the copy starts copies nothing: every outcome
+  // fails. The limits steer big drops to Finder; they don't bound a file another
+  // program grows during the copy. Never rejects for a file that fails, only for a
+  // contact that can't take drops.
   copyDropped: (
     instanceId: string,
     sources: string[],
