@@ -6,7 +6,7 @@ import {
   dropStep,
   dropTitle,
   HELD_KEY_WINDOW_MS,
-  holdKeys,
+  holdInput,
   lookupTooSlowMessage,
   shownNames,
   somewhereElseMessage,
@@ -135,7 +135,7 @@ function key(type: string, code: string, repeat = false, target?: unknown): Even
   Object.defineProperty(e, "code", { value: code });
   Object.defineProperty(e, "key", { value: code });
   Object.defineProperty(e, "repeat", { value: repeat });
-  // What it was aimed at, for holdKeys' `allow`; Node's has no tree to set it.
+  // What it was aimed at, for holdInput's `allow`; Node's has no tree to set it.
   if (target !== undefined) Object.defineProperty(e, "target", { value: target });
   return e;
 }
@@ -240,24 +240,90 @@ describe("swallowHeldKeyRepeats", () => {
   });
 });
 
-describe("holdKeys", () => {
-  const DIALOG = { in: "dialog" };
-  const allow = (to: EventTarget | null) => (to as unknown) === DIALOG;
+describe("holdInput", () => {
+  // Every kind of input the hold stops, as the window sees each.
+  const INPUT = [
+    "keydown",
+    "keypress",
+    "paste",
+    "beforeinput",
+    "input",
+    "compositionstart",
+    "compositionupdate",
+    "compositionend",
+    "drop",
+  ];
+  // What events are aimed at: an element in the drop's dialog, and one outside it
+  // (the terminal's textarea), each able to lose the focus.
+  let inDialog: { blur: () => void };
+  let terminal: { blur: () => void };
+  const allow = (to: EventTarget | null) => (to as unknown) === inDialog;
 
-  it("keeps every key from everything but what it allows", () => {
-    let release = () => {};
-    const { reached, send } = behindGuard((t) => (release = holdKeys(t, allow)));
-    expect(send(key("keydown", "Enter")).defaultPrevented).toBe(true);
-    send(key("keypress", "Enter"));
-    send(key("keydown", "KeyX", true));
+  beforeEach(() => {
+    inDialog = { blur: vi.fn() };
+    terminal = { blur: vi.fn() };
+  });
+
+  // An event of `type` at `to`; a drop carries a dataTransfer with `dragTypes`.
+  function aimed(type: string, to: unknown, dragTypes = ["text/plain"]): Event {
+    const e = new Event(type, { cancelable: true });
+    Object.defineProperty(e, "target", { value: to });
+    if (type === "drop") Object.defineProperty(e, "dataTransfer", { value: { types: dragTypes } });
+    return e;
+  }
+
+  // The hold first, as on a window its capture listeners run before the page's.
+  // What reaches the page behind it, by event type.
+  function held() {
+    const target = new EventTarget();
+    const release = holdInput(target, allow);
+    const reached: string[] = [];
+    for (const type of [...INPUT, "focusin"]) {
+      target.addEventListener(type, (e) => reached.push(e.type));
+    }
+    return { release, reached, send: (e: Event) => (target.dispatchEvent(e), e) };
+  }
+
+  it("stops every kind of input aimed outside the dialog", () => {
+    const { reached, send } = held();
+    for (const type of INPUT) {
+      expect(send(aimed(type, terminal)).defaultPrevented, type).toBe(true);
+    }
     expect(reached).toEqual([]);
+  });
 
-    send(key("keydown", "Enter", false, DIALOG));
-    expect(reached).toEqual(["Enter"]);
+  it("lets the dialog's own input through", () => {
+    const { reached, send } = held();
+    for (const type of INPUT) {
+      expect(send(aimed(type, inDialog)).defaultPrevented, type).toBe(false);
+    }
+    expect(reached).toEqual(INPUT);
+  });
 
+  it("leaves dropped files to useFileDrop, and stops dropped text", () => {
+    const { reached, send } = held();
+    expect(send(aimed("drop", terminal, ["Files"])).defaultPrevented).toBe(false);
+    expect(send(aimed("drop", terminal, ["text/plain"])).defaultPrevented).toBe(true);
+    expect(reached).toEqual(["drop"]);
+  });
+
+  it("takes the focus off anything outside the dialog, and leaves the dialog's", () => {
+    const { send } = held();
+    send(aimed("focusin", terminal));
+    send(aimed("focusin", inDialog));
+    expect(terminal.blur).toHaveBeenCalledTimes(1);
+    expect(inDialog.blur).not.toHaveBeenCalled();
+  });
+
+  it("lets everything through once released", () => {
+    const { release, reached, send } = held();
     release();
-    send(key("keydown", "KeyX"));
-    expect(reached).toEqual(["Enter", "KeyX"]);
+    for (const type of INPUT) {
+      expect(send(aimed(type, terminal)).defaultPrevented, type).toBe(false);
+    }
+    send(aimed("focusin", terminal));
+    expect(terminal.blur).not.toHaveBeenCalled();
+    expect(reached).toEqual([...INPUT, "focusin"]);
   });
 });
 
@@ -338,7 +404,10 @@ describe("withDeadline", () => {
 });
 
 describe("lookupTooSlowMessage", () => {
-  it("says nothing was copied and what took too long", () => {
+  it("says nothing was copied and what took too long, for each step", () => {
+    expect(lookupTooSlowMessage("focus")).toBe(
+      "Nothing copied: bringing Multi-Code to the front took over 10 seconds"
+    );
     expect(lookupTooSlowMessage("folder")).toBe(
       "Nothing copied: reading the default folder took over 10 seconds"
     );

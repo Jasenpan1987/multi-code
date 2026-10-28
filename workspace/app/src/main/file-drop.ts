@@ -24,7 +24,8 @@ export interface DropFailed {
   reason: string;
   // Set when a folder copy stopped partway. What it copied stays (Multi-Code never
   // deletes anything), in the folder at `destination`, and the reason starts
-  // "partly copied: ".
+  // "partly copied: ", then names where inside the folder it stopped:
+  // "partly copied: b-sub/secret.txt: no permission".
   partial?: true;
   destination?: string;
 }
@@ -63,7 +64,13 @@ export function plainReason(err: unknown): string {
   if (code === "EACCES" || code === "EPERM") return "no permission";
   if (code === "ENOSPC") return "disk full";
   if (code === "ENOENT") return "no longer exists";
-  return err instanceof Error ? err.message : String(err);
+  if (code === "EEXIST") return "already exists";
+  if (!(err instanceof Error)) return String(err);
+  // An fs error's message ends with the call and its full paths ("EIO: i/o error,
+  // copyfile '/a' -> '/b'"). The message already names the file, so keep the start.
+  const syscall = (err as NodeJS.ErrnoException).syscall;
+  const tail = syscall ? err.message.indexOf(`, ${syscall} '`) : -1;
+  return tail > 0 ? err.message.slice(0, tail) : err.message;
 }
 
 export interface FileId {
@@ -127,20 +134,43 @@ async function claimName(
 // contents come after), an exclusive copy of a file, or the link itself with its
 // target unchanged, as Finder copies one. Each fails with EEXIST rather than replace
 // what is there.
+//
+// A folder starts as 0700, open to no one else, and gets the source's mode only once
+// fillFolder has filled it. A copy that stops partway is kept, so a private source
+// folder must not leave its files readable by others in an unfinished copy.
 async function createEntry(
   source: string,
   destination: string,
   stat: fs.Stats | fs.BigIntStats
 ): Promise<void> {
   if (stat.isDirectory()) {
-    await fs.promises.mkdir(destination);
+    await fs.promises.mkdir(destination, { mode: 0o700 });
   } else if (stat.isFile()) {
     await fs.promises.copyFile(source, destination, fs.constants.COPYFILE_EXCL);
   } else if (stat.isSymbolicLink()) {
     await fs.promises.symlink(await fs.promises.readlink(source), destination);
   } else {
     // A socket or a pipe: copyFile would block reading a pipe forever.
-    throw new Error(`${path.basename(source)} is not a file or folder`);
+    throw new Error("not a file or folder");
+  }
+}
+
+// Where in the dropped folder a folder copy stopped, and why.
+class StoppedAt extends Error {
+  constructor(
+    readonly entry: string,
+    readonly error: unknown
+  ) {
+    super(`${entry}: ${plainReason(error)}`);
+  }
+}
+
+// One step of the walk, done for `entry` (its path inside the dropped folder).
+async function step<T>(entry: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    throw new StoppedAt(entry, err);
   }
 }
 
@@ -155,24 +185,33 @@ async function createEntry(
 // only reach it through a real folder entry, which isSameOrInside rules out before
 // the copy starts. The check here is for what that can't see: a bind mount, a
 // hard-linked folder, or a firmlink between a folder and its parent.
+//
+// `at` is where `source` sits inside the dropped folder ("" for the folder itself).
+// The walk stops at the first failure, and says where with a StoppedAt.
 async function fillFolder(
   source: string,
   destination: string,
   mode: number,
-  copyId: FileId
+  copyId: FileId,
+  at = ""
 ): Promise<void> {
   // In name order, so a copy that stops partway has a predictable part.
-  for (const entry of (await fs.promises.readdir(source)).sort()) {
+  const entries = await step(at, async () => (await fs.promises.readdir(source)).sort());
+  for (const entry of entries) {
     const from = path.join(source, entry);
     const to = path.join(destination, entry);
-    const stat = await fs.promises.lstat(from, { bigint: true });
-    if (stat.isDirectory() && stat.dev === copyId.dev && stat.ino === copyId.ino) {
-      throw new Error(SAME_FOLDER);
-    }
-    await createEntry(from, to, stat);
-    if (stat.isDirectory()) await fillFolder(from, to, Number(stat.mode), copyId);
+    const inside = path.join(at, entry);
+    const stat = await step(inside, async () => {
+      const stat = await fs.promises.lstat(from, { bigint: true });
+      if (stat.isDirectory() && stat.dev === copyId.dev && stat.ino === copyId.ino) {
+        throw new Error(SAME_FOLDER);
+      }
+      await createEntry(from, to, stat);
+      return stat;
+    });
+    if (stat.isDirectory()) await fillFolder(from, to, Number(stat.mode), copyId, inside);
   }
-  await fs.promises.chmod(destination, mode & 0o7777);
+  await step(at, () => fs.promises.chmod(destination, mode & 0o7777));
 }
 
 async function copyOne(
@@ -204,11 +243,14 @@ async function copyOne(
         await fillFolder(source, claimed.destination, stat.mode, copyId);
       } catch (err) {
         // What was copied stays: Multi-Code never deletes, and the folder may by now
-        // hold something that isn't ours. The result says it is incomplete.
+        // hold something that isn't ours. The result says it is incomplete, and
+        // where it stopped unless that was the dropped folder itself.
+        const where = err instanceof StoppedAt && err.entry ? `${err.entry}: ` : "";
+        const why = plainReason(err instanceof StoppedAt ? err.error : err);
         return {
           ok: false,
           source,
-          reason: `partly copied: ${plainReason(err)}`,
+          reason: `partly copied: ${where}${why}`,
           partial: true,
           destination: claimed.destination,
         };

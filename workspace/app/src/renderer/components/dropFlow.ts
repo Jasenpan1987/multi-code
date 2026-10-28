@@ -141,15 +141,21 @@ export function withDeadline<T>(
   });
 }
 
-// What a drop's lookups were waiting on when they ran out of time.
-export type DropLookup = "folder" | "items";
+// What a drop was waiting on when it ran out of time: main bringing the window
+// forward, the default folder, or the dropped items.
+export type DropLookup = "focus" | "folder" | "items";
+
+const TOO_SLOW: Record<DropLookup, string> = {
+  focus: "bringing Multi-Code to the front",
+  folder: "reading the default folder",
+  items: "reading the dropped files",
+};
 
 export function lookupTooSlowMessage(
   waitingOn: DropLookup,
   ms = DROP_LOOKUP_DEADLINE_MS
 ): string {
-  const what = waitingOn === "folder" ? "the default folder" : "the dropped files";
-  return `Nothing copied: reading ${what} took over ${Math.round(ms / 1000)} seconds`;
+  return `Nothing copied: ${TOO_SLOW[waitingOn]} took over ${Math.round(ms / 1000)} seconds`;
 }
 
 // Capture, so these run before the terminal's and the compose box's own listeners.
@@ -157,26 +163,52 @@ export function lookupTooSlowMessage(
 // `true`.
 const CAPTURE = { capture: true };
 
+// What the builder's input arrives as: keys, a paste (Edit → Paste, the context
+// menu, webContents.paste()), the text an input method or dictation composes, text
+// dropped on a field.
+const HELD_INPUT = [
+  "keydown",
+  "keypress",
+  "paste",
+  "beforeinput",
+  "input",
+  "compositionstart",
+  "compositionupdate",
+  "compositionend",
+  "drop",
+];
+
 /**
- * Keys reach nothing but what `allow` lets through until the returned release is
- * called. A drop holds the keyboard from its release until its dialog or picker has
- * it: the folder lookup can be slow (a network volume), and an Enter meanwhile must
- * reach no terminal or compose box, even one that takes the focus back.
+ * The builder's input reaches nothing but what `allow` lets through until the
+ * returned release is called. A drop holds it from its release until its dialog or
+ * picker has it: the folder lookup can be slow (a network volume), and an Enter or
+ * a paste meanwhile must reach no terminal or compose box. Keys, pastes, input
+ * method text and dropped text are stopped where they start, and the focus is kept
+ * off everything else, so a click on the terminal, or xterm taking the focus back,
+ * gives none of them a target. Only input: what a terminal sends by itself, its
+ * replies to the CLI's queries, still goes to its session.
  */
-export function holdKeys(
+export function holdInput(
   target: EventTarget,
   allow: (to: EventTarget | null) => boolean
 ): () => void {
-  const onKey = (e: Event) => {
+  const stop = (e: Event) => {
     if (allow(e.target)) return;
+    // Files dropped are useFileDrop's, which ignores them while a drop is going on.
+    if (e.type === "drop" && (e as DragEvent).dataTransfer?.types.includes("Files")) return;
     e.preventDefault();
     e.stopImmediatePropagation();
   };
-  target.addEventListener("keydown", onKey, CAPTURE);
-  target.addEventListener("keypress", onKey, CAPTURE);
+  const keepFocusOff = (e: Event) => {
+    if (allow(e.target)) return;
+    const to = e.target as HTMLElement | null;
+    if (typeof to?.blur === "function") to.blur();
+  };
+  for (const type of HELD_INPUT) target.addEventListener(type, stop, CAPTURE);
+  target.addEventListener("focusin", keepFocusOff, CAPTURE);
   return () => {
-    target.removeEventListener("keydown", onKey, CAPTURE);
-    target.removeEventListener("keypress", onKey, CAPTURE);
+    for (const type of HELD_INPUT) target.removeEventListener(type, stop, CAPTURE);
+    target.removeEventListener("focusin", keepFocusOff, CAPTURE);
   };
 }
 

@@ -30,7 +30,7 @@ import {
   DeadlineError,
   DROP_LOOKUP_DEADLINE_MS,
   dropStep,
-  holdKeys,
+  holdInput,
   lookupTooSlowMessage,
   somewhereElseMessage,
   swallowHeldKeyRepeats,
@@ -713,14 +713,14 @@ export function App() {
   );
 
   // At once on a drop, before anything is awaited: the folder lookup can be slow,
-  // and a key typed meanwhile must reach no terminal or compose box. Only the
-  // drop's dialog gets keys until the hold is given back.
+  // and a key typed or a paste meanwhile must reach no terminal or compose box.
+  // Only the drop's dialog gets input, or the focus, until the hold is given back.
   const takeDropKeys = useCallback(() => {
     const was = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     was?.blur();
     dropKeysRef.current = {
       was,
-      release: holdKeys(
+      release: holdInput(
         window,
         (to) => to instanceof Element && to.closest(".file-drop-dialog") !== null
       ),
@@ -780,7 +780,7 @@ export function App() {
       void (async () => {
         const api = window.electronAPI;
         // For the message, should the lookups run out of time.
-        let waitingOn: DropLookup = "folder";
+        let waitingOn: DropLookup = "focus";
         // When the drop is given up. Main brings the window forward only before
         // then: the call can reach it after the renderer has handed the keys back.
         const until = Date.now() + DROP_LOOKUP_DEADLINE_MS;
@@ -792,6 +792,7 @@ export function App() {
             // Before the dialog or picker: Finder may still be the active app.
             await api.focusDropWindow(until);
             signal.throwIfAborted();
+            waitingOn = "folder";
             const step = dropStep(await api.getDropFolder(target.id), target);
             signal.throwIfAborted();
             if (step.kind === "pick") return step;

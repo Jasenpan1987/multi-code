@@ -245,7 +245,8 @@ shows their real paths.
 ### T-706: QA and the builder's Finder test
 
 - **Type:** qa
-- **Status:** backlog
+- **Status:** in-progress (steps 1–2 done: `qa-report-m1.md`, 35/44 pass, 0 fail, 9 for
+  the builder; step 3: `test-plan-m1.md`)
 - **Story:** all
 - **Description:**
   1. Run `pnpm test`, `pnpm lint`, `pnpm type`.
@@ -268,6 +269,35 @@ shows their real paths.
 - **Parallel with:** none
 - **Notes:** The README update belongs to the release, per the release process.
 
+### T-707: Fix: a partial folder copy doesn't say which file failed
+
+- **Type:** bug
+- **Status:** done
+- **Source:** QA — `qa-report-m1.md` issue 1
+- **Description:** A folder copy stops at the first entry it can't copy (for example an
+  unreadable file), and the result reads only "partly copied: no permission". PRD
+  Story 4 says the message names the file. Put the failing entry's path inside the
+  dropped folder into the reason: "partly copied: b-sub/secret.txt: no permission".
+  Keep stopping at the first error (a predictable stop point).
+- **Acceptance:** a unit test with an unreadable file two levels down shows its relative
+  path in the reason; the existing partial-copy tests still pass.
+- **Blocks:** none
+- **Blocked by:** none
+
+### T-708: Fix: the deadline message names the wrong step when the focus call stalls
+
+- **Type:** bug
+- **Status:** done
+- **Source:** QA — `qa-report-m1.md` issue 3
+- **Description:** When `focusDropWindow` is what takes past the 10 s deadline, the
+  message says "reading the default folder took over 10 seconds", because the step
+  being waited on starts as "folder" before the focus call (`App.tsx`). Give the focus
+  call its own step and wording.
+- **Acceptance:** a unit test of the wording for each step (focus, folder, dropped
+  files); the deadline CDP check still passes.
+- **Blocks:** none
+- **Blocked by:** none
+
 ## Legend
 
 - **Blocks:** This task must complete before the listed tasks can start
@@ -280,3 +310,5 @@ shows their real paths.
   can't tell a Finder file from a browser image (PRD v1.1 changelog).
 - 2026-10-28: T-701 done (GPT review, 2 rounds: no deletes, no `fs.cp`, folder-into-itself by device and inode). T-703 done (GPT: no findings; in-page drags ignored). T-702 done (GPT: no findings). Merged into `feat/file-drop`, plus 2da48c2 for a clash between them. T-704 started; it also carries `partial`/`destination` into the copy IPC and brings the window to the front on a drop.
 - 2026-10-28: T-704 done (GPT review: two ways a key could reach the terminal around a drop, both fixed in 1a66b0e) and merged (255f73e). T-705 gained four items from T-704's report, including a deadline on the pre-dialog lookups. Builder stopped for the day; next is T-705.
+- 2026-10-29: T-705 done and merged (58cb29b). review-loop on the whole epic: main area clean after 2 rounds, renderer clean after 3; fixes uncommitted (private folder modes; input held at its sources during a drop). QA (T-706 steps 1–3): 35 of 44 criteria pass, 0 fail, 9 for the builder's test. Filed T-707, T-708 from QA issues 1 and 3; issues 2 (five-line cap) and 4 (`/tmp` vs `/private/tmp` display) left as they are.
+- 2026-10-29: T-707, T-708 done (GPT: no findings). Committed together with the review-loop fixes.

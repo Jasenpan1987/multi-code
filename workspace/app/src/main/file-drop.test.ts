@@ -51,13 +51,20 @@ beforeEach(() => {
   fs.mkdirSync(target);
 });
 
+// An unreadable test file or folder would stop rm; give everything back its
+// permissions, each folder before reading it.
+function unlock(dir: string): void {
+  for (const entry of fs.readdirSync(dir)) {
+    const full = path.join(dir, entry);
+    if (fs.lstatSync(full).isSymbolicLink()) continue;
+    fs.chmodSync(full, 0o755);
+    if (fs.statSync(full).isDirectory()) unlock(full);
+  }
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
-  // An unreadable test file would stop rm; give everything back its permissions.
-  for (const entry of fs.readdirSync(root, { recursive: true, encoding: "utf8" })) {
-    const full = path.join(root, entry);
-    if (!fs.lstatSync(full).isSymbolicLink()) fs.chmodSync(full, 0o755);
-  }
+  unlock(root);
   fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -154,6 +161,18 @@ describe("plainReason", () => {
     expect(plainReason(err("EPERM"))).toBe("no permission");
     expect(plainReason(err("ENOSPC"))).toBe("disk full");
     expect(plainReason(err("ENOENT"))).toBe("no longer exists");
+  });
+
+  it("says a name taken meanwhile is already there", () => {
+    expect(plainReason(err("EEXIST"))).toBe("already exists");
+  });
+
+  it("drops the call and the paths from an fs error, which the message names already", () => {
+    const io = Object.assign(new Error("EIO: i/o error, copyfile '/a/x.md' -> '/b/x.md'"), {
+      code: "EIO",
+      syscall: "copyfile",
+    });
+    expect(plainReason(io)).toBe("EIO: i/o error");
   });
 
   it("falls back to the error's own message", () => {
@@ -370,7 +389,7 @@ describe("copyIntoFolder", () => {
     expect(result).toEqual({
       ok: false,
       source: assets,
-      reason: "partly copied: can't copy a folder into itself",
+      reason: "partly copied: loop: can't copy a folder into itself",
       partial: true,
       destination: copied,
     });
@@ -434,7 +453,7 @@ describe("copyIntoFolder", () => {
         {
           ok: false,
           source: assets,
-          reason: "partly copied: no permission",
+          reason: "partly copied: z-locked.txt: no permission",
           partial: true,
           destination: path.join(target, "assets"),
         },
@@ -442,6 +461,40 @@ describe("copyIntoFolder", () => {
       ]);
       // Nothing is deleted: what was copied before the failure is still there.
       expect(snapshot(path.join(target, "assets"))).toEqual({ "a.txt": "a" });
+    }
+  );
+
+  it.skipIf(process.getuid?.() === 0)(
+    "names where inside the folder a partial copy stopped",
+    async () => {
+      const assets = path.join(src, "assets");
+      write(path.join(assets, "a.txt"), "a");
+      write(path.join(assets, "one", "a.txt"), "a");
+      fs.chmodSync(write(path.join(assets, "one", "two", "secret.txt"), "secret"), 0o000);
+      const lockedDir = path.join(src, "box");
+      write(path.join(lockedDir, "sub", "x.txt"), "x");
+      fs.chmodSync(path.join(lockedDir, "sub"), 0o000);
+      const unreadable = path.join(src, "closed");
+      fs.mkdirSync(unreadable);
+      fs.chmodSync(unreadable, 0o000);
+
+      const results = await copyIntoFolder([assets, lockedDir, unreadable], target);
+
+      expect(results.map((r) => !r.ok && r.reason)).toEqual([
+        // A file two folders down.
+        "partly copied: one/two/secret.txt: no permission",
+        // A folder inside that can't be read.
+        "partly copied: sub: no permission",
+        // The dropped folder itself can't be read: nothing to name but it.
+        "partly copied: no permission",
+      ]);
+      // It stopped at the first failure, and kept what came before it.
+      expect(snapshot(path.join(target, "assets"))).toEqual({
+        "a.txt": "a",
+        one: "dir",
+        "one/a.txt": "a",
+        "one/two": "dir",
+      });
     }
   );
 
@@ -478,7 +531,9 @@ describe("copyIntoFolder", () => {
     expect(results).toEqual([
       expect.objectContaining({ ok: false, partial: true, destination: copied }),
     ]);
-    expect(results[0].ok === false && results[0].reason).toMatch(/^partly copied: /);
+    expect(results[0].ok === false && results[0].reason).toBe(
+      "partly copied: entry: already exists"
+    );
     expect(theirs()).toEqual(
       kind === "link"
         ? { entry: `-> ${outside}` }
@@ -503,7 +558,7 @@ describe("copyIntoFolder", () => {
       {
         ok: false,
         source: assets,
-        reason: "partly copied: b-pipe is not a file or folder",
+        reason: "partly copied: b-pipe: not a file or folder",
         partial: true,
         destination: path.join(target, "assets"),
       },
@@ -523,6 +578,54 @@ describe("copyIntoFolder", () => {
     expect(snapshot(path.join(target, "docs"))).toEqual({ sub: "dir", "sub/a.md": "a" });
     expect(fs.statSync(path.join(target, "docs")).mode & 0o777).toBe(0o555);
     expect(fs.statSync(path.join(target, "docs", "sub")).mode & 0o777).toBe(0o555);
+  });
+
+  it("ends a finished copy with each folder's own mode", async () => {
+    const docs = path.join(src, "docs");
+    write(path.join(docs, "shared", "a.md"), "a");
+    write(path.join(docs, "private", "b.md"), "b");
+    fs.chmodSync(path.join(docs, "shared"), 0o755);
+    fs.chmodSync(path.join(docs, "private"), 0o700);
+    fs.chmodSync(docs, 0o750);
+
+    const [result] = await copyIntoFolder([docs], target);
+
+    expect(result).toMatchObject({ ok: true, destination: path.join(target, "docs") });
+    const mode = (p: string) => fs.statSync(path.join(target, "docs", p)).mode & 0o777;
+    expect(mode("")).toBe(0o750);
+    expect(mode("shared")).toBe(0o755);
+    expect(mode("private")).toBe(0o700);
+  });
+
+  // A kept partial copy must not hand a private folder's files to everyone: the
+  // folders it made stay 0700, because the source's mode comes only after a fill.
+  it("keeps the folders of a partial copy closed to group and others", async () => {
+    const secret = path.join(src, "secret");
+    const doc = write(path.join(secret, "a-doc.txt"), "private");
+    fs.chmodSync(doc, 0o644);
+    const sub = path.join(secret, "b-sub");
+    write(path.join(sub, "c-doc.txt"), "private too");
+    execFileSync("mkfifo", [path.join(sub, "d-pipe")]);
+    fs.chmodSync(sub, 0o755);
+    fs.chmodSync(secret, 0o700);
+
+    const [result] = await copyIntoFolder([secret], target);
+
+    const copied = path.join(target, "secret");
+    expect(result).toEqual({
+      ok: false,
+      source: secret,
+      reason: "partly copied: b-sub/d-pipe: not a file or folder",
+      partial: true,
+      destination: copied,
+    });
+    expect(snapshot(copied)).toEqual({
+      "a-doc.txt": "private",
+      "b-sub": "dir",
+      "b-sub/c-doc.txt": "private too",
+    });
+    expect(fs.statSync(copied).mode & 0o077).toBe(0);
+    expect(fs.statSync(path.join(copied, "b-sub")).mode & 0o077).toBe(0);
   });
 
   it("numbers a clashing folder by the folder rule", async () => {

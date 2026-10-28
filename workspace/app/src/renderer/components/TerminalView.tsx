@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
-import type { IMarker } from "@xterm/xterm";
+import type { IDisposable, IMarker } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
@@ -273,6 +273,21 @@ export function applyMainThemeToAll() {
   }
 }
 
+/**
+ * Everything a terminal sends goes to its session as it is: the builder's keys and
+ * pastes, and xterm's own replies to the CLI's queries (cursor position, device
+ * attributes), which a CLI can be waiting on. Nothing is filtered here: a drop
+ * holds the builder's input where it starts (dropFlow's holdInput). Exported for
+ * the tests.
+ */
+export function forwardToSession(
+  terminal: Terminal,
+  instanceId: string,
+  write = (id: string, data: string) => window.electronAPI.writeToInstance(id, data)
+): IDisposable {
+  return terminal.onData((data) => write(instanceId, data));
+}
+
 export function TerminalView({ instanceId, active }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
@@ -385,9 +400,7 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
     window.electronAPI.resizeInstance(instanceId, terminal.cols, terminal.rows);
 
     // Send terminal input to main process
-    terminal.onData((data) => {
-      window.electronAPI.writeToInstance(instanceId, data);
-    });
+    forwardToSession(terminal, instanceId);
 
     // Handle resize
     terminal.onResize(({ cols, rows }) => {
