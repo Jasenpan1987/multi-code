@@ -4,6 +4,39 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-10-28 — A drop takes at most 10 files and 1 GB, and no folders
+
+**Decision:** One drop copies at most 10 files and at most 1 GB (1,000,000,000 bytes, as Finder counts) in total. Folders are not accepted. Past either limit, or with a folder in it, the whole drop is refused: nothing is copied, and the message says to place the files in Finder, naming the default folder when there is one. The main process enforces the same limits on its own.
+
+**Why:** Asked by the builder after the first real Finder test. A big or unusual drop is better done in Finder, where progress and conflicts are visible; the builder never drops folders. Refusing the whole drop avoids a half-placed batch the builder would have to sort out.
+
+**Source:** 2026-10-28, builder's Finder test of the file-drop epic (PRD v1.2, Story 6).
+**Affects:** the drop flow and its message; the copy IPC; folder copying is removed from the copy engine.
+
+---
+
+## 2026-10-28 — A file dropped on Multi-Code is copied into the project, and nothing more
+
+**Decision:** A file (or folder) dragged from Finder onto any part of the window is copied into the selected session's project, to that project's default folder or to a folder picked for this drop only. Multi-Code never types into the session afterwards; the builder tells the session, as today. v1 takes Finder drags only, and every file type.
+
+**Why:** The builder's current way is "Go to Code Base", then a drag inside VS Code. Placing the file is the whole job. Writing into the session would tie the feature to the session's state, and a write into a session waiting on a dialog can answer it. Copying does not look at the file type, so a type list would only be extra work.
+
+**Source:** 2026-10-28 file-drop ideation.
+**Affects:** a drop handler in the renderer; a copy IPC in main; the preload (`webUtils.getPathForFile`).
+
+---
+
+## 2026-10-28 — Each project has its own default drop folder, which the builder picks
+
+**Decision:** The default drop folder is per project, keyed by the project directory (cwd), so two contacts on one project share it. The first drop in a project says there is no default folder yet and opens a folder picker; the folder picked becomes the default, and the files go there. Every later drop confirms the folder. "Choose another folder" applies to that drop only; "Change default path" changes the project's default. Multi-Code finds no folder by itself, and nothing depends on OMT.
+
+**Why:** Project layouts differ, so one global path would put files in the wrong place. The builder knows where a project's files belong; the OMT input folder is only one example of a folder they pick. (A look-up order from OMT folders was recorded first and corrected by the builder in the same session.)
+
+**Source:** 2026-10-28 file-drop ideation.
+**Affects:** a per-project folder map in the persisted settings; the drop confirmation.
+
+---
+
 ## 2026-10-27 — Multi-Code moves an OpenCode terminal's view with keys it binds there
 
 **Decision:** To show a finished turn's conclusion from its first line in OpenCode, Multi-Code binds one more key each to OpenCode's own `session.last` and `session.message.previous`, only in the terminals it starts (`OPENCODE_CLI_CONFIG_CONTENT`, after the builder's own keys for those commands), and sends those keys itself. The keys are Cmd+Ctrl+Option+Shift+F11/F12, which no keyboard can send into Multi-Code's terminal. They go through their own IPC, not as input: the run state, the secretary's event and the phone's badge stay as they are. The TUI plugin stays report-only.

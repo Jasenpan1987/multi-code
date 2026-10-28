@@ -74,7 +74,8 @@ once, they read the same contacts and overwrite each other's spawn files. Never 
 - `contacts.json` — the instance list. Each entry: id, cwd (project directory),
   alias (display name), backend, sessionId (the session its next start resumes, so
   two contacts on one project stay apart)
-- `settings.json` — theme, phone-link enabled, Secretary Mode, speech server address
+- `settings.json` — theme, phone-link enabled, Secretary Mode, speech server address,
+  each project's default drop folder
 - `remote-identity.json`, `remote-devices.json` — phone-link keys and paired devices
 - `manager-mcp.json` — the manager's `--mcp-config`, written 0600 because it carries
   a bearer token; removed on shutdown

@@ -9,6 +9,7 @@ import {
 } from "electron";
 import { spawn } from "child_process";
 import { writeFileSync, rmSync, statSync, readFileSync } from "fs";
+import { stat } from "fs/promises";
 import { tmpdir, homedir } from "os";
 import { join, resolve, dirname, basename, extname } from "path";
 import { processManager } from "./process-manager";
@@ -18,19 +19,26 @@ import { getFileDiff, isInsideCwd } from "./git-diff";
 import { backendAvailability, getBackend } from "./backends";
 import type { BackendName } from "./backends";
 import {
+  loadDropFolder,
   loadSecretarySettings,
   loadSettings,
   loadSpeechServer,
   saveSettings,
+  setDropFolder,
   setSecretaryMode,
   setSpeechServer,
 } from "./settings-store";
 import type { ThemeName } from "./settings-store";
 import { testServer } from "./secretary/speech";
 import { secretary } from "./secretary";
+import { copyIntoFolder, describePath, displayPath, dropStillWaiting } from "./file-drop";
+import { debugTrace } from "./debug-trace";
 import type {
   CreateManagerResult,
   DiffSide,
+  DropCopyOutcome,
+  DropFolder,
+  DroppedItem,
   FileDiff,
   ReadFileResult,
   SpeechKeyChange,
@@ -91,6 +99,32 @@ async function readClipboardPng(): Promise<Buffer | null> {
     return image.isEmpty() ? null : image.toPNG();
   }
   return null;
+}
+
+// The project a drop on this contact goes into: its directory as stored, which
+// also keys its default folder, so contacts on one project share it. The manager's
+// directory is Multi-Code's own and takes no drops; the renderer refuses it first.
+function dropProjectDir(instanceId: unknown): string {
+  const instance = processManager.listInstances().find((i) => i.id === instanceId);
+  if (!instance || instance.isManager) {
+    throw new Error("this contact has no project to drop files into");
+  }
+  return instance.cwd;
+}
+
+async function dropFolderOf(projectDir: string): Promise<DropFolder> {
+  const folder = loadDropFolder(projectDir);
+  if (folder === null) return { path: null, exists: false, display: null };
+  // stat, not lstat: a default folder reached through a link is still there.
+  const exists = await stat(folder).then(
+    (s) => s.isDirectory(),
+    () => false
+  );
+  return { path: folder, exists, display: displayPath(folder, projectDir, homedir(), true) };
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((v) => typeof v === "string");
 }
 
 export function registerIpcHandlers() {
@@ -486,6 +520,103 @@ export function registerIpcHandlers() {
     saveSettings(next);
     return next;
   });
+
+  // ---------------------------------------------------------------------
+  // File drop: files dropped from Finder are copied into the selected
+  // contact's project. Nothing here ever writes to a session.
+  // ---------------------------------------------------------------------
+
+  ipcMain.handle("file-drop-get-folder", (_event, instanceId: string) =>
+    dropFolderOf(dropProjectDir(instanceId))
+  );
+
+  // setDropFolder refuses anything but an absolute path.
+  ipcMain.handle("file-drop-set-folder", (_event, instanceId: string, folder: string) => {
+    const projectDir = dropProjectDir(instanceId);
+    setDropFolder(projectDir, folder);
+    return dropFolderOf(projectDir);
+  });
+
+  // What the renderer checks the drop's limits against, and its dialog lists. A path
+  // that is gone counts as an empty file rather than failing the whole call; its copy
+  // reports it.
+  ipcMain.handle(
+    "file-drop-describe",
+    (_event, paths: string[]): Promise<DroppedItem[]> => {
+      if (!isStringArray(paths)) throw new TypeError("paths must be an array of strings");
+      return Promise.all(
+        paths.map(async (p) => ({ name: basename(p), ...(await describePath(p)) }))
+      );
+    }
+  );
+
+  // A drop from Finder leaves Finder the active app (macOS doesn't switch on a
+  // drop), so the Enter meant for the dialog or the picker that follows would go to
+  // Finder. Stealing is fine here: the builder just dropped files on this window.
+  // Not once the renderer has given the drop up (`until`, epoch ms): a call that
+  // reaches here that late would take the keys with no dialog to show.
+  ipcMain.handle("file-drop-focus-window", (event, until: unknown) => {
+    if (!dropStillWaiting(until, Date.now())) return;
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    if (process.platform === "darwin") app.focus({ steal: true });
+    win.focus();
+  });
+
+  // On the window the drop landed on rather than the focused one, unlike
+  // select-directory: with no focused window the picker would never open and read
+  // as a cancel.
+  ipcMain.handle(
+    "file-drop-pick-folder",
+    async (event, message: string, startFolder: string): Promise<string | null> => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win) return null;
+      const result = await dialog.showOpenDialog(win, {
+        properties: ["openDirectory", "createDirectory"],
+        message: typeof message === "string" ? message : undefined,
+        defaultPath:
+          typeof startFolder === "string" && startFolder !== "" ? startFolder : undefined,
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      return result.filePaths[0];
+    }
+  );
+
+  // Every path goes to the trace as JSON, so the builder's Finder test can read
+  // the real dropped paths, spaces and all: `grep file-drop` in the log. A drop past
+  // the limits copies nothing, whatever the renderer checked (copyIntoFolder).
+  ipcMain.handle(
+    "file-drop-copy",
+    async (
+      _event,
+      instanceId: string,
+      sources: string[],
+      targetDir: string
+    ): Promise<DropCopyOutcome[]> => {
+      const projectDir = dropProjectDir(instanceId);
+      if (!isStringArray(sources) || typeof targetDir !== "string") {
+        throw new TypeError("sources must be an array of strings and the target a string");
+      }
+      debugTrace(
+        `[file-drop] copy ${JSON.stringify(sources)} -> ${JSON.stringify(targetDir)} (project ${JSON.stringify(projectDir)}) at ${new Date().toISOString()}`
+      );
+      const home = homedir();
+      const outcomes: DropCopyOutcome[] = [];
+      for (const result of await copyIntoFolder(sources, targetDir)) {
+        if (!result.ok) {
+          debugTrace(`[file-drop]   failed ${JSON.stringify(result.source)}: ${result.reason}`);
+          outcomes.push(result);
+          continue;
+        }
+        debugTrace(
+          `[file-drop]   copied ${JSON.stringify(result.source)} -> ${JSON.stringify(result.destination)}${result.renamed ? " (renamed)" : ""}`
+        );
+        // A copy is a file, or a link copied as itself: never shown as a folder.
+        outcomes.push({ ...result, display: displayPath(result.destination, projectDir, home, false) });
+      }
+      return outcomes;
+    }
+  );
 
   // ---------------------------------------------------------------------
   // Phone link

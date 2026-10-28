@@ -21,11 +21,32 @@ import {
 } from "./components/secretaryBrief";
 import type { BriefMap, OpenCard } from "./components/secretaryBrief";
 import { DiffWindow } from "./components/DiffWindow";
+import { DropMessage } from "./components/DropMessage";
+import { DropOverlay } from "./components/DropOverlay";
+import { FileDropDialog } from "./components/FileDropDialog";
+import {
+  allOnDisk,
+  changeDefaultMessage,
+  DeadlineError,
+  DROP_LOOKUP_DEADLINE_MS,
+  dropStep,
+  holdInput,
+  lookupTooSlowMessage,
+  somewhereElseMessage,
+  swallowHeldKeyRepeats,
+  withDeadline,
+} from "./components/dropFlow";
+import type { DropLookup, DropReport } from "./components/dropFlow";
+import { COPYING_DELAY_MS, withDropReport } from "./components/dropNotice";
+import type { DropNotice } from "./components/dropNotice";
+import { MAX_DROP_FILES } from "../shared/dropLimits";
+import { ipcErrorMessage } from "./components/secretaryText";
 import { cleanupShellTerminal } from "./components/TerminalSection";
 import { Toolbox } from "./components/Toolbox";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { VersionBadge } from "./components/VersionBadge";
 import { useNotifications } from "./hooks/useNotifications";
+import { useFileDrop } from "./hooks/useFileDrop";
 import { ThemeContext } from "./hooks/useTheme";
 import { playMessageSound, playCoughSound, stopMessageSound } from "./audio/sounds";
 import {
@@ -36,6 +57,7 @@ import type {
   Instance,
   BackendName,
   DiffSide,
+  DroppedItem,
   ThemeName,
 } from "../shared/types";
 
@@ -93,6 +115,21 @@ export function App() {
   const [secretaryMode, setSecretaryMode] = useState(false);
   const [briefs, setBriefs] = useState<BriefMap>({});
   const [card, setCard] = useState<OpenCard | null>(null);
+  // File drop (epic file-drop). What the last few drops came to, for the message at
+  // the bottom of the window: the copy running, its outcomes, or why nothing was
+  // copied.
+  const [dropNotices, setDropNotices] = useState<DropNotice[]>([]);
+  // The drop waiting on its dialog (PRD Story 3): its paths, what they are, and the
+  // default folder offered. `picking`: one of the dialog's pickers is open.
+  const [dropPrompt, setDropPrompt] = useState<{
+    drop: number;
+    target: Instance;
+    sources: string[];
+    items: DroppedItem[];
+    folder: string;
+    display: string;
+    picking: boolean;
+  } | null>(null);
   // The shown instance, for listeners subscribed once.
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
@@ -653,6 +690,199 @@ export function App() {
   const selectedInstance = selectedId
     ? instances.find((i) => i.id === selectedId)
     : null;
+
+  // Files dragged onto the window go into the selected contact's project (epic
+  // file-drop): through the picker while the project has no default folder, else
+  // through the dialog. A drop past the limits (shared/dropLimits.ts) gets only a
+  // message. Nothing on the way writes to the session.
+
+  // Drops are numbered as they come, so each one's report goes to its own message.
+  const dropCountRef = useRef(0);
+  const reportDrop = useCallback((drop: number, report: DropReport) => {
+    setDropNotices((notices) => withDropReport(notices, drop, report));
+  }, []);
+  const dismissDrop = useCallback((drop: number) => {
+    setDropNotices((notices) => notices.filter((n) => n.drop !== drop));
+  }, []);
+
+  // A drop between its release and its dialog or first picker. Another drop then
+  // is ignored, as one is while the dialog is open.
+  const dropBusyRef = useRef(false);
+  // The keyboard while a drop holds it: where it was when the files were dropped
+  // (the terminal, usually, or the compose box), and the hold's release.
+  const dropKeysRef = useRef<{ was: HTMLElement | null; release: () => void } | null>(
+    null
+  );
+
+  // At once on a drop, before anything is awaited: the folder lookup can be slow,
+  // and a key typed or a paste meanwhile must reach no terminal or compose box.
+  // Only the drop's dialog gets input, or the focus, until the hold is given back.
+  const takeDropKeys = useCallback(() => {
+    const was = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    was?.blur();
+    dropKeysRef.current = {
+      was,
+      release: holdInput(
+        window,
+        (to) => to instanceof Element && to.closest(".file-drop-dialog") !== null
+      ),
+    };
+  }, []);
+
+  // The dialog or picker is gone, or the drop failed before either: the keys go
+  // back where they were, else to the shown terminal as after the other dialogs,
+  // and never a held key's repeats.
+  const returnDropKeys = useCallback(() => {
+    const keys = dropKeysRef.current;
+    if (!keys) return;
+    dropKeysRef.current = null;
+    keys.release();
+    swallowHeldKeyRepeats(window);
+    if (keys.was?.isConnected && keys.was !== document.body) keys.was.focus();
+    else if (selectedIdRef.current) getTerminal(selectedIdRef.current)?.focus();
+  }, []);
+
+  // Into `folder`, saved first as the project's default when asked. Never rejects:
+  // every outcome, failures included, goes to the report.
+  const copyDrop = useCallback(
+    async (
+      drop: number,
+      target: Instance,
+      sources: string[],
+      folder: string,
+      asDefault: boolean
+    ) => {
+      // "Copying…" only once the copy takes a moment; a quick one goes straight to
+      // where the files went.
+      const slow = setTimeout(() => reportDrop(drop, { kind: "copying" }), COPYING_DELAY_MS);
+      try {
+        if (asDefault) await window.electronAPI.setDropFolder(target.id, folder);
+        const outcomes = await window.electronAPI.copyDropped(target.id, sources, folder);
+        reportDrop(drop, { kind: "copied", outcomes });
+      } catch (err) {
+        reportDrop(drop, { kind: "error", message: ipcErrorMessage(err) });
+      } finally {
+        clearTimeout(slow);
+      }
+    },
+    [reportDrop]
+  );
+
+  const handleFileDrop = useCallback(
+    (files: File[], target: Instance) => {
+      if (dropBusyRef.current) return;
+      const drop = ++dropCountRef.current;
+      const sources = files.map((f) => window.electronAPI.getPathForFile(f));
+      if (!allOnDisk(sources)) {
+        reportDrop(drop, { kind: "only-finder" });
+        return;
+      }
+      dropBusyRef.current = true;
+      takeDropKeys();
+      void (async () => {
+        const api = window.electronAPI;
+        // For the message, should the lookups run out of time.
+        let waitingOn: DropLookup = "focus";
+        // When the drop is given up. Main brings the window forward only before
+        // then: the call can reach it after the renderer has handed the keys back.
+        const until = Date.now() + DROP_LOOKUP_DEADLINE_MS;
+        try {
+          // Everything up to the dialog, the picker or the past-limit message, while
+          // the keyboard is held, under one deadline: a lookup that never returns
+          // must not keep the keys. Only lookups in here; a late answer is dropped,
+          // and acts on nothing.
+          const { folder, items } = await withDeadline(async (signal) => {
+            // Before the dialog or picker: Finder may still be the active app.
+            await api.focusDropWindow(until);
+            signal.throwIfAborted();
+            waitingOn = "folder";
+            const folder = await api.getDropFolder(target.id);
+            signal.throwIfAborted();
+            // The limits (Story 6), before the picker and the dialog. Folders and
+            // the total size need the items; too many are refused by the count.
+            if (sources.length > MAX_DROP_FILES) return { folder, items: [] };
+            waitingOn = "items";
+            return { folder, items: await api.describeDropped(sources) };
+          }, DROP_LOOKUP_DEADLINE_MS);
+          const next = dropStep(folder, target, sources.length, items);
+          if (next.kind === "refuse") {
+            returnDropKeys();
+            reportDrop(drop, next.report);
+            return;
+          }
+          // The picker has no deadline: the builder may take their time.
+          if (next.kind === "pick") {
+            const picked = await api
+              .pickDropFolder(next.message, next.start)
+              .finally(returnDropKeys);
+            if (picked !== null) void copyDrop(drop, target, sources, picked, true);
+            return;
+          }
+          setDropPrompt({
+            drop,
+            target,
+            sources,
+            items,
+            folder: next.folder,
+            display: next.display,
+            picking: false,
+          });
+        } catch (err) {
+          returnDropKeys();
+          reportDrop(drop, {
+            kind: "error",
+            message:
+              err instanceof DeadlineError
+                ? lookupTooSlowMessage(waitingOn)
+                : ipcErrorMessage(err),
+          });
+        } finally {
+          dropBusyRef.current = false;
+        }
+      })();
+    },
+    [copyDrop, reportDrop, takeDropKeys, returnDropKeys]
+  );
+  const fileDrop = useFileDrop(selectedInstance ?? null, handleFileDrop);
+
+  const closeDropPrompt = useCallback(() => {
+    setDropPrompt(null);
+    returnDropKeys();
+  }, [returnDropKeys]);
+
+  const putDropHere = () => {
+    if (!dropPrompt || dropPrompt.picking) return;
+    closeDropPrompt();
+    void copyDrop(
+      dropPrompt.drop,
+      dropPrompt.target,
+      dropPrompt.sources,
+      dropPrompt.folder,
+      false
+    );
+  };
+
+  // The dialog's two pickers, both starting in the default folder. The dialog stays
+  // up behind the picker. Cancelling copies nothing and leaves the default as it was.
+  const pickForDrop = async (asDefault: boolean) => {
+    if (!dropPrompt || dropPrompt.picking) return;
+    const prompt = dropPrompt;
+    setDropPrompt({ ...prompt, picking: true });
+    const message = asDefault
+      ? changeDefaultMessage(prompt.target.name)
+      : somewhereElseMessage(prompt.display);
+    try {
+      const picked = await window.electronAPI
+        .pickDropFolder(message, prompt.folder)
+        .finally(closeDropPrompt);
+      if (picked !== null) {
+        void copyDrop(prompt.drop, prompt.target, prompt.sources, picked, asDefault);
+      }
+    } catch (err) {
+      reportDrop(prompt.drop, { kind: "error", message: ipcErrorMessage(err) });
+    }
+  };
+
   // Backend of the currently selected instance drives the outer-chrome skin
   // (blue for claude, green for opencode). Backend is per-instance, so this
   // rides selection rather than the global <html data-theme>. Falls back to
@@ -1003,6 +1233,22 @@ export function App() {
           onAskAgent={handleAskAgent}
         />
       )}
+
+      {dropPrompt && (
+        <FileDropDialog
+          project={dropPrompt.target.name}
+          folder={dropPrompt.display}
+          items={dropPrompt.items}
+          picking={dropPrompt.picking}
+          onPutHere={putDropHere}
+          onSomewhereElse={() => void pickForDrop(false)}
+          onChangeDefault={() => void pickForDrop(true)}
+          onClose={closeDropPrompt}
+        />
+      )}
+
+      <DropMessage notices={dropNotices} onDismiss={dismissDrop} />
+      <DropOverlay state={fileDrop} />
     </div>
     </ThemeContext.Provider>
   );

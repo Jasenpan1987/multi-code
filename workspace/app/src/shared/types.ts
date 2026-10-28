@@ -10,6 +10,9 @@ export interface AppSettings {
   remoteEnabled: boolean;
   secretaryMode: boolean;
   speechServerUrl: string;
+  // Project directory → its default drop folder. The drop flow reads one through
+  // getDropFolder, which also says whether it still exists.
+  dropFolders: Record<string, string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -293,6 +296,38 @@ export type ReadFileResult =
   | { ok: true; path: string; content: string }
   | { ok: false; path: string; error: ReadFileError };
 
+// ---------------------------------------------------------------------------
+// File drop (epic file-drop)
+// ---------------------------------------------------------------------------
+
+// A project's default drop folder. `path` is null until the first drop sets one;
+// `exists` is false once it has been deleted or moved. `display` is how the dialog
+// shows it (`docs/sources/inbox/`, or `~/Downloads/` outside the project), made in
+// main because the renderer has no home directory. Null with `path`.
+export interface DropFolder {
+  path: string | null;
+  exists: boolean;
+  display: string | null;
+}
+
+// One dropped path, for the drop's limits (shared/dropLimits.ts) and the dialog's
+// title ("Put 2 files…") and list. lstat's: a link is not a folder, and its size is
+// its own. A path that is gone counts as an empty file; its copy then reports it.
+export interface DroppedItem {
+  name: string;
+  isDirectory: boolean;
+  // Bytes.
+  size: number;
+}
+
+// One dropped path's copy, in the drop's order. `destination` is absolute and
+// `display` is the same path as the message shows it (`docs/sources/inbox/report
+// 2.docx`). `renamed`: the name was taken, so the copy got a number. `reason` is
+// short and plain: "no permission", "no longer exists".
+export type DropCopyOutcome =
+  | { ok: true; source: string; destination: string; renamed: boolean; display: string }
+  | { ok: false; source: string; reason: string };
+
 export interface ElectronAPI {
   // Instance management
   createInstance: (
@@ -385,6 +420,34 @@ export interface ElectronAPI {
 
   // Manager activity feed
   getManagerActivity: () => Promise<ManagerActivityEntry[]>;
+
+  // File drop. The ones taking an instance id act on that contact's project
+  // directory, as stored, which keys its default folder: contacts on one project
+  // share it. They reject for the manager or an unknown contact.
+  getDropFolder: (instanceId: string) => Promise<DropFolder>;
+  // Resolves to the folder as getDropFolder now reports it.
+  setDropFolder: (instanceId: string, folder: string) => Promise<DropFolder>;
+  describeDropped: (paths: string[]) => Promise<DroppedItem[]>;
+  // Makes Multi-Code the active app with the calling window in front, so the
+  // dialog or picker a drop opens gets the keyboard rather than Finder. Does nothing
+  // once `until` (epoch ms, when the drop is given up) has passed.
+  focusDropWindow: (until: number) => Promise<void>;
+  // The native folder picker, able to make a new folder. `message` is the line shown
+  // above it; it opens in `startFolder`. Null when cancelled.
+  pickDropFolder: (message: string, startFolder: string) => Promise<string | null>;
+  // Copies, never moves or overwrites; one outcome per source. A drop past the
+  // limits (shared/dropLimits.ts) when the copy starts copies nothing: every outcome
+  // fails. The limits steer big drops to Finder; they don't bound a file another
+  // program grows during the copy. Never rejects for a file that fails, only for a
+  // contact that can't take drops.
+  copyDropped: (
+    instanceId: string,
+    sources: string[],
+    targetDir: string
+  ) => Promise<DropCopyOutcome[]>;
+  // The real path of a dropped File, "" when it has none on disk (an image dragged
+  // out of a browser). Synchronous, not an IPC: Electron has no File.path.
+  getPathForFile: (file: File) => string;
 
   // Compose box: clipboard image -> temp file (renderer has no fs access)
   saveClipboardImage: () => Promise<SavedClipboardImage | null>;
