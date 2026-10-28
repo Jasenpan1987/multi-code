@@ -3302,6 +3302,8 @@ body,
 .drop-card-path {
   font-family: Menlo, Monaco, "Courier New", monospace;
   overflow-wrap: anywhere;
+  /* A path's runs of spaces are part of it. */
+  white-space: pre-wrap;
 }
 
 .drop-card-title {
@@ -3328,6 +3330,8 @@ body,
 .file-drop-names {
   font-family: Menlo, Monaco, "Courier New", monospace;
   overflow-wrap: anywhere;
+  /* A path's runs of spaces are part of it. */
+  white-space: pre-wrap;
 }
 
 .file-drop-folder {
@@ -3346,7 +3350,8 @@ body,
 
 .file-drop-names li {
   overflow: hidden;
-  white-space: nowrap;
+  /* One line, spaces kept. */
+  white-space: pre;
   text-overflow: ellipsis;
 }
 
@@ -3444,6 +3449,8 @@ body,
 .drop-message-text {
   min-width: 0;
   overflow-wrap: anywhere;
+  /* A path's runs of spaces are part of it. */
+  white-space: pre-wrap;
 }
 
 .drop-message-mark {

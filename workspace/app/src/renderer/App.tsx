@@ -781,13 +781,16 @@ export function App() {
         const api = window.electronAPI;
         // For the message, should the lookups run out of time.
         let waitingOn: DropLookup = "folder";
+        // When the drop is given up. Main brings the window forward only before
+        // then: the call can reach it after the renderer has handed the keys back.
+        const until = Date.now() + DROP_LOOKUP_DEADLINE_MS;
         try {
           // Everything up to the dialog or picker, while the keyboard is held, under
           // one deadline: a lookup that never returns must not keep the keys. Only
           // lookups in here; a late answer is dropped, and acts on nothing.
           const next = await withDeadline(async (signal) => {
             // Before the dialog or picker: Finder may still be the active app.
-            await api.focusDropWindow();
+            await api.focusDropWindow(until);
             signal.throwIfAborted();
             const step = dropStep(await api.getDropFolder(target.id), target);
             signal.throwIfAborted();

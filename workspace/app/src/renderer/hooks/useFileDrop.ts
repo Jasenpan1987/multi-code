@@ -59,22 +59,29 @@ export function useFileDrop(
       fromPage = false;
     };
 
-    const onEnter = (e: DragEvent) => {
-      if (!filesDrag(e)) return;
-      entered = e.target;
-      setDragging(true);
-      setDialogOpen(isDialogOpen());
-    };
-    const onOver = (e: DragEvent) => {
-      const data = filesDrag(e);
-      if (!data) return;
-      // Without it no drop event arrives. Where the files can't go, the effect is
-      // "none", so the pointer shows no copy badge and letting go drops nothing.
+    // Without it no drop event arrives. Where the files can't go, the effect is
+    // "none", so the pointer shows no copy badge and letting go drops nothing. On
+    // dragenter as well as dragover: a drop let go of as the overlay appears lands
+    // on it before any dragover has, and is then taken from its dragenter alone.
+    const accept = (e: DragEvent, data: DataTransfer) => {
       e.preventDefault();
       const open = isDialogOpen();
       setDialogOpen(open);
       const state = dropState(latest.current.selected, open);
       data.dropEffect = state.kind === "target" ? "copy" : "none";
+    };
+
+    const onEnter = (e: DragEvent) => {
+      const data = filesDrag(e);
+      if (!data) return;
+      entered = e.target;
+      setDragging(true);
+      accept(e, data);
+    };
+    const onOver = (e: DragEvent) => {
+      const data = filesDrag(e);
+      if (!data) return;
+      accept(e, data);
     };
     const onLeave = (e: DragEvent) => {
       if (filesDrag(e) && e.target === entered) hide();
