@@ -9,7 +9,7 @@ import {
 } from "electron";
 import { spawn } from "child_process";
 import { writeFileSync, rmSync, statSync, readFileSync } from "fs";
-import { lstat, stat } from "fs/promises";
+import { stat } from "fs/promises";
 import { tmpdir, homedir } from "os";
 import { join, resolve, dirname, basename, extname } from "path";
 import { processManager } from "./process-manager";
@@ -31,7 +31,7 @@ import {
 import type { ThemeName } from "./settings-store";
 import { testServer } from "./secretary/speech";
 import { secretary } from "./secretary";
-import { copyIntoFolder, displayPath, dropStillWaiting } from "./file-drop";
+import { copyIntoFolder, describePath, displayPath, dropStillWaiting } from "./file-drop";
 import { debugTrace } from "./debug-trace";
 import type {
   CreateManagerResult,
@@ -110,14 +110,6 @@ function dropProjectDir(instanceId: unknown): string {
     throw new Error("this contact has no project to drop files into");
   }
   return instance.cwd;
-}
-
-// lstat: a dropped link is copied as a link, so it counts as a file, as in Finder.
-function isFolder(target: string): Promise<boolean> {
-  return lstat(target).then(
-    (s) => s.isDirectory(),
-    () => false
-  );
 }
 
 async function dropFolderOf(projectDir: string): Promise<DropFolder> {
@@ -545,14 +537,15 @@ export function registerIpcHandlers() {
     return dropFolderOf(projectDir);
   });
 
-  // A path that is gone counts as a file rather than failing the whole call; its
-  // copy reports it.
+  // What the renderer checks the drop's limits against, and its dialog lists. A path
+  // that is gone counts as an empty file rather than failing the whole call; its copy
+  // reports it.
   ipcMain.handle(
     "file-drop-describe",
     (_event, paths: string[]): Promise<DroppedItem[]> => {
       if (!isStringArray(paths)) throw new TypeError("paths must be an array of strings");
       return Promise.all(
-        paths.map(async (p) => ({ name: basename(p), isDirectory: await isFolder(p) }))
+        paths.map(async (p) => ({ name: basename(p), ...(await describePath(p)) }))
       );
     }
   );
@@ -590,7 +583,8 @@ export function registerIpcHandlers() {
   );
 
   // Every path goes to the trace as JSON, so the builder's Finder test can read
-  // the real dropped paths, spaces and all: `grep file-drop` in the log.
+  // the real dropped paths, spaces and all: `grep file-drop` in the log. A drop past
+  // the limits copies nothing, whatever the renderer checked (copyIntoFolder).
   ipcMain.handle(
     "file-drop-copy",
     async (
@@ -610,22 +604,15 @@ export function registerIpcHandlers() {
       const outcomes: DropCopyOutcome[] = [];
       for (const result of await copyIntoFolder(sources, targetDir)) {
         if (!result.ok) {
-          debugTrace(
-            `[file-drop]   failed ${JSON.stringify(result.source)}: ${result.reason}${result.destination ? ` (kept ${JSON.stringify(result.destination)})` : ""}`
-          );
-          // Only a folder copy stops partway, so what it kept is a folder.
-          outcomes.push(
-            result.destination
-              ? { ...result, display: displayPath(result.destination, projectDir, home, true) }
-              : result
-          );
+          debugTrace(`[file-drop]   failed ${JSON.stringify(result.source)}: ${result.reason}`);
+          outcomes.push(result);
           continue;
         }
         debugTrace(
           `[file-drop]   copied ${JSON.stringify(result.source)} -> ${JSON.stringify(result.destination)}${result.renamed ? " (renamed)" : ""}`
         );
-        const folder = await isFolder(result.destination);
-        outcomes.push({ ...result, display: displayPath(result.destination, projectDir, home, folder) });
+        // A copy is a file, or a link copied as itself: never shown as a folder.
+        outcomes.push({ ...result, display: displayPath(result.destination, projectDir, home, false) });
       }
       return outcomes;
     }

@@ -5,6 +5,7 @@ import {
   HIDE_FAILED_AFTER_MS,
   hideAfterMs,
   MAX_NOTICES,
+  pastLimitText,
   withDropReport,
 } from "./dropNotice";
 import type { DropNotice } from "./dropNotice";
@@ -22,14 +23,6 @@ const failed = (source: string, reason: string): DropCopyOutcome => ({
   source,
   reason,
 });
-const partly = (source: string, display: string, why: string): DropCopyOutcome => ({
-  ok: false,
-  source,
-  reason: `partly copied: ${why}`,
-  partial: true,
-  destination: `/p/${display}`,
-  display,
-});
 const texts = (outcomes: DropCopyOutcome[], max?: number) =>
   dropMessage({ kind: "copied", outcomes }, max).lines.map((l) => l.text);
 
@@ -37,11 +30,11 @@ describe("dropMessage", () => {
   it("lists every copy's path as main shows it, in the drop's order", () => {
     const message = dropMessage({
       kind: "copied",
-      outcomes: [copied("docs/sources/inbox/report.docx"), copied("docs/sources/inbox/assets/")],
+      outcomes: [copied("docs/sources/inbox/report.docx"), copied("docs/sources/inbox/data.csv")],
     });
     expect(message.lines).toEqual([
       { tone: "ok", text: "docs/sources/inbox/report.docx", path: true },
-      { tone: "ok", text: "docs/sources/inbox/assets/", path: true },
+      { tone: "ok", text: "docs/sources/inbox/data.csv", path: true },
     ]);
     expect(message.tone).toBe("ok");
   });
@@ -69,37 +62,17 @@ describe("dropMessage", () => {
     expect(message.tone).toBe("failed");
   });
 
-  it("says a folder dropped into itself is refused", () => {
-    expect(
-      texts([failed("/tmp/p/inbox", "can't copy a folder into itself"), copied("inbox/a.md")])
-    ).toEqual(["inbox: can't copy a folder into itself", "inbox/a.md"]);
-  });
-
-  it("reads a partial copy as partly copied, with where what was copied is", () => {
+  it("says why main refused a whole drop, for each file", () => {
+    const reason = "the drop has a folder";
     const message = dropMessage({
       kind: "copied",
-      outcomes: [partly("/Users/me/assets", "inbox/assets 2/", "disk full"), copied("inbox/a.md")],
+      outcomes: [failed("/a/report.docx", reason), failed("/a/assets", reason)],
     });
-    expect(message.lines[0]).toEqual({
-      tone: "partial",
-      text: "inbox/assets 2/ (partly copied: disk full)",
-      path: true,
-    });
-    expect(message.tone).toBe("partial");
-  });
-
-  it("names a partial copy by its source when main gave no path", () => {
-    expect(
-      texts([{ ok: false, source: "/Users/me/assets", reason: "partly copied: disk full", partial: true }])
-    ).toEqual(["assets (partly copied: disk full)"]);
-  });
-
-  it("is failed, not partial, once anything wasn't copied at all", () => {
-    const { tone } = dropMessage({
-      kind: "copied",
-      outcomes: [partly("/a/x", "x/", "disk full"), failed("/a/y", "no longer exists")],
-    });
-    expect(tone).toBe("failed");
+    expect(message.lines.map((l) => l.text)).toEqual([
+      "report.docx: the drop has a folder",
+      "assets: the drop has a folder",
+    ]);
+    expect(message.tone).toBe("failed");
   });
 
   it("past the limit keeps every failure, then the first copies, and counts the rest", () => {
@@ -151,10 +124,63 @@ describe("dropMessage", () => {
     });
   });
 
+  it("says a drop past a limit copied nothing, in one line", () => {
+    expect(
+      dropMessage({ kind: "past-limit", limit: { kind: "too-many" }, count: 12, folder: "docs/" })
+    ).toEqual({
+      lines: [
+        {
+          tone: "failed",
+          text: "Nothing copied: 12 files, up to 10 at a time. Put them in docs/ with Finder.",
+          path: false,
+        },
+      ],
+      tone: "failed",
+    });
+  });
+
   it("gives an error's own message", () => {
     expect(dropMessage({ kind: "error", message: "No such instance" }).lines).toEqual([
       { tone: "failed", text: "No such instance", path: false },
     ]);
+  });
+});
+
+describe("pastLimitText", () => {
+  it("says how many were dropped, the limit, and where to put them, with a default", () => {
+    expect(pastLimitText({ kind: "too-many" }, 12, "docs/")).toBe(
+      "Nothing copied: 12 files, up to 10 at a time. Put them in docs/ with Finder."
+    );
+  });
+
+  it("says the project folder without a default", () => {
+    expect(pastLimitText({ kind: "too-many" }, 11, null)).toBe(
+      "Nothing copied: 11 files, up to 10 at a time. Put them in the project folder with Finder."
+    );
+  });
+
+  it("gives the total as Finder shows it, and the 1 GB limit", () => {
+    expect(pastLimitText({ kind: "too-large", bytes: 1_412_345_678 }, 3, "docs/")).toBe(
+      "Nothing copied: 1.41 GB, up to 1 GB at a time. Put them in docs/ with Finder."
+    );
+    expect(pastLimitText({ kind: "too-large", bytes: 12_345_678_901 }, 1, null)).toBe(
+      "Nothing copied: 12.35 GB, up to 1 GB at a time. Put it in the project folder with Finder."
+    );
+  });
+
+  it("says more than 1 GB when the total rounds to the limit itself", () => {
+    expect(pastLimitText({ kind: "too-large", bytes: 1_000_000_001 }, 2, "docs/")).toBe(
+      "Nothing copied: more than 1 GB, up to 1 GB at a time. Put them in docs/ with Finder."
+    );
+  });
+
+  it("says folders can't be dropped, for one folder or a mix", () => {
+    expect(pastLimitText({ kind: "folder" }, 1, "~/Downloads/")).toBe(
+      "Nothing copied: folders can't be dropped. Put it in ~/Downloads/ with Finder."
+    );
+    expect(pastLimitText({ kind: "folder" }, 3, null)).toBe(
+      "Nothing copied: folders can't be dropped. Put them in the project folder with Finder."
+    );
   });
 });
 
@@ -168,9 +194,9 @@ describe("hideAfterMs", () => {
     expect(
       hideAfterMs({ kind: "copied", outcomes: [copied("in/a"), failed("/b", "disk full")] })
     ).toBe(HIDE_FAILED_AFTER_MS);
-    expect(hideAfterMs({ kind: "copied", outcomes: [partly("/b", "b/", "disk full")] })).toBe(
-      HIDE_FAILED_AFTER_MS
-    );
+    expect(
+      hideAfterMs({ kind: "past-limit", limit: { kind: "folder" }, count: 1, folder: null })
+    ).toBe(HIDE_FAILED_AFTER_MS);
     expect(hideAfterMs({ kind: "only-finder" })).toBe(HIDE_FAILED_AFTER_MS);
     expect(hideAfterMs({ kind: "error", message: "x" })).toBe(HIDE_FAILED_AFTER_MS);
     expect(HIDE_FAILED_AFTER_MS).toBeGreaterThan(HIDE_AFTER_MS);
