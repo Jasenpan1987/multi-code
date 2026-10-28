@@ -27,6 +27,7 @@ When working with multiple coding-agent sessions across different projects simul
 - **Next unread with `Option+Shift+↓`** — `Option+Shift+↓` switches to the next contact with unread alerts, looking down the list from the one shown and round to the top; `Option+Shift+↑` looks up (Slack's and Discord's keys). As with `Cmd+1`…`Cmd+9`, the cursor goes into its terminal and the session you leave keeps its badge. In the Compose Box the keys keep their usual text-selection meaning
 - **Lands on the conclusion** — When a turn finishes, the terminal shows its conclusion (what the agent said after its last tool call) from the first line, so you start reading there and scroll up yourself for the steps. A session out of sight when it finished jumps when you next switch to it; one you're reading higher up stays put, and a conclusion already on screen doesn't move. For Claude Code this needs its classic renderer (`"tui": "default"` in `~/.claude/settings.json`); its fullscreen renderer scrolls itself and is left alone. OpenCode is moved with its own "previous message" command, on two keys Multi-Code binds only in the terminals it starts (Cmd+Ctrl+Option+Shift+F11/F12, which no keyboard can send there). Terminals keep 5,000 lines of scrollback
 - **Compose Box** — `Cmd+L` summons an editor over the terminal: multi-line input, mouse editing, `Enter` to send / `Shift+Enter` for a newline, and image paste (with a thumbnail preview) sent as an `@<path>` attachment. For long messages the folded TUI input makes awkward. Works for both backends
+- **Drop files from Finder** — Drag files from Finder onto any part of the window to copy them into the selected contact's project, without opening VS Code. The first drop in a project asks for its default folder (it can be outside the project); every later drop asks "Put 2 files in multi-code?" and shows the folder: **Put here** (`Enter`), **Somewhere else…** for this drop only, or **Change default path…**. Files are copied, never moved or overwritten (a name already there becomes `report 2.docx`, as in Finder), and a short message shows where each one went. Nothing is typed into the session. One drop takes files only, at most 10 and 1 GB in total; past that, or with a folder in it, nothing is copied and the message says to use Finder. Each project keeps its own default folder. Not with the Manager selected
 - **Side-by-side diff** — Open any changed file from the Git section in a movable, resizable diff window. Select lines and hit **Ask agent** to drop an `@path:start-end` reference into the Compose Box
 - **Three-Column Layout** — Contact list | terminal | toolbox, with a draggable splitter between terminal and toolbox
 
@@ -113,11 +114,12 @@ multi-code/
 │       │   │   ├── remote/            # Phone Link: WebSocket server, crypto, paired devices
 │       │   │   ├── secretary/         # Voice secretary: brief writer, speech client, reply interpreter
 │       │   │   ├── shell-manager.ts  # Spawns & manages shell PTYs (toolbox Terminal)
+│       │   │   ├── file-drop.ts      # Copies files dropped from Finder, Finder-style names, never overwrites
 │       │   │   ├── git-status.ts     # Git status reader (used by toolbox)
 │       │   │   ├── git-diff.ts       # Reads a file's diff as aligned old/new rows
 │       │   │   ├── ipc-handlers.ts    # IPC endpoint registration
 │       │   │   ├── preload.ts         # Context bridge (electronAPI)
-│       │   │   ├── settings-store.ts  # settings.json (theme, phone link, secretary) and the speech key
+│       │   │   ├── settings-store.ts  # settings.json (theme, phone link, secretary, drop folders) and the speech key
 │       │   │   └── store.ts           # contacts.json (in Electron's userData folder)
 │       │   ├── renderer/       # React UI
 │       │   │   ├── App.tsx
@@ -500,7 +502,7 @@ trusts, it says so and points you to the terminal.
 Everything Multi-Code keeps lives in Electron's user-data folder. On macOS that is `~/Library/Application Support/Multi-Code/` for the installed app, and `~/Library/Application Support/multi-code/` when running from source. On a standard macOS disk, file names ignore case, so these are the same folder: a dev build and the installed app share one contact list, and running both at once makes them overwrite each other's files.
 
 - `contacts.json` — instance list (directory + alias + backend), in sidebar order
-- `settings.json` — theme, whether Phone Link is on, Secretary Mode, and the speech server address
+- `settings.json` — theme, whether Phone Link is on, Secretary Mode, the speech server address, and each project's default drop folder
 - `speech-key` — the secretary's speech server key, alone in a `0600` file. Never in `settings.json`, never logged; kept across runs
 - `remote-identity.json`, `remote-devices.json` — Phone Link keys and paired phones
 - `manager/` — the manager agent's working folder and its `CLAUDE.md`

@@ -27,6 +27,7 @@
 - **`Option+Shift+↓` 跳到下一个未读** — `Option+Shift+↓` 切到下一个有未读提醒的联系人,从当前这个往下找,到底再从最上面找;`Option+Shift+↑` 往上找。和 Slack、Discord 用的键一样。跟 `Cmd+1`…`Cmd+9` 一样,光标直接进它的终端,离开的那个会话红点不变。在消息编辑框里,这两个键还是原来的选中文字功能
 - **停在结论上** — 一轮结束时,终端从结论的第一行开始显示(结论就是 agent 最后一次调用工具之后说的话)。你从那里开始读,想看过程就自己往上滑。结束时没显示的会话,等你下次切过去时再跳;你正往上翻着看的不动;结论已经整个在屏幕上的也不动。Claude Code 需要用经典模式(`~/.claude/settings.json` 里 `"tui": "default"`);全屏模式自己管滚动,Multi-Code 不动它。OpenCode 用它自己的"上一条消息"命令来跳,按的是 Multi-Code 只在自己启动的 OpenCode 终端里绑的两个键(Cmd+Ctrl+Option+Shift+F11/F12,键盘在那里按不出来)。终端保留 5000 行滚动记录
 - **消息编辑框** — `Cmd+L` 在终端上唤起一个编辑框:多行输入、鼠标编辑、`Enter` 发送 / `Shift+Enter` 换行,还能粘贴图片(带缩略图预览)一起发出去。适合折叠 TUI 输入框里写不方便的长消息。两种后端都能用
+- **从 Finder 拖文件进来** — 从 Finder 把文件拖到窗口任意位置,就会复制进当前选中联系人的项目,不用再打开 VS Code。项目第一次拖文件时,会让你选它的默认文件夹(可以在项目外面);以后每次都会弹框问 "Put 2 files in multi-code?",并显示目标文件夹:**Put here**(`Enter`)放进去,**Somewhere else…** 只这一次放到别处,**Change default path…** 改默认文件夹。文件是复制,不会移动,也不会覆盖(重名就像 Finder 一样叫 `report 2.docx`),复制完有一条短消息列出每个文件放到了哪里。不会往会话里输入任何东西。一次只收文件,最多 10 个、总共 1 GB;超过限制或者里面有文件夹,就一个都不复制,消息会让你改用 Finder。每个项目记住自己的默认文件夹。选中 Manager 时不能拖
 - **左右对照 diff** — 在 Git section 里打开任意变更文件的 diff 窗口,可以拖动、可以缩放。选中几行点 **Ask agent**,就会把 `@path:start-end` 引用塞进编辑框
 - **三栏布局** — 联系人列表 | 终端 | 工具箱,终端和工具箱之间有可拖拽分栏
 
@@ -113,11 +114,12 @@ multi-code/
 │       │   │   ├── remote/            # 手机互联:WebSocket server、加密、已配对设备
 │       │   │   ├── secretary/         # 语音秘书:写汇报、语音客户端、理解回复
 │       │   │   ├── shell-manager.ts  # spawn 和管理 shell PTY(工具箱 Terminal)
+│       │   │   ├── file-drop.ts      # 复制从 Finder 拖进来的文件,重名按 Finder 的规则改名,从不覆盖
 │       │   │   ├── git-status.ts     # Git 状态读取(工具箱用)
 │       │   │   ├── git-diff.ts       # 把文件 diff 读成新旧对齐的行
 │       │   │   ├── ipc-handlers.ts    # IPC 端点注册
 │       │   │   ├── preload.ts         # context bridge(electronAPI)
-│       │   │   ├── settings-store.ts  # settings.json(主题、手机互联、秘书)和语音密钥
+│       │   │   ├── settings-store.ts  # settings.json(主题、手机互联、秘书、拖放文件夹)和语音密钥
 │       │   │   └── store.ts           # contacts.json(在 Electron 的 userData 目录里)
 │       │   ├── renderer/       # React UI
 │       │   │   ├── App.tsx
@@ -450,7 +452,7 @@ Manager 的角色 guidance 放在它文件夹里的 `CLAUDE.md`。你可以改;�
 Multi-Code 自己存的东西都在 Electron 的 userData 目录里。macOS 上安装版是 `~/Library/Application Support/Multi-Code/`,从源码跑是 `~/Library/Application Support/multi-code/`。macOS 默认的磁盘格式文件名不分大小写,所以这其实是同一个文件夹:开发版和安装版共用一份联系人列表,两个同时开会互相覆盖对方的文件。
 
 - `contacts.json`:实例列表(目录 + alias + 后端),按侧边栏顺序
-- `settings.json`:主题、手机互联开没开、秘书模式、语音服务器地址
+- `settings.json`:主题、手机互联开没开、秘书模式、语音服务器地址、每个项目拖文件的默认文件夹
 - `speech-key`:秘书的语音服务器密钥,单独一个 `0600` 文件。不放进 `settings.json`,不写日志,重启后保留
 - `remote-identity.json`、`remote-devices.json`:手机互联的密钥和已配对手机
 - `manager/`:Manager agent 的工作目录和它的 `CLAUDE.md`
