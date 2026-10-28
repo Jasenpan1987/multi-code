@@ -31,7 +31,7 @@ import {
 import type { ThemeName } from "./settings-store";
 import { testServer } from "./secretary/speech";
 import { secretary } from "./secretary";
-import { copyIntoFolder, displayPath } from "./file-drop";
+import { copyIntoFolder, displayPath, dropStillWaiting } from "./file-drop";
 import { debugTrace } from "./debug-trace";
 import type {
   CreateManagerResult,
@@ -560,7 +560,10 @@ export function registerIpcHandlers() {
   // A drop from Finder leaves Finder the active app (macOS doesn't switch on a
   // drop), so the Enter meant for the dialog or the picker that follows would go to
   // Finder. Stealing is fine here: the builder just dropped files on this window.
-  ipcMain.handle("file-drop-focus-window", (event) => {
+  // Not once the renderer has given the drop up (`until`, epoch ms): a call that
+  // reaches here that late would take the keys with no dialog to show.
+  ipcMain.handle("file-drop-focus-window", (event, until: unknown) => {
+    if (!dropStillWaiting(until, Date.now())) return;
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return;
     if (process.platform === "darwin") app.focus({ steal: true });

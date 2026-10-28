@@ -47,6 +47,10 @@
   --secretary-quote-border: #c3b3e0;
   --secretary-muted-fg: #778;
   --secretary-warn-fg: #9a5b00;
+  /* The message after a file drop: copied, copied in part, not copied. */
+  --drop-ok-fg: #1f7a3d;
+  --drop-partial-fg: #9a5b00;
+  --drop-failed-fg: #c62828;
 }
 
 [data-theme="dark"] {
@@ -90,6 +94,9 @@
   --secretary-quote-border: #5e4f7a;
   --secretary-muted-fg: #999;
   --secretary-warn-fg: #e0b060;
+  --drop-ok-fg: #8fd9a3;
+  --drop-partial-fg: #e0b060;
+  --drop-failed-fg: #ff8a80;
 }
 
 [data-theme="dark"] .alerts-degraded-bar {
@@ -186,6 +193,9 @@
   --secretary-quote-border: #cdb3b8;
   --secretary-muted-fg: #8a7855;
   --secretary-warn-fg: #9a5200;
+  --drop-ok-fg: #4f7a2a;
+  --drop-partial-fg: #9a5200;
+  --drop-failed-fg: #b5332a;
 }
 
 * {
@@ -3292,6 +3302,8 @@ body,
 .drop-card-path {
   font-family: Menlo, Monaco, "Courier New", monospace;
   overflow-wrap: anywhere;
+  /* A path's runs of spaces are part of it. */
+  white-space: pre-wrap;
 }
 
 .drop-card-title {
@@ -3318,6 +3330,8 @@ body,
 .file-drop-names {
   font-family: Menlo, Monaco, "Courier New", monospace;
   overflow-wrap: anywhere;
+  /* A path's runs of spaces are part of it. */
+  white-space: pre-wrap;
 }
 
 .file-drop-folder {
@@ -3336,7 +3350,8 @@ body,
 
 .file-drop-names li {
   overflow: hidden;
-  white-space: nowrap;
+  /* One line, spaces kept. */
+  white-space: pre;
   text-overflow: ellipsis;
 }
 
@@ -3368,4 +3383,102 @@ body,
   margin-top: 8px;
   font-size: 10px;
   color: #889;
+}
+
+/* The message after a drop (DropMessage): a card per drop at the bottom right,
+   over the toolbox when it shows, so the terminal's prompt at the bottom left stays
+   in view while the builder types a path into it. Above the terminal and the
+   compose box, under the dialogs: a drop's next dialog covers it. The stack itself
+   takes no pointer, only its cards. Themed like the compose box. */
+.drop-message-stack {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 900;
+  width: min(420px, calc(100% - 24px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.drop-message {
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px 6px 8px;
+  background: var(--compose-bg);
+  color: var(--compose-fg);
+  border: 1px solid var(--compose-border);
+  border-left: 3px solid var(--compose-focus-border);
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: auto;
+  cursor: default;
+  user-select: none;
+}
+
+.drop-message[data-tone="ok"] {
+  border-left-color: var(--drop-ok-fg);
+}
+
+.drop-message[data-tone="partial"] {
+  border-left-color: var(--drop-partial-fg);
+}
+
+.drop-message[data-tone="failed"] {
+  border-left-color: var(--drop-failed-fg);
+}
+
+.drop-message-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.drop-message-line[data-path] .drop-message-text {
+  font-family: Menlo, Monaco, "Courier New", monospace;
+  font-size: 11px;
+}
+
+.drop-message-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  /* A path's runs of spaces are part of it. */
+  white-space: pre-wrap;
+}
+
+.drop-message-mark {
+  flex: none;
+  width: 10px;
+  font-weight: bold;
+  text-align: center;
+}
+
+.drop-message-line[data-tone="ok"] .drop-message-mark {
+  color: var(--drop-ok-fg);
+}
+
+.drop-message-line[data-tone="partial"] .drop-message-mark {
+  color: var(--drop-partial-fg);
+}
+
+.drop-message-line[data-tone="failed"] .drop-message-mark {
+  color: var(--drop-failed-fg);
+}
+
+.drop-message-line[data-tone="busy"],
+.drop-message-line[data-tone="more"] {
+  color: var(--compose-hint-fg);
+}
+
+/* Under the lines that have a mark, not under the marks. */
+.drop-message-line[data-tone="more"] {
+  padding-left: 16px;
+  font-size: 11px;
 }

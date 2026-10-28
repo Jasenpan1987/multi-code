@@ -293,3 +293,18 @@ export function displayPath(
   }
   return full === path.sep ? full : full + slash;
 }
+
+// ---------------------------------------------------------------------------
+// The window a drop brings forward
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether a drop still waits on its dialog at `now`: `until` (epoch ms) is when the
+ * renderer gives it up. Past that the renderer has abandoned the drop and handed the
+ * keyboard back, so bringing the window forward would take the keys from whatever
+ * app the builder went on to, with no dialog to show for it. Anything but a finite
+ * number counts as past.
+ */
+export function dropStillWaiting(until: unknown, now: number): boolean {
+  return typeof until === "number" && Number.isFinite(until) && now < until;
+}

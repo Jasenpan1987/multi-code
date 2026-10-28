@@ -85,7 +85,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("file-drop-set-folder", instanceId, folder),
   describeDropped: (paths: string[]) =>
     ipcRenderer.invoke("file-drop-describe", paths),
-  focusDropWindow: () => ipcRenderer.invoke("file-drop-focus-window"),
+  focusDropWindow: (until: number) => ipcRenderer.invoke("file-drop-focus-window", until),
   pickDropFolder: (message: string, startFolder: string) =>
     ipcRenderer.invoke("file-drop-pick-folder", message, startFolder),
   copyDropped: (instanceId: string, sources: string[], targetDir: string) =>

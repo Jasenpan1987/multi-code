@@ -435,8 +435,9 @@ export interface ElectronAPI {
   setDropFolder: (instanceId: string, folder: string) => Promise<DropFolder>;
   describeDropped: (paths: string[]) => Promise<DroppedItem[]>;
   // Makes Multi-Code the active app with the calling window in front, so the
-  // dialog or picker a drop opens gets the keyboard rather than Finder.
-  focusDropWindow: () => Promise<void>;
+  // dialog or picker a drop opens gets the keyboard rather than Finder. Does nothing
+  // once `until` (epoch ms, when the drop is given up) has passed.
+  focusDropWindow: (until: number) => Promise<void>;
   // The native folder picker, able to make a new folder. `message` is the line shown
   // above it; it opens in `startFolder`. Null when cancelled.
   pickDropFolder: (message: string, startFolder: string) => Promise<string | null>;

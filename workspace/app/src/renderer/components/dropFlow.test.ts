@@ -2,13 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   allOnDisk,
   changeDefaultMessage,
+  DeadlineError,
   dropStep,
   dropTitle,
   HELD_KEY_WINDOW_MS,
   holdKeys,
+  lookupTooSlowMessage,
   shownNames,
   somewhereElseMessage,
   swallowHeldKeyRepeats,
+  withDeadline,
 } from "./dropFlow";
 import type { DroppedItem } from "../../shared/types";
 
@@ -255,5 +258,96 @@ describe("holdKeys", () => {
     release();
     send(key("keydown", "KeyX"));
     expect(reached).toEqual(["Enter", "KeyX"]);
+  });
+});
+
+describe("withDeadline", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // A promise settled from outside, as an IPC answer is.
+  function later<T>() {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  it("gives what the work comes to in time, and leaves no timer", async () => {
+    const answer = later<string>();
+    const result = withDeadline(() => answer.promise, 1000);
+    vi.advanceTimersByTime(999);
+    answer.resolve("folder");
+    await expect(result).resolves.toBe("folder");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("passes on a failure in time as it is", async () => {
+    const answer = later<string>();
+    const result = withDeadline(() => answer.promise, 1000);
+    answer.reject(new Error("no such instance"));
+    await expect(result).rejects.toThrow("no such instance");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("gives up at the deadline on work that never settles, and aborts its signal", async () => {
+    let seen: AbortSignal | undefined;
+    const result = withDeadline((signal) => {
+      seen = signal;
+      return new Promise<never>(() => {});
+    }, 1000);
+    const caught = result.catch((e: unknown) => e);
+    expect(seen?.aborted).toBe(false);
+    vi.advanceTimersByTime(1000);
+    expect(await caught).toBeInstanceOf(DeadlineError);
+    expect(seen?.aborted).toBe(true);
+  });
+
+  it("drops an answer that comes after the deadline", async () => {
+    const answer = later<string>();
+    const result = withDeadline(() => answer.promise, 1000);
+    const caught = result.catch((e: unknown) => e);
+    vi.advanceTimersByTime(1000);
+    answer.resolve("late folder");
+    expect(await caught).toBeInstanceOf(DeadlineError);
+    await expect(result).rejects.toBeInstanceOf(DeadlineError);
+  });
+
+  it("lets the work stop before its next step once the deadline has passed", async () => {
+    const first = later<string>();
+    const steps: string[] = [];
+    const result = withDeadline(async (signal) => {
+      steps.push(await first.promise);
+      signal.throwIfAborted();
+      steps.push("describe");
+      return steps;
+    }, 1000);
+    result.catch(() => {});
+    vi.advanceTimersByTime(1000);
+    first.resolve("folder");
+    await vi.runAllTimersAsync();
+    expect(steps).toEqual(["folder"]);
+  });
+});
+
+describe("lookupTooSlowMessage", () => {
+  it("says nothing was copied and what took too long", () => {
+    expect(lookupTooSlowMessage("folder")).toBe(
+      "Nothing copied: reading the default folder took over 10 seconds"
+    );
+    expect(lookupTooSlowMessage("items")).toBe(
+      "Nothing copied: reading the dropped files took over 10 seconds"
+    );
+  });
+
+  it("counts the deadline it was given", () => {
+    expect(lookupTooSlowMessage("folder", 30_000)).toMatch(/over 30 seconds$/);
   });
 });

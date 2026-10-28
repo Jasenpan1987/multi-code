@@ -7,7 +7,13 @@ import { execFileSync } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { copyIntoFolder, isSameOrInside, numberedName, plainReason } from "./file-drop";
+import {
+  copyIntoFolder,
+  dropStillWaiting,
+  isSameOrInside,
+  numberedName,
+  plainReason,
+} from "./file-drop";
 
 let root = "";
 let src = "";
@@ -152,6 +158,26 @@ describe("plainReason", () => {
 
   it("falls back to the error's own message", () => {
     expect(plainReason(err("EIO"))).toBe("EIO: something, copyfile 'a' -> 'b'");
+  });
+});
+
+describe("dropStillWaiting", () => {
+  const until = 1_700_000_010_000;
+
+  it("brings the window forward before the drop is given up", () => {
+    expect(dropStillWaiting(until, until - 9_999)).toBe(true);
+    expect(dropStillWaiting(until, until - 1)).toBe(true);
+  });
+
+  it("refuses once the renderer has given the drop up", () => {
+    expect(dropStillWaiting(until, until)).toBe(false);
+    expect(dropStillWaiting(until, until + 60_000)).toBe(false);
+  });
+
+  it("refuses a call with no usable deadline", () => {
+    for (const bad of [undefined, null, "1700000010000", NaN, Infinity, {}]) {
+      expect(dropStillWaiting(bad, until - 1)).toBe(false);
+    }
   });
 });
 
