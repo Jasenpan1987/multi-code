@@ -16,7 +16,9 @@
     "lint": "oxlint && eslint --cache",
     "lint:fix": "oxlint --fix && eslint --fix",
     "type": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "harness": "pnpm build:main && pnpm build:mobile && electron scripts/mobile-harness/main.ts --user-data-dir=/tmp/mc-harness-$$",
+    "harness:shot": "node scripts/mobile-harness/screenshot.ts"
   },
   "build": {
     "appId": "com.multicode.app",
@@ -58,6 +60,7 @@
     "eslint": "^10.3.0",
     "eslint-plugin-oxlint": "^0.16.0",
     "oxlint": "^0.16.0",
+    "playwright": "1.64.1",
     "react-refresh": "^0.17.0",
     "style-loader": "^4.0.0",
     "typescript": "^5.8.0",

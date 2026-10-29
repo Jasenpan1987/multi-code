@@ -2,12 +2,15 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "baseUrl": ".",
+    // The phone dev harness (scripts/mobile-harness) runs on Node's own type
+    // stripping, which needs the real file names in its imports.
+    "allowImportingTsExtensions": true,
     "paths": {
       "@main/*": ["src/main/*"],
       "@renderer/*": ["src/renderer/*"],
       "@shared/*": ["src/shared/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "scripts/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
