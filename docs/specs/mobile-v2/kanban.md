@@ -424,7 +424,7 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
 ### T-809: Terminal fallback
 
 - **Type:** feature
-- **Status:** in-progress
+- **Status:** done (14062ff, merged 1466711)
 - **Story:** 8
 - **Description:** Mockup 4.1. A terminal screen per session (`#/s/<id>/term`): xterm.js at
   the PTY's `cols/rows` from `snapshot`/`resize` (no fit to the screen), inside a container
@@ -647,3 +647,4 @@ shows each check state, gates the QR, sends a test push and revokes.
 - 2026-10-29: T-812 done and merged (c3e88c6), with G-304 wired (`instance-acknowledged`) and Copy pairing link.
 - 2026-10-29: T-811 done and merged (8d2d812): `renderer-mobile/push.ts`, service worker push handlers, settings on the setup screen, copy/paste hand-off. iPhone steps in `test-plan-iphone.md`.
 - 2026-10-29: T-807 done and merged (a1f2118); phone bundle 502 KB (+183 KB, react-markdown). T-808 started.
+- 2026-10-29: T-809 done and merged (1466711); phone bundle 602 KiB with xterm. 4 timing tests (opencodeService, loudness) failed once under load average ~300 from other projects and passed alone (69/69).
