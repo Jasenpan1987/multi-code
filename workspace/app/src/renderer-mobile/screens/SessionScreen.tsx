@@ -8,7 +8,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 import type { RemoteSessionState, TranscriptEntry } from "../../shared/remote-protocol";
 import { Compose } from "../components/Compose";
 import { ConnectionBanner } from "../components/Connection";
-import { DialogSlot } from "../components/DialogSlot";
+import { AnswerOutcome, DialogSlot } from "../components/DialogSlot";
 import { Markdown } from "../components/Markdown";
 import { useDraft } from "../drafts";
 import { duration, useNow } from "../format";
@@ -148,6 +148,7 @@ export function SessionScreen({ id }: { id: string }) {
           </p>
         ) : (
           <>
+            <AnswerOutcome id={id} />
             {working && <WorkingBar id={id} turn={turns[turns.length - 1]} since={instance?.since} />}
             <Compose
               text={draft}

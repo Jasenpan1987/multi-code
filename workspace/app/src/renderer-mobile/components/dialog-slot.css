@@ -1,13 +1,17 @@
-/* The dialog slot (mockup 3.1's `.dock`). mobile-v2 T-808 replaces it with the answer
-   card and sheets. */
+/* The dialog slot (mockups 3.1–3.3): the permission card docked in place of the
+   compose box (`.dock`), and the question and plan sheets over the chat (`.sheet`),
+   with the bar a sheet leaves at the bottom when pulled down. */
 
 .dialog-slot {
   flex: none;
   background: var(--sheet);
   border-top: 1px solid var(--border);
   border-radius: 18px 18px 0 0;
-  padding: 12px 14px max(14px, env(safe-area-inset-bottom));
   box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.25);
+}
+
+.dialog-slot.dock {
+  padding: 12px 14px max(14px, env(safe-area-inset-bottom));
 }
 
 .dialog-slot .kind {
@@ -17,22 +21,438 @@
   font-size: 12.5px;
   color: var(--red);
   font-weight: 700;
+  margin-bottom: 6px;
 }
 .dialog-slot .kind .m {
   color: var(--muted);
   font-weight: 500;
   margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dialog-slot .q {
   font-size: 15px;
   font-weight: 600;
-  margin: 8px 0 4px;
+  margin: 8px 0 10px;
   overflow-wrap: anywhere;
 }
+.dialog-slot p.q { margin-bottom: 4px; }
 
 .dialog-slot .desc {
   font-size: 13px;
   color: var(--muted);
-  margin: 0 0 10px;
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+}
+.dialog-slot p.desc { margin-bottom: 10px; }
+
+/* The command or path. A long one scrolls in place, so the buttons stay in view. */
+.dialog-slot pre.cmd {
+  margin: 0;
+  max-height: 30vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--code-bg);
+  border-radius: 10px;
+  padding: 9px 11px;
+  font-family: var(--mono);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text);
+}
+
+/* Buttons */
+.dialog-slot .stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dialog-slot .btns {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.dialog-slot .btns > .btn { flex: 1; }
+.dialog-slot .btns.nav .back { flex: 1; }
+.dialog-slot .btns.nav .go { flex: 2; }
+
+.dialog-slot .btn.left {
+  justify-content: flex-start;
+  text-align: left;
+  font-weight: 500;
+}
+.dialog-slot .btn.primary.left { font-weight: 600; }
+.dialog-slot .btn.danger.solid { background: var(--red); color: #fff; }
+.dialog-slot .btn.sm {
+  position: relative;
+  min-height: 34px;
+  padding: 5px 12px;
+  font-size: 13.5px;
+  border-radius: 10px;
+}
+/* 44 pt to tap. */
+.dialog-slot .btn.sm::after {
+  content: "";
+  position: absolute;
+  inset: -5px 0;
+}
+
+/* An option: its label, and under it what it does when the dialog says. */
+.dialog-slot .opt-btn {
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.dialog-slot .opt-btn.left { align-items: flex-start; }
+.dialog-slot .opt-btn .od {
+  font-size: 12.5px;
+  font-weight: 400;
+  opacity: 0.75;
+}
+/* It opens a field first. */
+.dialog-slot .opt-btn .ol[data-more]::after { content: "…"; }
+
+/* A denial's reason, or what a plan should change. */
+.dialog-slot .field .fl,
+.dialog-slot .sure .cl {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.dialog-slot textarea.reason {
+  display: block;
+  width: 100%;
+  min-height: 54px;
+  max-height: 30vh;
+  margin: 0;
+  border: 1px solid var(--red);
+  border-radius: 10px;
+  padding: 8px 11px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  /* 16px or more, or iOS zooms the page in on focus. */
+  font-size: 16px;
+  line-height: 1.35;
+  resize: none;
+  outline: none;
+}
+.dialog-slot textarea.reason::placeholder { color: var(--faint); }
+
+/* "Are you sure?" */
+.dialog-slot .sure {
+  background: var(--surface2);
+  border-radius: 12px;
+  padding: 11px 12px 12px;
+}
+.dialog-slot .sure .ct { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.dialog-slot .sure .cl { color: var(--text); font-weight: 600; margin-bottom: 2px; }
+.dialog-slot .sure .cd { font-size: 13px; color: var(--muted); }
+
+/* A line about the answer, or the link. */
+.dialog-slot .note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.dialog-slot .note .t { flex: 1; min-width: 0; }
+.dialog-slot .note.err { color: var(--red); }
+.dialog-slot .note .btn { flex: none; }
+.dialog-slot.dock[data-kind="closed"] .note { margin-top: 0; }
+
+/* ---------------------------------------------------------------------------
+   Sheets
+   --------------------------------------------------------------------------- */
+
+/* The bar at the foot: what a pulled-down sheet leaves, and what is under a sheet
+   that is up, so the chat ends above it either way. */
+.dialog-slot.sheet-bar {
+  padding: 0 0 env(safe-area-inset-bottom);
+}
+
+.dialog-slot .bar-notes { padding: 0 16px; }
+.dialog-slot .bar-notes > .note { margin: 0 0 12px; }
+
+.dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: var(--scrim);
+}
+
+.dialog-slot.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 21;
+  display: flex;
+  flex-direction: column;
+  border-top: 0;
+  border-radius: 20px 20px 0 0;
+  padding: 0 16px max(14px, env(safe-area-inset-bottom));
+  box-shadow: 0 -14px 40px rgba(0, 0, 0, 0.35);
+}
+/* As tall as the mockups draw them: the chat's last lines show above. */
+.dialog-slot.sheet[data-kind="questions"] { height: calc(100dvh - env(safe-area-inset-top) - 150px); }
+.dialog-slot.sheet[data-kind="plan"] { height: calc(100dvh - env(safe-area-inset-top) - 90px); }
+
+/* The handle and the title under it: a tap or a pull moves the sheet. */
+.dialog-slot .grab {
+  flex: none;
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 16px 10px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  touch-action: none;
+}
+.dialog-slot.sheet .grab {
+  width: auto;
+  margin: 0 -16px;
+  padding-bottom: 2px;
+}
+.dialog-slot .handle {
+  display: block;
+  width: 38px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+  margin: 0 auto 10px;
+}
+.dialog-slot .sh {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.dialog-slot .sh b { color: var(--text); font-size: 15px; }
+/* A chevron: down on the sheet, up on the bar it leaves. */
+.dialog-slot .sh .x {
+  margin: -4px 4px 0 auto;
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+}
+.dialog-slot .sh .x[data-up] { margin-top: 5px; transform: rotate(-135deg); }
+
+.dialog-slot .sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  margin: 0 -16px;
+  padding: 0 16px 4px;
+}
+
+/* Question pages */
+.dialog-slot .answered {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13.5px;
+  background: var(--surface2);
+  border-radius: 10px;
+  padding: 0 0 0 11px;
+  margin-top: 12px;
+  min-height: 38px;
+}
+.dialog-slot .answered .ok { color: var(--green); font-weight: 700; flex: none; }
+.dialog-slot .answered .h { color: var(--muted); flex: none; }
+.dialog-slot .answered .v {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dialog-slot .answered .e {
+  flex: none;
+  min-height: 44px;
+  margin: -3px 0;
+  padding: 0 11px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+}
+
+.dialog-slot .qhead {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dialog-slot .qtag {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: var(--surface2);
+  color: var(--muted);
+}
+.dialog-slot .qstep { font-size: 12px; color: var(--muted); margin-left: auto; }
+.dialog-slot .qtext {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 6px 0 8px;
+  overflow-wrap: anywhere;
+}
+
+.dialog-slot .opt {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  gap: 11px;
+  padding: 10px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  align-items: flex-start;
+}
+.dialog-slot .opt .ot { display: flex; flex-direction: column; min-width: 0; }
+/* Locked while the answer is on its way. */
+.dialog-slot .opt:disabled,
+.dialog-slot .opt.type:has(:disabled),
+.dialog-slot .answered .e:disabled { opacity: 0.55; }
+.dialog-slot .opt .ol { font-weight: 600; font-size: 14.5px; overflow-wrap: anywhere; }
+.dialog-slot .opt .od { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+
+.dialog-slot .box {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: 2px solid var(--faint);
+  flex: none;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  line-height: 1;
+  color: #fff;
+  font-weight: 800;
+}
+.dialog-slot .box.radio { border-radius: 50%; }
+.dialog-slot .box.on { background: var(--accent); border-color: var(--accent); }
+.dialog-slot .box.radio.on::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+/* "Type something": the box, then the field in the label's place. */
+.dialog-slot .opt.type { align-items: center; padding: 0 4px 0 0; gap: 0; }
+.dialog-slot .opt.type .tbox {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  margin-left: -10px;
+  padding: 0 0 0 14px;
+  display: flex;
+  align-items: center;
+  border: 0;
+  background: none;
+}
+.dialog-slot .opt.type input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  margin-left: 1px;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  /* 16px or more, or iOS zooms the page in on focus. */
+  font-size: 16px;
+  outline: none;
+}
+.dialog-slot .opt.type input::placeholder { color: var(--faint); }
+.dialog-slot .opt.type[data-on] { border-bottom-color: var(--accent); }
+
+/* The plan: Markdown in a box that scrolls, with a fade while there is more. */
+.dialog-slot .plan-wrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  margin: 10px 0 2px;
+}
+.dialog-slot .plan {
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 13px 14px;
+  font-size: 13.5px;
+}
+.dialog-slot .plan .md h1,
+.dialog-slot .plan .md h2 { font-size: 15px; margin: 2px 0 6px; }
+.dialog-slot .plan .md h3 { font-size: 14px; }
+.dialog-slot .fade {
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 1px;
+  height: 44px;
+  border-radius: 0 0 12px 12px;
+  background: linear-gradient(transparent, var(--surface));
+  pointer-events: none;
+}
+.dialog-slot .empty-plan { color: var(--muted); margin: 0; }
+.dialog-slot.sheet[data-kind="plan"] .stack,
+.dialog-slot.sheet[data-kind="plan"] .field,
+.dialog-slot.sheet[data-kind="plan"] .sure { margin-top: 10px; }
+
+/* An answer's outcome that came after its dialog had closed, above the compose box. */
+.answer-outcome {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 13px;
+  color: var(--muted);
+}
+.answer-outcome.err { color: var(--red); }
+.answer-outcome .t { flex: 1; min-width: 0; }
+.answer-outcome .link {
+  position: relative;
+  flex: none;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  padding: 0;
+}
+.answer-outcome .link::after {
+  content: "";
+  position: absolute;
+  inset: -14px -6px;
 }

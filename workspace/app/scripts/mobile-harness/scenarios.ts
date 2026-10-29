@@ -83,11 +83,11 @@ const CLAUDE_PERMISSION = (always: string) => [
   { effect: "deny" as const, label: "No, and tell Claude what to do differently" },
 ];
 
-// secretary/dialog.ts CLAUDE_PLAN_OPTIONS: the plan box's labels on 2.1.295.
+// secretary/dialog.ts CLAUDE_PLAN_OPTIONS: the plan box's labels on 2.1.312.
 const CLAUDE_PLAN = [
-  { effect: "approve-auto" as const, label: "Yes, and auto-accept edits" },
+  { effect: "approve-auto" as const, label: "Yes, auto-accept edits" },
   { effect: "approve" as const, label: "Yes, manually approve edits" },
-  { effect: "revise" as const, label: "No, tell Claude what to change" },
+  { effect: "revise" as const, label: "Tell Claude what to change" },
 ];
 
 // multi-code's earlier turns, the same in every scenario, so "Earlier turns" has
