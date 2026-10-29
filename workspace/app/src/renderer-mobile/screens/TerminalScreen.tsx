@@ -19,6 +19,7 @@ import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { RemoteSessionState } from "../../shared/remote-protocol";
 import { ConnectionBanner } from "../components/Connection";
+import { useKeyboardFrame } from "../keyboard";
 import { navigate } from "../routes";
 import { useActions, useApp } from "../store";
 import { sessionOf } from "../state";
@@ -61,6 +62,7 @@ export function TerminalScreen({ id, hidden = false }: { id: string; hidden?: bo
   // As the chat's header has it (SessionScreen.tsx).
   const pill = instance ? (running ? PILLS[instance.state] : { className: "idle", label: "Stopped" }) : null;
 
+  // The key row and the line sit right above the keyboard (keyboard.ts).
   useKeyboardFrame(screenRef, typing && !hidden);
 
   const send = () => {
@@ -286,31 +288,4 @@ function TerminalView({ id, input }: { id: string; input: RefObject<HTMLInputEle
       )}
     </div>
   );
-}
-
-// The key row and the line sit right above the keyboard. iOS has no VirtualKeyboard
-// API and doesn't shrink the page for the keyboard: it pans the visual viewport.
-// So while the line has focus the screen takes the visual viewport's height and
-// follows its pan. Only then: in a Home Screen app on iOS 27 visualViewport.height
-// stays ~68 px short after the first keyboard (WebKit 322900), so with the keyboard
-// down the screen goes back to the full height its CSS gives it.
-function useKeyboardFrame(screen: RefObject<HTMLDivElement | null>, active: boolean) {
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    const el = screen.current;
-    if (!active || !viewport || !el) return;
-    const place = () => {
-      el.style.height = `${viewport.height}px`;
-      el.style.transform = `translateY(${viewport.offsetTop}px)`;
-    };
-    place();
-    viewport.addEventListener("resize", place);
-    viewport.addEventListener("scroll", place);
-    return () => {
-      viewport.removeEventListener("resize", place);
-      viewport.removeEventListener("scroll", place);
-      el.style.height = "";
-      el.style.transform = "";
-    };
-  }, [screen, active]);
 }

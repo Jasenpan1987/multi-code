@@ -105,6 +105,8 @@ describe("phone dev harness", () => {
       questions: "needs-you",
       plan: "needs-you",
       terminal: "needs-you",
+      short: "idle",
+      commands: "idle",
       empty: undefined,
     };
     for (const name of SCENARIOS) {
@@ -309,6 +311,64 @@ describe("phone dev harness", () => {
     const before = await ids("home");
     const after = await ids("permission");
     expect([...after].filter((x) => before.has(x))).toEqual([]);
+  });
+
+  it("runs slash commands as command lines, and /new as a new CLI session", async () => {
+    const client = await connect();
+    await scenario(client, "short");
+    client.send({ type: "subscribe", instanceId: "multi-code" });
+    const first = await client.next("transcript");
+    expect(first.session).toBeTruthy();
+    expect(first.entries.map((e) => e.text)).toEqual(["你是谁", expect.any(String), "你是什么模型", expect.any(String)]);
+
+    client.send({ type: "prompt", instanceId: "multi-code", text: "/token", clientMsgId: id() });
+    expect(await client.next("ack")).toMatchObject({ ok: true });
+    const ran = await client.next("transcript", (t) => t.entries.some((e) => e.local));
+    expect(ran.session).toBe(first.session);
+    expect(ran.entries.slice(-2)).toMatchObject([
+      { kind: "user", text: "/token", local: true },
+      { kind: "assistant", text: "Unknown command: /token", local: true },
+    ]);
+    // No turn: the session stays idle.
+    expect(world.stateOf("multi-code")?.state).toBe("idle");
+
+    client.send({ type: "prompt", instanceId: "multi-code", text: "/new", clientMsgId: id() });
+    expect(await client.next("ack")).toMatchObject({ ok: true });
+    const renewed = await client.next("transcript", (t) => t.session !== first.session);
+    expect(renewed).toMatchObject({ entries: [], hasEarlier: false });
+    // Then Claude's record of the command that made it.
+    const cleared = await client.next("transcript", (t) => t.entries.length > 0);
+    expect(cleared).toMatchObject({ session: renewed.session, entries: [{ kind: "user", text: "/clear", local: true }] });
+
+    // At the desk: a command line, then another new session.
+    expect(await post("local/multi-code?command=%2Fmodel%20opus&output=Set%20model%20to%20opus")).toMatchObject({ ok: true });
+    const desk = await client.next("transcript", (t) => t.entries.length === 3);
+    expect(desk.session).toBe(renewed.session);
+    expect(await post("new-session/multi-code")).toMatchObject({ ok: true });
+    const again = await client.next("transcript", (t) => t.session !== renewed.session);
+    expect(again.entries).toEqual([]);
+    expect(await post("new-session/nobody")).toMatchObject({ ok: false });
+  });
+
+  it("closes the old session's dialog with it, and takes what was queued behind a slash command", async () => {
+    const client = await connect();
+    await scenario(client, "permission");
+    client.send({ type: "subscribe", instanceId: "multi-code" });
+    const { seq } = await client.next("prompt-state");
+    expect(await post("new-session/multi-code")).toMatchObject({ ok: true });
+    expect(await client.next("prompt-cleared")).toMatchObject({ instanceId: "multi-code", seq });
+    await client.next("instances", hasState("multi-code", "idle"));
+    client.send({ type: "answer", instanceId: "multi-code", seq, choice: { effect: "allow-once" }, clientMsgId: id() });
+    expect(await client.next("ack")).toMatchObject({ ok: false, reason: "gone" });
+
+    const queued = new World("short", false);
+    queued.prompt("multi-code", "first turn");
+    queued.prompt("multi-code", "/cost");
+    queued.prompt("multi-code", "after the command");
+    for (let i = 0; i < 6; i++) queued.tick();
+    const users = queued.transcript("multi-code", 100).entries.filter((e) => e.kind === "user").map((e) => e.text);
+    expect(users.slice(-3)).toEqual(["first turn", "/cost", "after the command"]);
+    queued.stop();
   });
 
   it("marks a Finished session seen when a phone opens it", async () => {

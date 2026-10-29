@@ -12,6 +12,7 @@ import {
   loadOutbox,
   markSent,
   newDevice,
+  renewSession,
   saveOutbox,
   settleDelivered,
   socketLost,
@@ -175,6 +176,57 @@ describe("outbox", () => {
     const first = settleDelivered(outbox, "a", [go]);
     expect(settleDelivered(first.outbox, "a", [go], first.delivered).outbox).toBe(first.outbox);
     expect(settleDelivered(first.outbox, "a", [go, go], first.delivered).outbox).toEqual([]);
+  });
+
+  it("settles a slash command when its command line shows, by its text or the command alone", () => {
+    let outbox = enqueue([], prompt("p1", "/token"), 1000, true);
+    outbox = enqueue(outbox, prompt("p2", "/model  opus"), 2000, true);
+    outbox = enqueue(outbox, prompt("p3", "/cost"), 3000, true);
+    outbox = applyAck(applyAck(applyAck(outbox, ok("p1"), 1100), ok("p2"), 2100), ok("p3"), 3100);
+    const line = (text: string, at: number): TranscriptEntry => ({ kind: "user", text, at, local: true });
+    const output: TranscriptEntry = { kind: "assistant", text: "Unknown command: /token", at: 1500, local: true };
+    const settled = settleDelivered(outbox, "a", [line("/token", 1500), output, line("/model", 2500)]);
+    // The CLI's output delivers nothing; "/cost" hasn't shown yet.
+    expect(status(settled.outbox)).toEqual({ p3: "acked" });
+    // A message to the model is matched on its whole text only.
+    const typed = applyAck(enqueue([], prompt("p4", "/review the diff"), 4000, true), ok("p4"), 4100);
+    expect(settleDelivered(typed, "a", [{ kind: "user", text: "/review", at: 4500 }]).outbox).toBe(typed);
+  });
+
+  it("settles on a new CLI session what the old one was sent, and what may have reached it once acked", () => {
+    let outbox = enqueue([], prompt("hello"), 1, true);
+    outbox = enqueue(outbox, prompt("new", "/new"), 2, true);
+    outbox = enqueue(outbox, prompt("lost", "and this"), 3, true);
+    outbox = enqueue(outbox, prompt("offline", "typed offline"), 4, false);
+    outbox = enqueue(outbox, prompt("elsewhere", "other session", "b"), 5, true);
+    outbox = enqueue(outbox, answer("ans"), 6, true);
+    outbox = applyAck(applyAck(applyAck(outbox, ok("hello"), 7), ok("new"), 8), ok("elsewhere"), 9);
+    // "lost" went out on a socket that dropped before its ack.
+    outbox = socketLost(outbox, 10);
+    expect(status(outbox)).toMatchObject({ hello: "acked", new: "acked", lost: "waiting", offline: "waiting" });
+    // On the next socket the outbox goes out right after the resubscribe, before the
+    // transcript that names the new session is back.
+    outbox = markSent(outbox, new Set(["lost", "offline"]));
+    // And something typed now, first written on this socket too.
+    outbox = enqueue(outbox, prompt("fresh", "typed now"), 11, true);
+
+    outbox = renewSession(outbox, "a");
+    // The acked ones are the old session's; the new one's transcript won't show them.
+    expect(status(outbox)).toEqual({ lost: "sent", offline: "sent", elsewhere: "acked", ans: "unknown", fresh: "sent" });
+    // "lost" may have reached the old session before its socket dropped: its ack
+    // settles it. "offline" and "fresh" first went out after the resubscribe, so to
+    // the new session, and wait to show there as usual.
+    outbox = applyAck(applyAck(applyAck(outbox, ok("lost"), 12), ok("offline"), 13), ok("fresh"), 14);
+    expect(status(outbox)).toEqual({ offline: "acked", elsewhere: "acked", ans: "unknown", fresh: "acked" });
+    // Nothing of ours left to settle: the same outbox.
+    expect(renewSession(outbox, "c")).toBe(outbox);
+  });
+
+  it("keeps a prompt from before a new session that the Mac refused, with its refusal", () => {
+    let outbox = socketLost(enqueue([], prompt("lost", "go"), 1, true), 2);
+    outbox = renewSession(outbox, "a");
+    outbox = applyAck(markSent(outbox, new Set(["lost"])), refused("lost"), 3);
+    expect(status(outbox)).toEqual({ lost: "refused" });
   });
 
   it("makes what went out on a socket unknown when the phone pairs again as a new device", () => {

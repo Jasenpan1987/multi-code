@@ -3,7 +3,17 @@
 
 import { describe, expect, it } from "vitest";
 import type { TranscriptEntry } from "../shared/remote-protocol";
-import { foldCounts, foldLabel, groupTurns, landingOf, runningTool, toolMark, toolVerb, type Turn } from "./turns";
+import {
+  commandLine,
+  foldCounts,
+  foldLabel,
+  groupTurns,
+  landingOf,
+  runningTool,
+  toolMark,
+  toolVerb,
+  type Turn,
+} from "./turns";
 
 let n = 0;
 const t0 = 1_800_000_000_000;
@@ -18,6 +28,10 @@ const tool = (name: string, text: string, s = 0, extra: Partial<TranscriptEntry>
   outcome: "ok",
   ...extra,
 });
+
+// A CLI command the builder ran, and the CLI's output for it.
+const ran = (text: string, s = 0): TranscriptEntry => ({ ...user(text, s), local: true });
+const said = (text: string, s = 0): TranscriptEntry => ({ ...say(text, s), local: true });
 
 const idle = { working: false, waiting: false };
 
@@ -151,6 +165,102 @@ describe("groupTurns", () => {
   });
 });
 
+describe("command lines", () => {
+  const texts = (turn: Turn) => turn.lines.map((line) => line.entries.map((e) => e.text));
+
+  it("draws each command, with the output after it, as a line after the turn it came in", () => {
+    const turns = groupTurns(
+      [
+        user("你是谁", 0),
+        say("我是 Claude。", 5),
+        ran("/token", 10),
+        said("Unknown command: /token", 10),
+        ran("/compact", 20),
+        user("你是什么模型", 30),
+        say("Opus 5.5。", 35),
+      ],
+      idle
+    );
+    // Commands start no turn.
+    expect(turns).toHaveLength(2);
+    expect(texts(turns[0])).toEqual([["/token", "Unknown command: /token"], ["/compact"]]);
+    expect(texts(turns[1])).toEqual([]);
+    // The turn itself is whole: the answer is still its conclusion, and it took the
+    // 5 s to answer, not the 20 s to the last command.
+    expect(turns[0].conclusion.map((e) => e.text)).toEqual(["我是 Claude。"]);
+    expect(turns[0].endAt! - turns[0].startAt!).toBe(5000);
+    expect(turns[0].endsInCommand).toBe(true);
+    expect(turns[1].endsInCommand).toBe(false);
+    expect(commandLine(turns[0].lines[0])).toEqual({ command: "/token", output: "Unknown command: /token" });
+    expect(commandLine(turns[0].lines[1])).toEqual({ command: "/compact", output: "" });
+  });
+
+  it("shows output without a command alone, and drops terminal colours", () => {
+    const [turn] = groupTurns([said("\x1b[1mCompacted\x1b[0m \n", 0), said("ctrl+o to see the summary", 0)], idle);
+    expect(turn.user).toBeNull();
+    expect(commandLine(turn.lines[0])).toEqual({ command: null, output: "Compacted\nctrl+o to see the summary" });
+  });
+
+  it("puts the /clear a new session opens with before its first message", () => {
+    const turns = groupTurns([ran("/clear", 0), user("你好", 5), say("你好！", 6)], idle);
+    expect(turns.map((t) => [t.user?.text ?? null, texts(t)])).toEqual([
+      [null, [["/clear"]]],
+      ["你好", []],
+    ]);
+    expect(landingOf(turns, 0)).toEqual({ kind: "conclusion", turn: turns[1].key });
+  });
+
+  it("keeps a command run in the middle of a turn out of its fold and counts, and the turn whole", () => {
+    const entries = [
+      user("跑测试", 0),
+      tool("Read", "package.json", 5),
+      ran("/cost", 8),
+      said("Total cost: $0.41", 8),
+      tool("Bash", "pnpm test", 10),
+      say("全过了。", 20),
+    ];
+    const [turn, ...rest] = groupTurns(entries, idle);
+    expect(rest).toEqual([]);
+    expect(foldLabel(turn.fold, false)).toBe("2 tools · 1 read · 1 command");
+    expect(turn.conclusion.map((e) => e.text)).toEqual(["全过了。"]);
+    expect([...turn.lead, ...turn.fold, ...turn.conclusion].some((e) => e.local)).toBe(false);
+    expect(texts(turn)).toEqual([["/cost", "Total cost: $0.41"]]);
+    // The agent spoke after it, so the screen lands on the conclusion as usual.
+    expect(turn.endsInCommand).toBe(false);
+  });
+
+  it("leaves a running turn as it was when a command comes in the middle of it", () => {
+    const before = [
+      user("跑测试", 0),
+      tool("Read", "package.json", 5, { outcome: undefined, pending: true }),
+    ];
+    const working = { working: true, waiting: false };
+    const [was] = groupTurns(before, working);
+    const [turn] = groupTurns(
+      [...before, ran("/cost", 8), said("Total cost: $0.41", 8), tool("Bash", "pnpm test", 10, { outcome: undefined, pending: true })],
+      working
+    );
+    // The same turn: its key (the working bar is keyed by it) and its start.
+    expect(turn.key).toBe(was.key);
+    expect(turn.startAt).toBe(was.startAt);
+    expect(turn.live).toBe(true);
+    expect(turn.fold.map((e) => toolMark(e, turn.live).kind)).toEqual(["running", "running"]);
+    expect(runningTool(turn)?.text).toBe("pnpm test");
+  });
+
+  it("leaves the dialog's call out of the fold when a line comes after it", () => {
+    const entries = [
+      user("跑测试", 0),
+      tool("Bash", "pnpm test", 5, { outcome: undefined, pending: true }),
+      said("Context left until auto-compact: 12%", 6),
+    ];
+    const [turn] = groupTurns(entries, { working: false, waiting: true });
+    expect(turn.waiting).toBe(true);
+    expect(turn.fold).toEqual([]);
+    expect(texts(turn)).toEqual([["Context left until auto-compact: 12%"]]);
+  });
+});
+
 describe("the fold line", () => {
   it("counts files read and edited once each, and every command run (mockup 2.1)", () => {
     const [turn] = groupTurns(jwtTurn(), idle);
@@ -229,5 +339,16 @@ describe("landingOf", () => {
     // Stopped mid-call: the turn ends on a tool.
     expect(landingOf(turnsOf([user("go"), tool("Bash", "x", 0, { outcome: "error" })]), 0)).toEqual({ kind: "bottom" });
     expect(landingOf([], 0)).toEqual({ kind: "bottom" });
+  });
+
+  it("lands at the bottom after a command, never on its output as a conclusion", () => {
+    // The builder ran it after reading the answer: what it said is at the bottom.
+    const after = turnsOf([...jwtTurn(), ran("/token", 200), said("Unknown command: /token", 200)]);
+    expect(landingOf(after, 0)).toEqual({ kind: "bottom" });
+    // Its output alone isn't a conclusion either.
+    expect(landingOf(turnsOf([said("Compacted", 0)]), 0)).toEqual({ kind: "bottom" });
+    // A command before the last turn changes nothing.
+    const before = turnsOf([ran("/model opus", 0), said("Set model to opus", 0), ...jwtTurn()]);
+    expect(landingOf(before, 0)).toEqual({ kind: "conclusion", turn: before[1].key });
   });
 });

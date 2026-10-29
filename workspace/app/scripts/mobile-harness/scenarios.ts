@@ -13,6 +13,8 @@ export const SCENARIOS = [
   "questions",
   "plan",
   "terminal",
+  "short",
+  "commands",
   "empty",
 ] as const;
 export type ScenarioName = (typeof SCENARIOS)[number];
@@ -26,7 +28,7 @@ export const TERMINAL_ROWS = 36;
 
 const DAY_S = 24 * 3600;
 
-export type ScriptedSession = Omit<Session, "dialog" | "idPrefix"> & { dialog?: Omit<OpenDialog, "seq"> };
+export type ScriptedSession = Omit<Session, "dialog" | "idPrefix" | "cli"> & { dialog?: Omit<OpenDialog, "seq"> };
 
 // A transcript written backwards in time from `now`: `at(s)` is s seconds ago.
 function writer(id: string, now: number) {
@@ -37,6 +39,11 @@ function writer(id: string, now: number) {
     entries,
     user: (ago: number, text: string) => add(ago, { kind: "user", text }),
     say: (ago: number, text: string) => add(ago, { kind: "assistant", text }),
+    // A CLI command the builder ran, and the CLI's output for it.
+    local: (ago: number, command: string, output?: string) => {
+      add(ago, { kind: "user", text: command, local: true });
+      if (output) add(ago - 1, { kind: "assistant", text: output, local: true });
+    },
     tool: (ago: number, step: Step) => call(ago, step, false),
     pending: (ago: number, step: Step) => call(ago, step, true),
     // A finished turn: the message, its calls 20 s apart, the conclusion.
@@ -76,6 +83,16 @@ function session(
 }
 
 const CWD = "/Users/builder/code";
+
+// What `/cost` prints: longer than a command line shows before it is tapped.
+export const COST = [
+  "Total cost:            $0.4127",
+  "Total duration (API):  1m 52s",
+  "Total duration (wall): 14m 08s",
+  "Total code changes:    48 lines added, 30 lines removed",
+  "Usage by model:",
+  "  claude-opus-5-5:  31.2k input, 4.1k output, 210k cache read",
+].join("\n");
 
 const CLAUDE_PERMISSION = (always: string) => [
   { effect: "allow-once" as const, label: "Yes" },
@@ -212,8 +229,25 @@ function planDialog(plan: string): Omit<OpenDialog, "seq"> {
 // a different moment of it on screen.
 function multiCode(scenario: ScenarioName, now: number): ScriptedSession {
   const w = writer("multi-code", now);
-  HISTORY.forEach(([user, steps, conclusion], i) => w.turn((HISTORY.length - i) * 3600 + 900, user, steps, conclusion));
   const info = { id: "multi-code", name: "multi-code", cwd: `${CWD}/multi-code`, backend: "claude", status: "running" as const };
+
+  if (scenario === "short" || scenario === "commands") {
+    // The builder's iPhone test (2026-10-30): two questions, far shorter than the
+    // screen; in "commands", the CLI commands run after them at the desk.
+    w.user(300, "你是谁");
+    w.say(295, "我是 Claude，Anthropic 做的 AI 助手。在这个终端里我帮你写代码、查问题、跑命令。");
+    w.user(120, "你是什么模型");
+    w.say(115, "我是 Claude Opus 5.5。");
+    if (scenario === "commands") {
+      w.local(90, "/token", "Unknown command: /token");
+      w.local(80, "/model opus", "Set model to opus");
+      w.local(60, "/cost", COST);
+      w.local(40, "/compact");
+    }
+    return session(info, "idle", now - 40 * 1000, w.entries);
+  }
+
+  HISTORY.forEach(([user, steps, conclusion], i) => w.turn((HISTORY.length - i) * 3600 + 900, user, steps, conclusion));
 
   if (scenario === "finished") {
     // Mockups 2.1 and 2.2: 12 tools, 2m 41s, a Markdown conclusion.
