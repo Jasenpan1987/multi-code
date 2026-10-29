@@ -299,7 +299,7 @@ export interface TranscriptEntry {
   removed?: number;
   // Not a message to or from the model: a CLI command the builder ran ("user",
   // e.g. "/compact", "/token") or the CLI's own output for it ("assistant", e.g.
-  // "Unknown slash command: token"). The phone shows these as small grey lines.
+  // "Unknown command: /token"). The phone shows these as small grey lines.
   local?: boolean;
 }
 
