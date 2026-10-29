@@ -140,11 +140,12 @@ export interface RemoteHost {
   // A phone opened the instance: Finished becomes Idle.
   markSeen: (id: string) => void;
   // The last `turns` turns of the reflowable transcript, which is what the phone
-  // shows instead of the 120-column terminal.
+  // shows instead of the 120-column terminal, and the session they come from. The
+  // host calls `broadcastTranscript` itself when an instance moves to another session.
   readTranscript: (
     id: string,
     turns: number
-  ) => { entries: TranscriptEntry[]; hasEarlier: boolean };
+  ) => { entries: TranscriptEntry[]; hasEarlier: boolean; session?: string };
   // The PTY's size, or null when it isn't running.
   ptySize: (id: string) => { cols: number; rows: number } | null;
   // The instance streams output and a phone is connected: refresh the list's line
@@ -1120,7 +1121,7 @@ export class RemoteServer {
 
   private sendTranscript(conn: Connection, instanceId: string, turns: number) {
     if (!this.host) return;
-    let read: { entries: TranscriptEntry[]; hasEarlier: boolean };
+    let read: ReturnType<RemoteHost["readTranscript"]>;
     try {
       read = this.host.readTranscript(instanceId, turns);
     } catch {

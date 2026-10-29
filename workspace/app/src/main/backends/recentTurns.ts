@@ -15,25 +15,36 @@ export function noTurns(): RecentTurns {
   return { entries: [], hasEarlier: false };
 }
 
+// Where a turn starts: a message to the agent. A command the CLI ran itself (`local`,
+// `/model`, `/token`) is shown in the turn it came after.
+export function startsTurn(entry: TranscriptEntry): boolean {
+  return entry.kind === "user" && !entry.local;
+}
+
 /**
- * The last `turns` turns of `entries`. A turn starts at each "user" entry; whatever
- * comes before the first one (a session that began with something the builder didn't
- * type) counts as a turn of its own. `earlier`: the reader stopped before the session's
- * start, so there is more before `entries` whatever they hold.
+ * The last `turns` turns of `entries`. A turn starts at each "user" entry that isn't
+ * `local`; whatever comes before the first one (a session that began with something the
+ * builder didn't type) counts as a turn of its own, unless all of it is local: the
+ * `/clear` a session after one opens with is shown with its first turn. `earlier`: the
+ * reader stopped before the session's start, so there is more before `entries`
+ * whatever they hold.
  */
 export function lastTurns(entries: TranscriptEntry[], turns: number, earlier: boolean): RecentTurns {
   let start = 0;
   let seen = 0;
   for (let i = entries.length - 1; i >= 0; i--) {
-    if (entries[i].kind === "user" && ++seen === turns) {
+    if (startsTurn(entries[i]) && ++seen === turns) {
       start = i;
       break;
     }
   }
+  let local = 0;
+  while (local < start && entries[local].local) local++;
+  if (local === start) start = 0;
   // Whole turns from the oldest, then the newest turn's own start.
   while (entries.length - start > RECENT_TURNS_ENTRY_CAP) {
     let next = start + 1;
-    while (next < entries.length && entries[next].kind !== "user") next++;
+    while (next < entries.length && !startsTurn(entries[next])) next++;
     start = next < entries.length ? next : entries.length - RECENT_TURNS_ENTRY_CAP;
   }
   return {

@@ -52,6 +52,37 @@ describe("lastTurns", () => {
   it("is empty for an empty session", () => {
     expect(lastTurns([], 10, false)).toEqual({ entries: [], hasEarlier: false });
   });
+
+  // A command the CLI ran itself, and its output (TranscriptEntry.local).
+  const ran = (text: string): TranscriptEntry => ({ kind: "user", text, local: true });
+  const output = (text: string): TranscriptEntry => ({ kind: "assistant", text, local: true });
+
+  it("starts no turn at a local command: it stays in the turn it came after", () => {
+    const entries = [user("a"), said("1"), ran("/model"), output("Kept"), user("b"), said("2"), ran("/token"), output("Unknown")];
+    expect(texts(lastTurns(entries, 1, false).entries)).toEqual(["b", "2", "/token", "Unknown"]);
+    expect(texts(lastTurns(entries, 2, false).entries)).toEqual(texts(entries));
+    expect(lastTurns(entries, 2, false).hasEarlier).toBe(false);
+  });
+
+  it("shows local commands before the first turn with it, not as an earlier turn", () => {
+    const entries = [ran("/clear"), user("a"), said("1")];
+    expect(lastTurns(entries, 1, false)).toEqual({ entries, hasEarlier: false });
+    // Anything else before it is still a turn of its own.
+    const told = [said("hello"), ran("/clear"), user("a"), said("1")];
+    expect(lastTurns(told, 1, false)).toEqual({ entries: told.slice(2), hasEarlier: true });
+  });
+
+  it("shows a session of nothing but local commands whole", () => {
+    const entries = [ran("/clear"), ran("/token"), output("Unknown command: /token")];
+    expect(lastTurns(entries, 1, false)).toEqual({ entries, hasEarlier: false });
+  });
+
+  it("drops whole turns under the cap without stopping at a local command", () => {
+    const entries = [user("a"), ...tools("a", 300), ran("/model"), ...tools("m", 250), user("b"), ...tools("b", 300)];
+    const capped = lastTurns(entries, 10, false);
+    expect(capped.entries[0]).toEqual(user("b"));
+    expect(capped.entries).toHaveLength(301);
+  });
 });
 
 describe("lineCount", () => {

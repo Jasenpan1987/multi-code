@@ -151,7 +151,9 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
       }
       reading.add(id);
       void Promise.resolve()
-        .then(() => pm.readRecentTurns(id, 1).entries)
+        // The agent's own lines: a local command's output ("Unknown command: /token")
+        // is the CLI talking, not the session's last word.
+        .then(() => pm.readRecentTurns(id, 1).entries.filter((entry) => !entry.local))
         .catch(() => null)
         .then((turn) => {
           if (!turn) return;
@@ -257,6 +259,13 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
         // another session; a turn starting reads again, so Working doesn't show the
         // last turn's line.
         if (!lines.has(info.id) || linesSession.get(info.id) !== info.sessionId) {
+          // Moved to another session (`/new`, `/clear`, a resume): a phone that has it
+          // open is sent the new one's transcript, empty as it may be, once this
+          // listing is out. Not read here, where no file may be.
+          if (linesSession.has(info.id) && linesSession.get(info.id) !== info.sessionId) {
+            const id = info.id;
+            void Promise.resolve().then(() => push.broadcastTranscript(id));
+          }
           lines.set(info.id, {});
           linesSession.set(info.id, info.sessionId);
           void refreshLines(info.id);

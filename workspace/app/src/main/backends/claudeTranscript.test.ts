@@ -8,6 +8,7 @@ import os from "os";
 import path from "path";
 import {
   builderTurnFromLines,
+  claudeTranscriptEntries,
   claudeTurnEntries,
   readBuilderTurn,
   readClaudeRecentTurns,
@@ -221,7 +222,10 @@ const FIXTURE = path.join(__dirname, "__fixtures__", "claude-transcript", "three
 const at = (second: number) => Date.parse(`2026-10-29T09:${String(Math.floor(second / 60)).padStart(2, "0")}:${String(second % 60).padStart(2, "0")}.000Z`);
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
+// The `/clear` the session opens with, shown with its first turn.
+const CLEARED = { kind: "user", id: uuid(1), at: at(1), text: "/clear", local: true };
 const TURN_1 = [
+  CLEARED,
   { kind: "user", id: uuid(3), at: at(10), text: "Add a login endpoint" },
   { kind: "assistant", id: uuid(4), at: at(12), text: "I'll look at the routes first." },
   { kind: "tool", id: "toolu_01Read", at: at(13), tool: "Read", text: "/Users/builder/code/shop/src/routes.ts", outcome: "ok" },
@@ -234,6 +238,9 @@ const TURN_2 = [
   { kind: "user", id: uuid(15), at: at(70), text: "[Image #1] what about this?" },
   { kind: "assistant", id: uuid(17), at: at(75), text: "That's the login form." },
   { kind: "assistant", id: uuid(19), at: at(81), text: "The background check passed." },
+  // A local command and its output belong to the turn they came after.
+  { kind: "user", id: uuid(20), at: at(90), text: "/model", local: true },
+  { kind: "assistant", id: uuid(21), at: at(90), text: "Set model to opus", local: true },
 ];
 const TURN_3 = [
   { kind: "user", id: uuid(22), at: at(100), text: "/omt:work T-1" },
@@ -343,6 +350,159 @@ describe("readClaudeRecentTurns", () => {
   });
 });
 
+// The rows Claude Code 2.1.312 writes around local commands, in its own layout and key
+// order (measured 2026-10-30 on a scratch session; the text here is made up): the
+// caveat, the command row, its output as a `local_command` system row or a user row,
+// and for a command it doesn't know, only an `informational` system row.
+const CLI_ROW = { isSidechain: false, userType: "external", entrypoint: "cli", cwd: "/Users/builder/code/shop", version: "2.1.312" };
+const CAVEAT =
+  "<local-command-caveat>The command below was run directly in Claude Code, not sent to you as a request, and its output goes straight to the user. It's recorded here as context for later messages.</local-command-caveat>";
+
+function cliSession() {
+  let parent: string | null = null;
+  let second = 0;
+  const rows: unknown[] = [];
+  const row = (id: string, fields: Record<string, unknown>) => {
+    rows.push({ parentUuid: parent, ...CLI_ROW, ...fields, uuid: id, timestamp: `2026-10-30T01:00:${String(second++).padStart(2, "0")}.000Z` });
+    parent = id;
+  };
+  const user = (id: string, content: unknown, extra: Record<string, unknown> = {}) =>
+    row(id, { type: "user", message: { role: "user", content }, ...extra });
+  const system = (id: string, subtype: string, content: string, extra: Record<string, unknown> = {}) =>
+    row(id, { type: "system", subtype, content, isMeta: false, ...extra });
+  const command = (id: string, name: string) => {
+    user(`${id}-caveat`, CAVEAT, { isMeta: true });
+    user(id, `<command-name>/${name}</command-name>\n            <command-message>${name}</command-message>\n            <command-args></command-args>`);
+  };
+  const assistant = (id: string, text: string) =>
+    row(id, { type: "assistant", message: { role: "assistant", content: [{ type: "text", text }] } });
+  return { rows, user, system, command, assistant, at: (n: number) => Date.parse(`2026-10-30T01:00:${String(n).padStart(2, "0")}.000Z`) };
+}
+
+describe("local commands in the phone's turns", () => {
+  it("shows each command the CLI ran itself and its output as local lines, in the 2.1.312 layout", () => {
+    const s = cliSession();
+    // A session `/new` started: the CLI's `/clear` at its top, with no output.
+    s.command("clear", "clear");
+    s.system("clear-out", "local_command", "<local-command-stdout></local-command-stdout>", { level: "info", commandRun: { command: "clear", args: "" } });
+    s.system("token", "informational", "Unknown command: /token", { level: "warning" });
+    s.user("ping", "Reply with one word");
+    s.assistant("pong", "Pong.");
+    s.system("took", "turn_duration", "", { durationMs: 900 });
+    s.command("context", "context");
+    s.system("context-out", "local_command", "<local-command-stdout> \x1b[1mContext Usage\x1b[22m\n\x1b[38;2;136;136;136m⛁ ⛀ \x1b[39m 12k tokens</local-command-stdout>", { level: "info" });
+    s.command("exit", "exit");
+    s.user("exit-out", "<local-command-stdout>See ya!</local-command-stdout>");
+
+    expect(claudeTurnEntries(s.rows)).toEqual([
+      { kind: "user", id: "clear", at: s.at(1), text: "/clear", local: true },
+      { kind: "user", id: "token:command", at: s.at(3), text: "/token", local: true },
+      { kind: "assistant", id: "token", at: s.at(3), text: "Unknown command: /token", local: true },
+      { kind: "user", id: "ping", at: s.at(4), text: "Reply with one word" },
+      { kind: "assistant", id: "pong", at: s.at(5), text: "Pong." },
+      { kind: "user", id: "context", at: s.at(8), text: "/context", local: true },
+      { kind: "assistant", id: "context-out", at: s.at(9), text: "Context Usage\n⛁ ⛀  12k tokens", local: true },
+      { kind: "user", id: "exit", at: s.at(11), text: "/exit", local: true },
+      { kind: "assistant", id: "exit-out", at: s.at(12), text: "See ya!", local: true },
+    ]);
+  });
+
+  it("reads a command row an older CLI wrote as a system row, and an unknown command's older wording", () => {
+    const s = cliSession();
+    s.system("model", "local_command", "<command-name>/model</command-name>\n            <command-message>model</command-message>\n            <command-args>haiku</command-args>", { level: "info" });
+    s.system("model-out", "local_command", "<local-command-stdout>Set model to \x1b[1mHaiku 4.5\x1b[22m</local-command-stdout>", { level: "info" });
+    s.system("old", "informational", "Unknown slash command: token", { level: "warning" });
+    expect(claudeTurnEntries(s.rows).map((entry) => [entry.kind, entry.text, entry.local])).toEqual([
+      ["user", "/model haiku", true],
+      ["assistant", "Set model to Haiku 4.5", true],
+      ["user", "/token", true],
+      ["assistant", "Unknown slash command: token", true],
+    ]);
+  });
+
+  it("leaves out the CLI's other notices, and a command's output that only a tool read", () => {
+    const s = cliSession();
+    s.user("go", "go on");
+    s.system("bg", "informational", "Backgrounding after the current tool finishes…", { level: "warning" });
+    s.system("hooks", "stop_hook_summary", "", { level: "suggestion" });
+    s.user("grep", [{ type: "tool_result", tool_use_id: "t1", content: "<local-command-stdout>old</local-command-stdout>" }]);
+    expect(claudeTurnEntries(s.rows).map((entry) => entry.text)).toEqual(["go on"]);
+  });
+
+  it("shows a command whose child isn't written yet as local", () => {
+    const s = cliSession();
+    s.command("model", "model");
+    expect(claudeTurnEntries(s.rows)).toEqual([{ kind: "user", id: "model", at: s.at(1), text: "/model", local: true }]);
+  });
+
+  it("counts no local command as a turn, and shows a session's leading ones with its first turn", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "multicode-local-"));
+    const file = path.join(dir, "s.jsonl");
+    try {
+      const s = cliSession();
+      s.command("clear", "clear");
+      s.system("clear-out", "local_command", "<local-command-stdout></local-command-stdout>");
+      s.user("a", "first");
+      s.assistant("a-said", "One.");
+      s.system("token", "informational", "Unknown command: /token");
+      s.command("model", "model");
+      s.system("model-out", "local_command", "<local-command-stdout>Kept model as Haiku</local-command-stdout>");
+      s.user("b", "second");
+      s.assistant("b-said", "Two.");
+      fs.writeFileSync(file, lines(s.rows).join("\n") + "\n");
+      const ids = (read: { entries: { id?: string }[] }) => read.entries.map((entry) => entry.id);
+
+      const last = readClaudeRecentTurns(file, 1);
+      expect(ids(last)).toEqual(["b", "b-said"]);
+      expect(last.hasEarlier).toBe(true);
+      const both = ["clear", "a", "a-said", "token:command", "token", "model", "model-out", "b", "b-said"];
+      expect(ids(readClaudeRecentTurns(file, 2))).toEqual(both);
+      expect(readClaudeRecentTurns(file, 2).hasEarlier).toBe(false);
+      // A window too small for both turns widens past the local lines, which aren't one.
+      for (const startBytes of [64, 512, 2048]) {
+        expect(ids(readClaudeRecentTurns(file, 2, { startBytes, maxBytes: 1 << 20 }))).toEqual(both);
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("shows a session of nothing but local commands whole: the one `/new` just opened", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "multicode-local-"));
+    const file = path.join(dir, "s.jsonl");
+    try {
+      const s = cliSession();
+      s.command("clear", "clear");
+      s.system("clear-out", "local_command", "<local-command-stdout></local-command-stdout>");
+      s.system("token", "informational", "Unknown command: /token");
+      fs.writeFileSync(file, lines(s.rows).join("\n") + "\n");
+      expect(readClaudeRecentTurns(file, 1)).toEqual({
+        entries: [
+          { kind: "user", id: "clear", at: s.at(1), text: "/clear", local: true },
+          { kind: "user", id: "token:command", at: s.at(3), text: "/token", local: true },
+          { kind: "assistant", id: "token", at: s.at(3), text: "Unknown command: /token", local: true },
+        ],
+        hasEarlier: false,
+      });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves the manager's and the secretary's readers as they were", () => {
+    const s = cliSession();
+    s.command("clear", "clear");
+    s.system("clear-out", "local_command", "<local-command-stdout></local-command-stdout>");
+    s.system("token", "informational", "Unknown command: /token");
+    s.user("ping", "Reply with one word");
+    s.assistant("pong", "Pong.");
+    const turn = builderTurnFromLines(lines(s.rows));
+    expect(turn.builderLatestMessage).toBe("Reply with one word");
+    expect(turn.turn).toEqual([{ kind: "assistant", text: "Pong." }]);
+    expect(claudeTranscriptEntries(lines(s.rows)).some((entry) => entry.local)).toBe(false);
+  });
+});
+
 describe("claudeTurnEntries", () => {
   it("counts only what the builder typed as user entries", () => {
     const entries = claudeTurnEntries([
@@ -359,7 +519,7 @@ describe("claudeTurnEntries", () => {
     ]);
   });
 
-  it("starts a turn at a command only when the CLI hands its prompt to the agent", () => {
+  it("starts a turn at a command only when the CLI hands its prompt to the agent, else shows it as local", () => {
     // Rows chained the way the CLI chains them, each the previous one's child.
     let parent: string | null = null;
     const chained = (row: Record<string, unknown>, uuid: string) => {
@@ -387,11 +547,14 @@ describe("claudeTurnEntries", () => {
       command("c4", "/plan", "add a cache"),
       meta("m4", "Plan this."),
     ]);
-    expect(entries.map((entry) => [entry.kind, entry.id, entry.text])).toEqual([
-      ["assistant", "a0", "Continuing."],
-      ["user", "c3", "/init"],
-      ["assistant", "a3", "Reading."],
-      ["user", "c4", "/plan add a cache"],
+    expect(entries.map((entry) => [entry.kind, entry.id, entry.text, entry.local])).toEqual([
+      ["user", "c1", "/clear", true],
+      ["assistant", "a0", "Continuing.", undefined],
+      ["user", "c2", "/compact", true],
+      ["assistant", "o2", "Compacted", true],
+      ["user", "c3", "/init", undefined],
+      ["assistant", "a3", "Reading.", undefined],
+      ["user", "c4", "/plan add a cache", undefined],
     ]);
   });
 

@@ -1,7 +1,8 @@
 // Reading a Claude session's JSONL: the entries the manager sees
 // (`claudeTranscriptEntries`), what the builder last said and what happened since
 // (`readBuilderTurn`), the secretary's material behind `Backend.readBuilderTurn`, and
-// the phone's last turns (`readClaudeRecentTurns`, at the end).
+// the phone's last turns (`readClaudeRecentTurns`, at the end), which alone also show
+// the builder's local commands and their output.
 //
 // The builder's messages come from the raw rows, not from `readClaudeTranscript`,
 // which keeps every `isMeta` row with string content as a "user" entry and drops
@@ -17,7 +18,7 @@
 import fs from "fs";
 import type { TranscriptEntry } from "../../shared/remote-protocol";
 import type { BuilderTurn, RecentTurns } from "./types";
-import { RECENT_TURNS_ENTRY_CAP, lastTurns, lineCount, noTurns } from "./recentTurns";
+import { RECENT_TURNS_ENTRY_CAP, lastTurns, lineCount, noTurns, startsTurn } from "./recentTurns";
 
 // For the language rule only: a bare "B" or "[Image #1]" as the latest message
 // falls back to these, newest first.
@@ -347,7 +348,7 @@ export function readClaudeRecentTurns(
       if (start === 0) parsedFrom = 0;
       else if (newline !== -1) parsedFrom = start + newline + 1;
       const entries = claudeTurnEntries(rows);
-      const typed = entries.reduce((count, entry) => (entry.kind === "user" ? count + 1 : count), 0);
+      const typed = entries.reduce((count, entry) => (startsTurn(entry) ? count + 1 : count), 0);
       if (
         start === 0 ||
         length >= window.maxBytes ||
@@ -367,12 +368,22 @@ export function readClaudeRecentTurns(
 
 /**
  * The entries `readClaudeRecentTurns` shows, from session rows in file order. Unlike
- * `claudeTranscriptEntries`, a "user" entry is only a message the builder typed
- * (`typedText`) or a command of theirs that prompted the agent, so each one starts a
- * turn; the other user rows the CLI writes (tool results, notifications, a local
- * command's output, image notes) are left out. A tool entry is settled by its result:
- * `outcome` from `is_error`, and an edit's or write's line counts from the record the
- * CLI keeps beside the result.
+ * `claudeTranscriptEntries`, a "user" entry is a message the builder typed
+ * (`typedText`) or a command of theirs that prompted the agent, each of which starts a
+ * turn, or a command the CLI ran itself, marked `local`; the CLI's output for that
+ * command is a `local` "assistant" entry. The other user rows the CLI writes (tool
+ * results, notifications, image notes, the caveat before a local command) are left
+ * out. A tool entry is settled by its result: `outcome` from `is_error`, and an edit's
+ * or write's line counts from the record the CLI keeps beside the result.
+ *
+ * How Claude Code 2.1.312 records a local command (measured 2026-10-30): an `isMeta`
+ * `<local-command-caveat>` row, the command row (`<command-name>`), and its output as
+ * the command row's child, a `system` row of subtype `local_command` or (`/compact`,
+ * `/exit`) a user row, holding `<local-command-stdout>` (empty for `/clear`). Older
+ * versions wrote some command rows (`/context`, `/model`) as `local_command` system
+ * rows too. A command the CLI doesn't know leaves no command row at all, only an
+ * `informational` system row: "Unknown command: /token". `/new` is recorded as
+ * `/clear`, at the top of the new session's file, which the CLI writes at once.
  */
 export function claudeTurnEntries(rows: Iterable<unknown>): TranscriptEntry[] {
   const entries: TranscriptEntry[] = [];
@@ -387,15 +398,23 @@ export function claudeTurnEntries(rows: Iterable<unknown>): TranscriptEntry[] {
     // A command is the builder's turn when the CLI's next row is the prompt it hands the
     // agent: an `isMeta` row that is the command row's child. A local command such as
     // `/clear`, `/model` or `/compact` has its output or a system row as that child
-    // instead. Every command row on the builder's machine was followed directly by its
-    // child (2026-10-29).
-    const prompted = command;
+    // instead, and is shown as `local`. Every command row on the builder's machine was
+    // followed directly by its child (2026-10-29).
+    const pending = command;
     command = null;
-    if (prompted && row.type === "user" && row.isMeta === true && row.parentUuid === prompted.id) {
-      entries.push(prompted);
-      continue;
+    if (pending) {
+      if (row.type === "user" && row.isMeta === true && row.parentUuid === pending.id) {
+        entries.push(pending);
+        continue;
+      }
+      entries.push({ ...pending, local: true });
     }
     const content = (row.message as Record<string, unknown> | undefined)?.content;
+
+    if (row.type === "system") {
+      command = systemRow(entries, row);
+      continue;
+    }
 
     if (row.type === "user") {
       if (Array.isArray(content)) settleResults(running, content, row.toolUseResult);
@@ -403,11 +422,17 @@ export function claudeTurnEntries(rows: Iterable<unknown>): TranscriptEntry[] {
       const text = typedText(row);
       if (text !== null) {
         entries.push(fromRecord({ kind: "user", text }, row.uuid, row.timestamp));
-      } else if (row.isCompactSummary !== true) {
-        // A compaction summary may quote an old command's tags; it is never one.
-        const line = commandLine(content);
-        if (line) command = fromRecord({ kind: "user", text: line }, row.uuid, row.timestamp);
+        continue;
       }
+      // A compaction summary may quote an old command's tags; it is never one.
+      if (row.isCompactSummary === true) continue;
+      const output = localOutput(content);
+      if (output !== null) {
+        if (output) entries.push(fromRecord({ kind: "assistant", text: output, local: true }, row.uuid, row.timestamp));
+        continue;
+      }
+      const line = commandLine(content);
+      if (line) command = fromRecord({ kind: "user", text: line }, row.uuid, row.timestamp);
       continue;
     }
 
@@ -436,7 +461,62 @@ export function claudeTurnEntries(rows: Iterable<unknown>): TranscriptEntry[] {
       }
     }
   }
+  // The file ends at a command row, its child not written yet: shown for now as the
+  // command the builder ran, and as a turn once its prompt follows.
+  if (command) entries.push({ ...command, local: true });
   return entries;
+}
+
+// A `system` row's local entries: a local command's output, or the CLI's word that it
+// doesn't know a command, as that command and the reply. The command row itself, when
+// an older CLI wrote it as a system row, is returned for the caller to hold like a
+// user one. Every other system row (turn durations, hook summaries, notices) is the
+// CLI's bookkeeping.
+function systemRow(entries: TranscriptEntry[], row: Record<string, unknown>): TranscriptEntry | null {
+  if (typeof row.content !== "string") return null;
+  if (row.subtype === "local_command") {
+    const output = localOutput(row.content);
+    if (output !== null) {
+      if (output) entries.push(fromRecord({ kind: "assistant", text: output, local: true }, row.uuid, row.timestamp));
+      return null;
+    }
+    const line = commandLine(row.content);
+    return line ? fromRecord({ kind: "user", text: line }, row.uuid, row.timestamp) : null;
+  }
+  if (row.subtype === "informational") {
+    const text = plainOutput(row.content);
+    const unknown = UNKNOWN_COMMAND.exec(text);
+    if (!unknown) return null;
+    const id = typeof row.uuid === "string" && row.uuid ? `${row.uuid}:command` : undefined;
+    entries.push(fromRecord({ kind: "user", text: `/${unknown[1]}`, local: true }, id, row.timestamp));
+    entries.push(fromRecord({ kind: "assistant", text, local: true }, row.uuid, row.timestamp));
+  }
+  return null;
+}
+
+// What the CLI says to a slash command it doesn't know: "Unknown command: /token"
+// (2.1.312, the only form on the builder's machine), the name possibly without its
+// slash or with "slash" before "command".
+const UNKNOWN_COMMAND = /^Unknown (?:slash )?command: ?\/?(\S+)/;
+
+// A local command's output, the `<local-command-stdout>` (or `-stderr`) row's text as
+// the terminal showed it: "" when it printed nothing (`/clear`), null for a row that
+// isn't one.
+function localOutput(content: unknown): string | null {
+  if (typeof content !== "string") return null;
+  const match = /^\s*<local-command-(stdout|stderr)>([\s\S]*)<\/local-command-\1>\s*$/.exec(content);
+  return match ? plainOutput(match[2]) : null;
+}
+
+// An escape sequence in terminal output: CSI (colours, `\x1b[1m`), OSC (titles, links)
+// ended by BEL or ST, a character-set choice (`\x1b(B`), or a lone two-byte one.
+// eslint-disable-next-line no-control-regex
+const ESCAPE_SEQUENCE = /\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[ -/]+[0-~]|[@-Z\\^_])/g;
+
+// Terminal output as plain text: without its colours and other escape sequences
+// (`/context` and `/compact` print them), trimmed.
+function plainOutput(text: string): string {
+  return text.replace(ESCAPE_SEQUENCE, "").trim();
 }
 
 // `id` and `at` from the record, when it has them.

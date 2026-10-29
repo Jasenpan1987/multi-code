@@ -318,7 +318,9 @@ class FakeProcessManager implements HostProcessManager {
     }
     this.transcriptReads++;
     this.transcriptTurns.push(turns);
-    return { entries: this.transcript, hasEarlier: this.hasEarlier };
+    // From the session the instance is on, as process-manager reads it.
+    const session = this.instances.get(id)?.sessionId;
+    return { entries: this.transcript, hasEarlier: this.hasEarlier, ...(session ? { session } : {}) };
   }
   ptySizeOf(id: string) {
     if (this.instances.get(id)?.status !== "running") return null;
@@ -827,6 +829,47 @@ describe("RemoteServer streaming", () => {
     client.close();
   });
 
+  it("sends the new session's transcript at once when the instance moves to another, empty as it may be", async () => {
+    // The builder's iPhone test: after `/new` the desk's terminal cleared and the
+    // phone kept the old chat. process-manager's attachSession broadcasts the list;
+    // that is what has to bring the new session's transcript.
+    const fx = await startServer();
+    fx.pm.instances.get("inst-1")!.sessionId = "ses-old";
+    const client = await connected(fx);
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    expect(await client.waitFor("transcript")).toMatchObject({ entries: fx.pm.transcript, session: "ses-old" });
+
+    fx.pm.instances.get("inst-1")!.sessionId = "ses-new";
+    fx.pm.transcript = [];
+    fx.server.broadcastInstances();
+    expect(await client.waitFor("transcript")).toEqual({
+      type: "transcript",
+      instanceId: "inst-1",
+      entries: [],
+      hasEarlier: false,
+      session: "ses-new",
+    });
+
+    // Once: a list that finds it on the same session sends none.
+    const reads = fx.pm.transcriptReads;
+    fx.server.broadcastInstances();
+    await client.drain();
+    expect(fx.pm.transcriptReads).toBe(reads);
+    client.close();
+  });
+
+  it("sends no transcript on a move to a phone that doesn't have the instance open", async () => {
+    const fx = await startServer();
+    fx.pm.instances.get("inst-1")!.sessionId = "ses-old";
+    const client = await connected(fx);
+    await vi.waitFor(() => expect(fx.pm.turnReads).toBe(1));
+    fx.pm.instances.get("inst-1")!.sessionId = "ses-new";
+    fx.server.broadcastInstances();
+    expect((await client.drain()).map((frame) => frame.type)).not.toContain("transcript");
+    expect(fx.pm.transcriptReads).toBe(0);
+    client.close();
+  });
+
   it("refreshes the transcript when the agent's state changes", async () => {
     const fx = await startServer();
     const client = await connected(fx);
@@ -1019,6 +1062,19 @@ describe("instance states and previews", () => {
     fx.server.broadcastInstances();
     await row(client, (r) => r.preview === undefined);
     expect(fx.pm.turnReads).toBe(2);
+    client.close();
+  });
+
+  it("lists the agent's last line, never a local command's output", async () => {
+    const fx = await startServer();
+    fx.pm.turns.set("inst-1", [
+      { kind: "user", text: "say something" },
+      { kind: "assistant", text: "Here is the answer you asked for." },
+      { kind: "user", text: "/token", local: true },
+      { kind: "assistant", text: "Unknown command: /token", local: true },
+    ]);
+    const client = await connected(fx);
+    await row(client, (r) => r.preview === "Here is the answer you asked for.");
     client.close();
   });
 
