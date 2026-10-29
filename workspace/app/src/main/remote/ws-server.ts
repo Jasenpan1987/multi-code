@@ -24,13 +24,13 @@ import {
   type PairedDevice,
   type PairingOffer,
   type RemoteInstance,
+  type RemoteSessionState,
   type RemoteStatus,
   type ServerFrame,
   type TranscriptEntry,
 } from "../../shared/remote-protocol";
 import { SealedChannel, getHostIdentity, mintDeviceToken, tokensMatch } from "./crypto";
 import { loadDevices, saveDevices, type StoredDevice } from "./device-store";
-import { buildEndpointUrls, buildEndpoints } from "./endpoints";
 import { outputBuffer } from "./output-buffer";
 import { type PromptDetail } from "./promptExtract";
 
@@ -72,12 +72,6 @@ export interface RemoteHost {
   writeToInstance: (id: string, data: string) => void;
   // Send a whole prompt as one paste + Enter (same path as the compose box).
   sendPrompt: (id: string, text: string) => void;
-  // Answer option `index` of `detail`, the prompt whose buttons the phone tapped:
-  // with the keys of the backend that owns the instance, or through the CLI's API
-  // when it answers that way. Must not be done here: the CLIs disagree on which keys
-  // select an option, and guessing wrong can confirm the wrong choice. Resolves false
-  // when nothing was answered.
-  answerChoice: (id: string, detail: PromptDetail, index: number) => Promise<boolean>;
   // Reflowable conversation tail, which is what the phone shows instead of the
   // 120-column terminal.
   readTranscript: (id: string, limit: number) => TranscriptEntry[];
@@ -92,6 +86,18 @@ const TRANSCRIPT_LIMIT = 40;
 // thousands, short enough that the summary tracks what's on screen.
 const TRANSCRIPT_REFRESH_MS = 1000;
 
+// mobile-v2 T-803 (answering dialogs): placeholder `prompt-state` with a one-line
+// summary and no `dialog`, so the phone falls back to the terminal; replaced by the
+// dialog in full.
+function promptStateFrame(instanceId: string, detail: PromptDetail, seq: number): ServerFrame {
+  return {
+    type: "prompt-state",
+    instanceId,
+    seq,
+    summary: detail.question ?? detail.tool,
+  };
+}
+
 export class RemoteServer {
   private httpServer: http.Server | null = null;
   private wss: WebSocketServer | null = null;
@@ -101,11 +107,12 @@ export class RemoteServer {
   private startError: string | undefined;
   private host: RemoteHost | null = null;
   private onStatusChange: (() => void) | null = null;
-  // Latest prompt per instance, so a phone that connects while the agent is
-  // already blocked still gets the buttons.
   // The prompt each instance is blocked on, as the phone was last shown it, and the
-  // number its `prompt-state` carried.
-  private activePrompts = new Map<string, { detail: PromptDetail; promptId: string }>();
+  // seq its `prompt-state` carried, so a phone that subscribes while the agent is
+  // already blocked gets the same dialog under the same seq.
+  private activePrompts = new Map<string, { detail: PromptDetail; seq: number }>();
+  // mobile-v2 T-803: placeholder seq source; T-803 uses the secretary event's seq.
+  private promptSeq = 0;
   // Latest activity signal per instance. Kept server-side rather than only in
   // the phone's memory so that reopening the app (or a reconnect after a screen
   // lock) still shows which agents are waiting, instead of a clean list that
@@ -222,7 +229,8 @@ export class RemoteServer {
 
     return {
       v: REMOTE_PROTOCOL_VERSION,
-      endpoints: buildEndpointUrls(this.port),
+      // mobile-v2 T-805: placeholder; T-805 makes this the tailscale https origin.
+      origin: `http://127.0.0.1:${this.port}`,
       hostPublicKey: identity.publicKeyB64,
       deviceToken: token,
       hostName: this.hostName(),
@@ -255,11 +263,18 @@ export class RemoteServer {
       pairedAt: d.pairedAt,
       lastSeenAt: d.lastSeenAt,
       connected: connectedIds.has(d.id),
+      // mobile-v2 T-810 (Web Push): no push yet.
+      pushEnabled: false,
     }));
     return {
       enabled: this.httpServer !== null,
       port: this.port,
-      endpoints: this.port ? buildEndpoints(this.port) : [],
+      // mobile-v2 T-805 (tailscale, https) and T-810 (Web Push): placeholder checks.
+      checks: {
+        tailscale: { state: "unknown" },
+        https: { state: "unknown" },
+        push: { state: "error", detail: "not built yet" },
+      },
       devices,
       error: this.startError,
     };
@@ -293,19 +308,25 @@ export class RemoteServer {
     if (hasWatcher) this.scheduleTranscriptRefresh(instanceId);
   }
 
-  // Current attention state for an instance, used to fill in the instance list
-  // so a freshly-opened phone sees badges immediately.
-  activityFor(instanceId: string): "waiting" | "prompt" | null {
-    return this.activity.get(instanceId) ?? null;
+  // Current state of an instance for the phone's list, so a freshly-opened phone
+  // sees which agents need it immediately.
+  // mobile-v2 T-803: placeholder mapping of the activity map; T-803 derives the
+  // state (and `since`/`preview`) properly, including "working".
+  stateFor(instanceId: string): RemoteSessionState {
+    const activity = this.activity.get(instanceId);
+    if (activity === "prompt") return "needs-you";
+    if (activity === "waiting") return "finished";
+    return "idle";
   }
 
-  // `restated`: a dialog the phone was told about before is the live one again. Its
-  // buttons replace the ones shown, without a second vibration.
+  // `_restated`: a dialog the phone was told about before is the live one again.
+  // Unused since the `activity` frame went (mobile-v2 T-803 decides what it means,
+  // with the secretary event's seq).
   broadcastActivity(
     instanceId: string,
     activity: string,
     detail?: PromptDetail,
-    restated = false
+    _restated = false
   ) {
     if (activity === "prompt-cleared") {
       this.activePrompts.delete(instanceId);
@@ -318,22 +339,14 @@ export class RemoteServer {
 
     if (activity !== "waiting" && activity !== "prompt") return;
     this.activity.set(instanceId, activity);
-    if (!restated) this.broadcast({ type: "activity", instanceId, activity });
     // The agent just changed state, so whoever is watching wants the updated
     // summary, not the one from when they subscribed.
     this.broadcastTranscript(instanceId);
 
     if (activity === "prompt" && detail) {
-      const promptId = crypto.randomUUID();
-      this.activePrompts.set(instanceId, { detail, promptId });
-      this.broadcast({
-        type: "prompt-state",
-        instanceId,
-        tool: detail.tool,
-        question: detail.question,
-        options: detail.options,
-        promptId,
-      });
+      const seq = ++this.promptSeq;
+      this.activePrompts.set(instanceId, { detail, seq });
+      this.broadcast(promptStateFrame(instanceId, detail, seq));
     }
     this.broadcastInstances();
   }
@@ -546,7 +559,13 @@ export class RemoteServer {
       // placeholder name from pairing is replaced here.
       if (frame.deviceName) device.name = frame.deviceName;
       saveDevices(this.devices);
-      this.send(conn, { type: "auth-ok", hostName: this.hostName() });
+      this.send(conn, {
+        type: "auth-ok",
+        hostName: this.hostName(),
+        // mobile-v2 T-810 (Web Push): no VAPID key or subscription yet.
+        vapidPublicKey: "",
+        pushEnabled: false,
+      });
       if (this.host) {
         this.send(conn, { type: "instances", instances: this.host.listInstances() });
       }
@@ -582,17 +601,13 @@ export class RemoteServer {
           type: "snapshot",
           instanceId: frame.instanceId,
           data: outputBuffer.snapshot(frame.instanceId),
+          // mobile-v2 T-803 (terminal sizing): placeholder; replaced by the PTY's size.
+          cols: 120,
+          rows: 40,
         });
         const prompt = this.activePrompts.get(frame.instanceId);
         if (prompt) {
-          this.send(conn, {
-            type: "prompt-state",
-            instanceId: frame.instanceId,
-            tool: prompt.detail.tool,
-            question: prompt.detail.question,
-            options: prompt.detail.options,
-            promptId: prompt.promptId,
-          });
+          this.send(conn, promptStateFrame(frame.instanceId, prompt.detail, prompt.seq));
         }
         return;
       }
@@ -607,35 +622,21 @@ export class RemoteServer {
 
       case "prompt":
         this.host?.sendPrompt(frame.instanceId, frame.text);
+        this.send(conn, { type: "ack", clientMsgId: frame.clientMsgId, ok: true });
         return;
 
-      case "choose": {
-        // Either the prompt already cleared, the index doesn't map to an answer we
-        // trust, or the CLI said the dialog was answered already. Say so instead of
-        // firing a guess into the PTY.
-        const unavailable = () =>
-          this.send(conn, {
-            type: "error",
-            message: "That choice is no longer available — use the terminal view.",
-          });
-        const prompt = this.activePrompts.get(frame.instanceId);
-        // A tap on buttons another prompt has replaced since: its index means
-        // something else now (a desk answer, then the next dialog, while the tap
-        // was on its way). One that doesn't say which buttons can't be told apart.
-        if (!prompt || frame.promptId !== prompt.promptId || !this.host) {
-          unavailable();
-          return;
-        }
-        // Keys are written before the call returns, so input the phone sends after
-        // still lands after them; an answer through the CLI's API resolves later.
-        this.host.answerChoice(frame.instanceId, prompt.detail, frame.optionIndex).then(
-          (answered) => {
-            if (!answered) unavailable();
-          },
-          unavailable
-        );
+      // mobile-v2 T-803 (answer, interrupt) and T-810 (Web Push): refused until each is built.
+      case "answer":
+      case "interrupt":
+      case "push-subscribe":
+        this.send(conn, {
+          type: "ack",
+          clientMsgId: frame.clientMsgId,
+          ok: false,
+          reason: "unsupported",
+          message: "Not built yet",
+        });
         return;
-      }
 
       default:
         return;
@@ -653,7 +654,8 @@ export class RemoteServer {
       return;
     }
     if (entries.length === 0) return;
-    this.send(conn, { type: "transcript", instanceId, entries });
+    // mobile-v2 T-803 + T-804 (transcript turns): placeholder; replaced by `turns` paging.
+    this.send(conn, { type: "transcript", instanceId, entries, hasEarlier: false });
   }
 
   // Push a refreshed transcript to everyone watching this instance. Called when

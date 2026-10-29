@@ -32,11 +32,11 @@ export function initRemote() {
         // Populated so the phone's list can show which agents need attention
         // without opening each one. Previously always undefined, which meant a
         // phone that had just been reopened showed no badges at all.
-        activity: remoteServer.activityFor(i.id),
+        // mobile-v2 T-803: no `since`/`preview` yet.
+        state: remoteServer.stateFor(i.id),
       })),
     writeToInstance: (id, data) => processManager.writeToInstance(id, data),
     sendPrompt: (id, text) => processManager.sendPrompt(id, text),
-    answerChoice: (id, detail, index) => processManager.answerPhoneChoice(id, detail, index),
     readTranscript: (id, limit) => processManager.readTranscript(id, limit),
   });
 

@@ -1,0 +1,929 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multi-Code mobile v2 · UI mockups</title>
+<style>
+/* Mockups only. Not app code. */
+body {
+  --page: #0d0e10; --page-text: #d8dbe0; --page-muted: #8a9099;
+  --bg: #141518; --surface: #1d1f24; --surface2: #262931; --border: #2f333b;
+  --text: #e8eaed; --muted: #9aa0aa; --faint: #6b717b;
+  --accent: #4a8ac4; --accent-text: #fff; --bubble: #2d5a8a; --bubble-text: #fff;
+  --red: #e5534b; --green: #3fb950; --amber: #d9822b; --blue: #4a8ac4;
+  --code-bg: #262931; --scrim: rgba(0,0,0,.55); --sheet: #1f2126;
+  --banner-bg: #3a2a12; --banner-text: #f3c68a;
+}
+body.light {
+  --page: #dfe5ee; --page-text: #1f2633; --page-muted: #5b6575;
+  --bg: #f0f4fa; --surface: #ffffff; --surface2: #e6edf6; --border: #d5dde8;
+  --text: #1a1a1a; --muted: #5f6b7d; --faint: #8b95a5;
+  --accent: #2d5a8a; --bubble: #2d5a8a;
+  --red: #d93a32; --green: #1f7a3d; --amber: #b86a12; --blue: #2d6fb0;
+  --code-bg: #e9eef5; --scrim: rgba(20,30,50,.35); --sheet: #ffffff;
+  --banner-bg: #fdf0dc; --banner-text: #8a4d00;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--page); color: var(--page-text);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif;
+  font-size: 14px; line-height: 1.5;
+}
+.page { max-width: 1760px; margin: 0 auto; padding: 32px 32px 80px; }
+.page h1 { font-size: 26px; margin: 0 0 4px; }
+.page h2 { font-size: 20px; margin: 48px 0 6px; padding-top: 16px; border-top: 1px solid var(--border); }
+.page .lead { color: var(--page-muted); margin: 0 0 18px; }
+.intro { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 1100px; }
+.intro .box { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; color: var(--text); }
+.intro .box h3 { margin: 0 0 6px; font-size: 15px; }
+.intro ul, .intro ol { margin: 0; padding-left: 20px; }
+.toggle { position: fixed; top: 16px; right: 20px; z-index: 10; display: flex; gap: 0; border-radius: 9px; overflow: hidden; border: 1px solid var(--border); }
+.toggle button { border: 0; padding: 7px 14px; font: inherit; background: var(--surface); color: var(--text); cursor: pointer; }
+.toggle button.on { background: var(--accent); color: #fff; }
+
+.row { display: flex; flex-wrap: wrap; gap: 40px 36px; margin-top: 20px; align-items: flex-start; }
+.shot { width: 390px; }
+.shot.wide { width: 620px; }
+.shot .label { font-weight: 600; font-size: 15px; margin-bottom: 10px; }
+.shot .label .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 6px; margin-right: 6px; background: var(--accent); color: #fff; }
+.shot .label .tag.alt { background: #8a5cc4; }
+.notes { margin: 14px 0 0; padding-left: 18px; color: var(--page-muted); }
+.notes li { margin: 3px 0; }
+.notes b { color: var(--page-text); }
+
+/* Phone frame ------------------------------------------------------------ */
+.phone {
+  position: relative; width: 390px; height: 844px; border-radius: 54px;
+  background: var(--bg); color: var(--text); overflow: hidden;
+  box-shadow: 0 0 0 10px #050505, 0 0 0 11px #2a2a2a, 0 24px 60px rgba(0,0,0,.45);
+  font-size: 15px; line-height: 1.45;
+}
+.island { position: absolute; top: 11px; left: 50%; transform: translateX(-50%); width: 122px; height: 35px; border-radius: 20px; background: #000; z-index: 30; }
+.statusbar { position: absolute; top: 0; left: 0; right: 0; height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 6px 34px 0 42px; font-weight: 600; font-size: 15px; z-index: 20; }
+.statusbar .r { font-size: 12px; letter-spacing: .5px; }
+.homebar { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); width: 134px; height: 5px; border-radius: 3px; background: var(--text); opacity: .55; z-index: 40; }
+.app { position: absolute; top: 54px; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; }
+
+/* App chrome */
+.topbar { height: 50px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--bg); }
+.topbar .title { font-size: 17px; font-weight: 700; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar .back { color: var(--accent); font-size: 26px; line-height: 1; margin-right: -2px; }
+.topbar .sub { font-size: 12px; color: var(--muted); font-weight: 400; }
+.topbar .icon { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); font-size: 17px; }
+.topbar .icon.mono { font-family: Menlo, monospace; font-size: 13px; font-weight: 700; background: var(--surface2); }
+.conn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); background: var(--surface2); padding: 3px 9px; border-radius: 11px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.dot.green { background: var(--green); } .dot.red { background: var(--red); } .dot.blue { background: var(--blue); } .dot.grey { background: var(--faint); } .dot.amber { background: var(--amber); }
+.dot.pulse { animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+.scroll { flex: 1; overflow: hidden; position: relative; }
+
+.av { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-weight: 700; font-size: 15px; color: #fff; flex: none; }
+.av.c { background: #c96f4e; } .av.o { background: #4b5563; }
+.av.sm { width: 22px; height: 22px; border-radius: 6px; font-size: 11px; }
+
+.pill { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 9px; white-space: nowrap; }
+.pill.need { background: var(--red); color: #fff; }
+.pill.work { background: transparent; color: var(--blue); border: 1px solid var(--blue); }
+.pill.done { background: transparent; color: var(--green); border: 1px solid var(--green); }
+
+/* List (A) */
+.group { font-size: 12px; font-weight: 600; color: var(--muted); padding: 14px 16px 6px; letter-spacing: .3px; }
+.srow { display: flex; gap: 12px; padding: 11px 16px; border-bottom: 1px solid var(--border); align-items: flex-start; }
+.srow .main { flex: 1; min-width: 0; }
+.srow .line1 { display: flex; align-items: center; gap: 7px; }
+.srow .name { font-weight: 600; font-size: 15px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srow .time { font-size: 12px; color: var(--muted); }
+.srow .prev { font-size: 13.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.srow .prev code { font-family: Menlo, monospace; font-size: 12.5px; color: var(--text); }
+.srow .proj { font-size: 12px; color: var(--faint); margin-top: 1px; }
+.srow.unread .name { font-weight: 800; }
+.srow.unread .prev { color: var(--text); }
+
+/* Cards (B) */
+.cards { padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 11px 12px 12px; }
+.card.need { border-left: 3px solid var(--red); }
+.card.done { border-left: 3px solid var(--green); }
+.card-head { display: flex; align-items: center; gap: 8px; }
+.card-head b { flex: 1; font-size: 15px; }
+.card-head .time { font-size: 12px; color: var(--muted); }
+.card-head .chev { color: var(--faint); font-size: 18px; }
+.card .ctx { font-size: 13px; color: var(--muted); margin: 7px 0 6px; }
+.card .q { font-size: 14.5px; margin: 6px 0; }
+.btns { display: flex; gap: 8px; margin-top: 9px; flex-wrap: wrap; }
+.strip { display: flex; gap: 8px; padding: 4px 12px 12px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 6px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; }
+.chip .m { color: var(--muted); font-size: 12px; }
+.more { font-size: 13px; color: var(--accent); margin-top: 8px; }
+
+/* Buttons */
+.btn { display: flex; align-items: center; justify-content: center; text-align: center; min-height: 44px; padding: 8px 14px; border-radius: 12px; font-weight: 600; font-size: 15px; background: var(--surface2); color: var(--text); border: 1px solid transparent; }
+.btn.primary { background: var(--accent); color: #fff; }
+.btn.danger { background: transparent; border-color: var(--red); color: var(--red); }
+.btn.sm { min-height: 36px; padding: 6px 13px; font-size: 14px; border-radius: 10px; }
+.btn.block { width: 100%; }
+.btn.left { justify-content: flex-start; text-align: left; font-weight: 500; }
+.btn.ghost { background: transparent; border-color: var(--border); }
+.btn.disabled { opacity: .45; }
+.stack { display: flex; flex-direction: column; gap: 8px; }
+
+/* Chat */
+.chat { padding: 14px 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.u { align-self: flex-end; max-width: 82%; background: var(--bubble); color: var(--bubble-text); padding: 8px 13px; border-radius: 18px 18px 5px 18px; }
+.u .st { display: block; font-size: 11.5px; opacity: .8; margin-top: 3px; text-align: right; }
+.a p { margin: 0 0 8px; } .a p:last-child { margin-bottom: 0; }
+.a ul, .a ol { margin: 4px 0 8px; padding-left: 20px; }
+.a li { margin: 2px 0; }
+.a h4 { margin: 4px 0 6px; font-size: 15px; }
+code, .mono { font-family: Menlo, "SF Mono", monospace; font-size: 13px; }
+.a code, .card code, .sheet code { background: var(--code-bg); padding: 1px 5px; border-radius: 5px; }
+.who { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.fold { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; font-size: 13px; color: var(--muted); }
+.fold .fh { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
+.fold .fh .chev { color: var(--muted); width: 12px; font-size: 14px; }
+.fold .fh .t { flex: 1; }
+.fold .tools { border-top: 1px solid var(--border); padding: 5px 0; }
+.tool { display: flex; gap: 8px; padding: 3px 12px; font-family: Menlo, monospace; font-size: 12px; color: var(--text); align-items: baseline; }
+.tool .v { width: 38px; flex: none; color: var(--muted); }
+.tool .tg { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool .ok { color: var(--green); } .tool .run { color: var(--blue); } .tool .bad { color: var(--red); }
+.tool .add { color: var(--green); } .tool .del { color: var(--red); }
+.divider { text-align: center; font-size: 11.5px; color: var(--faint); }
+.jumpmark { border-top: 1px dashed var(--accent); position: relative; margin: 2px 0; }
+.jumpmark span { position: absolute; right: 0; top: -9px; font-size: 11px; color: var(--accent); background: var(--bg); padding-left: 6px; }
+
+.compose { flex: none; border-top: 1px solid var(--border); padding: 8px 10px 36px; display: flex; gap: 8px; align-items: flex-end; background: var(--bg); }
+.compose .box { flex: 1; min-height: 38px; border-radius: 19px; background: var(--surface2); padding: 8px 14px; color: var(--faint); font-size: 15px; }
+.compose .send { width: 38px; height: 38px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 18px; flex: none; }
+.compose .send.off { opacity: .4; }
+.hint { font-size: 11.5px; color: var(--faint); padding: 0 14px 4px; }
+
+.workbar { flex: none; display: flex; align-items: center; gap: 9px; padding: 8px 14px; border-top: 1px solid var(--border); background: var(--surface); font-size: 13px; }
+.workbar .t { flex: 1; min-width: 0; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.workbar .t b { color: var(--text); font-weight: 600; }
+.stopbtn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 9px; border: 1px solid var(--red); color: var(--red); font-weight: 700; font-size: 13px; }
+.stopbtn i { width: 9px; height: 9px; background: var(--red); border-radius: 2px; display: inline-block; }
+
+/* Dock / sheet */
+.dock { flex: none; background: var(--sheet); border-top: 1px solid var(--border); border-radius: 18px 18px 0 0; padding: 12px 14px 38px; box-shadow: 0 -10px 30px rgba(0,0,0,.25); }
+.dock .kind { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--red); font-weight: 700; margin-bottom: 6px; }
+.dock .kind .m { color: var(--muted); font-weight: 500; margin-left: auto; }
+.dock .q { font-size: 15px; font-weight: 600; margin: 8px 0 10px; }
+pre.cmd { margin: 0; background: var(--code-bg); border-radius: 10px; padding: 9px 11px; font-family: Menlo, monospace; font-size: 13px; white-space: pre-wrap; word-break: break-all; color: var(--text); }
+.desc { font-size: 13px; color: var(--muted); margin-top: 6px; }
+.reason { margin-top: 8px; border: 1px solid var(--red); border-radius: 10px; padding: 8px 11px; font-size: 14px; color: var(--faint); min-height: 54px; }
+.scrim { position: absolute; inset: 0; background: var(--scrim); z-index: 5; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--sheet); border-radius: 20px 20px 0 0; padding: 8px 16px 40px; display: flex; flex-direction: column; box-shadow: 0 -14px 40px rgba(0,0,0,.35); }
+.handle { width: 38px; height: 5px; border-radius: 3px; background: var(--border); margin: 0 auto 10px; }
+.sheet .sh { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.sheet .sh b { color: var(--text); font-size: 15px; }
+.sheet .sh .x { margin-left: auto; color: var(--muted); font-size: 18px; }
+.answered { display: flex; gap: 8px; align-items: center; font-size: 13.5px; background: var(--surface2); border-radius: 10px; padding: 8px 11px; margin-top: 12px; }
+.answered .ok { color: var(--green); font-weight: 700; }
+.answered .h { color: var(--muted); }
+.answered .e { margin-left: auto; color: var(--accent); font-size: 13px; }
+.qhead { margin-top: 14px; display: flex; align-items: center; gap: 8px; }
+.qtag { font-size: 11.5px; font-weight: 700; padding: 1px 8px; border-radius: 6px; background: var(--surface2); color: var(--muted); }
+.qstep { font-size: 12px; color: var(--muted); margin-left: auto; }
+.qtext { font-size: 16px; font-weight: 600; margin: 6px 0 8px; }
+.opt { display: flex; gap: 11px; padding: 10px 4px; border-bottom: 1px solid var(--border); align-items: flex-start; }
+.opt .box { width: 20px; height: 20px; border-radius: 5px; border: 2px solid var(--faint); flex: none; margin-top: 1px; display: grid; place-items: center; font-size: 13px; color: #fff; font-weight: 800; }
+.opt .box.radio { border-radius: 50%; }
+.opt .box.on { background: var(--accent); border-color: var(--accent); }
+.opt .ol { font-weight: 600; font-size: 14.5px; }
+.opt .od { font-size: 12.5px; color: var(--muted); }
+.opt.type .ol { color: var(--faint); font-weight: 400; }
+.plan { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 13px; font-size: 13.5px; overflow: hidden; position: relative; margin: 10px 0 12px; }
+.plan h4 { margin: 2px 0 6px; font-size: 15px; }
+.plan ol { margin: 4px 0 6px; padding-left: 20px; }
+.plan p { margin: 4px 0; }
+.plan .fade { position: absolute; left: 0; right: 0; bottom: 0; height: 44px; background: linear-gradient(transparent, var(--surface)); }
+
+/* Terminal */
+.term { flex: 1; background: #0c0c0c; color: #cfcfcf; font-family: Menlo, monospace; font-size: 10.5px; line-height: 1.38; padding: 8px 0 8px 8px; overflow: hidden; position: relative; white-space: pre; }
+.term .y { color: #e5c07b; } .term .g { color: #7ec699; } .term .b { color: #79b8ff; } .term .d { color: #7d7d7d; } .term .w { color: #fff; font-weight: 700; } .term .o { color: #d9825b; }
+.term .edge { position: absolute; top: 0; right: 0; bottom: 0; width: 46px; background: linear-gradient(90deg, transparent, rgba(12,12,12,.95)); }
+.term .cols { position: absolute; right: 8px; bottom: 8px; font-family: -apple-system, sans-serif; font-size: 11px; background: rgba(255,255,255,.12); color: #ddd; padding: 3px 8px; border-radius: 8px; }
+.keyrow { flex: none; display: flex; gap: 6px; padding: 6px 8px; background: #1c1c1e; overflow: hidden; }
+.key { min-width: 38px; height: 34px; border-radius: 8px; background: #3a3a3c; color: #fff; display: grid; place-items: center; font-size: 12.5px; font-weight: 600; padding: 0 8px; flex: none; }
+.key.r { background: #5a2b2b; }
+.tinput { flex: none; display: flex; gap: 8px; padding: 6px 8px; background: #1c1c1e; border-top: 1px solid #2c2c2e; }
+.tinput .box { flex: 1; height: 34px; border-radius: 9px; background: #2c2c2e; color: #8a8a8e; font-size: 14px; padding: 7px 11px; }
+.tinput .go { height: 34px; padding: 0 12px; border-radius: 9px; background: #3a3a3c; color: #fff; display: grid; place-items: center; font-size: 13px; font-weight: 600; }
+.kbd { flex: none; height: 262px; background: #2b2b2d; padding: 8px 3px 40px; display: flex; flex-direction: column; gap: 10px; }
+.kbd .kr { display: flex; justify-content: center; gap: 6px; }
+.kbd .k { height: 42px; flex: 0 0 32px; background: #6b6b6e; border-radius: 6px; color: #fff; display: grid; place-items: center; font-size: 17px; }
+.kbd .k.f { background: #444446; flex-basis: 44px; font-size: 13px; }
+.kbd .k.sp { flex-basis: 180px; font-size: 13px; }
+.kbd .k.ret { flex-basis: 88px; font-size: 13px; background: #444446; }
+
+/* Banner */
+.banner { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: var(--banner-bg); color: var(--banner-text); font-size: 13px; }
+.banner b { font-weight: 700; }
+.banner .act { margin-left: auto; font-weight: 700; text-decoration: underline; }
+
+/* Lock screen */
+.lock { position: absolute; inset: 0; background: radial-gradient(120% 70% at 30% 10%, #3b4f8f 0%, #1d2346 45%, #0b0d1a 100%); color: #fff; }
+.lock .date { text-align: center; margin-top: 70px; font-size: 19px; font-weight: 600; opacity: .9; }
+.lock .clock { text-align: center; font-size: 92px; font-weight: 600; line-height: 1; letter-spacing: -2px; margin-top: 2px; }
+.lock .stackn { position: absolute; left: 10px; right: 10px; bottom: 120px; display: flex; flex-direction: column; gap: 8px; }
+.noti { background: rgba(245,245,250,.2); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-radius: 20px; padding: 11px 13px; display: flex; gap: 10px; }
+.noti .ic { width: 38px; height: 38px; border-radius: 9px; background: linear-gradient(135deg, #3f78b8, #23466e); display: grid; place-items: center; font-weight: 800; font-size: 17px; flex: none; }
+.noti .tx { flex: 1; min-width: 0; font-size: 14px; line-height: 1.3; }
+.noti .tx .h { display: flex; justify-content: space-between; font-weight: 700; }
+.noti .tx .h span { font-weight: 400; opacity: .7; font-size: 12.5px; }
+.noti .tx .b { opacity: .95; }
+.lock .bottom { position: absolute; bottom: 44px; left: 46px; right: 46px; display: flex; justify-content: space-between; }
+.lock .bottom div { width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,.18); display: grid; place-items: center; font-size: 20px; }
+
+/* Setup */
+.setup { padding: 26px 22px; display: flex; flex-direction: column; gap: 14px; }
+.logo { width: 62px; height: 62px; border-radius: 15px; background: linear-gradient(135deg, #3f78b8, #23466e); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 28px; }
+.setup h3 { margin: 4px 0 0; font-size: 22px; }
+.setup .m { color: var(--muted); font-size: 14px; margin: 0; }
+.step { display: flex; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px 13px; }
+.step .n { width: 26px; height: 26px; border-radius: 50%; background: var(--surface2); display: grid; place-items: center; font-weight: 700; font-size: 13px; flex: none; color: var(--muted); }
+.step .n.ok { background: var(--green); color: #fff; }
+.step .n.cur { background: var(--accent); color: #fff; }
+.step .st { flex: 1; }
+.step .st b { display: block; font-size: 15px; }
+.step .st span { font-size: 13px; color: var(--muted); }
+.share { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 5px; background: var(--surface2); font-size: 13px; vertical-align: -5px; }
+
+/* Desktop panel */
+.desk { width: 620px; border-radius: 12px; overflow: hidden; background: var(--surface); color: var(--text); border: 1px solid var(--border); box-shadow: 0 18px 50px rgba(0,0,0,.35); font-size: 13px; }
+.desk .wt { height: 30px; background: var(--surface2); display: flex; align-items: center; gap: 7px; padding: 0 12px; }
+.desk .wt i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+.desk .wt span { margin-left: 10px; font-size: 12px; color: var(--muted); }
+.desk .body { padding: 16px 18px; display: grid; grid-template-columns: 1fr 180px; gap: 18px; }
+.desk h4 { margin: 0 0 8px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.sw { width: 34px; height: 20px; border-radius: 10px; background: var(--green); position: relative; display: inline-block; margin-left: auto; }
+.sw::after { content: ""; position: absolute; right: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.check { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); align-items: baseline; }
+.check .s { width: 16px; font-weight: 800; flex: none; }
+.check .s.ok { color: var(--green); } .check .s.bad { color: var(--red); }
+.check .k { width: 92px; flex: none; color: var(--muted); }
+.check .v { flex: 1; font-family: Menlo, monospace; font-size: 11.5px; word-break: break-all; }
+.check .a { color: var(--accent); font-weight: 600; white-space: nowrap; }
+.qr { width: 180px; height: 180px; background: #fff; padding: 10px; border-radius: 8px; display: grid; grid-template-columns: repeat(25, 1fr); }
+.qr i { display: block; }
+.qr i.on { background: #111; }
+.desk .dev { display: flex; gap: 8px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.desk .dev .n { flex: 1; }
+.desk .dev .n span { color: var(--muted); font-size: 12px; margin-left: 6px; }
+.desk .lnk { color: var(--accent); font-weight: 600; }
+.desk .lnk.red { color: var(--red); }
+.desk .ex { margin-top: 12px; border: 1px dashed var(--border); border-radius: 8px; padding: 6px 10px; }
+.desk .ex .cap { font-size: 11.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="toggle"><button id="t-dark" class="on">深色</button><button id="t-light">浅色</button></div>
+<div class="page">
+  <h1>Multi-Code 手机版 v2 · UI 设计稿</h1>
+  <p class="lead">2026-10-29 · 草稿，讨论用。界面文字用英文，和 App 现在一致；对话内容是举例。右上角可以切深色、浅色。</p>
+
+  <div class="intro">
+    <div class="box">
+      <h3>已经定的</h3>
+      <ul>
+        <li>以结构化对话为主，终端只做兜底。</li>
+        <li>网页版 PWA。<code>tailscale serve</code> 提供 HTTPS，Mac 自己发 Web Push。</li>
+        <li>每次 Finished、Needs you 都推送。</li>
+        <li>手机能回复、回答对话框、打断。开、关、新建 session 只在电脑上。</li>
+        <li>工具调用折叠成一行，点开看明细。</li>
+        <li>秘书和 Manager 放第二期。</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h3>这份稿要你看的</h3>
+      <ol>
+        <li><b>首页选方案 A 还是方案 B</b>（第 1 组，二选一）。</li>
+        <li>其它每张图下面写了它怎么工作。哪里不对、不想要，直接指出。</li>
+        <li>有想加的界面，也直接说。</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- ===================================================== 1. Home -->
+  <h2>1 · 首页（二选一）</h2>
+  <p class="lead">两个方案的区别：回答对话框要不要先点进 session。</p>
+  <div class="row">
+
+    <!-- 1A list -->
+    <div class="shot">
+      <div class="label"><span class="tag">方案 A</span>会话列表</div>
+      <div class="phone">
+        <div class="island"></div>
+        <div class="statusbar"><span>14:32</span><span class="r">●●●● 5G ▮</span></div>
+        <div class="app">
+          <div class="topbar">
+            <div class="title">Multi-Code</div>
+            <span class="conn"><span class="dot green"></span>MacBook Air</span>
+            <span class="icon">⚙</span>
+          </div>
+          <div class="scroll">
+            <div class="group">NEEDS YOU · 2</div>
+            <div class="srow unread">
+              <span class="av c">C</span>
+              <div class="main">
+                <div class="line1"><span class="name">multi-code</span><span class="pill need">Needs you</span><span class="time">2m</span></div>
+                <div class="prev">Bash: <code>pnpm test:e2e</code></div>
+              </div>
+            </div>
+            <div class="srow unread">
+              <span class="av o">O</span>
+              <div class="main">
+                <div class="line1"><span class="name">data-pipeline</span><span class="pill need">Needs you</span><span class="time">8m</span></div>
+                <div class="prev">问题：迁移脚本要保留旧表 orders_v1 吗？</div>
+              </div>
+            </div>
+            <div class="group">WORKING · 1</div>
+            <div class="srow">
+              <span class="av c">C</span>
+              <div class="main">
+                <div class="line1"><span class="name">apra-portal</span><span class="dot blue pulse"></span><span class="time">3m 20s</span></div>
+                <div class="prev">Edit <code>src/pages/Login.tsx</code></div>
+              </div>
+            </div>
+            <div class="group">FINISHED · 1</div>
+            <div class="srow unread">
+              <span class="av c">C</span>
+              <div class="main">
+                <div class="line1"><span class="name">infra-terraform</span><span class="dot green"></span><span class="time">15m</span></div>
+                <div class="prev">改好了。plan 显示 2 处变更，没有删除。要我 apply 吗？</div>
+              </div>
+            </div>
+            <div class="group">IDLE</div>
+            <div class="srow">
+              <span class="av o">O</span>
+              <div class="main">
+                <div class="line1"><span class="name">docs-site</span><span class="time">Yesterday</span></div>
+                <div class="prev">首页文案已经换成新版。</div>
+              </div>
+            </div>
+            <div class="srow">
+              <span class="av c">C</span>
+              <div class="main">
+                <div class="line1"><span class="name">multi-code (review)</span><span class="time">Mon</span></div>
+                <div class="prev">review 完了，3 个问题都修了。</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="homebar"></div>
+      </div>
+      <ul class="notes">
+        <li>状态和桌面侧栏一样：<b>Needs you</b>、<b>Working</b>、<b>Finished</b>、<b>Idle</b>。</li>
+        <li>按状态分组，要你处理的永远在最上面。</li>
+        <li>每行第二行是最新的一句：等你时是要批准的东西，做完时是结论第一句，跑着时是正在做的事。</li>
+        <li>回答要先点进 session。多一步，但每次回答前都看得到上下文。</li>
+      </ul>
+    </div>
+
+    <!-- 1B cards -->
+    <div class="shot">
+      <div class="label"><span class="tag alt">方案 B</span>待办卡片</div>
+      <div class="phone">
+        <div class="island"></div>
+        <div class="statusbar"><span>14:32</span><span class="r">●●●● 5G ▮</span></div>
+        <div class="app">
+          <div class="topbar">
+            <div class="title">Multi-Code</div>
+            <span class="conn"><span class="dot green"></span>MacBook Air</span>
+            <span class="icon">⚙</span>
+          </div>
+          <div class="scroll">
+            <div class="cards">
+              <div class="card need">
+                <div class="card-head"><span class="av sm c">C</span><b>multi-code</b><span class="pill need">Needs you</span><span class="time">2m</span><span class="chev">›</span></div>
+                <div class="ctx">单元测试 42 个全过，现在跑 e2e。</div>
+                <pre class="cmd">pnpm test:e2e</pre>
+                <div class="btns"><span class="btn sm primary">Yes</span><span class="btn sm danger">No…</span><span class="btn sm ghost">All options ›</span></div>
+              </div>
+              <div class="card need">
+                <div class="card-head"><span class="av sm o">O</span><b>data-pipeline</b><span class="pill need">Needs you</span><span class="time">8m</span><span class="chev">›</span></div>
+                <div class="q">迁移脚本要保留旧表 <code>orders_v1</code> 吗？</div>
+                <div class="btns"><span class="btn sm">保留 30 天</span><span class="btn sm">直接删除</span><span class="btn sm ghost">Type…</span></div>
+              </div>
+              <div class="card done">
+                <div class="card-head"><span class="av sm c">C</span><b>infra-terraform</b><span class="pill done">Finished</span><span class="time">15m</span><span class="chev">›</span></div>
+                <div class="q">改好了。<code>terraform plan</code> 显示 2 处变更，没有删除。要我 apply 吗？</div>
+                <div class="btns"><span class="btn sm">Reply…</span><span class="btn sm ghost">Mark read</span></div>
+              </div>
+            </div>
+            <div class="group">OTHERS</div>
+            <div class="strip">
+              <span class="chip"><span class="dot blue pulse"></span>apra-portal <span class="m">3m</span></span>
+              <span class="chip"><span class="dot grey"></span>docs-site</span>
+              <span class="chip"><span class="dot grey"></span>multi-code (review)</span>
+            </div>
+          </div>
+        </div>
+        <div class="homebar"></div>
+      </div>
+      <ul class="notes">
+        <li>首页只放要你处理的事，一件一张卡。</li>
+        <li>简单的对话框在首页直接点。多题问答、计划、要打字的，点进 session 再答。</li>
+        <li>卡片放不下 CLI 的完整按钮文字，所以首页用短名，全文在 <b>All options</b> 里。</li>
+        <li>其它 session 缩成一排小块，点了进 session。</li>
+        <li>风险：不看上下文就批准；同时有五六件事时要往下翻。</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ===================================================== 2. Session -->
+  <h2>2 · 会话页</h2>
+  <div class="row">
+
+    <!-- 2.1 finished -->
+    <div class="shot">
+      <div class="label">一轮做完（Finished）</div>
+      <div class="phone">
+        <div class="island"></div>
+        <div class="statusbar"><span>14:32</span><span class="r">●●●● 5G ▮</span></div>
+        <div class="app">
+          <div class="topbar">
+            <span class="back">‹</span>
+            <div class="title">multi-code <span class="sub">Claude</span></div>
+            <span class="pill done">Finished</span>
+            <span class="icon mono">&gt;_</span>
+          </div>
+          <div class="scroll">
+            <div class="chat">
+              <div class="divider">Earlier turns ↑</div>
+              <div class="u">把登录接口改成 JWT，旧的 cookie session 兼容一周</div>
+              <div class="fold"><div class="fh"><span class="chev">▸</span><span class="t">12 tools · 6 read · 3 edited · 2 commands</span><span>2m 41s</span></div></div>
+              <div class="jumpmark"><span>conclusion</span></div>
+              <div class="a">
+                <p>改好了。</p>
+                <ul>
+                  <li><code>src/auth/jwt.ts</code>：新增签发和校验</li>
+                  <li>旧 cookie session 在 <code>legacySession.ts</code> 里保留到 11-05</li>
+                  <li>42 个单元测试全过</li>
+                </ul>
+                <p>还有一个问题要你定：refresh token 放 httpOnly cookie，还是放 localStorage？我建议 cookie，XSS 拿不到。</p>
+              </div>
+            </div>
+          </div>
+          <div class="compose"><div class="box">Reply to multi-code…</div><div class="send off">↑</div></div>
+        </div>
+        <div class="homebar"></div>
+      </div>
+      <ul class="notes">
+        <li>你说的话靠右。agent 的回复占满宽度，按 Markdown 显示。</li>
+        <li>一轮里的工具调用合成一行：次数、读写了几个文件、用时。</li>
+        <li>进来先停在最后一轮结论的开头，和桌面的“回来看结论”一样。往上滑看更早的轮次。</li>
+        <li>发送只用按钮，回车只换行。中文输入法按回车上屏时不会误发。</li>
+        <li>右上角 <code>&gt;_</code> 进终端兜底。</li>
+      </ul>
+    </div>
+
+    <!-- 2.2 tools expanded -->
+    <div class="shot">
+      <div class="label">点开工具调用</div>
+      <div class="phone">
+        <div class="island"></div>
+        <div class="statusbar"><span>14:32</span><span class="r">●●●● 5G ▮</span></div>
+        <div class="app">
+          <div class="topbar">
+            <span class="back">‹</span>
+            <div class="title">multi-code <span class="sub">Claude</span></div>
+            <span class="pill done">Finished</span>
+            <span class="icon mono">&gt;_</span>
+          </div>
+          <div class="scroll">
+            <div class="chat">
+              <div class="u">把登录接口改成 JWT，旧的 cookie session 兼容一周</div>
+              <div class="fold">
+                <div class="fh"><span class="chev">▾</span><span class="t">12 tools · 6 read · 3 edited · 2 commands</span><span>2m 41s</span></div>
+                <div class="tools">
+                  <div class="tool"><span class="v">Read</span><span class="tg">src/auth/session.ts</span><span class="ok">✓</span></div>
+                  <div class="tool"><span class="v">Read</span><span class="tg">src/routes/login.ts</span><span class="ok">✓</span></div>
+                  <div class="tool"><span class="v">Grep</span><span class="tg">"sessionId" · 14 matches</span><span class="ok">✓</span></div>
+                  <div class="tool"><span class="v">Read</span><span class="tg">src/db/user.ts</span><span class="ok">✓</span></div>
+                  <div class="tool"><span class="v">Read</span><span class="tg">src/middleware/auth.ts</span><span class="ok">✓</span></div>
+                  <div class="tool"><span class="v">Read</span><span class="tg">package.json</span><span class="ok">✓</span></div>
+                  <div class="tool"><span class="v">Write</span><span class="tg">src/auth/jwt.ts</span><span class="add">+48</span></div>
+                  <div class="tool"><span class="v">Edit</span><span class="tg">src/routes/login.ts</span><span><span class="add">+12</span> <span class="del">−30</span></span></div>
+                  <div class="tool"><span class="v">Edit</span><span class="tg">src/auth/legacySession.ts</span><span><span class="add">+9</span> <span class="del">−2</span></span></div>
+                  <div class="tool"><span class="v">Bash</span><span class="tg">pnpm test</span><span class="bad">✗ 3 failed</span></div>
+                  <div class="tool"><span class="v">Edit</span><span class="tg">src/auth/jwt.ts</span><span><span class="add">+3</span> <span class="del">−1</span></span></div>
+                  <div class="tool"><span class="v">Bash</span><span class="tg">pnpm test</span><span class="ok">✓</span></div>
+                </div>
+              </div>
+              <div class="a">
+                <p>改好了。</p>
+                <ul>
+                  <li><code>src/auth/jwt.ts</code>：新增签发和校验</li>
+                  <li>旧 cookie session 在 <code>legacySession.ts</code> 里保留到 11-05</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div class="compose"><div class="box">Reply to multi-code…</div><div class="send off">↑</div></div>
+        </div>
+        <div class="homebar"></div>
+      </div>
+      <ul class="notes">
+        <li>点开以后一个工具一行：动作、对象、结果。</li>
+        <li>结果只是摘要：Edit 显示加减行数，Bash 显示成功或失败。</li>
+        <li>第一期不看工具的完整输出和 diff。要看的话进终端，或者回电脑看。</li>
+      </ul>
+    </div>
+
+    <!-- 2.3 working -->
+    <div class="shot">
+      <div class="label">正在跑（Working）</div>
+      <div class="phone">
+        <div class="island"></div>
+        <div class="statusbar"><span>14:32</span><span class="r">●●●● 5G ▮</span></div>
+        <div class="app">
+          <div class="topbar">
+            <span class="back">‹</span>
+            <div class="title">apra-portal <span class="sub">Claude</span></div>
+            <span class="pill work">Working</span>
+            <span class="icon mono">&gt;_</span>
+          </div>
+          <div class="scroll">
+            <div class="chat">
+              <div class="u">登录页加一个“记住我”勾选框，勾上以后 30 天免登录</div>
+              <div class="a"><p>先看一下现在的登录表单和 token 的有效期设置。</p></div>
+              <div class="fold">
+                <div class="fh"><span class="chev">▾</span><span class="t">5 tools · running</span><span>3m 20s</span></div>
+                <div class="tools">
+                  <div class="tool"><span class="v">Read</span><span class="tg">src/pages/Login.tsx</span><span class="ok">✓</span></div>
+                  <div class="tool"><span class="v">Read</span><span class="tg">src/api/auth.ts</span><span class="ok">✓</span></div>
+                  <div class="tool"><span class="v">Edit</span><span class="tg">src/pages/Login.tsx</span><span><span class="add">+18</span> <span class="del">−2</span></span></div>
+                  <div class="tool"><span class="v">Edit</span><span class="tg">src/api/auth.ts</span><span><span class="add">+6</span></span></div>
+                  <div class="tool"><span class="v">Bash</span><span class="tg">pnpm test --filter login</span><span class="run">● 41s</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="workbar"><span class="dot blue pulse"></span><span class="t"><b>Bash</b> pnpm test --filter login · 41s</span><span class="stopbtn"><i></i>Stop</span></div>
+          <div class="compose" style="padding-top:6px"><div class="box">Queued until this turn ends…</div><div class="send off">↑</div></div>
+        </div>
+        <div class="homebar"></div>
+      </div>
+      <ul class="notes">
+        <li>跑着的时候，工具调用自动展开，新的一行一行加上来。做完以后自动折叠。</li>
+        <li>底部状态条写着正在做什么、做了多久。</li>
+        <li><b>Stop</b> 等于在电脑上按 Esc。只停这一轮，session 不关。点了先问一次“确定吗”。</li>
+        <li>跑着时也能发消息。CLI 会排队，这一轮结束后再处理。输入框里写明这一点。</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ===================================================== 3. Dialogs -->
+  <h2>3 · 回答对话框</h2>
+  <div class="row">
+
+    <!-- 3.1 permission -->
+    <div class="shot">
+      <div class="label">权限（Bash、Edit 这类）</div>
+      <div class="phone">
+        <div class="island"></div>
+        <div class="statusbar"><span>14:32</span><span class="r">●●●● 5G ▮</span></div>
+        <div class="app">
+          <div class="topbar">
+            <span class="back">‹</span>
+            <div class="title">multi-code <span class="sub">Claude</span></div>
+            <span class="pill need">Needs you</span>
+            <span class="icon mono">&gt;_</span>
+          </div>
+          <div class="scroll">
+            <div class="chat">
+              <div class="u">打包体积好像变大了，查一下</div>
+              <div class="fold"><div class="fh"><span class="chev">▸</span><span class="t">4 tools · 3 read · 1 command</span><span>1m 05s</span></div></div>
+              <div class="a"><p><code>dist/</code> 里还留着上次的 sourcemap，有 38 MB。我清掉重新打一次，再看真实体积。</p></div>
+            </div>
+          </div>
+          <div class="dock">
+            <div class="kind"><span class="dot red"></span>NEEDS YOU<span class="m">Bash command</span></div>
+            <pre class="cmd">rm -rf dist &amp;&amp; pnpm build</pre>
+            <div class="desc">Clean and rebuild the bundle</div>
+            <div class="q">Do you want to proceed?</div>
+            <div class="stack">
+              <span class="btn primary block">Yes</span>
+              <span class="btn block left">Yes, and don't ask again for rm commands in multi-code</span>
+              <span class="btn danger block left">No, and tell Claude what to do differently…</span>
+            </div>
+          </div>
+        </div>
+        <div class="homebar"></div>
+      </div>
+      <ul class="notes">
+        <li>有对话框时，输入框换成回答卡片。这样打的字不会掉进对话框里。</li>
+        <li>按钮文字和 CLI 里的选项一字不差。</li>
+        <li>点 <b>No…</b> 会展开一个输入框写原因，一起发过去。</li>
+        <li>电脑上先答了，手机上的卡片自动消失，换回输入框。</li>
+        <li>OpenCode 的是 Allow once、Always allow、Reject，走 OpenCode 自己的 API 回答。</li>
+      </ul>
+    </div>
+
+    <!-- 3.2 questions -->
+    <div class="shot">
+      <div class="label">多题问答（AskUserQuestion）</div>
+      <div class="phone">
+        <div class="island"></div>
+        <div class="statusbar"><span>14:32</span><span class="r">●●●● 5G ▮</span></div>
+        <div class="app">
+          <div class="topbar">
+            <span class="back">‹</span>
+            <div class="title">multi-code <span class="sub">Claude</span></div>
+            <span class="pill need">Needs you</span>
+            <span class="icon mono">&gt;_</span>
+          </div>
+          <div class="scroll">
+            <div class="chat">
+              <div class="u">refresh token 的事你问我吧</div>
+              <div class="a"><p>好，有两个问题要你定。</p></div>
+            </div>
+          </div>
+          <div class="scrim"></div>
+          <div class="sheet" style="height: 640px;">
+            <div class="handle"></div>
+            <div class="sh"><span class="dot red"></span><b>Claude is asking</b><span>· 2 questions</span><span class="x">⌄</span></div>
+            <div class="answered"><span class="ok">✓</span><span class="h">Storage</span><span>httpOnly cookie</span><span class="e">Edit</span></div>
+            <div class="qhead"><span class="qtag">Clients</span><span class="qstep">2 / 2 · pick any</span></div>
+            <div class="qtext">哪些端要先支持新的登录方式？</div>
+            <div class="opt"><span class="box on">✓</span><div><div class="ol">Web</div><div class="od">主站和 apra-portal</div></div></div>
+            <div class="opt"><span class="box on">✓</span><div><div class="ol">iOS</div><div class="od">要发新版本</div></div></div>
+            <div class="opt"><span class="box"></span><div><div class="ol">Android</div><div class="od">要发新版本</div></div></div>
+            <div class="opt"><span class="box"></span><div><div class="ol">Admin console</div><div class="od">内部用，可以晚点</div></div></div>
+            <div class="opt type"><span class="box"></span><div><div class="ol">Type something…</div></div></div>
+            <div style="flex:1"></div>
+            <div class="btns" style="flex-wrap:nowrap"><span class="btn ghost" style="flex:1">Back</span><span class="btn primary" style="flex:2">Submit answers</span></div>
+          </div>
+        </div>
+        <div class="homebar"></div>
+      </div>
+      <ul class="notes">
+        <li>一题一页。答完的题折叠在上面，点 <b>Edit</b> 回去改。</li>
+        <li>单选是圆点，多选是勾选框。每题最后都有 <b>Type something</b> 行，可以自己写。</li>
+        <li>所有题答完一起提交。桌面按 CLI 的按键流程一次答完，答完以后核对 CLI 收到的答案。</li>
+        <li>往下拉可以收起，先看上面的对话，再拉上来接着答。</li>
+      </ul>
+    </div>
+
+    <!-- 3.3 plan -->
+    <div class="shot">
+      <div class="label">计划审批（ExitPlanMode）</div>
+      <div class="phone">
+        <div class="island"></div>
+        <div class="statusbar"><span>14:32</span><span class="r">●●●● 5G ▮</span></div>
+        <div class="app">
+          <div class="topbar">
+            <span class="back">‹</span>
+            <div class="title">multi-code <span class="sub">Claude</span></div>
+            <span class="pill need">Needs you</span>
+            <span class="icon mono">&gt;_</span>
+          </div>
+          <div class="scroll"><div class="chat"><div class="u">先出个计划，我看完再改</div></div></div>
+          <div class="scrim"></div>
+          <div class="sheet" style="height: 700px;">
+            <div class="handle"></div>
+            <div class="sh"><span class="dot red"></span><b>Plan ready for review</b><span class="x">⌄</span></div>
+            <div class="plan" style="flex:1">
+              <h4>JWT 迁移计划</h4>
+              <ol>
+                <li>新增 <code>src/auth/jwt.ts</code>：签发、校验、刷新。</li>
+                <li><code>/login</code> 同时下发 JWT 和旧 cookie，一周内两种都认。</li>
+                <li>中间件先认 JWT，失败再认旧 cookie，打日志统计。</li>
+                <li>11-05 以后删掉旧 cookie 的分支。</li>
+                <li>补测试：过期、伪造、刷新、旧 cookie 兼容。</li>
+              </ol>
+              <p><b>风险</b>：iOS 老版本只认 cookie，要等它的使用量降下来。</p>
+              <p><b>不改</b>：注册流程、找回密码。</p>
+              <p>预计改 6 个文件，新增 1 个。</p>
+              <div class="fade"></div>
+            </div>
+            <div class="stack">
+              <span class="btn primary block left">Yes, and auto-accept edits</span>
+              <span class="btn block left">Yes, manually approve edits</span>
+              <span class="btn danger block left">No, tell Claude what to change…</span>
+            </div>
+          </div>
+        </div>
+        <div class="homebar"></div>
+      </div>
+      <ul class="notes">
+        <li>计划全文按 Markdown 显示，可以上下滚动。</li>
+        <li>三个选项和 CLI 一样。</li>
+        <li>选第三个会展开输入框，写要改什么，一起发过去。</li>
+        <li>“auto-accept edits” 权限更大，点了先确认一次，和秘书的规则一样。</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ===================================================== 4. Fallback + states -->
+  <h2>4 · 终端兜底和连接状态</h2>
+  <div class="row">
+
+    <!-- 4.1 terminal -->
+    <div class="shot">
+      <div class="label">终端兜底</div>
+      <div class="phone">
+        <div class="island"></div>
+        <div class="statusbar"><span>14:32</span><span class="r">●●●● 5G ▮</span></div>
+        <div class="app">
+          <div class="topbar">
+            <span class="back">‹</span>
+            <div class="title">multi-code <span class="sub">Terminal</span></div>
+            <span class="pill need">Needs you</span>
+            <span class="icon" style="color:var(--accent)">☰</span>
+          </div>
+<div class="term"><span class="d">  ⎿  Read 3 files (ctrl+o to expand)</span>
+
+<span class="w">⏺</span> MCP 服务器要你填一个表单，手机界面没法显示，用终端答。
+
+<span class="y">╭──────────────────────────────────────────────────────────────────────────╮</span>
+<span class="y">│</span> <span class="w">linear-mcp needs input</span>                                                   <span class="y">│</span>
+<span class="y">│</span>                                                                          <span class="y">│</span>
+<span class="y">│</span>   Team:      <span class="b">APRA Platform</span>                                               <span class="y">│</span>
+<span class="y">│</span>   Priority:  <span class="b">❯ High</span>    Medium    Low                                      <span class="y">│</span>
+<span class="y">│</span>   Labels:    [x] backend  [ ] frontend  [ ] infra                        <span class="y">│</span>
+<span class="y">│</span>                                                                          <span class="y">│</span>
+<span class="y">│</span> <span class="d">Tab to move · Space to toggle · Enter to submit · Esc to cancel</span>          <span class="y">│</span>
+<span class="y">╰──────────────────────────────────────────────────────────────────────────╯</span>
+
+<span class="d">  ? for shortcuts                                         ◯ Opus 5.5 · 41%</span>
+<div class="edge"></div><div class="cols">120 cols · swipe ⇆</div></div>
+          <div class="keyrow"><span class="key">Esc</span><span class="key">Tab</span><span class="key">⇧Tab</span><span class="key">↑</span><span class="key">↓</span><span class="key">←</span><span class="key">→</span><span class="key">␣</span><span class="key">⏎</span><span class="key r">^C</span></div>
+          <div class="tinput"><div class="box">Type into the terminal…</div><span class="go">Send</span></div>
+          <div class="kbd" data-kbd></div>
+        </div>
+        <div class="homebar"></div>
+      </div>
+      <ul class="notes">
+        <li>结构化界面答不了的对话框（比如 MCP 表单），或者想直接看屏幕时，用这里。</li>
+        <li>终端保持电脑上的宽度，左右滑动看，不会排版错乱。</li>
+        <li>按键行：Esc、Tab、⇧Tab、方向键、空格、回车、^C。点按键不会收起键盘。</li>
+        <li>输入行把字原样送进终端，不自动加回车。要回车就点 ⏎。</li>
+        <li>右上角 ☰ 回到对话视图。</li>
+      </ul>
+    </div>
+
+    <!-- 4.2 offline -->
+    <div class="shot">
+      <div class="label">连不上 Mac</div>
+      <div class="phone">
+        <div class="island"></div>
+        <div class="statusbar"><span>14:32</span><span class="r">●●●● 5G ▮</span></div>
+        <div class="app">
+          <div class="topbar">
+            <span class="back">‹</span>
+            <div class="title">infra-terraform <span class="sub">Claude</span></div>
+            <span class="pill done">Finished</span>
+            <span class="icon mono">&gt;_</span>
+          </div>
+          <div class="banner"><span class="dot amber"></span><span><b>Can't reach your Mac.</b> Showing what it said 3 min ago.</span><span class="act">Retry</span></div>
+          <div class="scroll">
+            <div class="chat">
+              <div class="u">plan 有删除吗？</div>
+              <div class="fold"><div class="fh"><span class="chev">▸</span><span class="t">3 tools · 1 command</span><span>48s</span></div></div>
+              <div class="a"><p>没有删除。<code>terraform plan</code> 显示 2 处变更：</p>
+                <ul><li><code>aws_s3_bucket.logs</code>：加 lifecycle 规则</li><li><code>aws_iam_role.ci</code>：加一条 policy</li></ul>
+                <p>要我 apply 吗？</p></div>
+              <div class="u">先别 apply，把 lifecycle 改成 90 天<span class="st">⏱ Waiting to send · sends when your Mac is back</span></div>
+            </div>
+          </div>
+          <div class="compose"><div class="box">Reply to infra-terraform…</div><div class="send off">↑</div></div>
+        </div>
+        <div class="homebar"></div>
+      </div>
+      <ul class="notes">
+        <li>断线时继续显示上次的内容，顶部写明是几分钟前的。</li>
+        <li>断线时发的消息先存在手机上，连上以后自动补发。桌面按消息编号去重，不会发两次。</li>
+        <li>解锁手机、切回 App 时马上重连，不等超时。</li>
+        <li>网页本身存在手机上。Mac 关机、睡眠，或者 Tailscale 没开，App 也能打开，并且告诉你哪一个连不上。</li>
+        <li>断线时不能回答对话框，因为不知道它还在不在。</li>
+      </ul>
+    </div>
+
+    <!-- 4.3 lock screen -->
+    <div class="shot">
+      <div class="label">锁屏推送</div>
+      <div class="phone">
+        <div class="island"></div>
+        <div class="statusbar" style="color:#fff"><span></span><span class="r">●●●● 5G ▮</span></div>
+        <div class="lock">
+          <div class="date">Thursday 29 October</div>
+          <div class="clock">14:32</div>
+          <div class="stackn">
+            <div class="noti"><div class="ic">M</div><div class="tx"><div class="h">multi-code · Needs you<span>now</span></div><div class="b">Bash: pnpm test:e2e</div></div></div>
+            <div class="noti"><div class="ic">M</div><div class="tx"><div class="h">data-pipeline · Needs you<span>8m ago</span></div><div class="b">迁移脚本要保留旧表 orders_v1 吗？</div></div></div>
+            <div class="noti"><div class="ic">M</div><div class="tx"><div class="h">infra-terraform · Finished<span>15m ago</span></div><div class="b">改好了。plan 显示 2 处变更，没有删除。要我 apply 吗？</div></div></div>
+          </div>
+          <div class="bottom"><div>🔦</div><div>📷</div></div>
+        </div>
+        <div class="homebar" style="background:#fff"></div>
+      </div>
+      <ul class="notes">
+        <li>每次 <b>Finished</b> 和 <b>Needs you</b> 都推。</li>
+        <li>标题是 session 名和状态。正文是要批准的东西，或者结论第一句。</li>
+        <li>点通知直接打开那个 session。主屏幕图标上的数字是等你的 session 个数。</li>
+        <li>同一个 session 的新推送替换旧的，不会堆一串。</li>
+        <li>网页版做不到：在锁屏上直接点按钮回答。Mac 睡眠时也发不出推送。</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ===================================================== 5. Setup -->
+  <h2>5 · 第一次设置</h2>
+  <div class="row">
+
+    <!-- 5.1 phone setup -->
+    <div class="shot">
+      <div class="label">手机端：三步</div>
+      <div class="phone">
+        <div class="island"></div>
+        <div class="statusbar"><span>14:32</span><span class="r">●●●● 5G ▮</span></div>
+        <div class="app">
+          <div class="setup">
+            <div class="logo">M</div>
+            <h3>Connected to MacBook Air</h3>
+            <p class="m">Three steps before you can leave your desk.</p>
+            <div class="step"><span class="n ok">✓</span><div class="st"><b>Paired</b><span>Scanned the code from Multi-Code on your Mac.</span></div></div>
+            <div class="step"><span class="n cur">2</span><div class="st"><b>Add to Home Screen</b><span>Tap <span class="share">⇪</span> at the bottom of Safari, then “Add to Home Screen”. Open Multi-Code from the new icon.</span></div></div>
+            <div class="step"><span class="n">3</span><div class="st"><b>Turn on notifications</b><span>Only works from the Home Screen icon. You’ll be told when a session finishes or needs you.</span></div></div>
+            <span class="btn primary block disabled">Turn on notifications</span>
+            <p class="m" style="font-size:12.5px">jasenpanmacbook-air.taile5fb0f.ts.net · reachable only inside your tailnet</p>
+          </div>
+        </div>
+        <div class="homebar"></div>
+      </div>
+      <ul class="notes">
+        <li>扫码、加到主屏幕、打开通知，三步。每步写清楚怎么做。</li>
+        <li>iPhone 只有从主屏幕打开的网页才能收推送，所以第 2 步不能跳过。从 Safari 里打开时，第 3 步的按钮是灰的。</li>
+        <li>地址换成 <code>https://jasenpanmacbook-air.taile5fb0f.ts.net</code>。旧的主屏幕图标要删掉，重新配对一次。</li>
+      </ul>
+    </div>
+
+    <!-- 5.2 desktop panel -->
+    <div class="shot wide">
+      <div class="label">桌面端：手机设置</div>
+      <div class="desk">
+        <div class="wt"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span>Multi-Code · Settings · Phone</span></div>
+        <div class="body">
+          <div>
+            <h4>Phone link <span class="sw"></span></h4>
+            <div class="check"><span class="s ok">✓</span><span class="k">Tailscale</span><span class="v">running · 100.103.73.2</span></div>
+            <div class="check"><span class="s ok">✓</span><span class="k">HTTPS</span><span class="v">https://jasenpanmacbook-air.taile5fb0f.ts.net</span></div>
+            <div class="check"><span class="s ok">✓</span><span class="k">Push</span><span class="v">keys ready · every Finished and Needs you</span></div>
+            <h4 style="margin-top:16px">Paired phones</h4>
+            <div class="dev"><span class="n">iPhone<span>seen 2 min ago · push on</span></span><span class="lnk">Send test</span><span class="lnk red">Revoke</span></div>
+            <div class="ex">
+              <div class="cap">When something is wrong, the row says what to do:</div>
+              <div class="check" style="border:0"><span class="s bad">✗</span><span class="k">Tailscale</span><span class="v" style="font-family:inherit;font-size:12.5px;word-break:normal">stopped. Your phone can't reach this Mac.</span><span class="a">Open Tailscale</span></div>
+            </div>
+          </div>
+          <div>
+            <div class="qr" data-qr></div>
+            <p style="margin:8px 0 0;color:var(--muted);font-size:12px;text-align:center">Scan with the iPhone camera to pair a new phone</p>
+          </div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>先检查三个条件：Tailscale 在跑、HTTPS 可用、推送密钥准备好。哪项不满足，就写明后果和怎么修。</li>
+        <li>以前“打不开”就是 Tailscale 停了，现在这里会直接看到。</li>
+        <li>每台手机可以单独发测试推送、单独撤销。</li>
+        <li>三项都满足才显示二维码，免得配对了也连不上。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+// Theme toggle.
+const dark = document.getElementById("t-dark"), light = document.getElementById("t-light");
+dark.onclick = () => { document.body.classList.remove("light"); dark.classList.add("on"); light.classList.remove("on"); };
+light.onclick = () => { document.body.classList.add("light"); light.classList.add("on"); dark.classList.remove("on"); };
+
+// Fake keyboard.
+for (const el of document.querySelectorAll("[data-kbd]")) {
+  const rows = [["q","w","e","r","t","y","u","i","o","p"],["a","s","d","f","g","h","j","k","l"],["⇧f","z","x","c","v","b","n","m","⌫f"],["123f","🌐f","spacesp","returnret"]];
+  el.innerHTML = rows.map(r => '<div class="kr">' + r.map(k => {
+    const m = k.match(/^(.+?)(f|sp|ret)?$/);
+    return `<span class="k ${m[2] || ""}">${m[1]}</span>`;
+  }).join("") + "</div>").join("");
+}
+
+// Fake QR: finder squares plus a fixed pseudo-random fill.
+for (const el of document.querySelectorAll("[data-qr]")) {
+  const n = 25; let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  const finder = (x, y, ox, oy) => { const dx = x - ox, dy = y - oy; if (dx < 0 || dy < 0 || dx > 6 || dy > 6) return null; return dx === 0 || dy === 0 || dx === 6 || dy === 6 || (dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4); };
+  let html = "";
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    let v = finder(x, y, 0, 0); if (v === null) v = finder(x, y, n - 7, 0); if (v === null) v = finder(x, y, 0, n - 7);
+    if (v === null) v = (x === 7 || y === 7 || (x === n - 8 && y < 8) || (y === n - 8 && x < 8)) ? false : rnd() > 0.52;
+    html += `<i class="${v ? "on" : ""}"></i>`;
+  }
+  el.innerHTML = html;
+}
+</script>
+</body>
+</html>

@@ -24,9 +24,7 @@ function decodePayload(code: string): PairingOffer | null {
     ) as PairingOffer;
 
     if (parsed.v !== REMOTE_PROTOCOL_VERSION) return null;
-    if (!Array.isArray(parsed.endpoints) || parsed.endpoints.length === 0) {
-      return null;
-    }
+    if (typeof parsed.origin !== "string" || !parsed.origin) return null;
     if (typeof parsed.hostPublicKey !== "string" || !parsed.hostPublicKey) {
       return null;
     }
@@ -43,7 +41,7 @@ function decodePayload(code: string): PairingOffer | null {
 // `multicode://pair?code=…` form so a scanned QR that opens as a custom scheme
 // still works when pasted in.
 export function pairingFromLocation(): PairingOffer | null {
-  const hash = window.location.hash.replace(/^#/, "");
+  const hash = window.location.hash.replace(/^#(pair=)?/, "");
   if (hash) {
     const offer = decodePayload(hash);
     if (offer) return offer;
@@ -56,7 +54,7 @@ export function pairingFromText(text: string): PairingOffer | null {
   if (!trimmed) return null;
 
   // Accept a full URL (either scheme) or a bare code.
-  const match = trimmed.match(/(?:code=|#)([A-Za-z0-9_-]+)/);
+  const match = trimmed.match(/(?:code=|#pair=|#)([A-Za-z0-9_-]+)/);
   if (match) {
     const offer = decodePayload(match[1]);
     if (offer) return offer;
@@ -81,7 +79,8 @@ export function loadPairing(): StoredPairing | null {
 
 export function savePairing(offer: PairingOffer) {
   const stored: StoredPairing = {
-    endpoints: offer.endpoints,
+    // mobile-v2 T-806: placeholder so the old transport still dials the one origin.
+    endpoints: [offer.origin.replace(/^http/, "ws")],
     hostPublicKey: offer.hostPublicKey,
     deviceToken: offer.deviceToken,
     hostName: offer.hostName,

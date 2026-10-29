@@ -7,15 +7,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { RemotePairing } from "../../shared/types";
-import type { EndpointKind, RemoteStatus } from "../../shared/remote-protocol";
-
-// Spells out what each address can actually do, so the reason a phone fails to
-// connect from outside is visible before pairing rather than after.
-const ENDPOINT_LABEL: Record<EndpointKind, string> = {
-  tailscale: "works anywhere",
-  lan: "this network only",
-  vpn: "VPN — phone can't use this",
-};
+import type { RemoteStatus } from "../../shared/remote-protocol";
 
 interface PhoneSectionProps {
   active: boolean;
@@ -122,24 +114,8 @@ export function PhoneSection({ active }: PhoneSectionProps) {
             </div>
           )}
 
-          <div className="phone-endpoints">
-            {status.endpoints.length === 0 ? (
-              <span className="phone-muted">No network address available</span>
-            ) : (
-              status.endpoints.map((endpoint) => (
-                <code
-                  key={endpoint.url}
-                  className="phone-endpoint"
-                  data-kind={endpoint.kind}
-                >
-                  {endpoint.url}
-                  <span className="phone-endpoint-tag">
-                    {ENDPOINT_LABEL[endpoint.kind]}
-                  </span>
-                </code>
-              ))
-            )}
-          </div>
+          {/* mobile-v2 T-812: the address list went with protocol v3; T-812 rewrites
+              this panel around status.checks. */}
 
           <button className="phone-btn" onClick={pairNew} disabled={busy}>
             {pairing ? "New pairing code" : "Pair a phone"}

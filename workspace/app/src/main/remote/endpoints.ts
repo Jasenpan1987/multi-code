@@ -6,7 +6,18 @@
 // of the feature — a plain 192.168.x address only works while both are home.
 
 import os from "os";
-import type { EndpointKind, RemoteEndpoint } from "../../shared/remote-protocol";
+
+// mobile-v2 T-805: protocol v3 dropped these (the phone reaches one tailscale https
+// origin); kept here only until T-805 replaces this module.
+//   tailscale — works from anywhere, including cellular
+//   lan       — only while the phone is on this same network
+//   vpn       — a corporate tunnel; a personal phone can never use it
+export type EndpointKind = "tailscale" | "lan" | "vpn";
+
+export interface RemoteEndpoint {
+  url: string;
+  kind: EndpointKind;
+}
 
 // Tailscale hands out addresses from the 100.64.0.0/10 CGNAT range. Matching the
 // range (rather than shelling out to the `tailscale` binary) means we detect it

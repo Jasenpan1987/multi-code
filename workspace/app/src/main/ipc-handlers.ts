@@ -638,21 +638,21 @@ export function registerIpcHandlers() {
     if (!offer) return null;
     const code = Buffer.from(JSON.stringify(offer), "utf8").toString("base64url");
     const pairingUrl = `multicode://pair?code=${code}`;
-    // The phone opens the served web client and pastes/scans there, so the
-    // human-usable form is an http URL with the payload in the fragment. A
-    // fragment never reaches a server, which matters because the token is in it.
-    const firstEndpoint = offer.endpoints[0];
-    const webUrl = firstEndpoint
-      ? `${firstEndpoint.replace(/^ws:/, "http:")}/#${code}`
-      : null;
+    // The phone opens the served web client at the offer's origin, with the payload
+    // in the fragment (`#pair=`, as remote-protocol.ts specifies). A fragment never
+    // reaches a server, which matters because the token is in it.
+    const webUrl = `${offer.origin}/#pair=${code}`;
+    // mobile-v2 T-812: `endpoints` kept only so RemotePairing's shape holds until
+    // T-812 rewrites the Phone section.
+    const endpoints = [offer.origin];
     try {
-      const qrDataUrl = await QRCode.toDataURL(webUrl ?? pairingUrl, {
+      const qrDataUrl = await QRCode.toDataURL(webUrl, {
         margin: 1,
         width: 240,
       });
-      return { pairingUrl, webUrl, qrDataUrl, endpoints: offer.endpoints };
+      return { pairingUrl, webUrl, qrDataUrl, endpoints };
     } catch {
-      return { pairingUrl, webUrl, qrDataUrl: null, endpoints: offer.endpoints };
+      return { pairingUrl, webUrl, qrDataUrl: null, endpoints };
     }
   });
 

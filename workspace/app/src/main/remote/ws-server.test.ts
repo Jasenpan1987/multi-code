@@ -22,7 +22,6 @@ const { RemoteServer } = await import("./ws-server");
 const { REMOTE_PROTOCOL_VERSION } = await import("../../shared/remote-protocol");
 type TranscriptEntry =
   import("../../shared/remote-protocol").TranscriptEntry;
-type PromptDetail = import("./promptExtract").PromptDetail;
 
 type AnyRecord = Record<string, unknown>;
 
@@ -175,10 +174,6 @@ interface Fixture {
   hostPublicKey: string;
   writes: Array<{ id: string; data: string }>;
   prompts: Array<{ id: string; text: string }>;
-  // Every tap the server handed the host, with the prompt it held for it.
-  choices: Array<{ id: string; detail: PromptDetail; index: number }>;
-  // Replaces the Claude-like default, to play a host answering through an API.
-  answerChoice?: (id: string, detail: PromptDetail, index: number) => Promise<boolean>;
   // How many times the host's transcript source has been read. A getter, so it
   // reflects the live count rather than its value at fixture creation.
   readonly transcriptReads: number;
@@ -197,19 +192,10 @@ async function startServer(): Promise<Fixture> {
   // Counts reads so the throttling tests can assert how often the (real-world:
   // file/sqlite-backed) transcript source is hit.
   const reads = { count: 0 };
-  const choices: Fixture["choices"] = [];
-  const answerChoice = (id: string, detail: PromptDetail, index: number): Promise<boolean> => {
-    choices.push({ id, detail, index });
-    if (fixture.answerChoice) return fixture.answerChoice(id, detail, index);
-    const count = detail.options.length;
-    if (!(index >= 0 && index < count && count <= 9)) return Promise.resolve(false);
-    writes.push({ id, data: String(index + 1) });
-    return Promise.resolve(true);
-  };
 
   server.setHost({
-    // Mirrors the real wiring in remote/index.ts, which fills `activity` from
-    // the server. A stub that hardcoded it would hide the bug this guards.
+    // Mirrors the real wiring in remote/index.ts, which fills `state` from the
+    // server. A stub that hardcoded it would hide the bug this guards.
     listInstances: () => [
       {
         id: "inst-1",
@@ -217,16 +203,11 @@ async function startServer(): Promise<Fixture> {
         cwd: "/tmp/demo",
         backend: "claude",
         status: "running",
-        activity: server.activityFor("inst-1"),
+        state: server.stateFor("inst-1"),
       },
     ],
     writeToInstance: (id, data) => writes.push({ id, data }),
     sendPrompt: (id, text) => prompts.push({ id, text }),
-    // Mirrors the claude backend (digit keys, written before the call returns),
-    // which is what the fixture's instance declares, unless a test swaps it.
-    // Per-backend routing itself is tested in process-manager and the backend
-    // suites; here it only needs to resolve to something.
-    answerChoice,
     readTranscript: () => {
       reads.count++;
       return transcript;
@@ -247,7 +228,6 @@ async function startServer(): Promise<Fixture> {
     hostPublicKey: offer.hostPublicKey,
     writes,
     prompts,
-    choices,
     get transcriptReads() {
       return reads.count;
     },
@@ -455,12 +435,15 @@ describe("RemoteServer streaming", () => {
     // Give the unsubscribe time to land, then confirm nothing streams.
     await new Promise((r) => setTimeout(r, 100));
     fx.server.broadcastOutput("inst-1", "after unsubscribe");
-    fx.server.broadcastActivity("inst-1", "waiting");
 
-    // An activity frame still arrives (it isn't subscription-scoped), but no
-    // output frame should.
-    const frame = await client.waitFor("activity");
-    expect(frame.type).toBe("activity");
+    // Everything up to the reply to a ping sent after it: no output among it.
+    client.send({ type: "ping", at: 1 });
+    const seen: unknown[] = [];
+    for (let frame = await client.next(); ; frame = await client.next()) {
+      seen.push(frame.type);
+      if (frame.type === "pong") break;
+    }
+    expect(seen).not.toContain("output");
 
     client.close();
   });
@@ -468,10 +451,34 @@ describe("RemoteServer streaming", () => {
   it("forwards a typed prompt through the compose path", async () => {
     const fx = await startServer();
     const client = await connected(fx);
-    client.send({ type: "prompt", instanceId: "inst-1", text: "use postgres" });
+    client.send({ type: "prompt", instanceId: "inst-1", text: "use postgres", clientMsgId: "m1" });
 
     await vi.waitFor(() => expect(fx.prompts).toHaveLength(1));
     expect(fx.prompts[0]).toEqual({ id: "inst-1", text: "use postgres" });
+
+    client.close();
+  });
+
+  it("acks a prompt, and refuses an answer as not built yet", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+
+    client.send({ type: "prompt", instanceId: "inst-1", text: "go on", clientMsgId: "m1" });
+    expect(await client.waitFor("ack")).toEqual({ type: "ack", clientMsgId: "m1", ok: true });
+
+    client.send({
+      type: "answer",
+      instanceId: "inst-1",
+      seq: 1,
+      choice: { effect: "allow-once" },
+      clientMsgId: "m2",
+    });
+    expect(await client.waitFor("ack")).toMatchObject({
+      clientMsgId: "m2",
+      ok: false,
+      reason: "unsupported",
+    });
+    expect(fx.writes).toEqual([]);
 
     client.close();
   });
@@ -488,7 +495,8 @@ describe("RemoteServer streaming", () => {
     const client = await connected(fx);
     client.send({ type: "subscribe", instanceId: "inst-1" });
     const prompt = await client.waitFor("prompt-state");
-    expect(prompt.question).toBe("Which database?");
+    expect(prompt.summary).toBe("Which database?");
+    expect(typeof prompt.seq).toBe("number");
 
     client.close();
   });
@@ -531,8 +539,9 @@ describe("RemoteServer streaming", () => {
   });
 
   it("reports blocked instances in the list so a reopened phone sees them", async () => {
-    // Regression guard: `activity` used to be left undefined, so a phone that
-    // had been closed and reopened showed a clean list with an agent blocked.
+    // Regression guard: the list's attention state used to be left undefined, so a
+    // phone that had been closed and reopened showed a clean list with an agent
+    // blocked.
     const fx = await startServer();
     const client = await connected(fx);
 
@@ -545,7 +554,7 @@ describe("RemoteServer streaming", () => {
     await vi.waitFor(async () => {
       const frame = await client.waitFor("instances");
       const instances = frame.instances as Array<Record<string, unknown>>;
-      expect(instances[0].activity).toBe("prompt");
+      expect(instances[0].state).toBe("needs-you");
     });
 
     client.close();
@@ -610,10 +619,11 @@ describe("RemoteServer streaming", () => {
       question: "Allow?",
       options: [{ label: "Allow once" }],
     });
-    expect(fx.server.activityFor("inst-1")).toBe("prompt");
+    expect(fx.server.stateFor("inst-1")).toBe("needs-you");
 
     fx.server.broadcastActivity("inst-1", "prompt-cleared");
-    expect(fx.server.activityFor("inst-1")).toBeNull();
+    expect(fx.server.stateFor("inst-1")).toBe("idle");
+    await client.waitFor("prompt-cleared");
 
     client.close();
   });
@@ -636,193 +646,29 @@ describe("RemoteServer remote decisions", () => {
       options,
     });
     const prompt = await client.waitFor("prompt-state");
-    // The id a tap on these buttons names.
-    return Object.assign(client, { promptId: prompt.promptId as string });
+    // The seq an answer to this dialog names.
+    return Object.assign(client, { seq: prompt.seq as number });
   }
 
-  it("translates a tapped option into the matching keystroke", async () => {
-    const fx = await startServer();
-    const client = await connectedWithPrompt(fx, 4);
-
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 2, promptId: client.promptId });
-    await vi.waitFor(() => expect(fx.writes).toHaveLength(1));
-    // Third option -> "3".
-    expect(fx.writes[0]).toEqual({ id: "inst-1", data: "3" });
-
-    client.close();
-  });
-
-  it("refuses an out-of-range option instead of guessing", async () => {
-    const fx = await startServer();
-    const client = await connectedWithPrompt(fx, 3);
-
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 7, promptId: client.promptId });
-    const error = await client.waitFor("error");
-    expect(String(error.message)).toContain("no longer available");
-    // The important part: nothing was typed into the agent's terminal.
-    expect(fx.writes).toEqual([]);
-
-    client.close();
-  });
-
-  it("refuses a choice for a prompt that already cleared", async () => {
-    const fx = await startServer();
-    const client = await connectedWithPrompt(fx, 3);
-
-    // Someone answered on the desktop first — the race that would otherwise send
-    // a keystroke into whatever replaced the prompt.
-    fx.server.broadcastActivity("inst-1", "prompt-cleared");
-    await client.waitFor("prompt-cleared");
-
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 0, promptId: client.promptId });
-    await client.waitFor("error");
-    expect(fx.writes).toEqual([]);
-
-    client.close();
-  });
-
-  it("refuses a tap on buttons a newer prompt has replaced, and takes one naming the live prompt", async () => {
-    const fx = await startServer();
-    const client = new TestClient(fx.url);
-    await client.handshake(fx.hostPublicKey);
-    client.send({ type: "auth", deviceToken: fx.token, deviceName: "phone" });
-    await client.waitFor("auth-ok");
-    await client.waitFor("instances");
-    const ask = (question: string) =>
-      fx.server.broadcastActivity("inst-1", "prompt", {
-        tool: "Permission",
-        question,
-        options: [{ label: "Allow once" }, { label: "Reject" }],
-      });
-    ask("A");
-    const first = await client.waitFor("prompt-state");
-    // A is answered at the desk and B comes up while the phone's tap on A travels.
-    fx.server.broadcastActivity("inst-1", "prompt-cleared");
-    ask("B");
-    const second = await client.waitFor("prompt-state");
-    expect(second.promptId).not.toBe(first.promptId);
-
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 0, promptId: first.promptId });
-    const error = await client.waitFor("error");
-    expect(String(error.message)).toContain("no longer available");
-    expect(fx.writes).toEqual([]);
-
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 0, promptId: second.promptId });
-    await vi.waitFor(() => expect(fx.writes).toHaveLength(1));
-
-    client.close();
-  });
-
-  it("gives a phone that subscribes late the live prompt's number", async () => {
+  it("gives a phone that subscribes late the live prompt's seq", async () => {
     const fx = await startServer();
     const client = await connectedWithPrompt(fx, 2);
     client.send({ type: "subscribe", instanceId: "inst-1" });
     const replayed = await client.waitFor("prompt-state");
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 1, promptId: replayed.promptId });
-    await vi.waitFor(() => expect(fx.writes).toHaveLength(1));
+    expect(replayed.seq).toBe(client.seq);
+    expect(replayed.summary).toBe("Pick one");
 
     client.close();
   });
 
-  it("shows a restated dialog's buttons without a second vibration", async () => {
-    const fx = await startServer();
-    const client = await connectedWithPrompt(fx, 2);
-    fx.server.broadcastActivity(
-      "inst-1",
-      "prompt",
-      { tool: "Permission", question: "Still open", options: [{ label: "Allow once" }] },
-      true
-    );
-    const seen: string[] = [];
-    for (;;) {
-      const frame = await client.next();
-      seen.push(String(frame.type));
-      if (frame.type === "prompt-state") {
-        expect(frame.question).toBe("Still open");
-        break;
-      }
-    }
-    // The `activity` frame is what makes the phone vibrate.
-    expect(seen).not.toContain("activity");
-    expect(fx.server.activityFor("inst-1")).toBe("prompt");
-
-    client.close();
-  });
-
-  it("refuses a tap that names no prompt, as a phone page from before prompt ids sends", async () => {
-    const fx = await startServer();
-    const client = await connectedWithPrompt(fx, 3);
-
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 0 });
-    const error = await client.waitFor("error");
-    expect(String(error.message)).toContain("no longer available");
-    expect(fx.writes).toEqual([]);
-    expect(fx.choices).toEqual([]);
-
-    client.close();
-  });
-
-  it("names every prompt afresh, so a restart can't reuse a number a phone still holds", async () => {
+  it("numbers each new prompt afresh", async () => {
     const fx = await startServer();
     const client = await connectedWithPrompt(fx, 2);
     fx.server.broadcastActivity("inst-1", "prompt", { tool: "Permission", options: [{ label: "Allow once" }] });
     const next = await client.waitFor("prompt-state");
-    expect(typeof client.promptId).toBe("string");
-    expect(next.promptId).not.toBe(client.promptId);
-    expect(String(next.promptId)).toMatch(/^[0-9a-f-]{36}$/);
-
-    client.close();
-  });
-
-  it("hands the host the prompt the phone was shown, so it answers that one", async () => {
-    const fx = await startServer();
-    const client = await connectedWithPrompt(fx, 3);
-
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 1, promptId: client.promptId });
-    await vi.waitFor(() => expect(fx.choices).toHaveLength(1));
-    expect(fx.choices[0]).toMatchObject({
-      id: "inst-1",
-      index: 1,
-      detail: { tool: "AskUserQuestion", question: "Pick one" },
-    });
-
-    client.close();
-  });
-
-  it("says the choice is gone when an answer through the CLI's API doesn't land", async () => {
-    const fx = await startServer();
-    // An OpenCode host: nothing is written, the answer resolves later.
-    fx.answerChoice = () => new Promise((resolve) => setTimeout(() => resolve(false), 20));
-    const client = await connectedWithPrompt(fx, 3);
-
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 0, promptId: client.promptId });
-    const error = await client.waitFor("error");
-    expect(String(error.message)).toContain("no longer available");
-    expect(fx.writes).toEqual([]);
-
-    // A host that throws says the same, rather than leave the phone waiting.
-    fx.answerChoice = () => Promise.reject(new Error("service unreachable"));
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 0, promptId: client.promptId });
-    await client.waitFor("error");
-
-    client.close();
-  });
-
-  it("sends no error when an answer through the CLI's API lands", async () => {
-    const fx = await startServer();
-    fx.answerChoice = () => Promise.resolve(true);
-    const client = await connectedWithPrompt(fx, 2);
-
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 1, promptId: client.promptId });
-    await vi.waitFor(() => expect(fx.choices).toHaveLength(1));
-    // Everything up to the reply to a ping sent after it: no error among it.
-    client.send({ type: "ping", at: 1 });
-    const seen: unknown[] = [];
-    for (let frame = await client.next(); ; frame = await client.next()) {
-      seen.push(frame.type);
-      if (frame.type === "pong") break;
-    }
-    expect(seen).not.toContain("error");
+    expect(next.seq).toBeGreaterThan(client.seq);
+    // No question: the summary is the tool.
+    expect(next.summary).toBe("Permission");
 
     client.close();
   });
@@ -885,10 +731,13 @@ describe("RemoteServer device revocation", () => {
     fx.server.revokeDevice(deviceA!.id);
     expect(await a.waitClose()).toBe(4003);
 
-    // b must still be live and receiving.
+    // b must still be live and receiving: the list it gets next shows the change.
     fx.server.broadcastActivity("inst-1", "waiting");
-    const activity = await b.waitFor("activity");
-    expect(activity.instanceId).toBe("inst-1");
+    for (;;) {
+      const frame = await b.waitFor("instances");
+      const instances = frame.instances as Array<Record<string, unknown>>;
+      if (instances[0].state === "finished") break;
+    }
 
     b.close();
   });
