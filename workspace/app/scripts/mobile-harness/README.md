@@ -137,6 +137,9 @@ pairs, authenticates and prints the sessions of every scenario. `HarnessClient`
   bracket access so `pnpm type` checks every name.
 - `world.ts`: the sessions as they change. `scenarios.ts`: what they start as.
 - `control.ts`, `screenshot.ts`, `client.ts`, `harness.test.ts`.
+- `push-check.ts`: notifications and the Home Screen hand-off (T-811) in WebKit or
+  Chrome, with the Home Screen, permission, PushManager and clipboard stubbed; its
+  header says how to run it.
 
 The files run on Node's type stripping (Electron 44's Node 24, or Node ≥ 22.18), so
 they import each other with their `.ts` names and use only erasable syntax (no enums,

@@ -51,6 +51,18 @@ export function offerFromText(text: string): PairingOffer | null {
   return decodeOffer(match ? match[1] : trimmed);
 }
 
+// The link a stored pairing came from, `<origin>/#pair=<offer>` as the desktop
+// encodes it (base64url of the JSON), for the Home Screen hand-off: Safari copies it,
+// the Home Screen app pastes it (G-306).
+export function pairingLink(pairing: StoredPairing): string {
+  const offer: PairingOffer = { v: REMOTE_PROTOCOL_VERSION, ...pairing };
+  const bytes = new TextEncoder().encode(JSON.stringify(offer));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  const code = btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `${pairing.origin}/#pair=${code}`;
+}
+
 export function loadPairing(storage: Storage): StoredPairing | null {
   try {
     const raw = storage.getItem(STORAGE_KEY);
