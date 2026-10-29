@@ -499,6 +499,9 @@ export interface ElectronAPI {
   // through a tool rather than the user clicking play.
   onInstanceStarted: (callback: (instance: Instance) => void) => () => void;
   onInstanceActivity: (callback: (id: string, type: string) => void) => () => void;
+  // A paired phone read the instance: opened it, or had it open when it reported.
+  // Its unread alerts clear here too.
+  onInstanceReadOnPhone: (callback: (id: string) => void) => () => void;
   onInstanceSessionId: (callback: (id: string, sessionId: string) => void) => () => void;
   onInstanceAlertsDegraded: (
     callback: (id: string, degraded: boolean, reason?: AlertsDegradedReason) => void

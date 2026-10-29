@@ -26,6 +26,8 @@ interface Spawn {
   report: ActivityCallback;
   // The agent's report that a turn runs (AttentionContext.onWorking).
   working: (working: boolean) => void;
+  // The terminal moved to another session (AttentionContext.onSessionShown).
+  shown: (sessionId: string) => void;
 }
 const spawns: Spawn[] = [];
 let nextPid = 500;
@@ -52,6 +54,7 @@ vi.mock("node-pty", () => ({
       exit: () => {},
       report: () => {},
       working: () => {},
+      shown: () => {},
     };
     spawns.push(spawn);
     return {
@@ -72,12 +75,16 @@ vi.mock("electron", () => ({
   BrowserWindow: { getAllWindows: () => [] },
 }));
 
+// The instances a paired phone that looks has open (RemoteServer.isReading).
+const phoneReading = vi.hoisted(() => new Set<string>());
+
 vi.mock("./remote/ws-server", () => ({
   remoteServer: {
     broadcastExit: () => {},
     broadcastInstances: () => {},
     broadcastOutput: () => {},
     broadcastResize: () => {},
+    isReading: (id: string) => phoneReading.has(id),
   },
 }));
 
@@ -95,12 +102,13 @@ vi.mock("./backends", async () => {
       pid: number,
       onActivity: ActivityCallback,
       onHooksHealth: (ok: boolean) => void,
-      context: { onWorking: (working: boolean) => void }
+      context: { onWorking: (working: boolean) => void; onSessionShown: (sessionId: string) => void }
     ) => {
       const spawn = spawns.find((s) => s.pid === pid);
       if (spawn) {
         spawn.report = onActivity;
         spawn.working = context.onWorking;
+        spawn.shown = context.onSessionShown;
       }
       const attention = new ClaudeHookAttention(
         onActivity,
@@ -192,6 +200,7 @@ beforeEach(() => {
   apiResult = async () => ({ ok: true });
   ocTarget = () => "ses_1";
   ocDialogOpen = false;
+  phoneReading.clear();
 });
 
 afterEach(() => {
@@ -978,6 +987,85 @@ describe("a restated dialog (opencode-v2 T-607)", () => {
 // PromptStateFrame). Nothing keeps the counter across launches; the clock does.
 // The first key clears the event while the dialog is still on screen; a paired
 // phone's compose and Stop hold off until the last (remote/remote-host.ts).
+// A session a paired phone shows is read there (mobile-v2): each activity the
+// renderer counts is followed by the read, so the desk's debounce drops the count.
+describe("a session a paired phone is reading (mobile-v2)", () => {
+  // What the renderer is told about activity and reads, in order.
+  const watch = (manager: Manager) => {
+    const sent: unknown[][] = [];
+    manager.setMainWindow({
+      isDestroyed: () => false,
+      webContents: { send: (...args: unknown[]) => sent.push(args) },
+    } as never);
+    return () => sent.filter(([channel]) => channel === "instance-activity" || channel === "instance-read-on-phone");
+  };
+
+  it("is read there as a dialog opens and as the turn finishes, each right after its activity", () => {
+    const manager = new ProcessManager();
+    const sent = watch(manager);
+    const id = create(manager);
+    phoneReading.add(id);
+    replay(manager, id, "permission-approved");
+
+    expect(sent()).toEqual([
+      ["instance-activity", id, "prompt"],
+      ["instance-read-on-phone", id],
+      ["instance-activity", id, "waiting"],
+      ["instance-read-on-phone", id],
+    ]);
+  });
+
+  it("isn't read when the phone shows another session, or none", () => {
+    const manager = new ProcessManager();
+    const sent = watch(manager);
+    const id = create(manager);
+    const other = create(manager);
+    phoneReading.add(other);
+    replay(manager, id, "plain-finish");
+    phoneReading.clear();
+    replay(manager, other, "plain-finish");
+
+    expect(sent()).toEqual([
+      ["instance-activity", id, "waiting"],
+      ["instance-activity", other, "waiting"],
+    ]);
+  });
+
+  it("isn't read for a turn that ended in another of the contact's sessions", () => {
+    const manager = new ProcessManager();
+    const sent = watch(manager);
+    const id = create(manager, "opencode");
+    phoneReading.add(id);
+    const spawn = latestSpawn(id);
+    // The terminal moved from ses_a to ses_b, and the turn left running in ses_a ends.
+    spawn.shown("ses_a");
+    spawn.shown("ses_b");
+    spawn.report("waiting", undefined, undefined, undefined, "ses_a");
+    spawn.report("waiting", undefined, undefined, undefined, "ses_b");
+
+    expect(sent()).toEqual([
+      ["instance-activity", id, "waiting"],
+      ["instance-activity", id, "waiting"],
+      ["instance-read-on-phone", id],
+    ]);
+  });
+
+  it("sends nothing for a restated dialog, which the renderer doesn't count", () => {
+    const manager = new ProcessManager();
+    const sent = watch(manager);
+    const id = create(manager, "opencode");
+    phoneReading.add(id);
+    const spawn = latestSpawn(id);
+    spawn.report("prompt", OC_PERMISSION.detail, OC_PERMISSION.toolCall);
+    spawn.report("prompt", OC_PERMISSION.detail, OC_PERMISSION.toolCall, true);
+
+    expect(sent()).toEqual([
+      ["instance-activity", id, "prompt"],
+      ["instance-read-on-phone", id],
+    ]);
+  });
+});
+
 describe("isAnswering (mobile-v2 T-803)", () => {
   it("is true from the first key of an answer to its last, and only then", async () => {
     const manager = new ProcessManager();

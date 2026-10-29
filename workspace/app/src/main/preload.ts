@@ -162,6 +162,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.removeListener("instance-activity", listener);
     };
   },
+  onInstanceReadOnPhone: (callback: (id: string) => void) => {
+    const listener = (_event: unknown, id: string) => callback(id);
+    ipcRenderer.on("instance-read-on-phone", listener);
+    return () => {
+      ipcRenderer.removeListener("instance-read-on-phone", listener);
+    };
+  },
   onInstanceStarted: (callback: (instance: unknown) => void) => {
     const listener = (_event: unknown, instance: unknown) => callback(instance);
     ipcRenderer.on("instance-started", listener);
