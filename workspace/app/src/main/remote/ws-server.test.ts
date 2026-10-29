@@ -636,6 +636,22 @@ describe("RemoteServer heartbeat", () => {
     client.close();
   });
 
+  it("keeps when a phone was last heard from as its last seen, once it goes", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    const authedAt = fx.server.getStatus().devices[0].lastSeenAt;
+    await new Promise((r) => setTimeout(r, 50));
+    const pingAt = Date.now();
+    client.send({ type: "ping", at: 1 });
+    await client.waitFor("pong");
+    client.close();
+    await vi.waitFor(() => expect(fx.server.getStatus().devices[0].connected).toBe(false));
+
+    const lastSeenAt = fx.server.getStatus().devices[0].lastSeenAt;
+    expect(lastSeenAt).toBeGreaterThan(authedAt);
+    expect(lastSeenAt).toBeGreaterThanOrEqual(pingAt);
+  });
+
   it("keeps a socket that pings", async () => {
     const fx = await startServer({ heartbeatTimeoutMs: 300 });
     const client = await connected(fx);
