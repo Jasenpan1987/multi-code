@@ -30,6 +30,7 @@ import {
   type RemoteChoice,
   type RemoteDialog,
   type RemoteInstance,
+  type RemotePushSubscription,
   type RemoteStatus,
   type ServerFrame,
   type TranscriptEntry,
@@ -38,7 +39,15 @@ import { SealedChannel, getHostIdentity, mintDeviceToken, tokensMatch } from "./
 import { loadDevices, saveDevices, type StoredDevice } from "./device-store";
 import { outputBuffer } from "./output-buffer";
 import { ChecksCache, type RemoteChecker } from "./tailscale";
-import type { RemoteHttpsSetup } from "../../shared/types";
+import {
+  declarativePayload,
+  loadVapidKeys,
+  sendPush,
+  topicOf,
+  type PushResult,
+  type VapidKeys,
+} from "./push";
+import type { RemoteHttpsSetup, RemoteTestPush } from "../../shared/types";
 
 // A phone that never completes its handshake + auth in this window gets dropped,
 // so a port scanner can't hold sockets open.
@@ -56,6 +65,16 @@ const ACKS_KEPT = 200;
 
 // What a subscribe gets when it doesn't say how many turns.
 const DEFAULT_TURNS = 10;
+
+// A phone with the app open pings every 15 s and is answered within 5; one that has
+// sent nothing for longer isn't looking, whatever its socket says. It gets the push:
+// a lock can leave a socket half-open until HEARTBEAT_TIMEOUT_MS, which is too long
+// to go without one.
+const LOOKING_MS = 20_000;
+
+// A push's lines, at most (Story 7). Well inside the 4 KB a push may carry.
+const PUSH_TITLE_CHARS = 120;
+const PUSH_BODY_CHARS = 180;
 
 // At most this often per instance, the list's line for a working agent is
 // refreshed from its transcript, and only while a phone is connected to see it.
@@ -93,6 +112,8 @@ interface Connection {
   authTimer: ReturnType<typeof setTimeout> | null;
   // Re-armed by every frame once authed; see HEARTBEAT_TIMEOUT_MS.
   heartbeat: ReturnType<typeof setTimeout> | null;
+  // When the phone last sent anything (ms); see LOOKING_MS.
+  heardAt: number;
 }
 
 // How the desktop answered a frame carrying a `clientMsgId`, before it becomes an
@@ -143,6 +164,18 @@ export interface RemoteServerOptions {
   heartbeatTimeoutMs?: number;
 }
 
+// A session finished or needs the builder (remote-host.ts): what its push says. The
+// server adds where tapping it goes and sends it to every phone that isn't looking.
+export interface SessionPush {
+  instanceId: string;
+  // `<name> · Needs you` / `<name> · Finished`.
+  title: string;
+  // The list row's line: what the dialog asks, or the conclusion's first sentence.
+  body?: string;
+  // How many sessions need the builder now: the Home Screen icon's number.
+  badge: number;
+}
+
 // Trailing delay before refreshing a watched instance's transcript. Long enough
 // that a fast-scrolling agent costs one file read per second rather than
 // thousands, short enough that the summary tracks what's on screen.
@@ -180,6 +213,12 @@ export class RemoteServer {
   // the list again only when it differs. Forgotten whenever a phone is sent the list
   // directly, so the next change reaches every phone whatever it was last sent.
   private lastInstances = "";
+  // The VAPID keypair once loaded (push.ts), or why it couldn't be.
+  private vapid: VapidKeys | null = null;
+  private vapidError = "";
+  // Per device, the push being sent to it, so the next one goes after it: a session's
+  // older push must never land after its newer one, which it would replace.
+  private pushQueues = new Map<string, Promise<unknown>>();
   private readonly heartbeatTimeoutMs: number;
 
   constructor(options: RemoteServerOptions = {}) {
@@ -335,6 +374,8 @@ export class RemoteServer {
   }
 
   getStatus(): RemoteStatus {
+    // First: a new pair forgets the subscriptions listed below (vapidKeys).
+    const vapid = this.vapidKeys();
     const connectedIds = new Set(
       [...this.connections].filter((c) => c.authed).map((c) => c.deviceId)
     );
@@ -344,16 +385,15 @@ export class RemoteServer {
       pairedAt: d.pairedAt,
       lastSeenAt: d.lastSeenAt,
       connected: connectedIds.has(d.id),
-      // mobile-v2 T-810 (Web Push): no push yet.
-      pushEnabled: false,
+      pushEnabled: !!d.push,
+      ...(d.lastPushError ? { lastPushError: d.lastPushError } : {}),
     }));
     return {
       enabled: this.httpServer !== null,
       port: this.port,
       checks: {
         ...this.checks.current(),
-        // mobile-v2 T-810 (Web Push): placeholder check.
-        push: { state: "error", detail: "not built yet" },
+        push: vapid ? { state: "ready" } : { state: "error", detail: this.vapidError },
       },
       devices,
       error: this.startError,
@@ -372,6 +412,182 @@ export class RemoteServer {
   async setUpHttps(): Promise<RemoteHttpsSetup> {
     const { error } = await this.checks.setUpHttps();
     return { status: this.getStatus(), ...(error ? { error } : {}) };
+  }
+
+  // -------------------------------------------------------------------------
+  // Web Push (Story 7)
+  // -------------------------------------------------------------------------
+
+  // A session finished or needs the builder: push it to every subscribed phone that
+  // isn't looking (one with the app open shows the change itself). Returns at once;
+  // the sends run behind it and never throw, so the activity that raised this can't
+  // be held up or broken by a push service. Nothing is sent until HTTPS is ready: the
+  // origin is both where tapping the push goes and the VAPID subject, and no phone
+  // could have subscribed without it.
+  pushSession(push: SessionPush): void {
+    const origin = this.httpsOrigin();
+    const keys = this.vapidKeys();
+    if (!origin || !keys) return;
+    const payload = declarativePayload({
+      title: clip(push.title, PUSH_TITLE_CHARS),
+      body: push.body ? clip(push.body, PUSH_BODY_CHARS) : undefined,
+      navigate: `${origin}/#/s/${encodeURIComponent(push.instanceId)}`,
+      tag: push.instanceId,
+      badge: push.badge,
+    });
+    const topic = topicOf(push.instanceId);
+    for (const device of this.devices) {
+      if (!device.push || this.isLooking(device.id)) continue;
+      void this.deliver(device.id, payload, { keys, subject: origin, topic });
+    }
+  }
+
+  // The Phone section's "Send test": one push to that phone, open or not, saying
+  // whether it went. Its outcome is recorded like any other push's.
+  async sendTestPush(deviceId: string): Promise<RemoteTestPush> {
+    const device = this.devices.find((d) => d.id === deviceId);
+    if (!device) return { ok: false, error: "This phone isn't paired any more." };
+    if (!device.push) return { ok: false, error: "Notifications are off on this phone. Turn them on in its app." };
+    if (!this.httpServer) return { ok: false, error: "Turn the phone link on first." };
+    const origin = this.httpsOrigin();
+    if (!origin) return { ok: false, error: "HTTPS isn't set up yet." };
+    const keys = this.vapidKeys();
+    if (!keys) return { ok: false, error: this.vapidError };
+    const payload = declarativePayload({
+      title: "Multi-Code · Test",
+      body: "Notifications from this Mac work.",
+      navigate: `${origin}/#/`,
+      tag: "multi-code-test",
+    });
+    const result = await this.deliver(deviceId, payload, { keys, subject: origin });
+    if (result.ok) return { ok: true };
+    if (result.gone) {
+      return { ok: false, error: "This phone's subscription has expired. Open the app on it to turn notifications on again." };
+    }
+    return { ok: false, error: result.error };
+  }
+
+  private httpsOrigin(): string | null {
+    const https = this.checks.current().https;
+    return https.state === "ready" ? https.origin : null;
+  }
+
+  // Loaded once, on first need. A new pair means every stored subscription was made
+  // for a key that no longer exists, so they go, and each phone subscribes again on
+  // its next launch (auth-ok says pushEnabled false). Until a pair loads, every call
+  // tries again: the folder may be writable by then.
+  private vapidKeys(): VapidKeys | null {
+    if (this.vapid) return this.vapid;
+    const loaded = loadVapidKeys();
+    if (!loaded.ok) {
+      this.vapidError = loaded.error;
+      return null;
+    }
+    this.vapid = loaded.keys;
+    this.vapidError = "";
+    if (loaded.created && this.devices.some((d) => d.push)) {
+      for (const device of this.devices) {
+        delete device.push;
+        delete device.lastPushError;
+      }
+      this.saveDevicesSafely();
+    }
+    return this.vapid;
+  }
+
+  // See LOOKING_MS.
+  private isLooking(deviceId: string): boolean {
+    const now = Date.now();
+    for (const conn of this.connections) {
+      if (
+        conn.authed &&
+        conn.deviceId === deviceId &&
+        conn.socket.readyState === conn.socket.OPEN &&
+        now - conn.heardAt < LOOKING_MS
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Send to the device's subscription as it is now, after whatever is being sent to
+  // it already, and record the outcome.
+  private deliver(
+    deviceId: string,
+    payload: string,
+    options: { keys: VapidKeys; subject: string; topic?: string }
+  ): Promise<PushResult> {
+    const send = async (): Promise<PushResult> => {
+      // Turned off, or the phone revoked, while an earlier push to it was going out.
+      const subscription = this.devices.find((d) => d.id === deviceId)?.push;
+      if (!subscription) return { ok: false, gone: false, error: "Notifications are off on this phone." };
+      const result = await sendPush(subscription, payload, options);
+      this.recordPush(deviceId, subscription.endpoint, result);
+      return result;
+    };
+    const sent = (this.pushQueues.get(deviceId) ?? Promise.resolve()).then(send).catch(
+      (err: Error): PushResult => ({ ok: false, gone: false, error: `Couldn't send it: ${err?.message ?? err}` })
+    );
+    this.pushQueues.set(deviceId, sent);
+    void sent.then(() => {
+      if (this.pushQueues.get(deviceId) === sent) this.pushQueues.delete(deviceId);
+    });
+    return sent;
+  }
+
+  // 404/410: the subscription is gone, so it is deleted (push off for that phone until
+  // it subscribes again). Any other failure is kept on the device until a push to it
+  // works. Only for the subscription the push went to: one the phone replaced while it
+  // was in flight is the phone's newer word, and a revoked phone has no row.
+  private recordPush(deviceId: string, endpoint: string, result: PushResult) {
+    const device = this.devices.find((d) => d.id === deviceId);
+    if (!device || device.push?.endpoint !== endpoint) return;
+    if (result.ok) {
+      if (device.lastPushError === undefined) return;
+      delete device.lastPushError;
+    } else if (result.gone) {
+      delete device.push;
+      delete device.lastPushError;
+    } else {
+      if (device.lastPushError === result.error) return;
+      device.lastPushError = result.error;
+    }
+    this.saveDevicesSafely();
+    this.notifyStatus();
+  }
+
+  // A phone's `push-subscribe`. Sent again on every launch, so an unchanged one
+  // writes nothing. A new subscription starts with no error: the last one was about
+  // the subscription it replaces. Undone when it can't be saved, and the ack says so:
+  // the phone sends it again, and that one must be saved rather than found unchanged.
+  private setPushSubscription(deviceId: string | null, subscription: RemotePushSubscription | null) {
+    const device = this.devices.find((d) => d.id === deviceId);
+    if (!device) return;
+    if (JSON.stringify(device.push ?? null) === JSON.stringify(subscription)) return;
+    const { push, lastPushError } = device;
+    if (subscription) device.push = subscription;
+    else delete device.push;
+    delete device.lastPushError;
+    try {
+      saveDevices(this.devices);
+    } catch (err) {
+      if (push) device.push = push;
+      else delete device.push;
+      if (lastPushError !== undefined) device.lastPushError = lastPushError;
+      throw err;
+    }
+    this.notifyStatus();
+  }
+
+  // From a push's outcome, which must not throw: the change stays in memory, and
+  // is written with the next save that works.
+  private saveDevicesSafely() {
+    try {
+      saveDevices(this.devices);
+    } catch {
+      // See above.
+    }
   }
 
   private hostName(): string {
@@ -564,6 +780,7 @@ export class RemoteServer {
       subscriptions: new Map(),
       authTimer: null,
       heartbeat: null,
+      heardAt: Date.now(),
     };
     this.connections.add(conn);
 
@@ -577,6 +794,7 @@ export class RemoteServer {
     };
     socket.on("message", (raw) => {
       conn.heartbeat?.refresh();
+      conn.heardAt = Date.now();
       this.handleMessage(conn, raw.toString());
     });
     socket.on("close", () => {
@@ -693,12 +911,15 @@ export class RemoteServer {
       // placeholder name from pairing is replaced here.
       if (frame.deviceName) device.name = frame.deviceName;
       saveDevices(this.devices);
+      // Before `device.push` is read: a new pair forgets every subscription.
+      const vapid = this.vapidKeys();
       this.send(conn, {
         type: "auth-ok",
         hostName: this.hostName(),
-        // mobile-v2 T-810 (Web Push): no VAPID key or subscription yet.
-        vapidPublicKey: "",
-        pushEnabled: false,
+        // Empty when the keys couldn't be loaded: the phone can't subscribe then, and
+        // the Phone section says why (checks.push).
+        vapidPublicKey: vapid?.publicKey ?? "",
+        pushEnabled: !!device.push,
       });
       this.sendInstances(conn);
       this.notifyStatus();
@@ -781,13 +1002,13 @@ export class RemoteServer {
         });
         return;
 
-      // mobile-v2 T-810 (Web Push): refused until it is built.
       case "push-subscribe":
-        this.acked(conn, frame.clientMsgId, async () => ({
-          ok: false,
-          reason: "unsupported",
-          message: "Not built yet",
-        }));
+        this.acked(conn, frame.clientMsgId, async () => {
+          const subscription = subscriptionOf(frame.subscription);
+          if (subscription === undefined) return MALFORMED;
+          this.setPushSubscription(conn.deviceId, subscription);
+          return { ok: true };
+        });
         return;
 
       default:
@@ -867,6 +1088,34 @@ export class RemoteServer {
     if (conn.socket.readyState !== conn.socket.OPEN) return;
     conn.socket.send(JSON.stringify(frame));
   }
+}
+
+// The phone's `PushSubscription.toJSON()` as stored: only the fields Web Push uses,
+// and only an https endpoint (every push service's is). Null turns push off;
+// undefined is a malformed frame.
+function subscriptionOf(value: unknown): RemotePushSubscription | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== "object") return undefined;
+  const { endpoint, expirationTime, keys } = value as Record<string, unknown>;
+  if (typeof endpoint !== "string") return undefined;
+  try {
+    if (new URL(endpoint).protocol !== "https:") return undefined;
+  } catch {
+    return undefined;
+  }
+  const { p256dh, auth } = (typeof keys === "object" && keys !== null ? keys : {}) as Record<string, unknown>;
+  if (typeof p256dh !== "string" || !p256dh || typeof auth !== "string" || !auth) return undefined;
+  return {
+    endpoint,
+    ...(typeof expirationTime === "number" ? { expirationTime } : {}),
+    keys: { p256dh, auth },
+  };
+}
+
+// At most `max` characters, by code point, so a cut never splits one.
+function clip(text: string, max: number): string {
+  const chars = Array.from(text);
+  return chars.length > max ? `${chars.slice(0, max - 1).join("")}…` : text;
 }
 
 export const remoteServer = new RemoteServer();

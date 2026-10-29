@@ -2,9 +2,11 @@
 // NaCl handshake, with the desktop's real RemoteHost (remote-host.ts) on top of a
 // fake process manager. This is the part where a subtle framing, auth or ack bug
 // would be invisible to unit tests but break every phone, and where an answer is
-// followed through to the keys process-manager would write.
+// followed through to the keys process-manager would write. Web Push's send is
+// mocked: no test reaches a push service.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import crypto from "crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -20,11 +22,20 @@ vi.mock("electron", () => ({
   },
 }));
 
+// Everything else of web-push is real: the keys it generates, the JWT it signs.
+const sendNotification = vi.fn();
+vi.mock("web-push", async (importOriginal) => {
+  const actual = (await importOriginal<{ default: typeof import("web-push") }>()).default;
+  return { default: { ...actual, sendNotification } };
+});
+
 const { RemoteServer } = await import("./ws-server");
 const { createRemoteHost, firstSentence } = await import("./remote-host");
 const { REMOTE_PROTOCOL_VERSION } = await import("../../shared/remote-protocol");
 const { extractPromptDetail } = await import("./promptExtract");
 const { permissionDetail, permissionToolCall } = await import("../backends/opencodePrompt");
+const { topicOf } = await import("./push");
+const { default: webpush } = await import("web-push");
 
 type TranscriptEntry = import("../../shared/remote-protocol").TranscriptEntry;
 type HostProcessManager = import("./remote-host").HostProcessManager;
@@ -939,6 +950,7 @@ describe("instance states and previews", () => {
       broadcastPromptState: () => {},
       broadcastPromptCleared: () => {},
       broadcastTranscript: () => {},
+      pushSession: () => {},
     };
     const host = createRemoteHost(pm, push);
     pm.turns.set("inst-1", [{ kind: "assistant", text: "The old result, from the turn before." }]);
@@ -1512,12 +1524,403 @@ describe("acks are kept per device", () => {
     expect(fx.pm.prompts.map((p) => p.text).slice(201)).toEqual(["p0"]);
     client.close();
   });
+});
 
-  it("refuses push-subscribe until Web Push is built", async () => {
+describe("Web Push (T-810)", () => {
+  // A phone's real-shaped subscription to Apple's push service.
+  const P256DH = crypto.createECDH("prime256v1").generateKeys().toString("base64url");
+  const AUTH = crypto.randomBytes(16).toString("base64url");
+  const subscription = (n = 1) => ({
+    endpoint: `https://web.push.apple.com/QK${n}`,
+    keys: { p256dh: P256DH, auth: AUTH },
+  });
+  const devicesFile = () =>
+    JSON.parse(fs.readFileSync(path.join(userData, "remote-devices.json"), "utf8")) as AnyRecord[];
+  const vapidPublicKey = () =>
+    (JSON.parse(fs.readFileSync(path.join(userData, "remote-push.json"), "utf8")) as AnyRecord).publicKey;
+  const payloadOf = (call: number) => JSON.parse(sendNotification.mock.calls[call][1] as string);
+  const endpoints = () => sendNotification.mock.calls.map(([sub]) => (sub as { endpoint: string }).endpoint);
+  const refused = (statusCode: number, body = "") =>
+    new webpush.WebPushError("Received unexpected response code", statusCode, {}, body, subscription().endpoint);
+  // Long enough for a read and a send that are going to happen to have happened.
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+  beforeEach(() => {
+    sendNotification.mockReset();
+    sendNotification.mockResolvedValue({ statusCode: 201, body: "", headers: {} });
+  });
+
+  // A phone that turned notifications on, then put the app away: its socket closed.
+  // Connect phones one at a time: the device connected now is taken to be this one.
+  async function subscribedAway(fx: Fixture, token = fx.token, sub = subscription()): Promise<string> {
+    const client = await connected(fx, token);
+    const id = fx.server.getStatus().devices.find((d) => d.connected)!.id;
+    client.send({ type: "push-subscribe", subscription: sub, clientMsgId: `on-${id}` });
+    expect(await client.ack(`on-${id}`)).toMatchObject({ ok: true });
+    client.close();
+    await vi.waitFor(() => expect(fx.server.getStatus().devices.find((d) => d.id === id)?.connected).toBe(false));
+    return id;
+  }
+
+  it("keeps a phone's subscription on its device, says so in auth-ok and the status, and null removes it", async () => {
+    const fx = await startServer();
+    expect(fx.server.getStatus().checks.push).toEqual({ state: "ready" });
+    const client = await connected(fx);
+    client.send({ type: "push-subscribe", subscription: subscription(), clientMsgId: "on" });
+    expect(await client.ack("on")).toEqual({ type: "ack", clientMsgId: "on", ok: true });
+    expect(fx.server.getStatus().devices[0].pushEnabled).toBe(true);
+    expect(devicesFile()[0].push).toEqual(subscription());
+    client.close();
+
+    const again = new TestClient(fx.url);
+    await again.handshake(fx.hostPublicKey);
+    again.send({ type: "auth", deviceToken: fx.token });
+    const ok = await again.waitFor("auth-ok");
+    expect(ok).toMatchObject({ pushEnabled: true, vapidPublicKey: vapidPublicKey() });
+    expect(Buffer.from(String(ok.vapidPublicKey), "base64url")).toHaveLength(65);
+
+    again.send({ type: "push-subscribe", subscription: null, clientMsgId: "off" });
+    expect(await again.ack("off")).toMatchObject({ ok: true });
+    expect(fx.server.getStatus().devices[0].pushEnabled).toBe(false);
+    expect(devicesFile()[0].push).toBeUndefined();
+    again.close();
+  });
+
+  it("refuses a subscription Web Push can't use, and keeps the one it had", async () => {
     const fx = await startServer();
     const client = await connected(fx);
-    client.send({ type: "push-subscribe", subscription: null, clientMsgId: "s1" });
-    expect(await client.ack("s1")).toMatchObject({ ok: false, reason: "unsupported" });
+    client.send({ type: "push-subscribe", subscription: subscription(), clientMsgId: "on" });
+    await client.ack("on");
+    const bad = [
+      { ...subscription(), endpoint: "http://web.push.apple.com/QK1" },
+      { ...subscription(), endpoint: "not a url" },
+      { endpoint: "https://web.push.apple.com/QK1" },
+      { ...subscription(), keys: { p256dh: P256DH, auth: "" } },
+      "on",
+      undefined,
+    ];
+    for (const [i, value] of bad.entries()) {
+      client.send({ type: "push-subscribe", subscription: value, clientMsgId: `bad${i}` });
+      expect(await client.ack(`bad${i}`), JSON.stringify(value)).toMatchObject({ ok: false, reason: "failed" });
+    }
+    expect(devicesFile()[0].push).toEqual(subscription());
+    client.close();
+  });
+
+  it("undoes a subscription it couldn't save, so the phone's resend is saved", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    const file = path.join(userData, "remote-devices.json");
+    fs.chmodSync(file, 0o400);
+    try {
+      client.send({ type: "push-subscribe", subscription: subscription(), clientMsgId: "on" });
+      expect(await client.ack("on")).toMatchObject({ ok: false, reason: "failed" });
+      expect(fx.server.getStatus().devices[0].pushEnabled).toBe(false);
+    } finally {
+      fs.chmodSync(file, 0o600);
+    }
+    client.send({ type: "push-subscribe", subscription: subscription(), clientMsgId: "again" });
+    expect(await client.ack("again")).toMatchObject({ ok: true });
+    expect(devicesFile()[0].push).toEqual(subscription());
+
+    // The same for turning it off.
+    fs.chmodSync(file, 0o400);
+    try {
+      client.send({ type: "push-subscribe", subscription: null, clientMsgId: "off" });
+      expect(await client.ack("off")).toMatchObject({ ok: false, reason: "failed" });
+      expect(fx.server.getStatus().devices[0].pushEnabled).toBe(true);
+    } finally {
+      fs.chmodSync(file, 0o600);
+    }
+    client.send({ type: "push-subscribe", subscription: null, clientMsgId: "off-again" });
+    expect(await client.ack("off-again")).toMatchObject({ ok: true });
+    expect(devicesFile()[0].push).toBeUndefined();
+    client.close();
+  });
+
+  it("pushes a Needs you to a phone that isn't looking, as Declarative Web Push", async () => {
+    const fx = await startServer();
+    await subscribedAway(fx);
+    fx.pm.raise("inst-1", bash(31));
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(1));
+
+    const [sub, payload, options] = sendNotification.mock.calls[0];
+    expect(sub).toEqual(subscription());
+    expect(JSON.parse(payload)).toEqual({
+      web_push: 8030,
+      notification: {
+        title: "demo · Needs you",
+        body: "Bash: pnpm test:e2e",
+        navigate: "https://mac.example.ts.net/#/s/inst-1",
+        tag: "inst-1",
+      },
+      app_badge: 1,
+    });
+    expect(options).toMatchObject({ TTL: 3600, urgency: "high", topic: topicOf("inst-1") });
+    expect(options.topic).toMatch(/^[A-Za-z0-9_-]{1,32}$/);
+    // Signed for Apple's service, with the HTTPS origin as the contact (Apple refuses a
+    // .local or localhost one) and the key the phone subscribed with.
+    const authorization = String(options.headers.Authorization);
+    expect(authorization).toMatch(new RegExp(`^vapid t=[\\w-]+\\.[\\w-]+\\.[\\w-]+, k=${vapidPublicKey()}$`));
+    const jwt = JSON.parse(Buffer.from(authorization.split(".")[1], "base64url").toString("utf8"));
+    expect(jwt).toMatchObject({ aud: "https://web.push.apple.com", sub: "https://mac.example.ts.net" });
+  });
+
+  it("pushes a Finished with its conclusion's first sentence, read after the event", async () => {
+    const fx = await startServer();
+    fx.pm.turns.set("inst-1", [{ kind: "assistant", text: "The old result, from the turn before." }]);
+    await subscribedAway(fx);
+    await vi.waitFor(() => expect(fx.pm.turnReads).toBe(1));
+    fx.pm.turns.set("inst-1", [
+      { kind: "user", text: "fix it" },
+      { kind: "tool", tool: "Edit", text: "src/a.ts" },
+      { kind: "assistant", text: "## Done\n\nFixed the **flaky** test. It was a race." },
+    ]);
+    fx.pm.raise("inst-1", finished(32));
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(1));
+    expect(payloadOf(0)).toEqual({
+      web_push: 8030,
+      notification: {
+        title: "demo · Finished",
+        body: "Fixed the flaky test. It was a race.",
+        navigate: "https://mac.example.ts.net/#/s/inst-1",
+        tag: "inst-1",
+      },
+      app_badge: 0,
+    });
+  });
+
+  it("badges the number of sessions that need the builder when it is sent", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "inst-2", name: "other" });
+    fx.pm.add({ id: "inst-3", name: "third" });
+    await subscribedAway(fx);
+    const raised = async (id: string, event: SecretaryEvent) => {
+      const before = sendNotification.mock.calls.length;
+      fx.pm.raise(id, event);
+      await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(before + 1));
+      return payloadOf(before).app_badge;
+    };
+    expect(await raised("inst-2", bash(40))).toBe(1);
+    expect(await raised("inst-3", finished(41))).toBe(1);
+    expect(await raised("inst-1", questions(42))).toBe(2);
+    // The builder answered inst-2 at the desk; its next turn finished.
+    fx.pm.clear("inst-2");
+    expect(await raised("inst-2", finished(43))).toBe(1);
+  });
+
+  it("skips a phone with the app open, until it has gone quiet", async () => {
+    const fx = await startServer();
+    const second = fx.server.createPairingOffer()!;
+    await subscribedAway(fx, second.deviceToken, subscription(2));
+    const looking = await connected(fx);
+    looking.send({ type: "push-subscribe", subscription: subscription(1), clientMsgId: "on" });
+    await looking.ack("on");
+
+    fx.pm.raise("inst-1", bash(50));
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(endpoints()).toEqual(["https://web.push.apple.com/QK2"]);
+
+    // Locked with its socket half-open: no ping for longer than a phone that looks
+    // ever goes without one.
+    for (const conn of fx.server["connections"]) conn.heardAt -= 30_000;
+    fx.pm.raise("inst-1", finished(51));
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(3));
+    expect(endpoints().slice(1).sort()).toEqual(["https://web.push.apple.com/QK1", "https://web.push.apple.com/QK2"]);
+    looking.close();
+  });
+
+  it("sends nothing for a restated dialog, or for the Manager", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "manager", name: "Manager", isManager: true });
+    await subscribedAway(fx);
+    fx.pm.raise("inst-1", { ...bash(60), restated: true });
+    fx.pm.raise("manager", bash(61));
+    await settle();
+    expect(sendNotification).not.toHaveBeenCalled();
+    // The restated dialog is still the live one; only its second push is skipped.
+    expect(fx.server["host"]!.listInstances()[0]).toMatchObject({ state: "needs-you" });
+  });
+
+  it("still pushes an event a restatement followed at once: the restatement has no push of its own", async () => {
+    const fx = await startServer();
+    await subscribedAway(fx);
+    // An OpenCode turn ends beside an open dialog: Finished, then the dialog said again.
+    fx.pm.raise("inst-1", finished(72));
+    fx.pm.raise("inst-1", { ...bash(73), restated: true });
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(1));
+    expect(payloadOf(0)).toMatchObject({ notification: { title: "demo · Finished" }, app_badge: 1 });
+
+    // A fresh dialog said again before its line was read.
+    fx.pm.raise("inst-1", bash(74));
+    fx.pm.raise("inst-1", { ...bash(75), restated: true });
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(2));
+    await settle();
+    expect(sendNotification).toHaveBeenCalledTimes(2);
+    expect(payloadOf(1).notification.title).toBe("demo · Needs you");
+  });
+
+  it("sends only the newer of two events that came before the first's line was read", async () => {
+    const fx = await startServer();
+    await subscribedAway(fx);
+    fx.pm.raise("inst-1", finished(70));
+    fx.pm.raise("inst-1", bash(71));
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+    expect(payloadOf(0).notification.title).toBe("demo · Needs you");
+  });
+
+  it("sends a phone's pushes one after the other, so an older one can't land after a newer one", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "inst-2", name: "other" });
+    await subscribedAway(fx);
+    let release!: () => void;
+    sendNotification.mockImplementationOnce(
+      () => new Promise((resolve) => (release = () => resolve({ statusCode: 201, body: "", headers: {} })))
+    );
+    fx.pm.raise("inst-1", bash(100));
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(1));
+    fx.pm.raise("inst-2", finished(101));
+    await settle();
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+    release();
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(2));
+    expect(payloadOf(1).notification.title).toBe("other · Finished");
+  });
+
+  it.each([404, 410])("deletes a subscription the push service says is gone (%i)", async (statusCode) => {
+    const fx = await startServer();
+    const id = await subscribedAway(fx);
+    const pushed: boolean[] = [];
+    fx.server.setStatusListener(() => pushed.push(fx.server.getStatus().devices[0].pushEnabled));
+    sendNotification.mockRejectedValueOnce(refused(statusCode));
+    fx.pm.raise("inst-1", bash(80));
+    await vi.waitFor(() => expect(fx.server.getStatus().devices[0].pushEnabled).toBe(false));
+    expect(pushed.at(-1)).toBe(false);
+    expect(devicesFile()[0].push).toBeUndefined();
+    expect(fx.server.getStatus().devices[0].lastPushError).toBeUndefined();
+
+    fx.pm.raise("inst-1", finished(81));
+    await settle();
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+    expect((await fx.server.sendTestPush(id)).ok).toBe(false);
+  });
+
+  it("records any other failure on the device until a push to it works, and never throws into the event", async () => {
+    const fx = await startServer();
+    await subscribedAway(fx);
+    const device = () => fx.server.getStatus().devices[0];
+
+    sendNotification.mockRejectedValueOnce(refused(403, JSON.stringify({ reason: "BadJwtToken" })));
+    fx.pm.raise("inst-1", bash(90));
+    await vi.waitFor(() => expect(device().lastPushError).toBe("The push service refused it: 403 BadJwtToken"));
+    expect(device().pushEnabled).toBe(true);
+    expect(devicesFile()[0].lastPushError).toBe("The push service refused it: 403 BadJwtToken");
+
+    sendNotification.mockRejectedValueOnce(new Error("getaddrinfo ENOTFOUND web.push.apple.com"));
+    fx.pm.raise("inst-1", finished(91));
+    await vi.waitFor(() =>
+      expect(device().lastPushError).toBe("Couldn't send it: getaddrinfo ENOTFOUND web.push.apple.com")
+    );
+
+    sendNotification.mockImplementationOnce(() => {
+      throw new Error("boom");
+    });
+    expect(() => fx.pm.raise("inst-1", bash(92))).not.toThrow();
+    await vi.waitFor(() => expect(device().lastPushError).toBe("Couldn't send it: boom"));
+
+    fx.pm.raise("inst-1", finished(93));
+    await vi.waitFor(() => expect(device().lastPushError).toBeUndefined());
+    expect(devicesFile()[0].lastPushError).toBeUndefined();
+    expect(sendNotification).toHaveBeenCalledTimes(4);
+  });
+
+  it("sends nothing until HTTPS is ready, nor with the phone link off", async () => {
+    const fx = await startServer();
+    const id = await subscribedAway(fx);
+    fx.server.setChecker({
+      check: async () => ({
+        tailscale: { state: "running", dnsName: "mac.example.ts.net" },
+        https: { state: "serve-missing", command: "tailscale serve --bg --https=443 http://127.0.0.1:6768" },
+      }),
+      setUpHttps: async () => {
+        throw new Error("not in these tests");
+      },
+    });
+    await fx.server["checks"].refresh(true);
+    fx.pm.raise("inst-1", bash(95));
+    await settle();
+    expect(sendNotification).not.toHaveBeenCalled();
+    expect(await fx.server.sendTestPush(id)).toEqual({ ok: false, error: "HTTPS isn't set up yet." });
+
+    await fx.server.stop();
+    fx.pm.raise("inst-1", finished(96));
+    await settle();
+    expect(sendNotification).not.toHaveBeenCalled();
+    expect(await fx.server.sendTestPush(id)).toEqual({ ok: false, error: "Turn the phone link on first." });
+  });
+
+  it("stops pushing to a revoked phone", async () => {
+    const fx = await startServer();
+    const id = await subscribedAway(fx);
+    fx.server.revokeDevice(id);
+    fx.pm.raise("inst-1", bash(97));
+    await settle();
+    expect(sendNotification).not.toHaveBeenCalled();
+    expect(await fx.server.sendTestPush(id)).toEqual({ ok: false, error: "This phone isn't paired any more." });
+  });
+
+  it("forgets every subscription when the keys are lost: they were made for the old key", async () => {
+    const fx = await startServer();
+    await subscribedAway(fx);
+    const before = vapidPublicKey();
+    await fx.server.stop();
+    fs.rmSync(path.join(userData, "remote-push.json"));
+
+    const server = new RemoteServer();
+    expect(server.getStatus().devices[0].pushEnabled).toBe(false);
+    expect(devicesFile()[0].push).toBeUndefined();
+    expect(vapidPublicKey()).not.toBe(before);
+  });
+
+  it("sends a test push to a phone whether or not it is looking, and says how it went", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    const id = fx.server.getStatus().devices[0].id;
+    expect(await fx.server.sendTestPush(id)).toEqual({
+      ok: false,
+      error: "Notifications are off on this phone. Turn them on in its app.",
+    });
+    client.send({ type: "push-subscribe", subscription: subscription(), clientMsgId: "on" });
+    await client.ack("on");
+
+    expect(await fx.server.sendTestPush(id)).toEqual({ ok: true });
+    // No badge: a test leaves the icon's number as it is.
+    expect(payloadOf(0)).toEqual({
+      web_push: 8030,
+      notification: {
+        title: "Multi-Code · Test",
+        body: "Notifications from this Mac work.",
+        navigate: "https://mac.example.ts.net/#/",
+        tag: "multi-code-test",
+      },
+    });
+
+    sendNotification.mockRejectedValueOnce(refused(500, JSON.stringify({ reason: "InternalServerError" })));
+    expect(await fx.server.sendTestPush(id)).toEqual({
+      ok: false,
+      error: "The push service refused it: 500 InternalServerError",
+    });
+    expect(fx.server.getStatus().devices[0].lastPushError).toBe("The push service refused it: 500 InternalServerError");
+
+    sendNotification.mockRejectedValueOnce(refused(410));
+    expect(await fx.server.sendTestPush(id)).toEqual({
+      ok: false,
+      error: "This phone's subscription has expired. Open the app on it to turn notifications on again.",
+    });
+    expect(fx.server.getStatus().devices[0]).toMatchObject({ pushEnabled: false });
     client.close();
   });
 });

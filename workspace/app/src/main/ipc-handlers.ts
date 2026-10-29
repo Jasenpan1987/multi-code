@@ -671,6 +671,9 @@ export function registerIpcHandlers() {
   // The Phone section's "Open Tailscale", for a Tailscale that is stopped or quit.
   ipcMain.handle("remote-open-tailscale", () => openTailscaleApp());
 
+  // The Phone section's "Send test" for one paired phone.
+  ipcMain.handle("remote-test-push", (_event, deviceId: string) => remoteServer.sendTestPush(deviceId));
+
   // Everything the manager has done, newest first. Live updates arrive on the
   // "manager-activity" event; this is for a renderer that just mounted or
   // reloaded.

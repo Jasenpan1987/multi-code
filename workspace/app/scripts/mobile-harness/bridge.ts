@@ -6,25 +6,21 @@
 // host below gates each frame the way the desktop's (main/remote/remote-host.ts)
 // does, holding answers to the dialog with the secretary's checkChoice.
 //
+// Web Push is the server's own too (T-810): `auth-ok` carries the VAPID key it keeps
+// in the harness's userData, and `push-subscribe` is stored on the device. Nothing
+// here pushes: the host below never asks the server to, and with the harness's
+// plain-http origin as the VAPID subject web-push would refuse to sign one anyway.
+//
 // What is still grafted onto the server's private members, by bracket access (which
 // TypeScript still checks, so `pnpm type` fails here when the server reshapes them):
-//   - Web Push, until T-810: `push-subscribe` is acked and remembered, and `auth-ok`
-//     carries a VAPID key and whether the device subscribed;
 //   - the log of what phones sent, with each ack and whether it was a resend;
 //   - sockets told to play dead (half-open), and the host name;
 //   - the connection list, for `drop`, `half-open` and `sockets`.
 
-import crypto from "node:crypto";
 import type { TailnetChecks } from "../../src/main/remote/tailscale";
 import type { HostAck, RemoteServer } from "../../src/main/remote/ws-server";
 import type { Dialog, checkChoice as CheckChoice } from "../../src/main/secretary/dialog";
-import type {
-  AckFrame,
-  ClientFrame,
-  PushSubscribeFrame,
-  RemoteChoice,
-  RemoteDialog,
-} from "../../src/shared/remote-protocol";
+import type { AckFrame, ClientFrame, RemoteChoice, RemoteDialog } from "../../src/shared/remote-protocol";
 import type { World } from "./world.ts";
 
 type Conn = Parameters<RemoteServer["send"]>[0];
@@ -66,9 +62,6 @@ export function attach(
   const silent = new WeakSet<Conn>();
   // The clientMsgIds each device sent, for the log's `resent`.
   const sentIds = new Map<string, Set<string>>();
-  const pushDevices = new Set<string>();
-  // A real P-256 key, so a browser's pushManager.subscribe accepts it.
-  const vapidPublicKey = crypto.createECDH("prime256v1").generateKeys().toString("base64url");
   // The seq each session's last prompt-state carried, to know when to clear it.
   const shownSeq = new Map<string, number>();
   for (const { id } of world.list()) {
@@ -167,12 +160,7 @@ export function attach(
   server["send"] = (conn, frame) => {
     if (silent.has(conn)) return;
     if (frame.type === "ack") noteAck(conn, frame);
-    send(
-      conn,
-      frame.type === "auth-ok"
-        ? { ...frame, vapidPublicKey, pushEnabled: pushDevices.has(conn.deviceId ?? "") }
-        : frame
-    );
+    send(conn, frame);
   };
 
   const handle = server["handleClientFrame"].bind(server);
@@ -181,8 +169,6 @@ export function attach(
     if (!conn.authed || frame.type === "auth") return handle(conn, frame);
     switch (frame.type) {
       case "push-subscribe":
-        record(conn, frame);
-        return pushSubscribe(conn, frame);
       case "prompt":
       case "answer":
       case "interrupt":
@@ -237,18 +223,6 @@ export function attach(
       }
     }
     server.broadcastInstances();
-  }
-
-  // Web Push isn't built yet (T-810): the harness remembers who subscribed, so the
-  // phone's settings show it. Through the server's own once-per-clientMsgId acks, so
-  // an old subscribe resent after a newer unsubscribe isn't acted on again.
-  function pushSubscribe(conn: Conn, frame: PushSubscribeFrame) {
-    server["acked"](conn, frame.clientMsgId, async () => {
-      const device = conn.deviceId ?? "";
-      if (frame.subscription) pushDevices.add(device);
-      else pushDevices.delete(device);
-      return { ok: true };
-    });
   }
 
   function record(conn: Conn, frame: ClientFrame) {

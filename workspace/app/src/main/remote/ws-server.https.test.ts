@@ -182,9 +182,26 @@ describe("RemoteServer status checks", () => {
     const status = server.getStatus();
     expect(status.checks.tailscale).toEqual(READY.tailscale);
     expect(status.checks.https).toEqual(READY.https);
-    // mobile-v2 T-810 fills this in.
-    expect(status.checks.push.state).toBe("error");
+    expect(status.checks.push).toEqual({ state: "ready" });
     expect(pushes()).toBeGreaterThan(0);
+  });
+
+  it("say push is ready once its keys load, and why not when they can't be kept", async () => {
+    const keys = path.join(userData, "remote-push.json");
+    fs.rmSync(keys, { force: true });
+    // A folder where the file goes: it can be neither read nor written.
+    fs.mkdirSync(keys);
+    try {
+      const { server } = await startWith(stubChecker(READY).checker);
+      expect(server.getStatus().checks.push).toEqual({
+        state: "error",
+        detail: expect.stringMatching(/^Couldn't save the push keys: /),
+      });
+    } finally {
+      fs.rmSync(keys, { recursive: true, force: true });
+    }
+    const { server } = await startWith(stubChecker(READY).checker);
+    expect(server.getStatus().checks.push).toEqual({ state: "ready" });
   });
 
   it("refresh on status requests at most every 5 s, and a change is pushed", async () => {

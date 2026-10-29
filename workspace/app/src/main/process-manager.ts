@@ -79,6 +79,10 @@ export interface SecretaryEvent {
   at: number;
   // `dialog` when the backend answers this dialog through its API (OpenCode).
   prompt?: { detail: PromptDetail; toolName: string; toolInput: unknown; dialog?: DialogRef };
+  // A needs-you for a dialog reported before, blocking the contact again
+  // (ActivityCallback's `restated`). It is the live dialog, under a new seq, but the
+  // builder has been told about it once: a paired phone gets no second push for it.
+  restated?: true;
 }
 
 // `event` is the instance's new live event, or null when it was cleared.
@@ -606,7 +610,8 @@ export class ProcessManager {
     instance: ManagedInstance,
     type: string,
     detail?: PromptDetail,
-    toolCall?: PromptToolCall
+    toolCall?: PromptToolCall,
+    restated = false
   ) {
     if (type === "prompt-cleared") {
       if (instance.secretaryEvent?.kind === "needs-you") {
@@ -642,6 +647,7 @@ export class ProcessManager {
                   },
                 }
               : {}),
+            ...(restated ? { restated: true as const } : {}),
           };
     instance.secretaryEvent = event;
     this.emitSecretaryEvent(instance.id, event);
@@ -1156,7 +1162,7 @@ export class ProcessManager {
     }
     // Before anything else hears of it, so a write made in reaction to this
     // activity clears the event it raised instead of landing before it exists.
-    this.updateSecretaryEvent(instance, type, detail, toolCall);
+    this.updateSecretaryEvent(instance, type, detail, toolCall, restated);
     // Only with a call: a clearing without one isn't the record anybody waits for,
     // and a call-less waiter run means the process went.
     if (type === "prompt-cleared" && toolCall) {
