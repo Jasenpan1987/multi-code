@@ -134,7 +134,7 @@ export function App() {
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
 
-  const { notify, markRead } = useNotifications();
+  const { notify, markRead, readOnPhone } = useNotifications();
   // Per-instance timestamp of the last audible alert, for the
   // burst-collapse cooldown. Only real alerts record here, so a
   // suppressed-while-watching event doesn't eat cooldown. Lifted out of the
@@ -285,8 +285,8 @@ export function App() {
   // Every attention event, "waiting" (finished) or "prompt" (needs you), for any
   // instance: chime, and one more on its red badge and the Dock's count. Nothing is
   // suppressed for the instance being watched, and nothing clears on a timer: the
-  // alert stays until the builder acknowledges it (below). See
-  // audio/attentionPolicy.ts.
+  // alert stays until the builder acknowledges it (below) or reads it on a paired
+  // phone. See audio/attentionPolicy.ts.
   useEffect(() => {
     const cleanup = window.electronAPI.onInstanceActivity((id) => {
       playMessageSound(id);
@@ -295,6 +295,14 @@ export function App() {
     });
     return cleanup;
   }, [instances, notify]);
+
+  // Read on a paired phone: opened there, or reporting while one shows it. Its red
+  // dot and its share of the Dock's count go; main sends this right after the
+  // activity it covers, so a count still in the debounce never lands. The chime
+  // has played: the builder may be at the desk as well.
+  useEffect(() => {
+    return window.electronAPI.onInstanceReadOnPhone((id) => readOnPhone(id));
+  }, [readOnPhone]);
 
   // A finished turn: its terminal shows the conclusion from the first line, so the
   // builder coming back at the chime starts reading there. Claude Code's classic

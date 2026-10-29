@@ -1074,6 +1074,91 @@ describe("instance states and previews", () => {
   });
 });
 
+// A session read on the phone is read at the desk too: opening it tells the desk
+// (index.ts clears its red dot), and while a phone that looks has it open, whatever
+// it reports is read there (process-manager.ts asks isReading).
+describe("read on the phone", () => {
+  it("tells the desk each time a phone opens a session", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "inst-2" });
+    const read: string[] = [];
+    fx.server.setReadListener((id) => read.push(id));
+    const client = await connected(fx);
+    expect(read).toEqual([]);
+
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    await client.waitFor("snapshot");
+    expect(read).toEqual(["inst-1"]);
+
+    client.send({ type: "unsubscribe", instanceId: "inst-1" });
+    client.send({ type: "subscribe", instanceId: "inst-2" });
+    await client.waitFor("snapshot");
+    expect(read).toEqual(["inst-1", "inst-2"]);
+    client.close();
+  });
+
+  it("is reading only a session a phone that looks has open", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "inst-2" });
+    const client = await connected(fx);
+    // Connected, on the list.
+    expect(fx.server.isReading("inst-1")).toBe(false);
+
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    await client.waitFor("snapshot");
+    expect(fx.server.isReading("inst-1")).toBe(true);
+    expect(fx.server.isReading("inst-2")).toBe(false);
+
+    // Locked with its socket half-open: no ping for longer than a phone that looks
+    // ever goes without one.
+    for (const conn of fx.server["connections"]) conn.heardAt -= 30_000;
+    expect(fx.server.isReading("inst-1")).toBe(false);
+    // Shown again: its next ping.
+    await client.drain();
+    expect(fx.server.isReading("inst-1")).toBe(true);
+
+    client.send({ type: "unsubscribe", instanceId: "inst-1" });
+    await client.drain();
+    expect(fx.server.isReading("inst-1")).toBe(false);
+    client.close();
+  });
+
+  it("tells the desk again when a phone that went quiet is heard from on the same socket", async () => {
+    const fx = await startServer();
+    const read: string[] = [];
+    fx.server.setReadListener((id) => read.push(id));
+    const client = await connected(fx);
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    await client.waitFor("snapshot");
+    // Pings while it looks say nothing new.
+    await client.drain();
+    expect(read).toEqual(["inst-1"]);
+
+    // A page shown again with its socket still held: its ping is the first frame in
+    // a while, and what was sent meanwhile has reached it.
+    for (const conn of fx.server["connections"]) conn.heardAt -= 30_000;
+    await client.drain();
+    expect(read).toEqual(["inst-1", "inst-1"]);
+
+    // Back on its list, a quiet spell reads nothing.
+    client.send({ type: "unsubscribe", instanceId: "inst-1" });
+    await client.drain();
+    for (const conn of fx.server["connections"]) conn.heardAt -= 30_000;
+    await client.drain();
+    expect(read).toEqual(["inst-1", "inst-1"]);
+    client.close();
+  });
+
+  it("stops reading when the phone's socket goes", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    await client.waitFor("snapshot");
+    client.close();
+    await vi.waitFor(() => expect(fx.server.isReading("inst-1")).toBe(false));
+  });
+});
+
 describe("prompt-state", () => {
   it("is broadcast when a dialog opens, with the dialog in full", async () => {
     const fx = await startServer();

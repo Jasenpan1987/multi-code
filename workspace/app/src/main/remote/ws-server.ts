@@ -199,6 +199,9 @@ export class RemoteServer {
   private startError: string | undefined;
   private host: RemoteHost | null = null;
   private onStatusChange: (() => void) | null = null;
+  // Told each session a phone has just read, so the desk counts it read too
+  // (index.ts): opened, or shown again after the phone went quiet.
+  private onRead: ((instanceId: string) => void) | null = null;
   // Pending throttled transcript refreshes, one per instance.
   private transcriptTimers = new Map<string, ReturnType<typeof setTimeout>>();
   // Tailscale and HTTPS, checked in the background while listening; a change is
@@ -239,6 +242,10 @@ export class RemoteServer {
 
   setStatusListener(listener: () => void) {
     this.onStatusChange = listener;
+  }
+
+  setReadListener(listener: (instanceId: string) => void) {
+    this.onRead = listener;
   }
 
   isRunning(): boolean {
@@ -516,14 +523,18 @@ export class RemoteServer {
   private isLooking(deviceId: string): boolean {
     const now = Date.now();
     for (const conn of this.connections) {
-      if (
-        conn.authed &&
-        conn.deviceId === deviceId &&
-        conn.socket.readyState === conn.socket.OPEN &&
-        now - conn.heardAt < LOOKING_MS
-      ) {
-        return true;
-      }
+      if (conn.deviceId === deviceId && looking(conn, now)) return true;
+    }
+    return false;
+  }
+
+  // A phone with the app open is showing this instance: whatever it reports now is
+  // read there as it lands, and the desk doesn't count it (process-manager.ts,
+  // reportActivity).
+  isReading(instanceId: string): boolean {
+    const now = Date.now();
+    for (const conn of this.connections) {
+      if (conn.subscriptions.has(instanceId) && looking(conn, now)) return true;
     }
     return false;
   }
@@ -823,7 +834,14 @@ export class RemoteServer {
     };
     socket.on("message", (raw) => {
       conn.heartbeat?.refresh();
-      conn.heardAt = Date.now();
+      // Heard from again on the same socket after going quiet past LOOKING_MS (a
+      // page shown again without a hidden event first, or a gap in the network): it
+      // is looking again, and what was sent to it meanwhile has reached it, so its
+      // open session is read now, as on a subscribe.
+      const now = Date.now();
+      const resumed = conn.authed && this.connections.has(conn) && now - conn.heardAt >= LOOKING_MS;
+      conn.heardAt = now;
+      if (resumed) for (const id of conn.subscriptions.keys()) this.onRead?.(id);
       // Anything a frame's handling throws would surface as an uncaught exception in
       // the main process, and before auth anyone who reaches the port can send one.
       try {
@@ -1006,6 +1024,8 @@ export class RemoteServer {
             : DEFAULT_TURNS;
         conn.subscriptions.set(id, turns);
         this.host?.markSeen(id);
+        // Opened on the phone is read, on the desk too: its red dot goes out.
+        this.onRead?.(id);
         // Send the readable transcript first: it's what the phone shows by
         // default, so it should be populated before the terminal replay.
         this.sendTranscript(conn, id, turns);
@@ -1144,6 +1164,11 @@ export class RemoteServer {
     if (conn.socket.readyState !== conn.socket.OPEN) return;
     conn.socket.send(JSON.stringify(frame));
   }
+}
+
+// An authenticated phone, still open and heard from lately; see LOOKING_MS.
+function looking(conn: Connection, now: number): boolean {
+  return conn.authed && conn.socket.readyState === conn.socket.OPEN && now - conn.heardAt < LOOKING_MS;
 }
 
 // The phone's `PushSubscription.toJSON()` as stored: only the fields Web Push uses,

@@ -80,6 +80,7 @@ vi.mock("./remote/ws-server", () => ({
     broadcastExit: () => {},
     broadcastInstances: () => {},
     broadcastOutput: () => {},
+    isReading: () => false,
   },
 }));
 

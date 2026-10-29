@@ -1207,8 +1207,25 @@ export class ProcessManager {
       !this.mainWindow.isDestroyed()
     ) {
       this.mainWindow.webContents.send("instance-activity", id, type);
+      // A phone showing this session has it on screen as it lands, so it is read
+      // there. Sent after the activity, so the renderer's debounce drops the count
+      // the activity just started and the red dot never lights; the chime stays.
+      // Not for a turn that ended in another of the contact's sessions (an OpenCode
+      // tab in the background): the phone shows the contact's session, not that one.
+      const elsewhere = type === "waiting" && !!endedSession && endedSession !== instance.sessionId;
+      if (!elsewhere && remoteServer.isReading(id)) this.readOnPhone(id);
     }
     this.emitActivity(id, type);
+  }
+
+  // The instance was read on a paired phone: opened or shown again there
+  // (remote/ws-server.ts, setReadListener), or reporting while one shows it. The
+  // renderer clears its unread without acknowledging it back (useNotifications.ts,
+  // readOnPhone).
+  readOnPhone(id: string) {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send("instance-read-on-phone", id);
+    }
   }
 
   private setAlertsDegraded(

@@ -1,7 +1,8 @@
 import { useRef, useCallback } from "react";
 
 // Unread alerts per instance: one for each finished turn or dialog, with a burst
-// inside the debounce counting once. Only acknowledging the instance clears them.
+// inside the debounce counting once. Acknowledging the instance at the desk clears
+// them, and so does reading it on a paired phone.
 export function useNotifications() {
   const unreadRef = useRef(new Map<string, number>());
   const debounceTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -36,22 +37,41 @@ export function useNotifications() {
     [publish]
   );
 
-  const markRead = useCallback(
-    (instanceId: string) => {
+  // Drop the instance's count and any alert still inside the debounce, saying
+  // whether there was either. Every key press on the shown instance lands here, so
+  // only a real change re-renders the app.
+  const clear = useCallback(
+    (instanceId: string): boolean => {
       const pending = debounceTimers.current.get(instanceId);
       if (pending) {
         clearTimeout(pending);
         debounceTimers.current.delete(instanceId);
       }
-      // Every key press on the shown instance lands here, so only a real change
-      // re-renders the app, and only a real change tells main (a session read here
-      // stops being Finished on the phone).
       const hadUnread = unreadRef.current.delete(instanceId);
       if (hadUnread) publish();
-      if (pending || hadUnread) window.electronAPI.acknowledgeInstance(instanceId);
+      return !!pending || hadUnread;
     },
     [publish]
   );
 
-  return { notify, markRead, unread: unreadRef.current };
+  // Read at the desk: only a real change tells main, and a session read here stops
+  // being Finished on the phone.
+  const markRead = useCallback(
+    (instanceId: string) => {
+      if (clear(instanceId)) window.electronAPI.acknowledgeInstance(instanceId);
+    },
+    [clear]
+  );
+
+  // Read on a paired phone (main's `instance-read-on-phone`). The phone has settled
+  // its own side, so nothing goes back to main: an acknowledgement would only echo
+  // the phone's read back to it.
+  const readOnPhone = useCallback(
+    (instanceId: string) => {
+      clear(instanceId);
+    },
+    [clear]
+  );
+
+  return { notify, markRead, readOnPhone, unread: unreadRef.current };
 }

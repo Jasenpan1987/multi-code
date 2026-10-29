@@ -1,12 +1,15 @@
 // The phone server's wiring: an instance acknowledged at the desk reaches the remote
-// host's markSeen (G-304; ws-server.test.ts covers what markSeen does to the list),
-// and the dev-only overrides (dev-overrides.ts) apply only to an unpackaged app.
+// host's markSeen (G-304; ws-server.test.ts covers what markSeen does to the list), a
+// session opened on a phone reaches the desk as read, and the dev-only overrides
+// (dev-overrides.ts) apply only to an unpackaged app.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const electron = vi.hoisted(() => ({ isPackaged: false }));
 const fakes = vi.hoisted(() => ({
   markSeen: vi.fn(),
+  readOnPhone: vi.fn(),
+  readListener: null as ((id: string) => void) | null,
   setChecker: vi.fn(),
   start: vi.fn(async () => ({})),
   tailscaleChecker: { check: async () => ({}), setUpHttps: async () => ({}) },
@@ -20,7 +23,7 @@ vi.mock("electron", () => ({
   },
   BrowserWindow: { getAllWindows: () => [] },
 }));
-vi.mock("../process-manager", () => ({ processManager: {} }));
+vi.mock("../process-manager", () => ({ processManager: { readOnPhone: fakes.readOnPhone } }));
 vi.mock("../settings-store", () => ({
   loadSettings: () => ({ remoteEnabled: false }),
   saveSettings: () => undefined,
@@ -30,6 +33,9 @@ vi.mock("./ws-server", () => ({
   remoteServer: {
     setHost: () => undefined,
     setStatusListener: () => undefined,
+    setReadListener: (listener: (id: string) => void) => {
+      fakes.readListener = listener;
+    },
     setChecker: fakes.setChecker,
     start: fakes.start,
     stop: async () => undefined,
@@ -46,6 +52,7 @@ const { acknowledgeInstance, initRemote, setRemoteEnabled } = await import("./in
 beforeEach(() => {
   vi.unstubAllEnvs();
   fakes.markSeen.mockReset();
+  fakes.readOnPhone.mockReset();
   fakes.setChecker.mockReset();
   fakes.start.mockClear();
 });
@@ -55,6 +62,15 @@ describe("acknowledgeInstance", () => {
     initRemote();
     acknowledgeInstance("inst-1");
     expect(fakes.markSeen).toHaveBeenCalledWith("inst-1");
+  });
+});
+
+describe("a session opened on a phone", () => {
+  it("is read at the desk, and isn't acknowledged back to the phone", () => {
+    initRemote();
+    fakes.readListener?.("inst-1");
+    expect(fakes.readOnPhone).toHaveBeenCalledWith("inst-1");
+    expect(fakes.markSeen).not.toHaveBeenCalled();
   });
 });
 

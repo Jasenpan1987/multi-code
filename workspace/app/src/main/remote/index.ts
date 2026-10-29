@@ -33,6 +33,9 @@ export function initRemote() {
   remoteServer.setHost(host);
 
   remoteServer.setStatusListener(emitStatus);
+  // A session read on a phone (opened, or shown again) is read at the desk too: its
+  // red dot goes out. The other way round from acknowledgeInstance below.
+  remoteServer.setReadListener((id) => processManager.readOnPhone(id));
   const dev = devOverrides(app.isPackaged);
   port = dev.port;
   remoteServer.setChecker(dev.checker ?? createTailscaleChecker());
