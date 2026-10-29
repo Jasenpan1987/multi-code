@@ -48,19 +48,21 @@
   - **Rename Session** — 给当前会话起个名字,走各后端自己的 `/rename`
 - **Terminal section** — 嵌入式真实 shell(用你的默认 `$SHELL`),在项目目录下运行。后台保活,折叠或切实例都不杀进程
 - **View section** — 内联渲染 Markdown 文件:粘贴一个 `.md` 路径(或点终端输出里的 `.md` 路径,或点 Git section 里某个变更 `.md` 旁边的 MD 标签)。支持 GitHub 风格 Markdown、数学公式(KaTeX)、Mermaid 图、本地和远程图片
-- **Phone section** — 配对手机,在手机上看和操作 agent(见下面的[手机互联](#手机互联))
+- **Phone section** — 打开手机互联,看还缺什么(Tailscale、HTTPS、Push)以及怎么补,配对手机,给每台已配对的手机发测试通知或吊销它(见下面的[手机互联](#手机互联))
 - **Secretary section** — 秘书模式开关和语音服务器设置(见下面的[语音秘书](#语音秘书-1))
 - **Manager section** — Manager agent 每一次调用的实时记录,最新的在上面,点一下能看完整参数和结果
 
 ### 手机互联
-- **不经过中间服务器** — 手机直连你的电脑,数据不经过任何第三方,包括我们
-- **出门也能用** — 装了 [Tailscale](https://tailscale.com) 之后,人在外面手机照样是直连电脑。在家同一个 WiFi 下什么都不用配
-- **不用装 App** — 电脑端直接把手机网页发给你,扫码即用,加到主屏幕就跟 App 一样
-- **实时同步** — 终端输出实时推过来;中途才打开手机也会先收到当前屏幕的快照,不是一片空白
-- **点一下就回答** — Agent 弹选项时,选项在手机上渲染成按钮,点一下 agent 就继续跑。一次点按只回答它显示时的那个对话框:如果那个已经在别处答掉、换成了新的,手机会提示这个选项已失效,而不会去回答新的那个。升级 Multi-Code 之后,已经打开着的手机页面要刷新一下,否则点按会被拒绝
-- **也能打字回答** — 开放式问题用输入框回,发送机制跟电脑端 `Cmd+L` 那个框一样
-- **端到端加密** — NaCl box(Curve25519 + XSalsa20-Poly1305)。配对时手机会 pin 住电脑的公钥,同一个地址上的冒充者过不了这一关
-- **可吊销** — 每台配对的手机有自己的 token,吊销一台立刻断开,不影响别的
+- **主屏幕上的手机 App** — 电脑端通过 HTTPS 把一个网页 App 发给你的 iPhone,加到主屏幕后打开起来跟 App 一样,有自己的图标。不用去 App Store 装
+- **所有会话一眼看完** — 一个列表按状态分组:Needs you、Working、Finished、Idle。每一行写着确认框在问什么、agent 正在用哪个工具、结论的第一句,或者它最后说的一句话
+- **像聊天一样看会话** — 你发的消息是气泡,agent 的文字按 Markdown 渲染。做完的一轮,工具调用折成一行("12 tools · 6 read · 3 edited · 2 commands"),点开是每个工具一行。结论一直显示,打开一个刚做完的会话会直接落在结论开头
+- **回复、作答、叫停** — 打字回复,只有点 Send 才发送,中文输入法的回车不会误发。每种确认框都能在手机上完整作答:权限确认用 CLI 自己的选项,选 No 时可以附上理由;问题框的每一道题都能答,多选也行;计划可以批准,也可以告诉 Claude 要改什么。正在跑的一轮可以叫停,效果跟在电脑前按 Esc 一样
+- **没网也能打开** — 显示上次拿到的内容和它是多久以前的,并说明是哪一头连不上:手机没网、Mac 连不上,还是 Mac 上的 Multi-Code 没响应。没网时打的回复先存在手机上,Mac 恢复后只发一次
+- **通知** — 每个会话每次做完或需要你,都推一条通知,App 关着、手机锁着也能收到。同一个会话的新通知会替换旧的,图标上的角标是需要你的会话数,点通知直接打开那个会话。App 正开着的手机不推,它自己会显示变化
+- **终端兜底** — 真实终端,宽度跟电脑上一样,带一排按键(Esc、Tab、Shift+Tab、方向键、空格、回车、Ctrl+C),聊天视图显示不了的东西都能在这里处理
+- **只在 tailnet 内,不经过中转** — 只有你 [Tailscale](https://tailscale.com) tailnet 里的设备,通过 `tailscale serve` 才能访问;Multi-Code 的端口只监听本机。通知由你的 Mac 直接发给 Apple 的推送服务,只有那台手机解得开
+- **端到端加密** — HTTPS 连接里面,每一帧再用 NaCl box(Curve25519 + XSalsa20-Poly1305)封一层。配对时手机会 pin 住电脑的公钥,同一个地址上的冒充者过不了这一关
+- **可吊销** — 每台配对的手机有自己的 token,吊销一台立刻断开,也不再给它推通知
 
 ### 语音秘书
 - **是汇报,不是念屏幕** — 会话做完或需要你的时候,秘书用自己的话把事情讲一遍:你让它干什么、它干了什么、成没成。遇到确认框,先讲这个操作是干什么的、为什么要做,再问你
@@ -111,7 +113,7 @@ multi-code/
 │       │   │   ├── run-state.ts       # 写入安全闸(每个实例的 idle / busy / blocked)
 │       │   │   ├── manager-mcp/       # 给 Manager agent 用的本地 MCP server 和工具
 │       │   │   ├── manager-workspace.ts # 初始化 Manager 自己的目录和 guidance
-│       │   │   ├── remote/            # 手机互联:WebSocket server、加密、已配对设备
+│       │   │   ├── remote/            # 手机互联:WebSocket server、加密、已配对设备、Tailscale 检查、Web Push
 │       │   │   ├── secretary/         # 语音秘书:写汇报、语音客户端、理解回复
 │       │   │   ├── shell-manager.ts  # spawn 和管理 shell PTY(工具箱 Terminal)
 │       │   │   ├── file-drop.ts      # 复制从 Finder 拖进来的文件,重名按 Finder 的规则改名,从不覆盖
@@ -374,32 +376,47 @@ Manager 的角色 guidance 放在它文件夹里的 `CLAUDE.md`。你可以改;�
 
 ### 手机互联
 
-人不在电脑前的时候,在手机上看 agent 干到哪了、回答它的问题,别让它干等着。
+人不在电脑前的时候,在 iPhone 上看 agent 干到哪了、干了什么,回答它的问题,别让它干等着。手机通过 [Tailscale](https://tailscale.com) 走 HTTPS 连到你的 Mac,人在哪都能连。
 
-**一次性设置:**
+**需要准备:** Mac 和 iPhone 都装 Tailscale,登进同一个 tailnet,MagicDNS 打开(Tailscale 默认就是开的)。通知要求 App 加到主屏幕(iOS 16.4 及以上)。
 
-1. 工具箱 → **Phone** → 点 **Phone link: OFF** 打开。它会监听 6768 端口,默认是关的,毕竟这是往局域网上开了个口
-2. 点 **Pair a phone**,出二维码
-3. 用手机相机扫,然后用浏览器的"添加到主屏幕",之后打开起来跟 App 一样
+**Mac 上的设置(只做一次):**
 
-在家同一个 WiFi 就这样够了。想**出门在外也能连**,电脑和手机都装 [Tailscale](https://tailscale.com) 并登同一个账号。Phone section 会告诉你有没有找到 Tailscale 地址,没有的话配对只在本地网络内有效。
+1. 工具箱 → **Phone** → 点 **Phone link: OFF** 打开。下面会出现三项检查:Tailscale、HTTPS、Push,每一项都会说缺什么。Tailscale 没在运行的话,点 **Open Tailscale** 把它打开
+2. HTTPS 要先在 tailnet 里开启 HTTPS Certificates:点 **Open admin console** 会打开 Tailscale 管理后台的 DNS 页面,在那里开启(每个 tailnet 只用开一次)。然后点 **Set up HTTPS**,它先把要运行的命令 `tailscale serve --bg --https=443 http://127.0.0.1:6768` 显示出来,点 **Run it** 才真正运行
+3. 三项检查都通过后,点 **Pair a phone**,出二维码
+
+**iPhone 上的设置(只做一次):**
+
+1. 用相机扫二维码,会在 Safari 里打开并完成配对
+2. 先点 **Copy pairing link**,再点 Safari 的分享按钮 → **添加到主屏幕**,然后从新图标打开 Multi-Code。主屏幕 App 不一定跟 Safari 共用存储,如果打开后显示没配对,点 **Paste pairing link** 就行。(Mac 的 Phone 面板里也有 **Copy pairing link**,通用剪贴板会把它带到 iPhone 上)
+3. 在主屏幕 App 里点 **Turn on notifications** 并允许。这一步只能在从主屏幕图标打开的 App 里做,在 Safari 里打开时 App 会提示
+
+App 的第一屏会显示三步里哪步做完了、下一步是什么。
 
 **用法:**
 
-- 手机上的实例列表跟电脑端联系人列表一致,点进去
-- Agent 需要你的时候手机会震动,列表里那一项打红点
-- 带选项的问题渲染成按钮,点一下就回答了
-- 开放式问题在输入框打字,点 Send
-- 展开 **Terminal** 能看到跟电脑端一模一样的原始终端画面
+- 列表按状态给会话分组:Needs you、Working、Finished、Idle,每一项都写着处在这个状态多久了。Manager 不在手机上
+- 点进一个会话,像聊天一样看。点某一轮的折叠行能看到每个工具:改文件加了几行、删了几行,命令成功还是失败。**Earlier turns** 再往前加载十轮
+- 在底部打字,点 **Send**。回车是换行。正在跑的时候消息照样发出,由 CLI 排队("Queued until this turn ends")。没网时消息先等着("Waiting to send"),可以取消,Mac 恢复后只发一次
+- 会话需要你的时候,输入框的位置换成确认框:CLI 自己的选项做成按钮,选 No(OpenCode 是 Reject)可以填理由;问题框的每道题都在,答完点 **Submit answers**;计划完整显示。"Always allow"、"don't ask again" 和 auto-accept edits 会先问一句 "Are you sure?"。如果这期间你已经在电脑上答过了,手机会告诉你,什么也不按。没网时不能作答
+- 正在跑的时候,上方有一条显示当前工具和这一轮跑了多久,旁边是 **Stop**,效果跟电脑前按 Esc 一样,结束这一轮。确认框开着时不提供 Stop,因为 Esc 会回答那个确认框
+- 会话页顶部的终端按钮打开它的真实终端,聊天视图显示不了的东西(比如 MCP 表单)在这里处理
+- 通知的标题是 "<会话名> · Finished",正文是结论的第一句;或者是 "<会话名> · Needs you",正文是确认框在问什么。Mac 的 Phone 面板里每台手机都有 **Send test**,可以发一条试试
+
+回答进到 CLI 的方式跟秘书一样:Claude Code 是按它自己确认框的键,走秘书那套实测过的按键流程,而且只在同一个确认框还开着的时候按;OpenCode 是按请求 id 调它的 API。手机显示不了的确认框会直说,并给出终端入口。
 
 **安全相关:**
 
-- 二维码里带着设备密钥,当密码看待,泄露了就重新生成一个
-- 流量端到端加密,不经过任何服务器
-- 配对时手机会 pin 住电脑的公钥,所以同一个地址上的其他东西冒充不了你的电脑
-- 手机丢了在同一个面板里吊销,立刻断连,token 随即失效
+- 手机只能在你的 tailnet 里、通过 `tailscale serve` 连到 Mac。Multi-Code 的端口(6768)只监听 `127.0.0.1`,局域网里的其他东西连不上
+- 开启 HTTPS Certificates 会把你的机器名(`<machine>.<tailnet>.ts.net`)写进公开的证书透明度日志,而且撤不回来。能访问它的仍然只有你 tailnet 里的设备
+- Multi-Code 只在你点 **Set up HTTPS** 时运行 `tailscale serve`。443 端口已经在服务别的东西的话,面板会说明,什么都不改。它从不删除这个 serve,关掉 Phone link 也不删;要撤销就运行 `tailscale serve --https=443 off`
+- HTTPS 连接里每一帧再用 NaCl box 封装,配对时手机会 pin 住电脑的公钥,同一个地址上的其他东西冒充不了你的电脑
+- 通知从你的 Mac 直接发到 Apple 的推送服务,按 Web Push 标准加密给那台手机,Apple 只看得到密文。中间没有我们的服务器
+- 二维码和配对链接里带着一台手机的密钥,当密码看待:泄露了就吊销对应的那一行。点 **New code** 时,被替换的码如果还没有手机用过,会一起作废
+- 手机丢了在同一个面板里吊销:立刻断连,token 随即失效,也不会再收到通知
 
-**有个限制值得知道:** 读取问题是可靠的(直接解析 CLI 自己写的 session 文件),但**用按钮回答**依赖 CLI 的选项框接受数字键。哪天 CLI 改了这个行为,按钮可能失效,其他功能照常 —— 终端视图一直在那儿兜底。
+**从旧版 Multi-Code 升级之后:** 用旧版手机互联配对过的手机(地址是 `http://<ip>:6768`)不会自动迁移。把旧的主屏幕图标删掉,重新配对一次;Phone 面板里也有这个提示。
 
 ### 语音秘书
 
@@ -445,7 +462,7 @@ Manager 的角色 guidance 放在它文件夹里的 `CLAUDE.md`。你可以改;�
 - 语音密钥单独放在 Multi-Code 数据目录里一个权限 `0600` 的文件里。保存后不再显示,不写日志,也不会发给界面
 - 秘书模式关着的时候,什么都不调用,不花一分钱
 
-**跟手机一样的限制:** 回答靠的是按 CLI 的选项键,这是界面上的习惯,不是 API。秘书没法把你的回答对应到一个它信得过的按键时,会直说,并让你去终端操作。
+**跟手机一样的限制:** 对 Claude Code,回答靠的是按 CLI 的选项键,这是界面上的习惯,不是 API(OpenCode 的确认框走它的 API 回答)。秘书没法把你的回答对应到一个它信得过的按键时,会直说,并让你去终端操作。
 
 ### 数据持久化
 
@@ -454,7 +471,8 @@ Multi-Code 自己存的东西都在 Electron 的 userData 目录里。macOS 上�
 - `contacts.json`:实例列表(目录 + alias + 后端),按侧边栏顺序
 - `settings.json`:主题、手机互联开没开、秘书模式、语音服务器地址、每个项目拖文件的默认文件夹
 - `speech-key`:秘书的语音服务器密钥,单独一个 `0600` 文件。不放进 `settings.json`,不写日志,重启后保留
-- `remote-identity.json`、`remote-devices.json`:手机互联的密钥和已配对手机
+- `remote-identity.json`、`remote-devices.json`:手机互联的密钥,以及已配对的手机(含每台手机的通知订阅和上次推送失败的原因);`0600`
+- `remote-push.json`:Mac 给通知签名用的 Web Push 密钥;`0600`,生成一次后一直保留。丢了会重新生成一对,每台手机下次打开 App 时重新订阅
 - `manager/`:Manager agent 的工作目录和它的 `CLAUDE.md`
 - `manager-mcp.json`:Manager 的 MCP 配置,因为里面有 bearer token 所以权限是 `0600`,退出时删除
 - `manager-settings.json`、`manager-hook.curl`:Manager 的 `--settings`(它自己的活动 hooks 加上提醒 hooks)和存 hook token 的 curl 配置;`0600`,退出时删除
@@ -475,7 +493,7 @@ Multi-Code 自己存的东西都在 Electron 的 userData 目录里。macOS 上�
    - Terminal:第一次展开时 lazy-spawn 一个 shell PTY,之后保活
 7. 实例信息持久化到 userData 目录里的 `contacts.json`
 8. 主进程在 app 打开期间一直在 `127.0.0.1` 上跑一个小 HTTP server(端口由系统分配,bearer token 鉴权)。它给 Manager 提供 MCP 工具:Manager 的 `claude` 启动时带 `--mcp-config` 指向它,另外挂了 hooks,把它自己的工具调用报回活动记录。它还有一个 `/alert` 路径,用单独的 token,给 agent 上报自己的状态
-9. 手机互联打开时,主进程还会在 6768 端口起一个 WebSocket server,既托管手机网页,又把同一份 PTY 字节流和解析出来的 prompt 推给已配对的手机。每一帧用 NaCl box 封装;手机通过局域网或 Tailscale 直连电脑,中间没有任何 relay
+9. 手机互联打开时,主进程还会在 `127.0.0.1:6768` 上起一个 server,既托管手机 App,又通过 WebSocket 把会话列表、对话记录、确认框和同一份 PTY 字节流推给已配对的手机。手机只能通过 `tailscale serve` 连到它,由 `tailscale serve` 在 Mac 的 tailnet 域名上提供 HTTPS;每一帧在这条连接里再用 NaCl box 封装。通知是 Mac 直接发给 Apple 推送服务的 Web Push 消息,按每台手机单独加密,中间没有任何 relay
 10. 秘书模式打开时,每次做完或等你的事件都交给一次性的 `claude -p --bare --no-session-persistence` 调用来写汇报,再交给语音服务器出音频。卡片上的回复走第二次这样的调用,由它决定按什么;只有同一个确认框还显示着的时候才会按键
 
 ## 许可

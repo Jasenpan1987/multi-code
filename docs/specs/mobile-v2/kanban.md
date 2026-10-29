@@ -598,7 +598,7 @@ shows each check state, gates the QR, sends a test push and revokes.
 ### T-813: QA and docs
 
 - **Type:** qa
-- **Status:** backlog
+- **Status:** automated QA and docs done (`mv2/t-813`); the builder's iPhone test is next
 - **Story:** all
 - **Description:**
   - Every acceptance criterion of PRD v1.0 checked: automated where possible (harness +
@@ -624,6 +624,16 @@ shows each check state, gates the QR, sends a test push and revokes.
 - **Acceptance:** `qa-report-m1.md` with every criterion and its evidence; the builder's
   iPhone test passed or its failures filed as new tickets.
 - **Blocked by:** T-804, T-808, T-809, T-811, T-812
+- **Notes (T-813):** `qa-report-m1.md`: 67 rows, 59 pass, 1 fail (44 pt touch targets in
+  the terminal's key row and line, and the compose text area: Bug 2, the builder's call),
+  7 iPhone-only. Bug 1 fixed: an answer to a Claude plan box written within ~100 ms of it
+  opening was dropped by the CLI after its first key had cleared the event
+  (`answerDialog` waits until the dialog is 500 ms old; G-320). Asked-for fix: "New code"
+  revokes the code it replaces when no phone used it (`revokeUnusedDevice`, checked in
+  main). Fold line hit area 43 → 45 pt. `test-plan-iphone.md` final;
+  `scripts/mobile-qa/iphone-qa.sh` starts the builder's session (port 6799,
+  `/tmp/mc-iphone-qa`). Docs: both READMEs, CLAUDE.md, decisions.md (8 entries),
+  phone-link PRD marked replaced, gaps. GPT review (gpt-6.1-sol): 3 findings, all fixed.
 
 ---
 
@@ -650,3 +660,4 @@ shows each check state, gates the QR, sends a test push and revokes.
 - 2026-10-29: T-809 done and merged (1466711); phone bundle 602 KiB with xterm. 4 timing tests (opencodeService, loudness) failed once under load average ~300 from other projects and passed alone (69/69).
 - 2026-10-29: T-808 done and merged (20cbd62), checked live on Claude 2.1.312 (permission yes/no+reason, two questions with multi-select and typed text, plan revise then approve). M1 and M2 complete: 1933 tests pass. Epic-wide review-loop next, then T-813.
 - 2026-10-29: Epic review-loop done (gpt-6.1-sol): desktop 13 rounds over 5 areas, $3.81 (2c4d4f7, merged b605887); phone 12 rounds over 5 areas, $4.24 (0365a94, merged ef7ad55). Every area ended clean or at its limit. 1968 tests pass.
+- 2026-10-29: T-813 automated QA and docs done on `mv2/t-813`: 59 of 67 criteria pass, 7 iPhone-only, 1 fail (touch targets, builder's call). Plan answers within ~100 ms were lost (fixed, 500 ms settle); New code revokes an unused replaced code. iPhone session: `scripts/mobile-qa/iphone-qa.sh`.

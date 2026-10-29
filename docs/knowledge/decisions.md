@@ -4,6 +4,116 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-10-29 — A pairing code is one phone's secret, and the Home Screen app is paired by paste
+
+**Decision:** Each "Pair a phone" or "New code" mints a device row with its own token at once, valid until the builder revokes it, so a code can be used later. "New code" revokes the code it replaces when no phone ever connected with it; "Done" keeps the shown code. After pairing in Safari, the phone's setup screen offers "Copy pairing link" (rebuilt from the stored pairing); the Home Screen app, when unpaired, offers "Paste pairing link" (one tap, iOS's Paste bubble) and empties the clipboard after. The desktop's Phone panel has its own "Copy pairing link", which Universal Clipboard carries to the iPhone.
+
+**Why:** A scanned QR always opens Safari, and an iOS Home Screen app may keep its own storage apart from Safari's, so a pairing made in Safari may never reach it (G-306). Pasting works either way. A code shown and then replaced before any phone used it is a secret nobody needs; one already used is a phone.
+
+**Consequences:** The pairing link holds the device token, so it sits on the clipboard until the paste empties it. Rows for codes never used ("New device · never connected") stay until revoked, unless "New code" replaced them.
+
+**Source:** supervisor calls, mobile-v2 (`.omt/mobile-v2-decisions.md`, T-806 "Worth your review", #65, #100); T-811, T-812, T-813
+**Affects:** `main/remote/ws-server.ts` (`createPairingOffer`, `revokeUnusedDevice`), `main/ipc-handlers.ts` (`remote-create-pairing`), `renderer/components/PhoneSection.tsx`, `renderer-mobile/screens/SetupScreen.tsx`, `renderer-mobile/pairing.ts`
+
+---
+
+## 2026-10-29 — Only typed messages wait for the connection; answers and Stop are sent once or not at all
+
+**Decision:** A message typed on the phone gets a `clientMsgId`, waits in an outbox kept in `localStorage` while there is no connection ("Waiting to send", cancellable until it goes out), and is resent on every connect until the Mac acks it. The Mac keeps the last 200 `clientMsgId`s per device, with their acks, in memory: a resend gets the same ack and isn't acted on again. Answers and Stop are never queued offline (the phone disables them) and never resent: one whose socket dropped before its ack says "may not have arrived" and asks the builder to check the session.
+
+**Why:** A message is the same message an hour later; the CLI queues it behind a running turn. An answer or a Stop is about the screen at that moment: resent after a reconnect it could land on a newer dialog or stop a newer turn.
+
+**Consequences:** A Multi-Code restart between a send and its ack could deliver a message twice (the dedupe is in memory); rare, and visible in the transcript.
+
+**Source:** builder, 2026-10-29 ideation (mockups: messages queue offline, dialogs can't be answered offline); supervisor calls, mobile-v2 (`.omt/mobile-v2-decisions.md` #6, #54); `shared/remote-protocol.ts` (`AnswerFrame`)
+**Affects:** `renderer-mobile/outbox.ts`, `renderer-mobile/store.ts`, `main/remote/ws-server.ts` (acks, `ACKS_KEPT`)
+
+---
+
+## 2026-10-29 — Phone answers go the secretary's way, named by a seq that never repeats
+
+**Decision:** A dialog answered from the phone goes through the same path as the secretary's: `checkChoice` on the dialog the Mac has, then `answerDialog`, which presses Claude Code's measured key flows only while that same dialog is still open, and answers OpenCode through its API by request id. The phone never knows a key binding. Each dialog is named by the secretary event's `seq`, which is `max(previous + 1, Date.now())`, so it never repeats across launches without being persisted. An answer whose `seq` isn't the live dialog's is refused (`gone`) and presses nothing. "Always allow", "don't ask again" and auto-accept edits need the phone's own "Are you sure?" (`confirmed`), else `needs-confirm`.
+
+**Why:** The key flows are already measured against the real CLIs and guard against the dialog changing under the keys. A seq that restarted at 0 on each launch would let a card shown before a restart answer a different dialog after it.
+
+**Alternatives considered:** the v1 path (`choose`, one digit per question), deleted with its helpers.
+
+**Consequences:** A backward clock step across a relaunch could in theory repeat a seq (accepted: it also needs a dialog in the same millisecond and an answer to a pre-restart card). Phone answers don't wait for a PostToolUse record (`answerDialog` without `expect`), which sessions' alert hooks never send. The first key waits until the dialog is 500 ms old (`dialogSettleMs`): Claude Code 2.1.312's plan box dropped an approve written 40 or 100 ms after its PermissionRequest hook, while that key had already cleared the needs-you event, so phone and desk showed Idle over a waiting dialog; 250 ms was taken (T-813 QA, Bug 1).
+
+**Source:** PRD `docs/specs/mobile-v2/prd.md` Technical Constraints; supervisor calls, mobile-v2 (`.omt/mobile-v2-decisions.md` #33, #34, #35, #39, #95), T-803; `docs/specs/mobile-v2/qa-report-m1.md` Bug 1
+**Affects:** `main/remote/remote-host.ts`, `main/process-manager.ts` (`secretarySeq`, `answerDialog`), `main/secretary/dialog.ts`
+
+---
+
+## 2026-10-29 — The phone replies, answers and stops; everything else stays on the desk
+
+**Decision:** From the phone the builder can send a message to a session, answer its dialog, and stop its running turn, plus the terminal fallback's keys and typed text. Starting, stopping, creating and renaming sessions stay on the desktop, and the Manager and the secretary are not on the phone (phase 2). The Mac refuses a message while a dialog is open (`dialog-open`), so text never lands in a dialog, and refuses Stop while a dialog is open (Esc would answer it) or with no turn running (`not-working`). A second Stop for the same turn within 3 s is refused.
+
+**Why:** Phase 1 solves opening, typing, answering and being told. Esc on a Claude dialog denies it, and a double Esc on an idle Claude opens its rewind menu.
+
+**Consequences:** OpenCode's Stop is two Escs 250 ms apart, sent only while its terminal shows the running session (G-303). The terminal's keys go in as typed, as the builder's own typing at the desk does.
+
+**Source:** builder, 2026-10-29 ideation (G-315, G-316); supervisor calls, mobile-v2 (`.omt/mobile-v2-decisions.md` #11, #36, #37), T-803
+**Affects:** `main/remote/remote-host.ts` (`prompt`, `interrupt`), `main/backends/types.ts` (`interrupt`), `renderer-mobile/screens/SessionScreen.tsx`
+
+---
+
+## 2026-10-29 — A push for every Finished and Needs you, except to a phone that is looking
+
+**Decision:** Every Finished and every Needs you of every session but the Manager sends a push to each phone that turned notifications on, whether or not the builder is at the desk, except to a phone that has the app open and connected at that moment (an authenticated socket heard from in the last 20 s). Title `<name> · Finished` or `<name> · Needs you`, body the session's one line (at most 180 characters). One tag and Topic per session, so a newer push replaces the older one; the Home Screen badge is the number of Needs-you sessions. A restated dialog sends nothing. Urgency high, TTL 1 hour.
+
+**Why:** The builder chose "every time". A phone with the app open shows the change itself. 20 s and not the 45 s heartbeat, because a locked phone's half-open socket would otherwise hold its pushes back.
+
+**Alternatives considered:** a push only when the desktop is idle or locked (not chosen).
+
+**Consequences:** Nothing is pushed when a Needs you clears; the badge is corrected by the next push or when the app opens. A subscription the push service says is gone (404/410) is deleted; any other failure is the phone's `lastPushError` until a push works.
+
+**Source:** builder, 2026-10-29 ideation (G-313); supervisor calls, mobile-v2 (`.omt/mobile-v2-decisions.md` #8, #9, #42, #44, #45, #48), T-810
+**Affects:** `main/remote/ws-server.ts` (`LOOKING_MS`, the push trigger), `main/remote/push.ts`, `renderer-mobile/sw.ts`, `renderer-mobile/push.ts`
+
+---
+
+## 2026-10-29 — Multi-Code runs `tailscale serve` only on the builder's button, and never removes it
+
+**Decision:** The only thing in Multi-Code that changes Tailscale is the Phone panel's "Set up HTTPS". It shows `tailscale serve --bg --https=443 http://127.0.0.1:6768` first, and on a second press checks again that nothing serves port 443 and runs it. If 443 already serves anything else (another port or host, Funnel, an extra mount), the panel says so and changes nothing. Multi-Code never removes the serve, even with the phone link off; the panel shows how (`tailscale serve --https=443 off`). Everything else only reads: `tailscale status --json`, `tailscale serve status --json`.
+
+**Why:** The serve config is the builder's Tailscale configuration, and the serve command replaces whatever is mounted at `/` without asking. Funnel would make Multi-Code public.
+
+**Consequences:** A writer racing the button in the same milliseconds isn't guarded (the CLI has no conditional write). With the phone link off the serve answers 502. Tests and the harness inject a checker and never run the CLI; a dev build reads its checks from `MULTICODE_DEV_REMOTE_CHECKS`. A serve set up for a dev build's port shows as a conflict to the release on 6768 until the builder removes it.
+
+**Source:** supervisor calls, mobile-v2 (`.omt/mobile-v2-decisions.md` #3, #16, #17, #19), T-805, T-812
+**Affects:** `main/remote/tailscale.ts`, `main/remote/dev-overrides.ts`, `main/ipc-handlers.ts` (`remote-setup-https`), `renderer/components/PhoneSection.tsx`
+
+---
+
+## 2026-10-29 — The phone server listens on 127.0.0.1
+
+**Decision:** The phone link's server (port 6768) binds to 127.0.0.1. The tailnet reaches it only through `tailscale serve`, which proxies `https://<machine>.<tailnet>.ts.net` to it. The pairing offer carries that HTTPS origin and nothing else, and no offer is made unless the HTTPS check is ready.
+
+**Why:** Only `tailscale serve` should reach it. Listening on every interface put the phone's socket on the home LAN and on any network the Mac joins, and an `https://` page can't open a `ws://` LAN socket anyway.
+
+**Consequences:** The phone no longer works on the home WiFi without Tailscale. The NaCl seal and per-phone tokens stay inside TLS.
+
+**Source:** supervisor calls, mobile-v2 (`.omt/mobile-v2-decisions.md` #1, #2), T-805
+**Affects:** `main/remote/ws-server.ts` (`start`, `createPairingOffer`)
+
+---
+
+## 2026-10-29 — The phone app is a PWA served by `tailscale serve`, with Web Push from the Mac
+
+**Decision:** The phone client is a web app on the iPhone's Home Screen, served by Multi-Code at `https://<machine>.<tailnet>.ts.net` through `tailscale serve`, which supplies the certificate. Notifications are Web Push messages the Mac sends itself (VAPID keys in `userData/remote-push.json`, encrypted to each phone) straight to Apple's push service. No native app, no relay or cloud service of ours, no path to the Mac without Tailscale. The tailnet's HTTPS Certificates are enabled for it. Protocol v3; phones paired with v1 are not migrated and pair again once.
+
+**Why:** v1 stopped being used: its saved `http://<ip>:6768` address couldn't load while Tailscale was stopped, and an iPhone web app on plain `http://` can never receive a push. HTTPS gives the app a stable origin, a service worker that opens it offline, and Web Push, with no Apple developer account. The builder accepted that the machine name goes into the public Certificate Transparency logs, for good; only tailnet devices can reach it.
+
+**Alternatives considered:** a native iOS app (answers from the lock screen, Live Activities): not chosen, both are given up.
+
+**Consequences:** The iOS-only parts (Home Screen, keyboard, push) are checked on the builder's iPhone, since there is no simulator here (G-319). A Home Screen app may not share Safari's storage (G-306), hence the paste hand-off above.
+
+**Source:** builder, 2026-10-29 ideation (`docs/timeline/2026-10-29_mobile-v2-ideation.md`, G-311, G-312); research `docs/timeline/2026-10-13_mobile-v2-research.md`
+**Affects:** `main/remote/ws-server.ts`, `main/remote/tailscale.ts`, `main/remote/push.ts`, `renderer-mobile/`, `shared/remote-protocol.ts`
+
+---
+
 ## 2026-10-28 — A drop takes at most 10 files and 1 GB, and no folders
 
 **Decision:** One drop copies at most 10 files and at most 1 GB (1,000,000,000 bytes, as Finder counts) in total. Folders are not accepted. Past either limit, or with a folder in it, the whole drop is refused: nothing is copied, and the message says to place the files in Finder, naming the default folder when there is one. The main process enforces the same limits on its own.
