@@ -183,6 +183,16 @@ const fixtures: Fixture[] = [];
 
 async function startServer(): Promise<Fixture> {
   const server = new RemoteServer();
+  // HTTPS ready, so pairing offers are made (ws-server.https.test.ts covers the gate).
+  server.setChecker({
+    check: async () => ({
+      tailscale: { state: "running", dnsName: "mac.example.ts.net" },
+      https: { state: "ready", origin: "https://mac.example.ts.net" },
+    }),
+    setUpHttps: async () => {
+      throw new Error("not in these tests");
+    },
+  });
   const writes: Array<{ id: string; data: string }> = [];
   const prompts: Array<{ id: string; text: string }> = [];
   const transcript: TranscriptEntry[] = [

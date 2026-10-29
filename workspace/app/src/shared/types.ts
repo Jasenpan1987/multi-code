@@ -101,6 +101,13 @@ export interface RemotePairing {
   endpoints: string[];
 }
 
+// What the Phone section's "Set up HTTPS" did: the status after it, and why the serve
+// command didn't run or didn't work, when it didn't.
+export interface RemoteHttpsSetup {
+  status: RemoteStatus;
+  error?: string;
+}
+
 // How full a session's context window is, read from the newest assistant turn in
 // its transcript.
 //
@@ -397,7 +404,11 @@ export interface ElectronAPI {
   setRemoteEnabled: (enabled: boolean) => Promise<RemoteStatus>;
   createRemotePairing: () => Promise<RemotePairing | null>;
   revokeRemoteDevice: (deviceId: string) => Promise<RemoteStatus>;
-  hasTailscale: () => Promise<boolean>;
+  // Runs `checks.https.command` when the checks say `serve-missing`; never anything
+  // else. The admin console link (`certs-off`) opens through openExternal.
+  setUpRemoteHttps: () => Promise<RemoteHttpsSetup>;
+  // Opens the Tailscale app, for the builder to turn it on.
+  openTailscale: () => Promise<{ ok: boolean; error?: string }>;
 
   // Secretary. setSpeechServer saves the address ("" for text only) and applies
   // the key change; testSpeechServer tests what is saved.

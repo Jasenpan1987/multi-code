@@ -1,0 +1,24 @@
+{
+  "Version": "1.98.9-t4fb758c39-g200941d74",
+  "TUN": true,
+  "BackendState": "NeedsLogin",
+  "HaveNodeKey": false,
+  "AuthURL": "https://login.tailscale.com/a/1a2b3c4d5e6f",
+  "TailscaleIPs": null,
+  "Self": {
+    "HostName": "jasenpan的MacBook Air",
+    "DNSName": "",
+    "OS": "macOS",
+    "TailscaleIPs": null,
+    "Online": false
+  },
+  "Health": [
+    "You are logged out."
+  ],
+  "MagicDNSSuffix": "",
+  "CurrentTailnet": null,
+  "CertDomains": null,
+  "Peer": {},
+  "User": {},
+  "ClientVersion": null
+}

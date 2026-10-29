@@ -47,7 +47,7 @@ import { OPENCODE_VIEW_KEYS, replyConclusion } from "../shared/replyStart";
 import type { OpencodeViewCommand } from "../shared/replyStart";
 import { remoteServer } from "./remote/ws-server";
 import { setRemoteEnabled } from "./remote";
-import { hasTailscaleEndpoint } from "./remote/endpoints";
+import { openTailscaleApp } from "./remote/tailscale";
 import { ensureManagerMcpStarted, getManagerActivity } from "./manager-mcp";
 import { ensureManagerWorkspace } from "./manager-workspace";
 import QRCode from "qrcode";
@@ -622,7 +622,9 @@ export function registerIpcHandlers() {
   // Phone link
   // ---------------------------------------------------------------------
 
-  ipcMain.handle("remote-get-status", () => remoteServer.getStatus());
+  // Also refreshes the Tailscale checks behind the answer (at most every 5 s); a change
+  // arrives as a "remote-status" push.
+  ipcMain.handle("remote-get-status", () => remoteServer.requestStatus());
 
   ipcMain.handle("remote-set-enabled", (_event, enabled: boolean) =>
     setRemoteEnabled(enabled)
@@ -661,15 +663,18 @@ export function registerIpcHandlers() {
     return remoteServer.getStatus();
   });
 
+  // The Phone section's "Set up HTTPS" button, the only caller: runs
+  // `tailscale serve --bg --https=443 http://127.0.0.1:<port>` when nothing serves
+  // port 443 yet, and changes nothing otherwise (remote/tailscale.ts).
+  ipcMain.handle("remote-setup-https", () => remoteServer.setUpHttps());
+
+  // The Phone section's "Open Tailscale", for a Tailscale that is stopped or quit.
+  ipcMain.handle("remote-open-tailscale", () => openTailscaleApp());
+
   // Everything the manager has done, newest first. Live updates arrive on the
   // "manager-activity" event; this is for a renderer that just mounted or
   // reloaded.
   ipcMain.handle("manager-activity-list", () => getManagerActivity());
-
-  // Whether a Tailscale address exists on this machine — i.e. whether the phone
-  // will still reach the desktop after leaving the house. Surfaced so the user
-  // isn't surprised by a LAN-only pairing.
-  ipcMain.handle("remote-has-tailscale", () => hasTailscaleEndpoint());
 
   // ---------------------------------------------------------------------
   // Secretary. The settings replies are SecretarySettings or a test result:

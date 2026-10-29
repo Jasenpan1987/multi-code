@@ -7,7 +7,29 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { RemotePairing } from "../../shared/types";
-import type { RemoteStatus } from "../../shared/remote-protocol";
+import type { RemoteChecks, RemoteStatus } from "../../shared/remote-protocol";
+
+// mobile-v2 T-812: the checks shown plainly, one line each; T-812 replaces this with
+// the mockup's rows.
+function describeTailscale(check: RemoteChecks["tailscale"]): string {
+  if (check.state === "running") return `running · ${check.ip ?? check.dnsName}`;
+  return check.detail ? `${check.state} · ${check.detail}` : check.state;
+}
+
+function describeHttps(check: RemoteChecks["https"]): string {
+  switch (check.state) {
+    case "ready":
+      return check.origin;
+    case "certs-off":
+      return "certificates are off for this tailnet";
+    case "serve-missing":
+      return "tailscale serve isn't set up";
+    case "serve-conflict":
+      return `conflict · ${check.detail}`;
+    default:
+      return check.detail ? `unknown · ${check.detail}` : "unknown";
+  }
+}
 
 interface PhoneSectionProps {
   active: boolean;
@@ -16,12 +38,12 @@ interface PhoneSectionProps {
 export function PhoneSection({ active }: PhoneSectionProps) {
   const [status, setStatus] = useState<RemoteStatus | null>(null);
   const [pairing, setPairing] = useState<RemotePairing | null>(null);
-  const [hasTailscale, setHasTailscale] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  // Why "Set up HTTPS" or "Open Tailscale" didn't work.
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     void window.electronAPI.getRemoteStatus().then(setStatus);
-    void window.electronAPI.hasTailscale().then(setHasTailscale);
   }, []);
 
   useEffect(() => {
@@ -66,6 +88,32 @@ export function PhoneSection({ active }: PhoneSectionProps) {
     setStatus(await window.electronAPI.revokeRemoteDevice(deviceId));
   };
 
+  const setUpHttps = async () => {
+    setBusy(true);
+    setActionError(null);
+    try {
+      const result = await window.electronAPI.setUpRemoteHttps();
+      setStatus(result.status);
+      setActionError(result.error ?? null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openTailscale = async () => {
+    setActionError(null);
+    const result = await window.electronAPI.openTailscale();
+    if (!result.ok) setActionError(`Couldn't open Tailscale: ${result.error ?? "unknown error"}`);
+  };
+
+  const openLink = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    void window.electronAPI.openExternal(e.currentTarget.href);
+  };
+
+  const checks = status?.checks;
+  const httpsReady = checks?.https.state === "ready";
+
   return (
     <div className="phone-section">
       <div className="phone-row">
@@ -86,38 +134,50 @@ export function PhoneSection({ active }: PhoneSectionProps) {
 
       {status?.enabled ? (
         <>
-          {hasTailscale === false ? (
-            <div className="phone-warn">
-              <strong>Same-network only.</strong> Every address below is private,
-              so your phone can only connect while it&apos;s on this same Wi-Fi.
-              It will <em>not</em> work over cellular.
-              <br />
-              To reach this desktop from anywhere, install{" "}
-              <a
-                href="https://tailscale.com/download"
-                onClick={(e) => {
-                  e.preventDefault();
-                  void window.electronAPI.openExternal(
-                    "https://tailscale.com/download"
-                  );
-                }}
-              >
-                Tailscale
-              </a>{" "}
-              on this Mac and on your phone, signed into the same account. A{" "}
-              <code>100.x</code> address will appear here and be used first.
+          {checks ? (
+            <div className={httpsReady ? "phone-ok" : "phone-warn"}>
+              <div>
+                Tailscale: {describeTailscale(checks.tailscale)}{" "}
+                {checks.tailscale.state === "missing" ? (
+                  <a href="https://tailscale.com/download/mac" onClick={openLink}>
+                    Get Tailscale
+                  </a>
+                ) : checks.tailscale.state !== "running" ? (
+                  <a
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      void openTailscale();
+                    }}
+                  >
+                    Open Tailscale
+                  </a>
+                ) : null}
+              </div>
+              <div>
+                HTTPS: {describeHttps(checks.https)}{" "}
+                {checks.https.state === "certs-off" ? (
+                  <a href={checks.https.adminUrl} onClick={openLink}>
+                    Open the admin console
+                  </a>
+                ) : null}
+              </div>
+              {checks.https.state === "serve-missing" ? (
+                <div>
+                  <code className="phone-url">{checks.https.command}</code>
+                  <button className="phone-btn" onClick={setUpHttps} disabled={busy}>
+                    Set up HTTPS
+                  </button>
+                </div>
+              ) : null}
+              <div>
+                Push: {checks.push.state === "ready" ? "ready" : `error · ${checks.push.detail}`}
+              </div>
             </div>
-          ) : (
-            <div className="phone-ok">
-              Tailscale detected — your phone can reach this desktop from
-              anywhere, not just this network.
-            </div>
-          )}
+          ) : null}
+          {actionError ? <div className="phone-error">{actionError}</div> : null}
 
-          {/* mobile-v2 T-812: the address list went with protocol v3; T-812 rewrites
-              this panel around status.checks. */}
-
-          <button className="phone-btn" onClick={pairNew} disabled={busy}>
+          <button className="phone-btn" onClick={pairNew} disabled={busy || !httpsReady}>
             {pairing ? "New pairing code" : "Pair a phone"}
           </button>
 
@@ -177,8 +237,9 @@ export function PhoneSection({ active }: PhoneSectionProps) {
       ) : (
         <div className="phone-hint">
           Turn this on to watch your agents from your phone and answer their
-          questions remotely. It opens a port on your local network; traffic is
-          end-to-end encrypted and never passes through any server.
+          questions remotely. Your phone reaches this Mac over Tailscale, through
+          HTTPS from tailscale serve; traffic is end-to-end encrypted and never
+          passes through any server of ours.
         </div>
       )}
     </div>
