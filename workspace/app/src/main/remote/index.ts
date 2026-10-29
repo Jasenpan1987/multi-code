@@ -7,6 +7,7 @@ import { BrowserWindow } from "electron";
 import { processManager } from "../process-manager";
 import { loadSettings, saveSettings } from "../settings-store";
 import { remoteServer } from "./ws-server";
+import { createTailscaleChecker } from "./tailscale";
 import type { RemoteInstance } from "../../shared/remote-protocol";
 
 // Push status to the renderer so the Phone section reflects connect/disconnect
@@ -41,6 +42,7 @@ export function initRemote() {
   });
 
   remoteServer.setStatusListener(emitStatus);
+  remoteServer.setChecker(createTailscaleChecker());
 
   // Auto-start when the user left it on. Failures (port taken) surface as
   // `error` on the status object rather than blocking app startup — so this must

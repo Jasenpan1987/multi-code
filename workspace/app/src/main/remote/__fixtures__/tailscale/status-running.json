@@ -1,0 +1,35 @@
+{
+  "Version": "1.98.9-t4fb758c39-g200941d74",
+  "TUN": true,
+  "BackendState": "Running",
+  "HaveNodeKey": true,
+  "AuthURL": "",
+  "TailscaleIPs": [
+    "100.103.73.2",
+    "fd7a:115c:a1e0::b301:49a2"
+  ],
+  "Self": {
+    "HostName": "jasenpan的MacBook Air",
+    "DNSName": "jasenpanmacbook-air.taile5fb0f.ts.net.",
+    "OS": "macOS",
+    "TailscaleIPs": [
+      "100.103.73.2",
+      "fd7a:115c:a1e0::b301:49a2"
+    ],
+    "Online": true,
+    "InNetworkMap": true,
+    "KeyExpiry": "2027-01-22T11:06:03Z"
+  },
+  "Health": [],
+  "MagicDNSSuffix": "taile5fb0f.ts.net",
+  "CurrentTailnet": {
+    "MagicDNSSuffix": "taile5fb0f.ts.net",
+    "MagicDNSEnabled": true
+  },
+  "CertDomains": [
+    "jasenpanmacbook-air.taile5fb0f.ts.net"
+  ],
+  "Peer": {},
+  "User": {},
+  "ClientVersion": null
+}

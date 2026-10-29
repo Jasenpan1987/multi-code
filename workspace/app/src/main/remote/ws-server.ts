@@ -4,10 +4,11 @@
 //   - the mobile web client (a static bundle, so the phone needs no install)
 //   - a WebSocket endpoint carrying the sealed frame protocol
 //
-// Both live on the same port so a single QR code covers both, and so there is
-// exactly one thing to allow through the firewall. Bound to 0.0.0.0 because the
-// point is to be reachable from another device; access control is the device
-// token plus the NaCl seal, not the bind address.
+// Both live on the same port so one origin covers both. Bound to 127.0.0.1 only: the
+// phone reaches it through `tailscale serve`, which terminates HTTPS on
+// `https://<machine>.<tailnet>.ts.net` and proxies to this port (tailscale.ts), so
+// nothing on the LAN or the tailnet can reach the port itself (PRD Story 1). Access
+// control on top of that is the device token plus the NaCl seal.
 
 import http from "http";
 import fs from "fs";
@@ -33,6 +34,8 @@ import { SealedChannel, getHostIdentity, mintDeviceToken, tokensMatch } from "./
 import { loadDevices, saveDevices, type StoredDevice } from "./device-store";
 import { outputBuffer } from "./output-buffer";
 import { type PromptDetail } from "./promptExtract";
+import { ChecksCache, type RemoteChecker } from "./tailscale";
+import type { RemoteHttpsSetup } from "../../shared/types";
 
 // A phone that never completes its handshake + auth in this window gets dropped,
 // so a port scanner can't hold sockets open.
@@ -120,9 +123,19 @@ export class RemoteServer {
   private activity = new Map<string, "waiting" | "prompt">();
   // Pending throttled transcript refreshes, one per instance.
   private transcriptTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  // Tailscale and HTTPS, checked in the background while listening; a change is
+  // pushed like any other status change.
+  private checks = new ChecksCache(() => this.notifyStatus());
 
   setHost(host: RemoteHost) {
     this.host = host;
+  }
+
+  // What reads Tailscale's state. Until one is set nothing is known and no pairing
+  // offer is made: remote/index.ts sets the real one; tests and the phone harness set
+  // their own (the harness's says ready at `http://127.0.0.1:<port>`).
+  setChecker(checker: RemoteChecker) {
+    this.checks.setChecker(checker);
   }
 
   setStatusListener(listener: () => void) {
@@ -160,7 +173,7 @@ export class RemoteServer {
       await new Promise<void>((resolve, reject) => {
         const onError = (err: Error) => reject(err);
         server.once("error", onError);
-        server.listen(port, "0.0.0.0", () => {
+        server.listen(port, "127.0.0.1", () => {
           server.removeListener("error", onError);
           resolve();
         });
@@ -179,6 +192,9 @@ export class RemoteServer {
     this.wss = wss;
     const address = server.address();
     this.port = typeof address === "object" && address ? address.port : port;
+    // Waited for, so the status this returns (the Phone section's toggle shows it)
+    // already says what is missing. Bounded by the CLI's timeouts.
+    await this.checks.watch(this.port);
     this.notifyStatus();
     return this.getStatus();
   }
@@ -191,6 +207,7 @@ export class RemoteServer {
 
     for (const timer of this.transcriptTimers.values()) clearTimeout(timer);
     this.transcriptTimers.clear();
+    this.checks.unwatch();
 
     const wss = this.wss;
     const server = this.httpServer;
@@ -210,9 +227,12 @@ export class RemoteServer {
   // Mint a token for a new device and return the offer to encode as a QR. The
   // device row is written immediately (rather than on first connect) so the
   // token is valid the moment the phone scans, and so a half-finished pairing
-  // is visible and revocable in the desktop UI.
+  // is visible and revocable in the desktop UI. Null unless HTTPS is ready: the
+  // origin is the only address the phone gets, and a pairing to an origin that
+  // doesn't answer is a phone that can't connect.
   createPairingOffer(): PairingOffer | null {
-    if (!this.port) return null;
+    const https = this.checks.current().https;
+    if (!this.port || https.state !== "ready") return null;
 
     const identity = getHostIdentity();
     const token = mintDeviceToken();
@@ -229,8 +249,7 @@ export class RemoteServer {
 
     return {
       v: REMOTE_PROTOCOL_VERSION,
-      // mobile-v2 T-805: placeholder; T-805 makes this the tailscale https origin.
-      origin: `http://127.0.0.1:${this.port}`,
+      origin: https.origin,
       hostPublicKey: identity.publicKeyB64,
       deviceToken: token,
       hostName: this.hostName(),
@@ -269,15 +288,28 @@ export class RemoteServer {
     return {
       enabled: this.httpServer !== null,
       port: this.port,
-      // mobile-v2 T-805 (tailscale, https) and T-810 (Web Push): placeholder checks.
       checks: {
-        tailscale: { state: "unknown" },
-        https: { state: "unknown" },
+        ...this.checks.current(),
+        // mobile-v2 T-810 (Web Push): placeholder check.
         push: { state: "error", detail: "not built yet" },
       },
       devices,
       error: this.startError,
     };
+  }
+
+  // A status request from the Phone section: the cached status now, and the checks
+  // refreshed behind it (at most every 5 s), a change arriving as a status push.
+  requestStatus(): RemoteStatus {
+    void this.checks.refresh();
+    return this.getStatus();
+  }
+
+  // The Phone section's "Set up HTTPS": runs the serve command if, checked again
+  // first, nothing serves port 443 yet, then checks again.
+  async setUpHttps(): Promise<RemoteHttpsSetup> {
+    const { error } = await this.checks.setUpHttps();
+    return { status: this.getStatus(), ...(error ? { error } : {}) };
   }
 
   private hostName(): string {
