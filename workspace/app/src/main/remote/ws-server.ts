@@ -520,7 +520,9 @@ export class RemoteServer {
     options: { keys: VapidKeys; subject: string; topic?: string }
   ): Promise<PushResult> {
     const send = async (): Promise<PushResult> => {
-      // Turned off, or the phone revoked, while an earlier push to it was going out.
+      // The phone link was turned off while an earlier push to this phone was going out.
+      if (!this.httpServer) return { ok: false, gone: false, error: "The phone link is off." };
+      // Turned off, or the phone revoked, meanwhile.
       const subscription = this.devices.find((d) => d.id === deviceId)?.push;
       if (!subscription) return { ok: false, gone: false, error: "Notifications are off on this phone." };
       const result = await sendPush(subscription, payload, options);
@@ -806,7 +808,13 @@ export class RemoteServer {
     socket.on("message", (raw) => {
       conn.heartbeat?.refresh();
       conn.heardAt = Date.now();
-      this.handleMessage(conn, raw.toString());
+      // Anything a frame's handling throws would surface as an uncaught exception in
+      // the main process, and before auth anyone who reaches the port can send one.
+      try {
+        this.handleMessage(conn, raw.toString());
+      } catch {
+        conn.socket.close(4002, "malformed");
+      }
     });
     socket.on("close", () => {
       stopTimers();
@@ -845,6 +853,10 @@ export class RemoteServer {
     try {
       parsed = JSON.parse(raw);
     } catch {
+      conn.socket.close(4002, "malformed");
+      return;
+    }
+    if (typeof parsed !== "object" || parsed === null) {
       conn.socket.close(4002, "malformed");
       return;
     }
@@ -899,19 +911,25 @@ export class RemoteServer {
       return;
     }
 
-    let inner: ClientFrame;
+    let inner: unknown;
     try {
-      inner = JSON.parse(opened) as ClientFrame;
+      inner = JSON.parse(opened);
     } catch {
       conn.socket.close(4002, "malformed");
       return;
     }
-    this.handleClientFrame(conn, inner);
+    if (typeof inner !== "object" || inner === null) {
+      conn.socket.close(4002, "malformed");
+      return;
+    }
+    this.handleClientFrame(conn, inner as ClientFrame);
   }
 
   private handleClientFrame(conn: Connection, frame: ClientFrame) {
     if (frame.type === "auth") {
-      const device = this.devices.find((d) => tokensMatch(d.token, frame.deviceToken));
+      const token: unknown = frame.deviceToken;
+      const device =
+        typeof token === "string" ? this.devices.find((d) => tokensMatch(d.token, token)) : undefined;
       if (!device) {
         this.send(conn, { type: "auth-failed", reason: "unknown-token" });
         conn.socket.close(4003, "unknown token");
@@ -931,7 +949,7 @@ export class RemoteServer {
       device.lastSeenAt = Date.now();
       // First successful connect is when we learn what to call this phone; the
       // placeholder name from pairing is replaced here.
-      if (frame.deviceName) device.name = frame.deviceName;
+      if (typeof frame.deviceName === "string" && frame.deviceName) device.name = frame.deviceName;
       saveDevices(this.devices);
       // Before `device.push` is read: a new pair forgets every subscription.
       const vapid = this.vapidKeys();

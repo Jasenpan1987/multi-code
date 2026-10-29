@@ -47,6 +47,7 @@ export type HostProcessManager = Pick<
   | "onSecretaryEvent"
   | "answerDialog"
   | "isAnswering"
+  | "dialogOnScreen"
   | "sendPrompt"
   | "writeToInstance"
   | "interruptInstance"
@@ -113,6 +114,8 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
   dispose(): void;
 } {
   const lines = new Map<string, Lines>();
+  // The session each instance's lines were read from: `/clear` or a resume moves it.
+  const linesSession = new Map<string, string | undefined>();
   // The finished event a phone opened, per instance: that one is Idle.
   const seen = new Map<string, number>();
   // The needs-you each instance's phones were shown, for the seq of its clearing.
@@ -235,24 +238,27 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
     return info && !info.isManager && info.status === "running" ? info : null;
   };
   // A dialog is on screen: reported and unanswered, or its answer's keys are still
-  // going in (the first key clears the event, the dialog closes on the last).
+  // going in (the first key clears the event, the dialog closes on the last), or the
+  // agent says one is up though a keystroke into it dropped the event.
   const dialogOpen = (id: string): boolean =>
-    pm.secretaryEventOf(id)?.kind === "needs-you" || pm.isAnswering(id);
+    pm.secretaryEventOf(id)?.kind === "needs-you" || pm.isAnswering(id) || pm.dialogOnScreen(id);
 
   return {
     listInstances(): RemoteInstance[] {
       const infos = pm.listInstances().filter((i) => !i.isManager);
       const ids = new Set(infos.map((i) => i.id));
-      for (const map of [lines, seen, stopping, listed, fresh]) {
+      for (const map of [lines, linesSession, seen, stopping, listed, fresh]) {
         for (const id of map.keys()) if (!ids.has(id)) map.delete(id);
       }
       return infos.map((info) => {
         const event = pm.secretaryEventOf(info.id);
         const { state, since } = stateOf(info, event, seen.get(info.id));
-        // Its first listing reads what it last said, once; a turn starting reads
-        // again, so Working doesn't show the last turn's line.
-        if (!lines.has(info.id)) {
+        // Its first listing reads what it last said, once, and so does its first in
+        // another session; a turn starting reads again, so Working doesn't show the
+        // last turn's line.
+        if (!lines.has(info.id) || linesSession.get(info.id) !== info.sessionId) {
           lines.set(info.id, {});
+          linesSession.set(info.id, info.sessionId);
           void refreshLines(info.id);
         } else if (state === "working" && listed.get(info.id) !== "working") {
           void refreshLines(info.id);
@@ -304,7 +310,10 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
     async sendPrompt(id, text) {
       if (!phoneable(id)) return refuse("not-running", "This session isn't running");
       // Text would land in the dialog, and could answer it.
-      if (dialogOpen(id)) return refuse("dialog-open", "Answer the dialog first");
+      if (dialogOpen(id)) {
+        const shown = pm.secretaryEventOf(id)?.kind === "needs-you" || pm.isAnswering(id);
+        return refuse("dialog-open", shown ? "Answer the dialog first" : "A dialog is open in its terminal; answer it there first");
+      }
       if (!text.trim()) return refuse("failed", "Nothing to send");
       pm.sendPrompt(id, text);
       return OK;
@@ -375,7 +384,7 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
       }
       stopping.set(id, { turn, at: Date.now() });
       if (await pm.interruptInstance(id)) return OK;
-      if (pm.secretaryEventOf(id)?.kind === "needs-you") {
+      if (pm.secretaryEventOf(id)?.kind === "needs-you" || pm.dialogOnScreen(id)) {
         return refuse("dialog-open", "A dialog came up; answer it instead");
       }
       if (!phoneable(id)) return refuse("not-running", "This session stopped");

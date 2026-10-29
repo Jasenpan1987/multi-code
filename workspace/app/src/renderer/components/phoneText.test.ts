@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { PairedDevice, RemoteChecks } from "../../shared/remote-protocol";
-import { checkRows, deviceLine, firstToFix } from "./phoneText";
+import type { PairedDevice, RemoteChecks, RemoteStatus } from "../../shared/remote-protocol";
+import { checkRows, deviceLine, firstToFix, pairingIsFor, pairingOrigin } from "./phoneText";
 
 const READY: RemoteChecks = {
   tailscale: { state: "running", dnsName: "mac.example.ts.net", ip: "100.64.0.7" },
@@ -87,5 +87,33 @@ describe("deviceLine", () => {
     expect(deviceLine(device({ lastSeenAt: NOW - 2 * 60_000 }), NOW)).toBe("seen 2 min ago · push off");
     expect(deviceLine(device({ lastSeenAt: NOW - 3 * 3_600_000 }), NOW)).toBe("seen 3 h ago · push off");
     expect(deviceLine(device({ lastSeenAt: NOW - 2 * 24 * 3_600_000 }), NOW)).toBe("seen 2 d ago · push off");
+  });
+});
+
+describe("pairing codes", () => {
+  const status = (checks: RemoteChecks, enabled = true): RemoteStatus => ({
+    enabled,
+    port: 6768,
+    checks,
+    devices: [],
+  });
+
+  it("are made for the HTTPS origin only while the link is on and every check passes", () => {
+    expect(pairingOrigin(status(READY))).toBe("https://mac.example.ts.net");
+    expect(pairingOrigin(status(READY, false))).toBeNull();
+    expect(pairingOrigin(null)).toBeNull();
+    expect(pairingOrigin(status({ ...READY, push: { state: "error", detail: "no keys" } }))).toBeNull();
+    expect(
+      pairingOrigin(status({ ...READY, https: { state: "serve-missing", command: "tailscale serve" } }))
+    ).toBeNull();
+  });
+
+  it("are shown only for the origin they were made for", () => {
+    const url = "https://mac.example.ts.net/#pair=abc";
+    expect(pairingIsFor(url, "https://mac.example.ts.net")).toBe(true);
+    // The Mac's tailnet name changed while the code was up: both origins are ready.
+    expect(pairingIsFor(url, "https://renamed.example.ts.net")).toBe(false);
+    expect(pairingIsFor(url, "https://mac.example.ts.ne")).toBe(false);
+    expect(pairingIsFor(url, null)).toBe(false);
   });
 });

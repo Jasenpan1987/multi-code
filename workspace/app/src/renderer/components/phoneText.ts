@@ -2,7 +2,7 @@
 // the component like secretaryText.ts so the wording lives in one place and is
 // unit-testable. The fixes (buttons, links) are the component's.
 
-import type { PairedDevice, RemoteChecks } from "../../shared/remote-protocol";
+import type { PairedDevice, RemoteChecks, RemoteStatus } from "../../shared/remote-protocol";
 
 export type CheckKey = keyof RemoteChecks;
 
@@ -90,6 +90,19 @@ export function checkRows(checks: RemoteChecks): CheckRow[] {
 // comes before the HTTPS it leaves unknown.
 export function firstToFix(rows: CheckRow[]): CheckRow | null {
   return rows.find((r) => r.tone !== "ok") ?? null;
+}
+
+// The origin a pairing code is made for: the HTTPS origin while the link is on and all
+// three checks pass. Null: no code is shown.
+export function pairingOrigin(status: RemoteStatus | null): string | null {
+  if (!status?.enabled || status.checks.https.state !== "ready") return null;
+  return firstToFix(checkRows(status.checks)) === null ? status.checks.https.origin : null;
+}
+
+// Whether a code's link (`<origin>/#pair=…`) is for `origin`. One made for an address
+// the Mac no longer has would pair a phone with nothing.
+export function pairingIsFor(webUrl: string, origin: string | null): boolean {
+  return origin !== null && webUrl.startsWith(`${origin}/`);
 }
 
 // "connected", "seen 5 min ago" or "never connected", then whether push is on.
