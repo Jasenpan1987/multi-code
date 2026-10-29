@@ -19,6 +19,7 @@ import {
   dismiss,
   enqueue,
   markSent,
+  newDevice,
   settleDelivered,
   socketLost,
   type OutboxFrame,
@@ -79,6 +80,9 @@ export interface AppState {
   // The session the phone is subscribed to (its chat or terminal is on screen).
   openId: string | null;
   outbox: OutboxItem[];
+  // By instance id: the transcript entries that delivered one of its outbox prompts
+  // (outbox.ts `settleDelivered`), so none delivers another. Kept with the outbox.
+  delivered: Record<string, readonly string[]>;
 }
 
 export type Action =
@@ -93,7 +97,9 @@ export type Action =
   | { type: "outbox-add"; frame: OutboxFrame; at: number; sent: boolean }
   | { type: "outbox-sent"; ids: ReadonlySet<string> }
   | { type: "outbox-cancel"; clientMsgId: string }
-  | { type: "outbox-dismiss"; clientMsgId: string };
+  | { type: "outbox-dismiss"; clientMsgId: string }
+  // Paired again with the same Mac under a new token (outbox.ts `newDevice`).
+  | { type: "outbox-new-device"; at: number };
 
 export const EMPTY_SESSION: Session = Object.freeze({
   transcript: null,
@@ -107,7 +113,7 @@ export const EMPTY_SESSION: Session = Object.freeze({
 
 export function initialState(
   pairing: StoredPairing | null,
-  saved: Partial<Pick<AppState, "instances" | "instancesAt" | "sessions" | "outbox">> & {
+  saved: Partial<Pick<AppState, "instances" | "instancesAt" | "sessions" | "outbox" | "delivered">> & {
     lastSeenAt?: number | null;
   } = {}
 ): AppState {
@@ -124,6 +130,7 @@ export function initialState(
     sessions: saved.sessions ?? {},
     openId: null,
     outbox: saved.outbox ?? [],
+    delivered: saved.delivered ?? {},
   };
 }
 
@@ -168,6 +175,8 @@ export function reduce(state: AppState, action: Action): AppState {
       return withOutbox(state, cancel(state.outbox, action.clientMsgId));
     case "outbox-dismiss":
       return withOutbox(state, dismiss(state.outbox, action.clientMsgId));
+    case "outbox-new-device":
+      return withOutbox(state, newDevice(state.outbox, action.at));
   }
 }
 
@@ -244,7 +253,7 @@ function reduceFrame(state: AppState, frame: ServerFrame, at: number): AppState 
           hasEarlier: frame.hasEarlier,
           refreshedAt: at,
         }),
-        outbox: settleDelivered(state.outbox, frame.instanceId, frame.entries),
+        ...settle(state, state.outbox, frame.instanceId, frame.entries),
       };
     case "snapshot":
     case "resize": {
@@ -277,14 +286,14 @@ function reduceFrame(state: AppState, frame: ServerFrame, at: number): AppState 
     }
     case "ack": {
       const item = state.outbox.find((i) => i.frame.clientMsgId === frame.clientMsgId);
-      let outbox = applyAck(state.outbox, frame, at);
+      const acked = applyAck(state.outbox, frame, at);
+      let next = withOutbox(state, acked);
       // A resent prompt's ack can come after the transcript that already shows it
       // (the resubscribe goes first).
       if (item?.frame.type === "prompt" && frame.ok) {
         const shown = sessionOf(state, item.frame.instanceId).transcript;
-        if (shown) outbox = settleDelivered(outbox, item.frame.instanceId, shown);
+        if (shown) next = { ...next, ...settle(next, acked, item.frame.instanceId, shown) };
       }
-      const next = withOutbox(state, outbox);
       // The desktop now holds (or has dropped) this phone's push subscription.
       if (item?.frame.type === "push-subscribe" && frame.ok && next.push) {
         return { ...next, push: { ...next.push, enabled: item.frame.subscription !== null } };
@@ -296,6 +305,19 @@ function reduceFrame(state: AppState, frame: ServerFrame, at: number): AppState 
     default:
       return state;
   }
+}
+
+// What a transcript settles of the outbox (outbox.ts `settleDelivered`), with the
+// entries that did the settling noted for the next one.
+function settle(
+  state: AppState,
+  outbox: OutboxItem[],
+  instanceId: string,
+  entries: TranscriptEntry[]
+): Pick<AppState, "outbox" | "delivered"> {
+  const settled = settleDelivered(outbox, instanceId, entries, state.delivered[instanceId]);
+  if (settled.outbox === outbox) return { outbox, delivered: state.delivered };
+  return { outbox: settled.outbox, delivered: { ...state.delivered, [instanceId]: settled.delivered } };
 }
 
 function patch(sessions: Record<string, Session>, id: string, change: Partial<Session>): Record<string, Session> {

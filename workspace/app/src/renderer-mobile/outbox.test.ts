@@ -11,6 +11,7 @@ import {
   enqueue,
   loadOutbox,
   markSent,
+  newDevice,
   saveOutbox,
   settleDelivered,
   socketLost,
@@ -129,28 +130,76 @@ describe("outbox", () => {
 
     // An earlier "yes", from before p2 was sent (beyond the clock skew allowed),
     // isn't p2 arriving.
-    const early = settleDelivered(outbox, "a", [entry("yes", 200_000 - 3 * 60_000)]);
+    const early = settleDelivered(outbox, "a", [entry("yes", 200_000 - 3 * 60_000)]).outbox;
     expect(early).toBe(outbox);
     // Another session's transcript doesn't count.
-    expect(settleDelivered(outbox, "b", [entry("run the tests")])).toBe(outbox);
+    expect(settleDelivered(outbox, "b", [entry("run the tests")]).outbox).toBe(outbox);
 
     // Whitespace aside, the same text; an entry without a time counts.
-    const shown = settleDelivered(outbox, "a", [entry("run the tests", 100_200), entry("yes")]);
+    const shown = settleDelivered(outbox, "a", [entry("run the tests", 100_200), entry("yes")]).outbox;
     expect(shown).toEqual([]);
   });
 
   it("needs one transcript entry per identical prompt", () => {
     let outbox = enqueue(enqueue([], prompt("p1", "go"), 1000, true), prompt("p2", "go"), 2000, true);
     outbox = applyAck(applyAck(outbox, ok("p1"), 1100), ok("p2"), 2100);
-    const once = settleDelivered(outbox, "a", [{ kind: "user", text: "go", at: 1500 }]);
+    const once = settleDelivered(outbox, "a", [{ kind: "user", text: "go", at: 1500 }]).outbox;
     expect(once.map((i) => i.frame.clientMsgId)).toEqual(["p2"]);
+  });
+
+  it("never lets one transcript entry settle two identical prompts, across refreshes too", () => {
+    let outbox = enqueue(enqueue([], prompt("p1", "go"), 1000, true), prompt("p2", "go"), 2000, true);
+    outbox = applyAck(applyAck(outbox, ok("p1"), 1100), ok("p2"), 2100);
+    const one: TranscriptEntry[] = [{ kind: "user", id: "u1", text: "go", at: 1500 }];
+    let settled = settleDelivered(outbox, "a", one);
+    expect(status(settled.outbox)).toEqual({ p2: "acked" });
+    expect(settled.delivered).toEqual(["u1"]);
+    // The same transcript again (the CLI still holds p2 behind a running turn).
+    settled = settleDelivered(settled.outbox, "a", one, settled.delivered);
+    expect(status(settled.outbox)).toEqual({ p2: "acked" });
+    // A later identical prompt: u1 delivered p1, so it isn't this one arriving either.
+    outbox = applyAck(enqueue(settled.outbox, prompt("p3", "go"), 3000, true), ok("p3"), 3100);
+    settled = settleDelivered(outbox, "a", one, settled.delivered);
+    expect(status(settled.outbox)).toEqual({ p2: "acked", p3: "acked" });
+    // p2 and p3 arrive.
+    const all: TranscriptEntry[] = [...one, { kind: "user", id: "u2", text: "go", at: 2500 }, { kind: "user", id: "u3", text: "go", at: 3500 }];
+    settled = settleDelivered(settled.outbox, "a", all, settled.delivered);
+    expect(settled.outbox).toEqual([]);
+    expect(settled.delivered).toEqual(["u1", "u2", "u3"]);
+  });
+
+  it("counts entries without an id or a time one by one across refreshes", () => {
+    let outbox = enqueue(enqueue([], prompt("p1", "go"), 1000, true), prompt("p2", "go"), 2000, true);
+    outbox = applyAck(applyAck(outbox, ok("p1"), 1100), ok("p2"), 2100);
+    const go: TranscriptEntry = { kind: "user", text: "go" };
+    const first = settleDelivered(outbox, "a", [go]);
+    expect(settleDelivered(first.outbox, "a", [go], first.delivered).outbox).toBe(first.outbox);
+    expect(settleDelivered(first.outbox, "a", [go, go], first.delivered).outbox).toEqual([]);
+  });
+
+  it("makes what went out on a socket unknown when the phone pairs again as a new device", () => {
+    let outbox = enqueue([], prompt("out"), 1, true);
+    outbox = socketLost(outbox, 2);
+    outbox = enqueue(outbox, prompt("sending"), 3, true);
+    outbox = enqueue(outbox, prompt("never-left"), 4, false);
+    outbox = enqueue(outbox, push("s1"), 5, true);
+    outbox = newDevice(outbox, 6);
+    expect(status(outbox)).toEqual({ out: "unknown", sending: "unknown", "never-left": "waiting", s1: "sent" });
+    expect(toSend(outbox).map((i) => i.frame.clientMsgId)).toEqual(["never-left"]);
+    // Whether it arrived shows in the transcript; until then it can be dismissed.
+    expect(status(settleDelivered(outbox, "a", [{ kind: "user", text: "hello", at: 5 }]).outbox)).toEqual({
+      sending: "unknown",
+      "never-left": "waiting",
+      s1: "sent",
+    });
+    expect(status(dismiss(outbox, "out"))).not.toHaveProperty("out");
   });
 
   it("keeps a waiting or refused prompt unless the transcript shows it was acked", () => {
     let outbox = enqueue([], prompt("p1", "x"), 1, false);
     outbox = enqueue(outbox, prompt("p2", "x"), 2, true);
     outbox = applyAck(outbox, refused("p2"), 3);
-    expect(settleDelivered(outbox, "a", [{ kind: "user", text: "x" }])).toBe(outbox);
+    expect(settleDelivered(outbox, "a", [{ kind: "user", text: "x" }]).outbox).toBe(outbox);
   });
 
   it("stops at 100 items by dropping the oldest settled ones, never one still on its way", () => {

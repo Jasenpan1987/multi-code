@@ -459,15 +459,21 @@ async function realWorker() {
   await context.grantPermissions(["notifications"], { origin });
   const page = await context.newPage();
   await page.goto(`${origin}/`);
-  await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
+  // `ready` never settles when sw.js couldn't register: bounded, so the check fails
+  // and the browser closes instead of the script hanging.
+  await within(10_000, "the service worker to be ready", page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined)));
   const cdp = await context.newCDPSession(page);
-  const registrationId = await new Promise<string>((resolve) => {
-    cdp.on("ServiceWorker.workerRegistrationUpdated", ({ registrations }: { registrations: { registrationId: string; scopeURL: string }[] }) => {
-      const mine = registrations.find((r) => r.scopeURL === `${origin}/`);
-      if (mine) resolve(mine.registrationId);
-    });
-    void cdp.send("ServiceWorker.enable");
-  });
+  const registrationId = await within(
+    10_000,
+    "the service worker's registration",
+    new Promise<string>((resolve, reject) => {
+      cdp.on("ServiceWorker.workerRegistrationUpdated", ({ registrations }: { registrations: { registrationId: string; scopeURL: string }[] }) => {
+        const mine = registrations.find((r) => r.scopeURL === `${origin}/`);
+        if (mine) resolve(mine.registrationId);
+      });
+      cdp.send("ServiceWorker.enable").catch(reject);
+    })
+  );
   const data = JSON.stringify({
     web_push: 8030,
     notification: {
@@ -496,6 +502,15 @@ async function realWorker() {
     shown
   );
   await context.close();
+}
+
+// A wait that gives up, so a broken build fails the check rather than hanging it.
+function within<T>(ms: number, what: string, promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`gave up waiting ${ms / 1000} s for ${what}`)), ms);
+  });
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer));
 }
 
 console.log(failures ? `${failures} failed` : "all passed");

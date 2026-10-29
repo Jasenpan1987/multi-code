@@ -149,6 +149,31 @@ describe("store", () => {
     expect(ids(lastLink().sent)).toEqual([item.frame.clientMsgId]);
   });
 
+  it("remembers across a relaunch which transcript entry already delivered an identical prompt", () => {
+    const first = make();
+    first.actions.pair(offer);
+    lastLink().up();
+    const p1 = first.actions.sendPrompt("a", "go");
+    clock += 1000;
+    const p2 = first.actions.sendPrompt("a", "go");
+    lastLink().frame({ type: "ack", clientMsgId: p1.frame.clientMsgId, ok: true });
+    lastLink().frame({ type: "ack", clientMsgId: p2.frame.clientMsgId, ok: true });
+    const one = { type: "transcript" as const, instanceId: "a", entries: [{ kind: "user" as const, id: "u1", text: "go", at: clock }], hasEarlier: false };
+    lastLink().frame(one);
+    expect(first.getState().outbox.map((i) => i.frame.clientMsgId)).toEqual([p2.frame.clientMsgId]);
+
+    // p2 still waits behind a running turn when the app closes.
+    const second = make();
+    second.start();
+    lastLink().up();
+    lastLink().frame(one);
+    expect(second.getState().outbox.map((i) => i.frame.clientMsgId)).toEqual([p2.frame.clientMsgId]);
+
+    // Unpairing forgets it with the outbox.
+    second.actions.unpair();
+    expect(storage.getItem("multicode.delivered")).toBeNull();
+  });
+
   it("never queues an answer or an interrupt, and marks one in flight unknown when the socket drops", () => {
     const store = make();
     store.actions.pair(offer);
@@ -286,17 +311,35 @@ describe("store", () => {
   it("settles what was on the old socket when the same Mac pairs the phone again", () => {
     const store = make();
     store.actions.pair(offer);
-    const old = lastLink();
-    old.up();
+    lastLink().up();
     const prompt = store.actions.sendPrompt("a", "in flight");
     store.actions.interrupt("a");
-    store.actions.pair({ ...offer, deviceToken: "new-token" });
+    // The same pairing link again: the same device, whose ids the Mac remembers.
+    store.actions.pair(offer);
     expect(store.getState().outbox.map((i) => [i.frame.type, i.status])).toEqual([
       ["prompt", "waiting"],
       ["interrupt", "unknown"],
     ]);
     lastLink().up();
     expect(ids(lastLink().sent)).toEqual([prompt.frame.clientMsgId]);
+  });
+
+  it("doesn't resend under a new token what may have reached the Mac under the old one", () => {
+    const store = make();
+    store.actions.pair(offer);
+    const old = lastLink();
+    old.up();
+    store.actions.sendPrompt("a", "in flight");
+    old.down();
+    const offline = store.actions.sendPrompt("a", "typed offline");
+    // A new device to the Mac (each Pair mints one), with no record of the old ids.
+    store.actions.pair({ ...offer, deviceToken: "new-token" });
+    expect(store.getState().outbox.map((i) => [i.frame.type, i.status])).toEqual([
+      ["prompt", "unknown"],
+      ["prompt", "waiting"],
+    ]);
+    lastLink().up();
+    expect(ids(lastLink().sent)).toEqual([offline.frame.clientMsgId]);
   });
 
   it("gives up the offline cache before a queued prompt when storage is full", () => {

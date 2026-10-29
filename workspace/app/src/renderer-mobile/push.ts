@@ -12,6 +12,7 @@
 // one; a subscription the browser replaced reaches it that way).
 
 import type { RemotePushSubscription } from "../shared/remote-protocol";
+import { clearCache } from "./cache";
 import { isStandalone } from "./format";
 import { idOf, type OutboxItem } from "./outbox";
 import { navigate, parseHash, type Route } from "./routes";
@@ -122,7 +123,15 @@ export function subscriptionJson(subscription: PushSubscriptionLike): RemotePush
   return { endpoint, expirationTime: expirationTime ?? null, keys: { p256dh: keys.p256dh, auth: keys.auth } };
 }
 
+// Turned off on a phone whose storage couldn't keep the flag even without the
+// offline cache: off for as long as the app runs, and written as soon as it fits.
+const offUnsaved = new WeakSet<Storage>();
+
 export function notificationsOff(storage: Storage): boolean {
+  if (offUnsaved.has(storage)) {
+    if (writeOff(storage)) offUnsaved.delete(storage);
+    return true;
+  }
   try {
     return storage.getItem(OFF_KEY) === "1";
   } catch {
@@ -130,13 +139,28 @@ export function notificationsOff(storage: Storage): boolean {
   }
 }
 
-function setOff(storage: Storage, off: boolean) {
+function writeOff(storage: Storage): boolean {
   try {
-    if (off) storage.setItem(OFF_KEY, "1");
-    else storage.removeItem(OFF_KEY);
+    storage.setItem(OFF_KEY, "1");
+    return true;
   } catch {
-    // Full storage: the flag only keeps the launch check from turning them on again.
+    return false;
   }
+}
+
+// The flag is what keeps the launch check from turning them on again, so a full
+// storage gives up the offline cache for it, as it does for the outbox (store.ts).
+function setOff(storage: Storage, off: boolean) {
+  if (!off) {
+    offUnsaved.delete(storage);
+    storage.removeItem(OFF_KEY);
+    return;
+  }
+  if (writeOff(storage)) return;
+  clearCache(storage);
+  if (writeOff(storage)) return;
+  offUnsaved.add(storage);
+  console.warn("Multi-Code: no room to remember that notifications are off on this phone after it closes");
 }
 
 // The phone's latest push-subscribe still in the outbox: on its way, or refused
@@ -336,6 +360,9 @@ export function startPush(store: PushStore, env: PushEnv = browserEnv, origin = 
       console.warn(`Multi-Code: couldn't renew this phone's push subscription: ${messageOf(err)}`);
     } finally {
       checking = false;
+      // A connect while this ran (after an unpair and a new pairing, say) skipped its
+      // own check because this one was running: run it now.
+      if (!checked) onChange();
     }
   }
 

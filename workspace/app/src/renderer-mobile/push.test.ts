@@ -396,6 +396,74 @@ describe("turning off and unpairing", () => {
     expect(endpoints(link().pushes()).at(-1)).toBe("https://push.example/2");
   });
 
+  it("remembers being turned off when storage is full, giving up the offline cache for it", async () => {
+    permission = "granted";
+    manager.existing();
+    const { store, link } = make();
+    link().up(authOk({ pushEnabled: true }));
+    await settle();
+    link().ack(link().pushes()[0]);
+    link().frame({ type: "instances", instances: Array.from({ length: 20 }, (_, i) => instance(`s${i}`, "idle")) });
+    store.flush();
+    expect(storage.getItem("multicode.cache")).not.toBeNull();
+    storage.quota = storage.used();
+
+    await turnOff(store, env());
+    expect(storage.getItem("multicode.push.off")).toBe("1");
+    link().ack(link().pushes()[1]);
+    link().down();
+    link().up(authOk({ pushEnabled: false }));
+    await settle();
+    expect(endpoints(link().pushes())).toEqual(["https://push.example/1", null]);
+    expect(manager.made).toBe(1);
+  });
+
+  it("stays off for the run when even without the cache there is no room for the flag", async () => {
+    permission = "granted";
+    manager.existing();
+    const { store, link } = make();
+    link().up(authOk({ pushEnabled: true }));
+    await settle();
+    link().ack(link().pushes()[0]);
+    storage.setItem("multicode.drafts", "x".repeat(1000));
+    expect(storage.getItem("multicode.cache")).toBeNull();
+    storage.quota = storage.used();
+
+    await turnOff(store, env());
+    expect(storage.getItem("multicode.push.off")).toBeNull();
+    link().ack(link().pushes()[1]);
+    link().down();
+    link().up(authOk({ pushEnabled: false }));
+    await settle();
+    expect(endpoints(link().pushes())).toEqual(["https://push.example/1", null]);
+    expect(manager.made).toBe(1);
+    // Written once there is room.
+    storage.removeItem("multicode.drafts");
+    link().down();
+    link().up(authOk({ pushEnabled: false }));
+    await settle();
+    expect(storage.getItem("multicode.push.off")).toBe("1");
+    expect(manager.made).toBe(1);
+  });
+
+  it("runs the check of a new pairing once one left waiting by an unpair has ended", async () => {
+    permission = "granted";
+    let release = () => {};
+    workerReady = new Promise((resolve) => (release = resolve));
+    const { store, link } = make();
+    link().up(authOk({ pushEnabled: false }));
+    await settle();
+    store.actions.unpair();
+    store.actions.pair(offer);
+    link().up(authOk({ pushEnabled: false }));
+    await settle();
+    expect(link().pushes()).toEqual([]);
+    release();
+    await settle();
+    await settle();
+    expect(endpoints(link().pushes())).toEqual(["https://push.example/1"]);
+  });
+
   it("unpairing tells the Mac on the open link and drops the subscription", async () => {
     permission = "granted";
     manager.existing();

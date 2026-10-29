@@ -188,6 +188,37 @@ describe("phone dev harness", () => {
     await client.next("instances", hasState("multi-code", "finished"));
   });
 
+  it("refuses a blank prompt and a malformed answer as the desktop does, changing nothing", async () => {
+    const client = await connect();
+    await scenario(client, "permission");
+    client.send({ type: "subscribe", instanceId: "multi-code" });
+    const { seq } = await client.next("prompt-state");
+
+    for (const bad of [{ effect: "deny", feedback: 42 }, { effect: "shrug" }, { answers: [{ question: 1, picks: ["1"] }] }]) {
+      client.send({ type: "answer", instanceId: "multi-code", seq, choice: bad as unknown as { effect: "deny" }, clientMsgId: id() });
+      expect(await client.next("ack")).toMatchObject({ ok: false, reason: "unsupported" });
+      expect(world.dialogOf("multi-code")?.seq).toBe(seq);
+      expect(world.stateOf("multi-code")?.state).toBe("needs-you");
+    }
+
+    // An idle session, so the only refusal left is the blank text.
+    client.send({ type: "prompt", instanceId: "infra-terraform", text: " \n ", clientMsgId: id() });
+    expect(await client.next("ack")).toMatchObject({ ok: false, reason: "failed" });
+    expect(world.stateOf("infra-terraform")?.state).not.toBe("working");
+  });
+
+  it("reads a choice with both an effect and answers as the effect, as the desktop does", async () => {
+    const client = await connect();
+    await scenario(client, "questions");
+    client.send({ type: "subscribe", instanceId: "multi-code" });
+    const { seq } = await client.next("prompt-state");
+    const both = { effect: "deny", answers: [{ question: 1, picks: [1] }, { question: 2, picks: [1] }] };
+    client.send({ type: "answer", instanceId: "multi-code", seq, choice: both as unknown as { effect: "deny" }, clientMsgId: id() });
+    // A question box has no "deny": refused, the box still open.
+    expect(await client.next("ack")).toMatchObject({ ok: false, reason: "unsupported" });
+    expect(world.dialogOf("multi-code")?.seq).toBe(seq);
+  });
+
   it("takes every question of a box in one answer", async () => {
     const client = await connect();
     await scenario(client, "questions");
