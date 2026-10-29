@@ -208,7 +208,7 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
 ### T-804: Turn-ready transcript
 
 - **Type:** feature
-- **Status:** in-progress
+- **Status:** done (fbb50c1, merged e154a82)
 - **Story:** 3
 - **Description:** The phone groups a transcript into turns and folds each turn's tools
   into one line with counts and results. Extend the readers so entries carry what that
@@ -347,6 +347,11 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
   - **Working bar:** running tool and turn duration, Stop with a "Stop this turn?"
     confirmation; disabled offline; hidden while a dialog is open.
   - **Offline banner:** "Can't reach your Mac. Showing what it said N min ago." with Retry.
+- **Note:** From T-804: a turn group can start without a user entry (the preamble, or a
+  partly read oldest turn); Bash failures carry only `outcome: "error"`, no failure count
+  (show "✗ failed", not "✗ 3 failed"); some writes have no line counts; turn duration =
+  `at` of its first and last entries; an OpenCode `!command` arrives as a `shell` tool
+  entry.
 - **Acceptance:** harness screenshots in Playwright WebKit (dark and light) of each mockup
   screen listed above, compared by eye with the mockups and attached to the report; a test
   that a Return in the textarea doesn't send; a test of the turn grouping and fold counts.
@@ -529,3 +534,4 @@ shows each check state, gates the QR, sends a test push and revokes.
 - 2026-10-29: Generated from PRD v1.0.
 - 2026-10-29: T-801 done (6f4155d). T-802..T-805 started in parallel worktrees.
 - 2026-10-29: T-805 done and merged (33a143a); endpoints.ts removed, port bound to 127.0.0.1.
+- 2026-10-29: T-804 done and merged (e154a82); `readRecentTurns(id, turns)` in process-manager.
