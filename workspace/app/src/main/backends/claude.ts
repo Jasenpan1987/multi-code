@@ -11,7 +11,8 @@ import type {
 import { keystrokeForOption } from "../remote/promptExtract";
 import { ClaudeHookAttention, ClaudeWorkingWatch } from "./claudeHooks";
 import type { TranscriptEntry } from "../../shared/remote-protocol";
-import { claudeTranscriptEntries, readBuilderTurn } from "./claudeTranscript";
+import { claudeTranscriptEntries, readBuilderTurn, readClaudeRecentTurns } from "./claudeTranscript";
+import { noTurns } from "./recentTurns";
 import type { ContextUsage } from "../../shared/types";
 import { resolvePath } from "./resolvePath";
 import { INSTANCE_ENV, SPAWN_ENV, withUtf8Locale } from "./instance-env";
@@ -452,6 +453,11 @@ export const claudeBackend: Backend = {
     const jsonlPath = findJsonlBySessionId(sessionId);
     if (!jsonlPath) return [];
     return readClaudeTranscript(jsonlPath, limit);
+  },
+
+  readRecentTurns(sessionId, turns) {
+    const jsonlPath = findJsonlBySessionId(sessionId);
+    return jsonlPath ? readClaudeRecentTurns(jsonlPath, turns) : noTurns();
   },
 
   async readBuilderTurn(sessionId) {

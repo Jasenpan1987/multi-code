@@ -154,6 +154,15 @@ export interface BuilderTurn {
 }
 
 /**
+ * The end of a session as the phone reads it, turn by turn (`Backend.readRecentTurns`):
+ * the entries oldest first, and whether the session has more before them.
+ */
+export interface RecentTurns {
+  entries: TranscriptEntry[];
+  hasEarlier: boolean;
+}
+
+/**
  * Activity callback. `detail` is populated only for the "prompt" event, and
  * only when the blocking tool_use could be decoded into a question plus
  * options — it's what lets a paired phone render real buttons instead of a
@@ -325,6 +334,22 @@ export interface Backend {
    * shows as "no transcript" while leaving the terminal view available.
    */
   readTranscript(sessionId: string, limit: number): TranscriptEntry[];
+
+  /**
+   * The session's last `turns` turns (at least one) for the phone's chat view, and
+   * whether earlier ones exist. A turn starts at each message the builder typed, and
+   * those are the only "user" entries here: rows the CLI adds to the conversation
+   * (reminders, notifications, a local command's output) are left out, where
+   * `readTranscript` keeps some of them for the manager. Entries carry `id` and `at`
+   * from the record; tool entries their `outcome`, and edits and writes the lines they
+   * added and removed, wherever the CLI recorded them. At most
+   * RECENT_TURNS_ENTRY_CAP entries (recentTurns.ts), the oldest turns dropped first.
+   *
+   * Called about once a second for every session a phone has open, so a read stops
+   * as soon as it has the turns it needs. `{ entries: [], hasEarlier: false }` when the
+   * session can't be read.
+   */
+  readRecentTurns(sessionId: string, turns: number): RecentTurns;
 
   /**
    * What the builder last typed in this session, up to three messages before it,

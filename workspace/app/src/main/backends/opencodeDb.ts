@@ -13,11 +13,12 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import Database from "better-sqlite3";
-import type { BuilderTurn } from "./types";
+import type { BuilderTurn, RecentTurns } from "./types";
 import type { TranscriptEntry } from "../../shared/remote-protocol";
 import type { ContextUsage } from "../../shared/types";
 import { resolvePath } from "./resolvePath";
 import { opencodePathEnv } from "./opencodeShellEnv";
+import { RECENT_TURNS_ENTRY_CAP, lastTurns, lineCount, noTurns } from "./recentTurns";
 
 function homeOf(env: NodeJS.ProcessEnv): string {
   return env.HOME || os.homedir();
@@ -113,13 +114,20 @@ interface MessageRow {
   text: unknown;
   // `shell`: running, exited, timeout or killed. Null otherwise.
   status: unknown;
+  // `shell`: the command's exit code, once it has one. Null otherwise.
+  exit: unknown;
+  // The row's `time_created`, ms. Equal to its `data.time.created` in every row on the
+  // builder's machine, and read without parsing `data`.
+  created: unknown;
 }
 
 const MESSAGE_ROWS_SQL =
   "SELECT id, type, " +
   "CASE type WHEN 'user' THEN json_extract(data, '$.text') " +
   "WHEN 'shell' THEN json_extract(data, '$.command') END AS text, " +
-  "CASE type WHEN 'shell' THEN json_extract(data, '$.status') END AS status " +
+  "CASE type WHEN 'shell' THEN json_extract(data, '$.status') END AS status, " +
+  "CASE type WHEN 'shell' THEN json_extract(data, '$.exit') END AS exit, " +
+  "time_created AS created " +
   "FROM session_message WHERE session_id = ? AND type IN ('user', 'assistant', 'shell') " +
   // A row that isn't valid JSON would make json_extract fail the whole query; it is
   // skipped instead, as one unreadable part was in 1.x. Assistant rows are parsed only
@@ -333,6 +341,181 @@ export function readOpencodeBuilderTurn(sessionId: string, dbPath?: string): Bui
       builderEarlierMessages: earlier.reverse().map((message) => message.text),
       turn: since.flatMap((row) => rowEntries(items, row)),
     };
+  });
+}
+
+// ---------------------------------------------------------------- recent turns
+
+// An assistant row's text and tool items with what the phone's turn view needs beyond
+// ASSISTANT_ITEMS_SQL: each item's position (the id of a text item, which has none of its
+// own), a tool's id and start, and from its result whether a shell call failed and how
+// many lines an edit changed. Each field comes out of SQLite on its own, so a tool's
+// output and the diffs in its metadata never reach JS (its input does, as in
+// ASSISTANT_ITEMS_SQL: the summary is read from it). `jsonb_each` hands each item over as JSONB,
+// which a `json_extract` reads without parsing it again: with the dozen fields read
+// here, `json_each` made a session holding one 36 MB step take three times as long as
+// the five-field ASSISTANT_ITEMS_SQL, and `jsonb_each` no longer than it (2026-10-29).
+//
+// Line counts are kept in both vocabularies (`packages/core/src/tool/plugin/file-diff.ts`
+// and the builder's migrated rows): 2.x `edit` and `patch` and 1.x `apply_patch` hold
+// `metadata.files[]`, each with `additions` and `deletions`, and 1.x `edit` one
+// `metadata.filediff`. 1.x `write` records only whether the file `exists`ed, and a 2.x
+// `write` no metadata at all, so a write over an existing file has no counts. Only
+// objects are read as diffs: a custom tool's `files` may be a list of paths, and
+// `json_extract` on a bare string fails the whole statement, which would lose the step.
+const TURN_ITEMS_SQL =
+  "SELECT c.key AS key, json_extract(c.value, '$.type') AS type, " +
+  "json_extract(c.value, '$.text') AS text, json_extract(c.value, '$.id') AS id, " +
+  "json_extract(c.value, '$.name') AS name, json_extract(c.value, '$.time.created') AS created, " +
+  "json_extract(c.value, '$.state.status') AS status, json_extract(c.value, '$.state.input') AS input, " +
+  "json_extract(c.value, '$.state.metadata.exit') AS exit, " +
+  "json_extract(c.value, '$.state.metadata.timeout') AS timeout, " +
+  "json_extract(c.value, '$.state.metadata.signal') AS signal, " +
+  "json_extract(c.value, '$.state.metadata.exists') AS existed, " +
+  "coalesce(json_extract(c.value, '$.state.metadata.filediff.additions'), " +
+  "(SELECT sum(json_extract(f.value, '$.additions')) " +
+  "FROM jsonb_each(c.value, '$.state.metadata.files') f WHERE f.type = 'object')) AS added, " +
+  "coalesce(json_extract(c.value, '$.state.metadata.filediff.deletions'), " +
+  "(SELECT sum(json_extract(f.value, '$.deletions')) " +
+  "FROM jsonb_each(c.value, '$.state.metadata.files') f WHERE f.type = 'object')) AS removed " +
+  "FROM jsonb_each((SELECT data FROM session_message WHERE id = ?), '$.content') c " +
+  "WHERE json_extract(c.value, '$.type') IN ('text', 'tool') ORDER BY c.key";
+
+interface TurnItem extends AssistantItem {
+  key: unknown;
+  id: unknown;
+  created: unknown;
+  exit: unknown;
+  timeout: unknown;
+  signal: unknown;
+  // JSON booleans come out of SQLite as 1 and 0.
+  existed: unknown;
+  added: unknown;
+  removed: unknown;
+}
+
+function finite(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function stamped(entry: TranscriptEntry, id: unknown, at: number | undefined): TranscriptEntry {
+  if (typeof id === "string" && id) entry.id = id;
+  if (at !== undefined) entry.at = at;
+  return entry;
+}
+
+// A shell call that completed but failed, as OpenCode itself reads its result
+// (`packages/core/src/shell/result.ts`, `notice`): it timed out, was killed by a signal,
+// or exited non-zero. Migrated 1.x `bash` rows keep the exit code the same way. Claude
+// reports such a call as an error, so both backends' failed commands read alike.
+function shellFailed(item: TurnItem): boolean {
+  if (item.name !== "shell" && item.name !== "bash") return false;
+  return item.timeout === 1 || typeof item.signal === "string" || (finite(item.exit) ?? 0) !== 0;
+}
+
+function settleTool(entry: TranscriptEntry, item: TurnItem, input: Record<string, unknown> | undefined) {
+  if (typeof item.status === "string" && IN_FLIGHT.has(item.status)) {
+    entry.pending = true;
+    return;
+  }
+  if (item.status === "error") {
+    entry.outcome = "error";
+    return;
+  }
+  // Anything else OpenCode may add is left without an outcome.
+  if (item.status !== "completed") return;
+  entry.outcome = shellFailed(item) ? "error" : "ok";
+  const added = finite(item.added);
+  const removed = finite(item.removed);
+  if (added !== undefined || removed !== undefined) {
+    entry.added = added ?? 0;
+    entry.removed = removed ?? 0;
+  } else if (item.existed === 0 && typeof input?.content === "string") {
+    entry.added = lineCount(input.content);
+    entry.removed = 0;
+  }
+}
+
+// A row's entries for the turn view, in order: `rowEntries`, with ids, times, outcomes
+// and line counts. A text item's time is its step's; a tool's is its own start.
+function turnRowEntries(items: Database.Statement, row: MessageRow): TranscriptEntry[] {
+  const at = finite(row.created);
+  if (row.type === "user") {
+    const text = typedText(row.text);
+    return text ? [stamped({ kind: "user", text }, row.id, at)] : [];
+  }
+  if (row.type === "shell") {
+    const text = typeof row.text === "string" ? row.text : "";
+    const entry = stamped({ kind: "tool", tool: "shell", text }, row.id, at);
+    if (row.status === "running") entry.pending = true;
+    else entry.outcome = row.exit === 0 ? "ok" : "error";
+    return [entry];
+  }
+  let content: TurnItem[];
+  try {
+    content = items.all(row.id) as TurnItem[];
+  } catch {
+    return [];
+  }
+  const entries: TranscriptEntry[] = [];
+  for (const item of content) {
+    const position = `${row.id}:${String(item.key)}`;
+    if (item.type === "text") {
+      const text = typeof item.text === "string" ? item.text.trim() : "";
+      if (text) entries.push(stamped({ kind: "assistant", text }, position, at));
+    } else if (typeof item.name === "string") {
+      const input = toolInput(item.input);
+      const entry = stamped(
+        { kind: "tool", tool: item.name, text: summarizeOpencodeTool(item.name, input) },
+        typeof item.id === "string" && item.id ? item.id : position,
+        finite(item.created) ?? at
+      );
+      settleTool(entry, item, input);
+      entries.push(entry);
+    }
+  }
+  return entries;
+}
+
+/**
+ * The last `turns` turns of a session (`Backend.readRecentTurns`). Rows are walked
+ * newest first and each read only when reached, so the walk stops at the first row
+ * before them (which is how `hasEarlier` is known) or once it holds more entries than
+ * the cap keeps.
+ */
+export function readOpencodeRecentTurns(
+  sessionId: string,
+  turns: number,
+  dbPath?: string
+): RecentTurns {
+  return withDb(dbPath, noTurns(), (db) => {
+    const items = db.prepare(TURN_ITEMS_SQL);
+    const newestFirst: TranscriptEntry[] = [];
+    let typed = 0;
+    let earlier = false;
+    // A negative LIMIT is none; the walk decides where to stop.
+    for (const row of db.prepare(MESSAGE_ROWS_SQL).iterate(sessionId, -1) as Iterable<MessageRow>) {
+      if (typed === turns) {
+        // Earlier turns exist if any row before has something to show. An older step
+        // counts without being opened, since one can hold tens of megabytes of tool
+        // output; a step with nothing but reasoning, the exception, costs an "Earlier
+        // turns" that brings nothing.
+        if (row.type !== "user" || typedText(row.text) !== null) {
+          earlier = true;
+          break;
+        }
+        continue;
+      }
+      const entries = turnRowEntries(items, row);
+      if (entries.length === 0) continue;
+      for (let i = entries.length - 1; i >= 0; i--) newestFirst.push(entries[i]);
+      if (entries[0].kind === "user") typed++;
+      if (newestFirst.length > RECENT_TURNS_ENTRY_CAP) {
+        earlier = true;
+        break;
+      }
+    }
+    return lastTurns(newestFirst.reverse(), turns, earlier);
   });
 }
 
