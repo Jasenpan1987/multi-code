@@ -27,3 +27,4 @@ Raised in the 2026-10-29 ideation (`docs/timeline/2026-10-29_mobile-v2-ideation.
 |----|----------|---------|-----|--------|
 | G-302 | Does Web Push sent from the Mac (VAPID, `web-push`) reach the builder's iPhone, closed and locked? | Story 7 | Measure on the iPhone at QA (no simulator) | open |
 | G-305 | In standalone mode on iOS 27, does the key row stay above the keyboard (WebKit 322900: `visualViewport.height` ~68 px short after the first keyboard)? | Stories 4, 8 | Check on the iPhone at QA | open |
+| G-306 | Does a pairing made in Safari (from the QR) reach the Home Screen app, or does the Home Screen app have its own storage? | Stories 1, 10 | Measure on the iPhone at QA; the copy/paste hand-off (T-811, T-812) works either way | open |

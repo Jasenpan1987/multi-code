@@ -276,7 +276,7 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
 ### T-806: Phone app shell
 
 - **Type:** feature
-- **Status:** in-progress
+- **Status:** done (e0c69a1, merged 4af00c1)
 - **Story:** 1, 4 (outbox), 10 (steps 1–2)
 - **Description:** The new phone app's foundation in `workspace/app/src/renderer-mobile/`,
   on which T-807..T-809 and T-811 build:
@@ -324,7 +324,7 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
 ### T-807: Session list and session chat
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** in-progress
 - **Story:** 2, 3, 4, 6
 - **Description:** Mockups 1A, 2.1, 2.2, 2.3, 4.2, built on T-806's store:
   - **List (plan A):** groups Needs you / Working / Finished / Idle with counts, empty ones
@@ -357,6 +357,18 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
   opened (mockup 2.1 shows "Finished") until its state changes. The header and list show
   the Mac's name without the `Multi-Code on ` prefix (mockup 1A: "MacBook Air"). The
   working row's preview is the running tool, whatever the mockup's example says.
+- **Note:** From T-806, the store API (`renderer-mobile/store.ts`, `state.ts`): read with
+  `useApp(select, equal?)` (pass `shallowEqual` for derived arrays), change only through
+  `useActions()`: `open(id|null)` (App calls it from the route), `loadEarlier(id)`,
+  `sendPrompt(id, text) → OutboxItem`, `cancelPrompt(clientMsgId)` (when `canCancel`),
+  `answer(id, seq, choice, confirmed?) → OutboxItem|null`, `interrupt(id) → OutboxItem|null`
+  (null offline), `sendInput(id, data) → boolean`, `pushSubscribe(sub|null)`,
+  `dismiss(clientMsgId)`, `attachTerminal(id, sink) → detach`, `pair`, `unpair`, `retry`.
+  State: `connection`, `push`, `instances`, `sessions[id] {transcript, hasEarlier, turns,
+  dialog {seq, summary, dialog?}, terminal {cols, rows}, exit, refreshedAt}`, `openId`,
+  `outbox` (items `waiting|sent|acked|refused|unknown`). A session's bubbles are its
+  transcript plus `outbox.filter(i => instanceOf(i) === id)`. One screen = one file under
+  `screens/` + its own CSS file.
 - **Acceptance:** harness screenshots in Playwright WebKit (dark and light) of each mockup
   screen listed above, compared by eye with the mockups and attached to the report; a test
   that a Return in the textarea doesn't send; a test of the turn grouping and fold counts.
@@ -385,6 +397,18 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
   - Sheets can be pulled down to read the chat and pulled up again. Disabled offline.
 - **Note:** The protocol has no question line for a permission dialog: show the fixed
   "Do you want to proceed?" (Claude's own wording) for every permission card.
+- **Note:** From T-806, the store API (`renderer-mobile/store.ts`, `state.ts`): read with
+  `useApp(select, equal?)` (pass `shallowEqual` for derived arrays), change only through
+  `useActions()`: `open(id|null)` (App calls it from the route), `loadEarlier(id)`,
+  `sendPrompt(id, text) → OutboxItem`, `cancelPrompt(clientMsgId)` (when `canCancel`),
+  `answer(id, seq, choice, confirmed?) → OutboxItem|null`, `interrupt(id) → OutboxItem|null`
+  (null offline), `sendInput(id, data) → boolean`, `pushSubscribe(sub|null)`,
+  `dismiss(clientMsgId)`, `attachTerminal(id, sink) → detach`, `pair`, `unpair`, `retry`.
+  State: `connection`, `push`, `instances`, `sessions[id] {transcript, hasEarlier, turns,
+  dialog {seq, summary, dialog?}, terminal {cols, rows}, exit, refreshedAt}`, `openId`,
+  `outbox` (items `waiting|sent|acked|refused|unknown`). A session's bubbles are its
+  transcript plus `outbox.filter(i => instanceOf(i) === id)`. One screen = one file under
+  `screens/` + its own CSS file.
 - **Acceptance:** harness screenshots of each dialog (dark and light); with the harness,
   each dialog is answered and the harness records the exact `answer` frame (effects,
   1-based picks, text, feedback, confirmed). On an isolated dev build with a real Claude
@@ -396,7 +420,7 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
 ### T-809: Terminal fallback
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** in-progress
 - **Story:** 8
 - **Description:** Mockup 4.1. A terminal screen per session (`#/s/<id>/term`): xterm.js at
   the PTY's `cols/rows` from `snapshot`/`resize` (no fit to the screen), inside a container
@@ -408,6 +432,18 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
   chat. Keep the terminal alive while the screen is hidden (the old pane disposed it on
   every hide). The key row sits above the keyboard (`visualViewport`); G-305 is checked on
   the iPhone at QA.
+- **Note:** From T-806, the store API (`renderer-mobile/store.ts`, `state.ts`): read with
+  `useApp(select, equal?)` (pass `shallowEqual` for derived arrays), change only through
+  `useActions()`: `open(id|null)` (App calls it from the route), `loadEarlier(id)`,
+  `sendPrompt(id, text) → OutboxItem`, `cancelPrompt(clientMsgId)` (when `canCancel`),
+  `answer(id, seq, choice, confirmed?) → OutboxItem|null`, `interrupt(id) → OutboxItem|null`
+  (null offline), `sendInput(id, data) → boolean`, `pushSubscribe(sub|null)`,
+  `dismiss(clientMsgId)`, `attachTerminal(id, sink) → detach`, `pair`, `unpair`, `retry`.
+  State: `connection`, `push`, `instances`, `sessions[id] {transcript, hasEarlier, turns,
+  dialog {seq, summary, dialog?}, terminal {cols, rows}, exit, refreshedAt}`, `openId`,
+  `outbox` (items `waiting|sent|acked|refused|unknown`). A session's bubbles are its
+  transcript plus `outbox.filter(i => instanceOf(i) === id)`. One screen = one file under
+  `screens/` + its own CSS file.
 - **Acceptance:** harness screenshot (dark and light); the harness records the exact bytes
   for each key; the terminal survives going to the chat and back without a resubscribe.
 - **Blocks:** T-813
@@ -467,7 +503,7 @@ shows each check state, gates the QR, sends a test push and revokes.
 ### T-811: Phone notifications
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** in-progress
 - **Story:** 7, 10 (step 3)
 - **Description:** Setup step 3's button (Home Screen only, from a tap):
   `Notification.requestPermission()`, then
@@ -492,6 +528,26 @@ shows each check state, gates the QR, sends a test push and revokes.
   permission is granted; resend when the ack says `failed`. The server counts a phone
   silent for 20 s as not looking, so it gets the push. Nothing is pushed when a Needs you
   clears, so keep calling `setAppBadge` while the app is open.
+- **Note:** From T-806, the store API (`renderer-mobile/store.ts`, `state.ts`): read with
+  `useApp(select, equal?)` (pass `shallowEqual` for derived arrays), change only through
+  `useActions()`: `open(id|null)` (App calls it from the route), `loadEarlier(id)`,
+  `sendPrompt(id, text) → OutboxItem`, `cancelPrompt(clientMsgId)` (when `canCancel`),
+  `answer(id, seq, choice, confirmed?) → OutboxItem|null`, `interrupt(id) → OutboxItem|null`
+  (null offline), `sendInput(id, data) → boolean`, `pushSubscribe(sub|null)`,
+  `dismiss(clientMsgId)`, `attachTerminal(id, sink) → detach`, `pair`, `unpair`, `retry`.
+  State: `connection`, `push`, `instances`, `sessions[id] {transcript, hasEarlier, turns,
+  dialog {seq, summary, dialog?}, terminal {cols, rows}, exit, refreshedAt}`, `openId`,
+  `outbox` (items `waiting|sent|acked|refused|unknown`). A session's bubbles are its
+  transcript plus `outbox.filter(i => instanceOf(i) === id)`. One screen = one file under
+  `screens/` + its own CSS file.
+- **Note (supervisor, from T-806's finding):** an iOS Home Screen app keeps its own storage,
+  apart from Safari's, and a scanned QR always opens Safari, so a pairing made in Safari may
+  not reach the Home Screen app (G-306). Hand-off: after pairing in Safari, step 2 offers
+  "Copy pairing link" (rebuilds `<origin>/#pair=<offer>` from the stored pairing,
+  `navigator.clipboard.writeText` on tap); the Home Screen app, when unpaired, shows a
+  "Paste pairing link" button (`navigator.clipboard.readText` on tap, iOS shows its Paste
+  bubble) above T-806's paste field, then clears the clipboard. When the storage did carry
+  over, the app is already paired and skips this.
 - **Acceptance:** in Playwright WebKit or Chromium with a stubbed `pushManager`, the
   subscribe and re-subscribe paths send the right frames; the service worker's `push` and
   `notificationclick` handlers are unit-tested with a fake `self`. Real delivery is
@@ -523,6 +579,8 @@ shows each check state, gates the QR, sends a test push and revokes.
   `error` + detail); "Send test" calls `window.electronAPI.sendRemoteTestPush(deviceId)` →
   `{ ok: true } | { ok: false; error }`; show the error. It needs the phone link on, HTTPS
   ready and a subscription.
+- **Note (supervisor):** add "Copy pairing link" beside the QR (Universal Clipboard reaches the
+  iPhone), for the Home Screen app's paste hand-off (T-811, G-306).
 - **Acceptance:** CDP checks on an isolated dev build (`--user-data-dir`) with the checks
   forced into each state (inject a fake checker): rows, buttons, QR gating, test push and
   revoke call the right IPC.
@@ -574,3 +632,4 @@ shows each check state, gates the QR, sends a test push and revokes.
 - 2026-10-29: T-803 done and merged (dd85e29). G-303 resolved (OpenCode Stop = two Escs 250 ms apart, only for the running session the terminal shows). G-304 wiring added to T-812. T-810 started.
 - 2026-10-29: T-810 done and merged (56adbbd): `remote/push.ts`, `web-push`, `remote-test-push` IPC. T-812 started.
 - 2026-10-29: G-301 measured: stable through `tailscale serve` (Node and WebKit 10 min, iPhone 4 min visible, 0 drops).
+- 2026-10-29: T-806 done and merged (4af00c1). Home Screen pairing hand-off added to T-811 and T-812 (G-306). T-807, T-809, T-811 started in parallel.
