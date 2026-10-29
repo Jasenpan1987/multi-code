@@ -442,6 +442,7 @@ function Sent({ item, working, onEdit }: { item: OutboxItem; working: boolean; o
   const actions = useActions();
   if (item.frame.type !== "prompt") return null;
   const id = idOf(item);
+  const session = item.frame.instanceId;
   let status: ReactNode = null;
   if (item.status === "waiting") {
     status = canCancel(item) ? (
@@ -488,6 +489,16 @@ function Sent({ item, working, onEdit }: { item: OutboxItem; working: boolean; o
       {item.status === "refused" && (
         <div className="refusal">
           ✗ {item.refusal?.message || "Your Mac didn't take this message."}{" "}
+          {/* A dialog the phone may not show (one touched at the desk) is open: its
+              terminal is where to answer it. */}
+          {item.refusal?.reason === "dialog-open" && (
+            <>
+              <button className="link" onClick={() => navigate({ screen: "terminal", id: session })}>
+                Open terminal
+              </button>{" "}
+              ·{" "}
+            </>
+          )}
           {onEdit && (
             <>
               <button className="link" onClick={() => onEdit(item)}>
@@ -576,6 +587,11 @@ function WorkingBar({ id, turn, since }: { id: string; turn: Turn | undefined; s
             </>
           )}
         </span>
+      )}
+      {stop?.status === "refused" && stop.refusal?.reason === "dialog-open" && (
+        <button className="wbtn" onClick={() => navigate({ screen: "terminal", id })}>
+          Open terminal
+        </button>
       )}
       <button className="stopbtn" disabled={!online || stopping} onClick={() => setConfirming(true)}>
         <i />
