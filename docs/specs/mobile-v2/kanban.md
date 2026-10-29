@@ -324,7 +324,7 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
 ### T-807: Session list and session chat
 
 - **Type:** feature
-- **Status:** in-progress
+- **Status:** done (75fc736, merged a1f2118)
 - **Story:** 2, 3, 4, 6
 - **Description:** Mockups 1A, 2.1, 2.2, 2.3, 4.2, built on T-806's store:
   - **List (plan A):** groups Needs you / Working / Finished / Idle with counts, empty ones
@@ -378,7 +378,7 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
 ### T-808: Dialogs
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** in-progress
 - **Story:** 5
 - **Description:** Mockups 3.1, 3.2, 3.3, from `prompt-state.dialog`:
   - **Permission:** a card in place of the compose box: NEEDS YOU, tool, subject as code,
@@ -409,6 +409,10 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
   `outbox` (items `waiting|sent|acked|refused|unknown`). A session's bubbles are its
   transcript plus `outbox.filter(i => instanceOf(i) === id)`. One screen = one file under
   `screens/` + its own CSS file.
+- **Note:** From T-807: replace `components/DialogSlot.tsx` (+ `dialog-slot.css`); SessionScreen
+  renders `<DialogSlot id dialog summary />` in place of the compose box and working bar
+  whenever `session.dialog !== null || instance.state === "needs-you"` (`dialog` may be null
+  before the prompt-state arrives). Reuse `components/Markdown.tsx` for the plan.
 - **Acceptance:** harness screenshots of each dialog (dark and light); with the harness,
   each dialog is answered and the harness records the exact `answer` frame (effects,
   1-based picks, text, feedback, confirmed). On an isolated dev build with a real Claude
@@ -642,3 +646,4 @@ shows each check state, gates the QR, sends a test push and revokes.
 - 2026-10-29: T-806 done and merged (4af00c1). Home Screen pairing hand-off added to T-811 and T-812 (G-306). T-807, T-809, T-811 started in parallel.
 - 2026-10-29: T-812 done and merged (c3e88c6), with G-304 wired (`instance-acknowledged`) and Copy pairing link.
 - 2026-10-29: T-811 done and merged (8d2d812): `renderer-mobile/push.ts`, service worker push handlers, settings on the setup screen, copy/paste hand-off. iPhone steps in `test-plan-iphone.md`.
+- 2026-10-29: T-807 done and merged (a1f2118); phone bundle 502 KB (+183 KB, react-markdown). T-808 started.
