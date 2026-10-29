@@ -573,3 +573,4 @@ shows each check state, gates the QR, sends a test push and revokes.
 - 2026-10-29: T-802 done and merged (e85b622): `pnpm harness`, `pnpm harness:shot`, README in `workspace/app/scripts/mobile-harness/`. T-806 started.
 - 2026-10-29: T-803 done and merged (dd85e29). G-303 resolved (OpenCode Stop = two Escs 250 ms apart, only for the running session the terminal shows). G-304 wiring added to T-812. T-810 started.
 - 2026-10-29: T-810 done and merged (56adbbd): `remote/push.ts`, `web-push`, `remote-test-push` IPC. T-812 started.
+- 2026-10-29: G-301 measured: stable through `tailscale serve` (Node and WebKit 10 min, iPhone 4 min visible, 0 drops).
