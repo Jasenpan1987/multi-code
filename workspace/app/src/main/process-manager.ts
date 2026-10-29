@@ -1428,6 +1428,21 @@ export class ProcessManager {
     }
   }
 
+  // The last `turns` turns of the session the phone has open (Backend.readRecentTurns),
+  // from the same session `readTranscript` reads. `turns` comes from the phone, so it
+  // is taken as a whole number of at least one.
+  readRecentTurns(id: string, turns: number): { entries: TranscriptEntry[]; hasEarlier: boolean } {
+    const instance = this.instances.get(id);
+    if (!instance) return { entries: [], hasEarlier: false };
+    const sessionId = this.readableSessionId(instance);
+    if (!sessionId) return { entries: [], hasEarlier: false };
+    try {
+      return getBackend(instance.backend).readRecentTurns(sessionId, Math.max(1, Math.floor(turns) || 1));
+    } catch {
+      return { entries: [], hasEarlier: false };
+    }
+  }
+
   // Whether this instance has any transcript to read, live or from disk. Lets a
   // caller give a specific reason rather than an empty list.
   hasReadableTranscript(id: string): boolean {

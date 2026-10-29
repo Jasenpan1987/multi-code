@@ -1,7 +1,7 @@
-// Reading a Claude session's JSONL: the entries the phone and the manager see
-// (`claudeTranscriptEntries`), and what the builder last said and what happened
-// since (`readBuilderTurn`), the secretary's material behind
-// `Backend.readBuilderTurn`.
+// Reading a Claude session's JSONL: the entries the manager sees
+// (`claudeTranscriptEntries`), what the builder last said and what happened since
+// (`readBuilderTurn`), the secretary's material behind `Backend.readBuilderTurn`, and
+// the phone's last turns (`readClaudeRecentTurns`, at the end).
 //
 // The builder's messages come from the raw rows, not from `readClaudeTranscript`,
 // which keeps every `isMeta` row with string content as a "user" entry and drops
@@ -16,7 +16,8 @@
 
 import fs from "fs";
 import type { TranscriptEntry } from "../../shared/remote-protocol";
-import type { BuilderTurn } from "./types";
+import type { BuilderTurn, RecentTurns } from "./types";
+import { RECENT_TURNS_ENTRY_CAP, lastTurns, lineCount, noTurns } from "./recentTurns";
 
 // For the language rule only: a bare "B" or "[Image #1]" as the latest message
 // falls back to these, newest first.
@@ -246,4 +247,260 @@ function summarizeTranscriptTool(name: string, input: unknown): string | undefin
     default:
       return str(record.description) ?? str(record.command);
   }
+}
+
+// ---------------------------------------------------------------- recent turns
+
+// Rows the turn reader never needs, told apart without parsing them. The CLI writes its
+// bookkeeping rows (`api-request`, `mode`, `last-prompt`, `queue-operation`, …) with
+// `type` as the first key, while user and assistant rows open with `parentUuid`. Of a
+// 24 MB session of the builder's (2026-10-29), `api-request` rows were 17.8 MB, each a
+// copy of the request so far; leaving them unparsed took a read of the whole file from
+// 60 ms to 20 ms.
+const TYPE_FIRST = Buffer.from('{"type":"');
+const MESSAGE_TYPE_FIRST = [Buffer.from('{"type":"user"'), Buffer.from('{"type":"assistant"')];
+
+function startsWith(buffer: Buffer, start: number, end: number, prefix: Buffer): boolean {
+  return (
+    end - start >= prefix.length &&
+    buffer.compare(prefix, 0, prefix.length, start, start + prefix.length) === 0
+  );
+}
+
+function isBookkeeping(buffer: Buffer, start: number, end: number): boolean {
+  return (
+    startsWith(buffer, start, end, TYPE_FIRST) &&
+    !MESSAGE_TYPE_FIRST.some((prefix) => startsWith(buffer, start, end, prefix))
+  );
+}
+
+// The parsed rows of a run of JSONL bytes. Only the lines that are kept are decoded.
+// `cut`: the bytes begin mid-file, so the first line is a fragment.
+function* jsonlRows(buffer: Buffer, cut: boolean): Generator<unknown> {
+  let start = 0;
+  if (cut) {
+    const newline = buffer.indexOf(0x0a);
+    start = newline === -1 ? buffer.length : newline + 1;
+  }
+  while (start < buffer.length) {
+    let end = buffer.indexOf(0x0a, start);
+    if (end === -1) end = buffer.length;
+    if (end > start && !isBookkeeping(buffer, start, end)) {
+      let row: unknown;
+      try {
+        row = JSON.parse(buffer.toString("utf8", start, end));
+      } catch {
+        // A row still being written, or a broken one.
+      }
+      if (row !== undefined) yield row;
+    }
+    start = end + 1;
+  }
+}
+
+function readRangeSync(fd: number, start: number, length: number): Buffer {
+  const buffer = Buffer.allocUnsafe(length);
+  let filled = 0;
+  while (filled < length) {
+    const read = fs.readSync(fd, buffer, filled, length - filled, start + filled);
+    if (read === 0) break;
+    filled += read;
+  }
+  return buffer.subarray(0, filled);
+}
+
+/**
+ * The last `turns` turns of a session JSONL (`Backend.readRecentTurns`). Reads the end
+ * of the file, doubled until it holds a turn more than asked for (which is how
+ * `hasEarlier` is known), more entries than the cap keeps, or the whole file, up to
+ * `maxBytes`. A read that stops at `maxBytes` says there is more, and its oldest turn
+ * may lack its start. Each widening reads and parses only the bytes before what it has,
+ * so no row is parsed twice.
+ */
+export function readClaudeRecentTurns(
+  jsonlPath: string,
+  turns: number,
+  window: { startBytes: number; maxBytes: number } = {
+    startBytes: TAIL_START_BYTES,
+    maxBytes: TAIL_MAX_BYTES,
+  }
+): RecentTurns {
+  let fd: number;
+  try {
+    fd = fs.openSync(jsonlPath, "r");
+  } catch {
+    return noTurns();
+  }
+  try {
+    const { size } = fs.fstatSync(fd);
+    // The rows parsed so far, in file order, and where the first of them begins. The
+    // line the window's edge cuts is left for the next widening to read whole.
+    let rows: unknown[] = [];
+    let parsedFrom = size;
+    // At least a byte, so the doubling below moves.
+    let length = Math.min(size, Math.max(1, window.startBytes), window.maxBytes);
+    for (;;) {
+      const start = size - length;
+      const chunk = readRangeSync(fd, start, parsedFrom - start);
+      rows = [...jsonlRows(chunk, start > 0), ...rows];
+      const newline = chunk.indexOf(0x0a);
+      if (start === 0) parsedFrom = 0;
+      else if (newline !== -1) parsedFrom = start + newline + 1;
+      const entries = claudeTurnEntries(rows);
+      const typed = entries.reduce((count, entry) => (entry.kind === "user" ? count + 1 : count), 0);
+      if (
+        start === 0 ||
+        length >= window.maxBytes ||
+        typed > turns ||
+        entries.length > RECENT_TURNS_ENTRY_CAP
+      ) {
+        return lastTurns(entries, turns, start > 0);
+      }
+      length = Math.min(size, length * 2, window.maxBytes);
+    }
+  } catch {
+    return noTurns();
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+/**
+ * The entries `readClaudeRecentTurns` shows, from session rows in file order. Unlike
+ * `claudeTranscriptEntries`, a "user" entry is only a message the builder typed
+ * (`typedText`) or a command of theirs that prompted the agent, so each one starts a
+ * turn; the other user rows the CLI writes (tool results, notifications, a local
+ * command's output, image notes) are left out. A tool entry is settled by its result:
+ * `outcome` from `is_error`, and an edit's or write's line counts from the record the
+ * CLI keeps beside the result.
+ */
+export function claudeTurnEntries(rows: Iterable<unknown>): TranscriptEntry[] {
+  const entries: TranscriptEntry[] = [];
+  // Tool uses still waiting for their result, by tool_use id.
+  const running = new Map<string, TranscriptEntry>();
+  // A command row, until the next row says whether it prompted the agent.
+  let command: TranscriptEntry | null = null;
+
+  for (const value of rows) {
+    if (typeof value !== "object" || value === null) continue;
+    const row = value as Record<string, unknown>;
+    // A command is the builder's turn when the CLI's next row is the prompt it hands the
+    // agent: an `isMeta` row that is the command row's child. A local command such as
+    // `/clear`, `/model` or `/compact` has its output or a system row as that child
+    // instead. Every command row on the builder's machine was followed directly by its
+    // child (2026-10-29).
+    const prompted = command;
+    command = null;
+    if (prompted && row.type === "user" && row.isMeta === true && row.parentUuid === prompted.id) {
+      entries.push(prompted);
+      continue;
+    }
+    const content = (row.message as Record<string, unknown> | undefined)?.content;
+
+    if (row.type === "user") {
+      if (Array.isArray(content)) settleResults(running, content, row.toolUseResult);
+      if (row.isMeta === true) continue;
+      const text = typedText(row);
+      if (text !== null) {
+        entries.push(fromRecord({ kind: "user", text }, row.uuid, row.timestamp));
+      } else {
+        const line = commandLine(content);
+        if (line) command = fromRecord({ kind: "user", text: line }, row.uuid, row.timestamp);
+      }
+      continue;
+    }
+
+    if (row.type !== "assistant" || !Array.isArray(content)) continue;
+    const uuid = typeof row.uuid === "string" ? row.uuid : undefined;
+    for (let index = 0; index < content.length; index++) {
+      const part = content[index] as Record<string, unknown> | null;
+      if (part?.type === "text" && typeof part.text === "string") {
+        const text = part.text.trim();
+        // One block per row in every transcript on the builder's machine (CLI 2.1.x);
+        // the index keeps several apart should a row hold more.
+        const id = uuid && index > 0 ? `${uuid}:${index}` : uuid;
+        if (text) entries.push(fromRecord({ kind: "assistant", text }, id, row.timestamp));
+      } else if (part?.type === "tool_use" && typeof part.name === "string") {
+        const entry = fromRecord(
+          { kind: "tool", tool: part.name, text: summarizeTranscriptTool(part.name, part.input) ?? "" },
+          part.id,
+          row.timestamp
+        );
+        // Without an id no result can be matched to it, so it never counts as running.
+        if (typeof part.id === "string") {
+          entry.pending = true;
+          running.set(part.id, entry);
+        }
+        entries.push(entry);
+      }
+    }
+  }
+  return entries;
+}
+
+// `id` and `at` from the record, when it has them.
+function fromRecord(entry: TranscriptEntry, id: unknown, timestamp: unknown): TranscriptEntry {
+  if (typeof id === "string" && id) entry.id = id;
+  const at = typeof timestamp === "string" ? Date.parse(timestamp) : NaN;
+  if (Number.isFinite(at)) entry.at = at;
+  return entry;
+}
+
+// The command line of a row that ran a command, as the builder typed it:
+// `<command-name>/omt:work</command-name>` and its `<command-args>`.
+function commandLine(content: unknown): string | null {
+  if (typeof content !== "string") return null;
+  const name = /<command-name>([^<]*)<\/command-name>/.exec(content)?.[1]?.trim();
+  if (!name) return null;
+  const args = /<command-args>([\s\S]*?)<\/command-args>/.exec(content)?.[1]?.trim();
+  return args ? `${name} ${args}` : name;
+}
+
+// Settles the tool uses a user row answers. The CLI writes one result per row (every
+// one of the 20 510 on the builder's machine), with the tool's own account of the call
+// as the row's `toolUseResult`; that is read only when the row answers a single call,
+// so it can't be credited to the wrong one.
+function settleResults(
+  running: Map<string, TranscriptEntry>,
+  content: unknown[],
+  toolUseResult: unknown
+): void {
+  const results = content.filter(
+    (part): part is Record<string, unknown> =>
+      (part as Record<string, unknown> | null)?.type === "tool_result" &&
+      typeof (part as Record<string, unknown>).tool_use_id === "string"
+  );
+  for (const result of results) {
+    const entry = running.get(result.tool_use_id as string);
+    if (!entry) continue;
+    running.delete(result.tool_use_id as string);
+    delete entry.pending;
+    entry.outcome = result.is_error === true ? "error" : "ok";
+    if (entry.outcome === "ok" && results.length === 1) {
+      Object.assign(entry, editedLines(toolUseResult));
+    }
+  }
+}
+
+// Lines an edit or a write changed, from the CLI's record of it: the hunks of its
+// `structuredPatch` (Edit, and Write over an existing file), or the whole content of a
+// file Write created (`type: "create"`, whose patch is empty).
+function editedLines(result: unknown): { added: number; removed: number } | undefined {
+  if (typeof result !== "object" || result === null) return undefined;
+  const record = result as Record<string, unknown>;
+  if (!Array.isArray(record.structuredPatch)) return undefined;
+  if (record.type === "create" && typeof record.content === "string") {
+    return { added: lineCount(record.content), removed: 0 };
+  }
+  let added = 0;
+  let removed = 0;
+  for (const hunk of record.structuredPatch as Array<{ lines?: unknown } | null>) {
+    if (!Array.isArray(hunk?.lines)) continue;
+    for (const line of hunk.lines) {
+      if (typeof line !== "string") continue;
+      if (line.startsWith("+")) added++;
+      else if (line.startsWith("-")) removed++;
+    }
+  }
+  return { added, removed };
 }

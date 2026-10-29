@@ -19,6 +19,7 @@ import Database from "better-sqlite3";
 vi.mock("./opencodeShellEnv", () => ({ opencodePathEnv: vi.fn(() => process.env) }));
 
 import { opencodePathEnv } from "./opencodeShellEnv";
+import { RECENT_TURNS_ENTRY_CAP } from "./recentTurns";
 import {
   BUILDER_TURN_SCAN_MESSAGES,
   latestRootSession,
@@ -28,6 +29,7 @@ import {
   readOpencodeBuilderTurn,
   readOpencodeContextUsage,
   readOpencodeContextWindow,
+  readOpencodeRecentTurns,
   readOpencodeTranscript,
   stripJsonc,
   summarizeOpencodeTool,
@@ -439,6 +441,112 @@ function turnSessions(): SessionSpec[] {
   ];
 }
 
+// A tool part with its own id and start time, as 2.x writes them; `state` whole.
+const part = (id: string, name: string, state: Record<string, unknown>, created = 500) => ({
+  type: "tool",
+  id,
+  name,
+  state,
+  time: { created, completed: created + 1 },
+});
+// A finished call: its output stays in SQLite, its metadata as given.
+const done = (input: Record<string, unknown>, metadata?: Record<string, unknown>) => ({
+  status: "completed",
+  input,
+  content: [{ type: "text", text: "tool output that is never shown" }],
+  ...(metadata ? { metadata } : {}),
+});
+const failed = (input: Record<string, unknown>) => ({
+  status: "error",
+  input,
+  error: { type: "tool.execution", message: "boom" },
+});
+const fileDiff = (file: string, additions: number, deletions: number) => ({
+  file,
+  patch: "diff text that is never shown",
+  status: "modified",
+  additions,
+  deletions,
+});
+const shellRow = (command: string, status: string, exit?: number): RowSpec => ({
+  type: "shell",
+  data: { shellID: `sh_${command}`, command, status, ...(exit === undefined ? {} : { exit }), time: { created: 1 } },
+});
+
+// Three turns in both vocabularies, for `readOpencodeRecentTurns`. Rows' `time_created`
+// is 10 000 minus their index (buildDb), parts' times are their own.
+const TURNS: SessionSpec = {
+  id: "ses_turns",
+  directory: "/repo/turns",
+  updated: 1,
+  rows: [
+    user("first ask"),
+    assistant([
+      reasoning("thinking"),
+      text("On it."),
+      part("call_t1", "shell", done({ command: "pnpm build" }, { status: "completed", exit: 0, truncated: false }), 501),
+      part("call_t2", "shell", done({ command: "pnpm test" }, { status: "completed", exit: 1, truncated: false }), 502),
+      part("call_t3", "edit", done({ path: "src/a.ts" }, { files: [fileDiff("src/a.ts", 2, 1)] }), 503),
+      part("call_t4", "patch", done({ patchText: PATCH_TEXT }, { files: [fileDiff("src/b.ts", 3, 0), fileDiff("src/c.ts", 1, 4)] }), 504),
+      part("call_t5", "write", done({ path: "src/new.ts", content: "x\n" }), 505),
+      part("call_t6", "read", failed({ path: "src/gone.ts" }), 506),
+    ]),
+    shellRow("ls", "exited", 0),
+    injected("synthetic", { text: "<system-reminder>reminder</system-reminder>" }),
+    user("second ask"),
+    assistant([
+      part("call_t7", "edit", done({ filePath: "/r/a.ts" }, { diff: "d", filediff: fileDiff("/r/a.ts", 5, 6) }), 601),
+      part("call_t8", "apply_patch", done({ patchText: "*** Begin Patch\n*** Delete File: old.txt\n*** End Patch" }, { files: [{ filePath: "old.txt", additions: 0, deletions: 1 }] }), 602),
+      part("call_t9", "write", done({ filePath: "/r/new.ts", content: "a\nb\n" }, { exists: false }), 603),
+      part("call_t10", "write", done({ filePath: "/r/old.ts", content: "a\n" }, { exists: true }), 604),
+      part("call_t11", "bash", done({ command: "make" }, { exit: 2, output: "o" }), 605),
+      part("call_t12", "shell", done({ command: "sleep 99" }, { timeout: true, truncated: false }), 606),
+      part("call_t13", "shell", done({ command: "yes" }, { signal: "SIGKILL", truncated: false }), 607),
+      part("call_t14", "question", failed({ questions: [{ question: "Ship it?" }] }), 608),
+    ]),
+    shellRow("false", "exited", 1),
+    user("third ask"),
+    user("", { files: [IMAGE] }),
+    assistant([
+      text("Working."),
+      part("call_t15", "shell", { status: "running", input: { command: "pnpm dev" }, metadata: {} }, 701),
+      { type: "tool", id: "call_t16", name: "grep", state: { status: "streaming", input: '{"pattern":"TO' }, time: { created: 702 } },
+    ]),
+    shellRow("top", "running"),
+  ],
+};
+
+// A custom tool whose metadata lists its files as paths, beside a real edit.
+const PATHS: SessionSpec = {
+  id: "ses_turns_paths",
+  directory: "/repo/turns",
+  updated: 1,
+  rows: [
+    user("tidy up"),
+    assistant([
+      text("Tidying."),
+      part("call_p1", "tidy", done({ description: "Tidy the folder" }, { files: ["src/a.ts", "src/b.ts"] }), 500),
+      part("call_p2", "edit", done({ path: "src/a.ts" }, { files: ["stray", fileDiff("src/a.ts", 1, 0)] }), 501),
+    ]),
+  ],
+};
+
+// Turns longer than the cap allows: three of 250 calls, and one of the cap and 50 more.
+const many = (prefix: string, count: number) =>
+  Array.from({ length: count }, (_, i) => part(`${prefix}_${i}`, "read", done({ path: `f${i}` })));
+const CAPPED: SessionSpec = {
+  id: "ses_turns_capped",
+  directory: "/repo/turns",
+  updated: 1,
+  rows: ["a", "b", "c"].flatMap((name) => [user(name), assistant(many(name, 250))]),
+};
+const LONG: SessionSpec = {
+  id: "ses_turns_long",
+  directory: "/repo/turns",
+  updated: 1,
+  rows: [user("long"), ...many("l", RECENT_TURNS_ENTRY_CAP + 50).map((call) => assistant([call]))],
+};
+
 // The models.dev catalog as OpenCode caches it: `body` is api.json's text.
 const CATALOG_BODY = {
   anthropic: {
@@ -485,7 +593,17 @@ beforeAll(() => {
     tmpLink = fs.mkdtempSync("/tmp/multicode-oc2-");
     realTmpDir = fs.realpathSync(tmpLink);
   }
-  const sessions = [NATIVE, LEGACY, ...lookupSessions(), ...usageSessions(), ...turnSessions()];
+  const sessions = [
+    NATIVE,
+    LEGACY,
+    ...lookupSessions(),
+    ...usageSessions(),
+    ...turnSessions(),
+    TURNS,
+    PATHS,
+    CAPPED,
+    LONG,
+  ];
   if (realTmpDir) sessions.push({ id: "ses_private_tmp", directory: realTmpDir, updated: 50 });
   dbFile = buildDb(path.join(dir, "opencode.db"), sessions, catalog(CATALOG_BODY, 1_700_000_000_000));
   // Read-only on disk: a reader that tried to write, or needed a write lock, fails.
@@ -686,6 +804,15 @@ describe("readOpencodeTranscript", () => {
           },
         });
       }
+      const iterate = statement.iterate.bind(statement) as (...args: unknown[]) => Iterable<unknown>;
+      Object.assign(statement, {
+        iterate: function* (...args: unknown[]) {
+          for (const row of iterate(...args)) {
+            returned.push(JSON.stringify(row) ?? "");
+            yield row;
+          }
+        },
+      });
       return statement;
     });
     try {
@@ -693,19 +820,215 @@ describe("readOpencodeTranscript", () => {
       readOpencodeBuilderTurn("ses_native", dbFile);
       readOpencodeBuilderTurn("ses_untyped", dbFile);
       readOpencodeContextUsage("ses_native", dbFile, NO_CONFIG());
+      readOpencodeRecentTurns("ses_native", 10, dbFile);
+      readOpencodeRecentTurns("ses_turns", 10, dbFile);
     } finally {
       spy.mockRestore();
     }
     expect(returned.length).toBeGreaterThan(5);
     expect(returned.filter((rows) => rows.includes("iVBORw0KGgo"))).toEqual([]);
-    // And no tool's output, which the transcript never shows either.
+    // And no tool's output, which the transcript never shows either, nor a diff's text.
     expect(returned.filter((rows) => rows.includes("tool output that is never shown"))).toEqual([]);
+    expect(returned.filter((rows) => rows.includes("diff text that is never shown"))).toEqual([]);
   });
 
   it("is empty for an unknown session, a zero limit or an unreadable database", () => {
     expect(readOpencodeTranscript("ses_gone", 40, dbFile)).toEqual([]);
     expect(readOpencodeTranscript("ses_native", 0, dbFile)).toEqual([]);
     expect(readOpencodeTranscript("ses_native", 40, MISSING())).toEqual([]);
+  });
+});
+
+describe("readOpencodeRecentTurns", () => {
+  const T = 10_000;
+  const TURN_1 = [
+    { kind: "user", id: "msg_ses_turns_0", at: T, text: "first ask" },
+    { kind: "assistant", id: "msg_ses_turns_1:1", at: T - 1, text: "On it." },
+    { kind: "tool", id: "call_t1", at: 501, tool: "shell", text: "pnpm build", outcome: "ok" },
+    { kind: "tool", id: "call_t2", at: 502, tool: "shell", text: "pnpm test", outcome: "error" },
+    { kind: "tool", id: "call_t3", at: 503, tool: "edit", text: "src/a.ts", outcome: "ok", added: 2, removed: 1 },
+    { kind: "tool", id: "call_t4", at: 504, tool: "patch", text: "src/b.ts", outcome: "ok", added: 4, removed: 4 },
+    // 2.x's write records no diff once it has run.
+    { kind: "tool", id: "call_t5", at: 505, tool: "write", text: "src/new.ts", outcome: "ok" },
+    { kind: "tool", id: "call_t6", at: 506, tool: "read", text: "src/gone.ts", outcome: "error" },
+    // The human's own `!ls`.
+    { kind: "tool", id: "msg_ses_turns_2", at: T - 2, tool: "shell", text: "ls", outcome: "ok" },
+  ];
+  const TURN_2 = [
+    { kind: "user", id: "msg_ses_turns_4", at: T - 4, text: "second ask" },
+    { kind: "tool", id: "call_t7", at: 601, tool: "edit", text: "/r/a.ts", outcome: "ok", added: 5, removed: 6 },
+    { kind: "tool", id: "call_t8", at: 602, tool: "apply_patch", text: "old.txt", outcome: "ok", added: 0, removed: 1 },
+    { kind: "tool", id: "call_t9", at: 603, tool: "write", text: "/r/new.ts", outcome: "ok", added: 2, removed: 0 },
+    // A 1.x write over a file that existed: what it replaced isn't recorded.
+    { kind: "tool", id: "call_t10", at: 604, tool: "write", text: "/r/old.ts", outcome: "ok" },
+    { kind: "tool", id: "call_t11", at: 605, tool: "bash", text: "make", outcome: "error" },
+    { kind: "tool", id: "call_t12", at: 606, tool: "shell", text: "sleep 99", outcome: "error" },
+    { kind: "tool", id: "call_t13", at: 607, tool: "shell", text: "yes", outcome: "error" },
+    { kind: "tool", id: "call_t14", at: 608, tool: "question", text: "Ship it?", outcome: "error" },
+    { kind: "tool", id: "msg_ses_turns_6", at: T - 6, tool: "shell", text: "false", outcome: "error" },
+  ];
+  const TURN_3 = [
+    { kind: "user", id: "msg_ses_turns_7", at: T - 7, text: "third ask" },
+    { kind: "assistant", id: "msg_ses_turns_9:0", at: T - 9, text: "Working." },
+    { kind: "tool", id: "call_t15", at: 701, tool: "shell", text: "pnpm dev", pending: true },
+    { kind: "tool", id: "call_t16", at: 702, tool: "grep", text: "", pending: true },
+    { kind: "tool", id: "msg_ses_turns_10", at: T - 10, tool: "shell", text: "top", pending: true },
+  ];
+
+  it("reads every turn with ids, times, outcomes and line counts, in both vocabularies", () => {
+    expect(readOpencodeRecentTurns("ses_turns", 10, dbFile)).toEqual({
+      entries: [...TURN_1, ...TURN_2, ...TURN_3],
+      hasEarlier: false,
+    });
+  });
+
+  it("selects the last turns and says earlier ones exist", () => {
+    expect(readOpencodeRecentTurns("ses_turns", 1, dbFile)).toEqual({ entries: TURN_3, hasEarlier: true });
+    expect(readOpencodeRecentTurns("ses_turns", 2, dbFile)).toEqual({
+      entries: [...TURN_2, ...TURN_3],
+      hasEarlier: true,
+    });
+    expect(readOpencodeRecentTurns("ses_turns", 3, dbFile).hasEarlier).toBe(false);
+  });
+
+  it("stops at the first entry of the turn before the ones asked for", () => {
+    const read: unknown[] = [];
+    const prepare = Database.prototype.prepare;
+    const spy = vi.spyOn(Database.prototype, "prepare").mockImplementation(function (
+      this: Database.Database,
+      sql: string
+    ) {
+      const statement = prepare.call(this, sql);
+      const all = statement.all.bind(statement) as (...args: unknown[]) => unknown[];
+      Object.assign(statement, {
+        all: (...args: unknown[]) => {
+          read.push(args[0]);
+          return all(...args);
+        },
+      });
+      return statement;
+    });
+    try {
+      readOpencodeRecentTurns("ses_turns", 1, dbFile);
+      readOpencodeRecentTurns("ses_turns", 2, dbFile);
+    } finally {
+      spy.mockRestore();
+    }
+    // One turn: the third turn's step only; the second's (row 5) is never opened. Two:
+    // the first turn's step (row 1), right before them, isn't either.
+    expect(read).toEqual(["msg_ses_turns_9", "msg_ses_turns_9", "msg_ses_turns_5"]);
+  });
+
+  it("caps a read, dropping whole turns from the oldest", () => {
+    const capped = readOpencodeRecentTurns("ses_turns_capped", 10, dbFile);
+    expect(capped.hasEarlier).toBe(true);
+    expect(capped.entries).toHaveLength(502);
+    expect(capped.entries[0]).toMatchObject({ kind: "user", text: "b" });
+
+    // A newest turn longer than the cap keeps its end.
+    const long = readOpencodeRecentTurns("ses_turns_long", 10, dbFile);
+    expect(long.hasEarlier).toBe(true);
+    expect(long.entries).toHaveLength(RECENT_TURNS_ENTRY_CAP);
+    expect(long.entries.at(-1)?.id).toBe(`l_${RECENT_TURNS_ENTRY_CAP + 49}`);
+  });
+
+  it("keeps a step whose tool lists its files as paths, counting no lines for it", () => {
+    expect(readOpencodeRecentTurns("ses_turns_paths", 10, dbFile).entries).toEqual([
+      { kind: "user", id: "msg_ses_turns_paths_0", at: 10_000, text: "tidy up" },
+      { kind: "assistant", id: "msg_ses_turns_paths_1:0", at: 9_999, text: "Tidying." },
+      { kind: "tool", id: "call_p1", at: 500, tool: "tidy", text: "Tidy the folder", outcome: "ok" },
+      { kind: "tool", id: "call_p2", at: 501, tool: "edit", text: "src/a.ts", outcome: "ok", added: 1, removed: 0 },
+    ]);
+  });
+
+  it("skips rows that aren't valid JSON", () => {
+    expect(readOpencodeRecentTurns("ses_garbled", 10, dbFile).entries.map((entry) => entry.text)).toEqual([
+      "first",
+      "still here",
+    ]);
+  });
+
+  it("is empty for an unknown session or an unreadable database", () => {
+    expect(readOpencodeRecentTurns("ses_gone", 10, dbFile)).toEqual({ entries: [], hasEarlier: false });
+    expect(readOpencodeRecentTurns("ses_turns", 10, MISSING())).toEqual({ entries: [], hasEarlier: false });
+  });
+});
+
+// The rows OpenCode 2.0.32 itself wrote in the T-601 scenarios (`__fixtures__/opencode-v2/
+// db-rows.json`), in a database built from its own DDL.
+describe("readOpencodeRecentTurns on recorded rows", () => {
+  const recorded = JSON.parse(
+    fs.readFileSync(path.join(__dirname, "__fixtures__", "opencode-v2", "db-rows.json"), "utf8")
+  ) as {
+    ddl: Record<string, string>;
+    session_v2: Record<string, unknown>[];
+    session_message: Array<Record<string, unknown> & { session_id: string; seq: number; data: Record<string, unknown> }>;
+  };
+  let recordedDb = "";
+
+  beforeAll(() => {
+    recordedDb = path.join(dir, "recorded.db");
+    const db = new Database(recordedDb);
+    db.pragma("foreign_keys = OFF");
+    // The two tables the reader touches; their foreign key's `project` isn't recorded.
+    db.exec(recorded.ddl.session_v2);
+    db.exec(recorded.ddl.session_message);
+    const insert = (table: string, row: Record<string, unknown>) => {
+      const keys = Object.keys(row);
+      db.prepare(`INSERT INTO ${table} (${keys.join(", ")}) VALUES (${keys.map(() => "?").join(", ")})`).run(
+        ...keys.map((key) => {
+          const value = row[key];
+          return value !== null && typeof value === "object" ? JSON.stringify(value) : value;
+        })
+      );
+    };
+    for (const row of recorded.session_v2) insert("session_v2", row);
+    for (const row of recorded.session_message) insert("session_message", row);
+    db.close();
+  });
+
+  // What the recorded rows say, read straight from the fixture.
+  function expectedFor(sessionId: string) {
+    const rows = recorded.session_message.filter((row) => row.session_id === sessionId).sort((a, b) => a.seq - b.seq);
+    const entries: Record<string, unknown>[] = [];
+    for (const row of rows) {
+      if (row.type === "user") entries.push({ kind: "user", id: row.id, at: row.time_created });
+      if (row.type !== "assistant") continue;
+      (row.data.content as Record<string, unknown>[]).forEach((item, key) => {
+        if (item.type === "text") entries.push({ kind: "assistant", id: `${row.id as string}:${key}`, at: row.time_created });
+        if (item.type !== "tool") return;
+        const state = item.state as { status: string };
+        entries.push({
+          kind: "tool",
+          id: item.id,
+          at: (item.time as { created: number }).created,
+          tool: item.name,
+          outcome: state.status === "completed" ? "ok" : "error",
+        });
+      });
+    }
+    return entries;
+  }
+
+  it("reads every recorded session's entries with the ids, times and outcomes OpenCode wrote", () => {
+    const sessions = recorded.session_v2.map((row) => row.id as string);
+    expect(sessions).toHaveLength(5);
+    for (const sessionId of sessions) {
+      const { entries, hasEarlier } = readOpencodeRecentTurns(sessionId, 10, recordedDb);
+      expect(hasEarlier).toBe(false);
+      expect(entries).toMatchObject(expectedFor(sessionId));
+      expect(entries.length).toBe(expectedFor(sessionId).length);
+    }
+  });
+
+  it("reads a shell call cut by a service restart as failed, and its rerun as done", () => {
+    const { entries } = readOpencodeRecentTurns("ses_eaab49affffeiBK1cNpR5BBiNs", 10, recordedDb);
+    expect(entries.map((entry) => [entry.kind, entry.tool, entry.outcome])).toEqual([
+      ["user", undefined, undefined],
+      ["tool", "shell", "error"],
+      ["tool", "shell", "ok"],
+      ["assistant", undefined, undefined],
+    ]);
   });
 });
 
@@ -1018,6 +1341,28 @@ describe("stripJsonc", () => {
 
 // Opt-in, read-only: OPENCODE_DB_SMOKE=1 pnpm vitest run src/main/backends/opencodeDb.test.ts -t smoke
 // Prints counts and shapes only, never message text.
+// What the phone's turn reader makes of a real session, as counts.
+function recentTurnsReport(sessionId: string) {
+  const started = performance.now();
+  const { entries, hasEarlier } = readOpencodeRecentTurns(sessionId, 10);
+  const count = (keep: (entry: (typeof entries)[number]) => boolean) => entries.filter(keep).length;
+  return {
+    recentTurns: {
+      entries: entries.length,
+      hasEarlier,
+      typed: count((entry) => entry.kind === "user"),
+      ok: count((entry) => entry.outcome === "ok"),
+      error: count((entry) => entry.outcome === "error"),
+      pending: count((entry) => entry.pending === true),
+      lineCounts: count((entry) => entry.added !== undefined),
+      withoutId: count((entry) => !entry.id),
+      withoutTime: count((entry) => entry.at === undefined),
+      duplicateIds: entries.length - new Set(entries.map((entry) => entry.id)).size,
+      ms: Math.round(performance.now() - started),
+    },
+  };
+}
+
 describe.runIf(process.env.OPENCODE_DB_SMOKE === "1")("smoke: the builder's real database", () => {
   it("reads the newest root sessions", () => {
     const file = opencodeDbPath();
@@ -1061,6 +1406,7 @@ describe.runIf(process.env.OPENCODE_DB_SMOKE === "1")("smoke: the builder's real
           contextWindow: usage.contextWindow ?? null,
         },
         ms: Math.round(performance.now() - started),
+        ...recentTurnsReport(root.id),
       });
     }
     const after = fs.statSync(file).mtimeMs;

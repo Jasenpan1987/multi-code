@@ -21,6 +21,7 @@ import {
   latestRootSession,
   readOpencodeBuilderTurn,
   readOpencodeContextUsage,
+  readOpencodeRecentTurns,
   readOpencodeTranscript,
 } from "./opencodeDb";
 import { registrationPath } from "./opencodeService";
@@ -369,6 +370,10 @@ export const opencodeBackend: Backend = {
   // OpenCode 2's own tables, read-only (opencodeDb.ts).
   readTranscript(sessionId, limit) {
     return readOpencodeTranscript(sessionId, limit);
+  },
+
+  readRecentTurns(sessionId, turns) {
+    return readOpencodeRecentTurns(sessionId, turns);
   },
 
   async readBuilderTurn(sessionId) {
