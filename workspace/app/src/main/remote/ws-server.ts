@@ -95,6 +95,7 @@ const CONTENT_TYPES: Record<string, string> = {
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
   ".png": "image/png",
   ".svg": "image/svg+xml",
   ".woff": "font/woff",
@@ -753,12 +754,22 @@ export class RemoteServer {
     }
 
     const type = CONTENT_TYPES[path.extname(resolved).toLowerCase()] ?? "application/octet-stream";
+    // Every file is checked with the server on every load (`no-cache`), and the
+    // tag makes that check a 304 when nothing changed. The files keep fixed names
+    // across builds (bundle.js, sw.js), so a cached copy must never outlive one:
+    // index.html and a stale bundle.js would not match, and a stale sw.js would
+    // keep the phone on an old build. Offline starts come from the service
+    // worker's own cache, not the HTTP cache.
+    const etag = `W/"${stat.size.toString(16)}-${Math.trunc(stat.mtimeMs).toString(16)}"`;
+    const headers = { "cache-control": "no-cache", etag };
+    if (req.headers["if-none-match"] === etag) {
+      res.writeHead(304, headers).end();
+      return;
+    }
     res.writeHead(200, {
+      ...headers,
       "content-type": type,
       "content-length": stat.size,
-      // The client is served over plain HTTP on a LAN/Tailscale address, so
-      // there's no TLS to lean on; keep it from being cached across versions.
-      "cache-control": "no-store",
     });
     if (req.method === "HEAD") {
       res.end();

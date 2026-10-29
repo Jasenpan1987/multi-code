@@ -1,11 +1,33 @@
-// mobile-v2 T-806..T-809: placeholder while the phone app is rewritten from
-// scratch against protocol v3. Imports nothing else from this folder on purpose.
+// The phone app's screens, chosen by the route (routes.ts). Each screen is its own
+// file under screens/ with its own CSS file; adding one means a case here.
+
+import { useEffect } from "react";
+import { openIdOf, useRoute } from "./routes";
+import { ListScreen } from "./screens/ListScreen";
+import { SessionScreen } from "./screens/SessionScreen";
+import { SetupScreen } from "./screens/SetupScreen";
+import { TerminalScreen } from "./screens/TerminalScreen";
+import { useActions, useApp } from "./store";
 
 export function App() {
-  return (
-    <div style={{ padding: 24, fontFamily: "system-ui, sans-serif", lineHeight: 1.4 }}>
-      <h1 style={{ fontSize: 20, margin: "0 0 8px" }}>Multi-Code</h1>
-      <p style={{ margin: 0 }}>The new phone app is being built.</p>
-    </div>
-  );
+  const actions = useActions();
+  const route = useRoute(actions.pair);
+  const paired = useApp((s) => s.pairing !== null);
+
+  // The open session follows the route: one subscription for its chat and its
+  // terminal, so switching between them doesn't resubscribe.
+  const openId = paired ? openIdOf(route) : null;
+  useEffect(() => actions.open(openId), [actions, openId]);
+
+  if (!paired) return <SetupScreen />;
+  switch (route.screen) {
+    case "setup":
+      return <SetupScreen />;
+    case "list":
+      return <ListScreen />;
+    case "session":
+      return <SessionScreen key={route.id} id={route.id} />;
+    case "terminal":
+      return <TerminalScreen key={route.id} id={route.id} />;
+  }
 }

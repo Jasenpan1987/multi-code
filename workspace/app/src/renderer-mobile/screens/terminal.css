@@ -1,0 +1,9 @@
+/* Terminal fallback. mobile-v2 T-809: placeholder styles, replaced with mockup 4.1's. */
+
+.terminal-screen .facts {
+  margin: 0;
+  padding: 14px 16px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--muted);
+}
