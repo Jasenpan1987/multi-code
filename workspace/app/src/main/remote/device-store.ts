@@ -5,6 +5,7 @@
 import fs from "fs";
 import path from "path";
 import { app } from "electron";
+import type { RemotePushSubscription } from "../../shared/remote-protocol";
 
 export interface StoredDevice {
   id: string;
@@ -12,6 +13,11 @@ export interface StoredDevice {
   token: string;
   pairedAt: number;
   lastSeenAt: number;
+  // The phone's Web Push subscription, from its `push-subscribe`. Absent:
+  // notifications are off on it (or it has never turned them on).
+  push?: RemotePushSubscription;
+  // The last push to it that failed, and why; cleared by the next one that works.
+  lastPushError?: string;
 }
 
 function storePath(): string {
@@ -31,7 +37,8 @@ export function loadDevices(): StoredDevice[] {
   return [];
 }
 
-// Written 0600: the file holds bearer tokens that grant terminal access.
+// Written 0600: the file holds bearer tokens that grant terminal access, and the
+// phones' push subscriptions.
 export function saveDevices(devices: StoredDevice[]) {
   const file = storePath();
   const dir = path.dirname(file);

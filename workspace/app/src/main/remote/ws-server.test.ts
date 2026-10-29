@@ -1,8 +1,12 @@
 // Integration test: drives the real RemoteServer over a real socket with a real
-// NaCl handshake. This is the part where a subtle framing or auth bug would be
-// invisible to unit tests but break every phone.
+// NaCl handshake, with the desktop's real RemoteHost (remote-host.ts) on top of a
+// fake process manager. This is the part where a subtle framing, auth or ack bug
+// would be invisible to unit tests but break every phone, and where an answer is
+// followed through to the keys process-manager would write. Web Push's send is
+// mocked: no test reaches a push service.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import crypto from "crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -18,11 +22,28 @@ vi.mock("electron", () => ({
   },
 }));
 
+// Everything else of web-push is real: the keys it generates, the JWT it signs.
+const sendNotification = vi.fn();
+vi.mock("web-push", async (importOriginal) => {
+  const actual = (await importOriginal<{ default: typeof import("web-push") }>()).default;
+  return { default: { ...actual, sendNotification } };
+});
+
 const { RemoteServer } = await import("./ws-server");
+const { createRemoteHost, firstSentence } = await import("./remote-host");
 const { REMOTE_PROTOCOL_VERSION } = await import("../../shared/remote-protocol");
-type TranscriptEntry =
-  import("../../shared/remote-protocol").TranscriptEntry;
-type PromptDetail = import("./promptExtract").PromptDetail;
+const { extractPromptDetail } = await import("./promptExtract");
+const { permissionDetail, permissionToolCall } = await import("../backends/opencodePrompt");
+const { topicOf } = await import("./push");
+const { default: webpush } = await import("web-push");
+
+type TranscriptEntry = import("../../shared/remote-protocol").TranscriptEntry;
+type HostProcessManager = import("./remote-host").HostProcessManager;
+type InstanceInfo = import("../process-manager").InstanceInfo;
+type SecretaryEvent = import("../process-manager").SecretaryEvent;
+type SecretaryEventListener = import("../process-manager").SecretaryEventListener;
+type AnswerOutcome = import("../process-manager").AnswerOutcome;
+type AnswerPlan = import("../secretary/dialog").AnswerPlan;
 
 type AnyRecord = Record<string, unknown>;
 
@@ -47,7 +68,7 @@ class TestClient {
 
     this.socket.on("message", (raw) => this.onMessage(raw.toString()));
 
-    const helloPromise = this.nextPlain();
+    const helloPromise = this.next();
     this.socket.send(
       JSON.stringify({
         type: "client-hello",
@@ -119,10 +140,6 @@ class TestClient {
     this.socket.send(text);
   }
 
-  private nextPlain(): Promise<AnyRecord> {
-    return this.next();
-  }
-
   next(timeoutMs = 3000): Promise<AnyRecord> {
     const queued = this.queue.shift();
     if (queued) return Promise.resolve(queued);
@@ -138,15 +155,43 @@ class TestClient {
     });
   }
 
-  // Skip frames until one of `type` arrives, so a test doesn't depend on the
-  // exact ordering of unrelated pushes.
-  async waitFor(type: string, timeoutMs = 3000): Promise<AnyRecord> {
+  // Skip frames until one of `type` (that `match` accepts) arrives, so a test
+  // doesn't depend on the exact ordering of unrelated pushes.
+  async waitFor(
+    type: string,
+    match: (frame: AnyRecord) => boolean = () => true,
+    timeoutMs = 3000
+  ): Promise<AnyRecord> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new Error(`timed out waiting for ${type}`);
       const frame = await this.next(remaining);
-      if (frame.type === type) return frame;
+      if (frame.type === type && match(frame)) return frame;
+    }
+  }
+
+  ack(clientMsgId: string): Promise<AnyRecord> {
+    return this.waitFor("ack", (f) => f.clientMsgId === clientMsgId);
+  }
+
+  // The first list in which instance `id` matches.
+  async instance(id: string, match: (row: AnyRecord) => boolean): Promise<AnyRecord> {
+    const frame = await this.waitFor("instances", (f) =>
+      (f.instances as AnyRecord[]).some((row) => row.id === id && match(row))
+    );
+    return (frame.instances as AnyRecord[]).find((row) => row.id === id)!;
+  }
+
+  // Every frame up to the reply to a ping sent now.
+  async drain(): Promise<AnyRecord[]> {
+    const at = Math.random();
+    this.send({ type: "ping", at });
+    const seen: AnyRecord[] = [];
+    for (;;) {
+      const frame = await this.next();
+      if (frame.type === "pong" && frame.at === at) return seen;
+      seen.push(frame);
     }
   }
 
@@ -168,92 +213,259 @@ class TestClient {
   }
 }
 
+// What process-manager would say about its instances, and what was asked of it.
+class FakeProcessManager implements HostProcessManager {
+  instances = new Map<string, InstanceInfo>();
+  events = new Map<string, SecretaryEvent>();
+  // The latest turn per instance, which the list's line is read from (one turn).
+  turns = new Map<string, TranscriptEntry[]>();
+  sizes = new Map<string, { cols: number; rows: number }>();
+  // What a subscribed phone is sent (the turns it asked for).
+  transcript: TranscriptEntry[] = [
+    { kind: "user", text: "run the tests" },
+    { kind: "tool", tool: "Bash", text: "pnpm test", pending: true },
+  ];
+  hasEarlier = false;
+  transcriptTurns: number[] = [];
+  answerOutcome: () => Promise<AnswerOutcome> = async () => ({ ok: true });
+  interruptResult = true;
+  // Instances whose answer's keys are still going in.
+  answering = new Set<string>();
+  // Instances whose terminal shows no running turn (OpenCode on another session).
+  offScreen = new Set<string>();
+  // Instances whose agent says a dialog is on screen (HookAttention.dialogOnScreen).
+  dialogsUp = new Set<string>();
+  answers: { id: string; seq: number; plan: AnswerPlan }[] = [];
+  prompts: { id: string; text: string }[] = [];
+  writes: { id: string; data: string }[] = [];
+  interrupts: string[] = [];
+  turnReads = 0;
+  transcriptReads = 0;
+  private listeners = new Set<SecretaryEventListener>();
+
+  add(info: Partial<InstanceInfo> & { id: string }) {
+    this.instances.set(info.id, {
+      cwd: `/tmp/${info.id}`,
+      name: info.id,
+      status: "running",
+      startedAt: 1,
+      backend: "claude",
+      ...info,
+    });
+  }
+
+  raise(id: string, event: SecretaryEvent) {
+    this.events.set(id, event);
+    for (const listener of this.listeners) listener(id, event);
+  }
+
+  clear(id: string) {
+    this.events.delete(id);
+    for (const listener of this.listeners) listener(id, null);
+  }
+
+  setWorking(id: string, working: boolean, since = Date.now()) {
+    const info = this.instances.get(id)!;
+    info.working = working || undefined;
+    info.workingSince = working ? since : undefined;
+  }
+
+  listInstances() {
+    return [...this.instances.values()].map((i) => ({ ...i }));
+  }
+  infoOf(id: string) {
+    const info = this.instances.get(id);
+    return info ? { ...info } : undefined;
+  }
+  secretaryEventOf(id: string) {
+    return this.events.get(id);
+  }
+  onSecretaryEvent(listener: SecretaryEventListener) {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+  async answerDialog(id: string, seq: number, plan: AnswerPlan) {
+    this.answers.push({ id, seq, plan });
+    return this.answerOutcome();
+  }
+  isAnswering(id: string) {
+    return this.answering.has(id);
+  }
+  canInterrupt(id: string) {
+    return !this.offScreen.has(id);
+  }
+  dialogOnScreen(id: string) {
+    return this.dialogsUp.has(id);
+  }
+  sendPrompt(id: string, text: string) {
+    this.prompts.push({ id, text });
+  }
+  writeToInstance(id: string, data: string) {
+    this.writes.push({ id, data });
+  }
+  async interruptInstance(id: string) {
+    this.interrupts.push(id);
+    return this.interruptResult;
+  }
+  // The host reads one turn for a list line, and the phone's own count of turns
+  // for a transcript; the fake keeps the two apart to count them.
+  readRecentTurns(id: string, turns: number) {
+    if (turns === 1) {
+      this.turnReads++;
+      return { entries: this.turns.get(id) ?? [], hasEarlier: false };
+    }
+    this.transcriptReads++;
+    this.transcriptTurns.push(turns);
+    // From the session the instance is on, as process-manager reads it.
+    const session = this.instances.get(id)?.sessionId;
+    return { entries: this.transcript, hasEarlier: this.hasEarlier, ...(session ? { session } : {}) };
+  }
+  ptySizeOf(id: string) {
+    if (this.instances.get(id)?.status !== "running") return null;
+    return this.sizes.get(id) ?? { cols: 120, rows: 30 };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Dialogs, as the agents report them
+// ---------------------------------------------------------------------------
+
+const BASH_INPUT = { command: "pnpm test:e2e", description: "Run the end-to-end tests" };
+
+function bash(seq: number, at = 1000): SecretaryEvent {
+  return {
+    kind: "needs-you",
+    seq,
+    at,
+    prompt: { detail: extractPromptDetail("Bash", BASH_INPUT)!, toolName: "Bash", toolInput: BASH_INPUT },
+  };
+}
+
+const QUESTIONS_INPUT = {
+  questions: [
+    {
+      question: "Which database?",
+      header: "DB",
+      multiSelect: false,
+      options: [{ label: "Postgres" }, { label: "SQLite", description: "One file" }],
+    },
+    {
+      question: "Which extras?",
+      header: "Extras",
+      multiSelect: true,
+      options: [{ label: "Cache" }, { label: "Metrics" }, { label: "Tracing" }],
+    },
+  ],
+};
+
+function questions(seq: number): SecretaryEvent {
+  return {
+    kind: "needs-you",
+    seq,
+    at: 1000,
+    prompt: {
+      detail: extractPromptDetail("AskUserQuestion", QUESTIONS_INPUT)!,
+      toolName: "AskUserQuestion",
+      toolInput: QUESTIONS_INPUT,
+    },
+  };
+}
+
+const PLAN_INPUT = { plan: "# Add dark mode\n\n1. Theme tokens\n2. A toggle" };
+
+function plan(seq: number): SecretaryEvent {
+  return {
+    kind: "needs-you",
+    seq,
+    at: 1000,
+    prompt: {
+      detail: extractPromptDetail("ExitPlanMode", PLAN_INPUT)!,
+      toolName: "ExitPlanMode",
+      toolInput: PLAN_INPUT,
+    },
+  };
+}
+
+const OC_REQUEST = {
+  id: "per_1",
+  sessionID: "ses_1",
+  action: "shell",
+  resources: ["rm -rf build"],
+  save: ["rm *"],
+};
+
+function ocPermission(seq: number): SecretaryEvent {
+  const call = permissionToolCall(OC_REQUEST);
+  return {
+    kind: "needs-you",
+    seq,
+    at: 1000,
+    prompt: { detail: permissionDetail(OC_REQUEST), ...call },
+  };
+}
+
+// An MCP elicitation: needs you, with nothing the desktop can answer.
+const elicitation = (seq: number): SecretaryEvent => ({ kind: "needs-you", seq, at: 1000 });
+
+const finished = (seq: number, at = 2000): SecretaryEvent => ({ kind: "finished", seq, at });
+
+// ---------------------------------------------------------------------------
+// Fixture
+// ---------------------------------------------------------------------------
+
 interface Fixture {
   server: InstanceType<typeof RemoteServer>;
+  pm: FakeProcessManager;
   url: string;
   token: string;
   hostPublicKey: string;
-  writes: Array<{ id: string; data: string }>;
-  prompts: Array<{ id: string; text: string }>;
-  // Every tap the server handed the host, with the prompt it held for it.
-  choices: Array<{ id: string; detail: PromptDetail; index: number }>;
-  // Replaces the Claude-like default, to play a host answering through an API.
-  answerChoice?: (id: string, detail: PromptDetail, index: number) => Promise<boolean>;
-  // How many times the host's transcript source has been read. A getter, so it
-  // reflects the live count rather than its value at fixture creation.
-  readonly transcriptReads: number;
 }
 
 const fixtures: Fixture[] = [];
 
-async function startServer(): Promise<Fixture> {
-  const server = new RemoteServer();
-  const writes: Array<{ id: string; data: string }> = [];
-  const prompts: Array<{ id: string; text: string }> = [];
-  const transcript: TranscriptEntry[] = [
-    { kind: "user", text: "run the tests" },
-    { kind: "tool", tool: "Bash", text: "pnpm test", pending: true },
-  ];
-  // Counts reads so the throttling tests can assert how often the (real-world:
-  // file/sqlite-backed) transcript source is hit.
-  const reads = { count: 0 };
-  const choices: Fixture["choices"] = [];
-  const answerChoice = (id: string, detail: PromptDetail, index: number): Promise<boolean> => {
-    choices.push({ id, detail, index });
-    if (fixture.answerChoice) return fixture.answerChoice(id, detail, index);
-    const count = detail.options.length;
-    if (!(index >= 0 && index < count && count <= 9)) return Promise.resolve(false);
-    writes.push({ id, data: String(index + 1) });
-    return Promise.resolve(true);
-  };
-
-  server.setHost({
-    // Mirrors the real wiring in remote/index.ts, which fills `activity` from
-    // the server. A stub that hardcoded it would hide the bug this guards.
-    listInstances: () => [
-      {
-        id: "inst-1",
-        name: "demo",
-        cwd: "/tmp/demo",
-        backend: "claude",
-        status: "running",
-        activity: server.activityFor("inst-1"),
-      },
-    ],
-    writeToInstance: (id, data) => writes.push({ id, data }),
-    sendPrompt: (id, text) => prompts.push({ id, text }),
-    // Mirrors the claude backend (digit keys, written before the call returns),
-    // which is what the fixture's instance declares, unless a test swaps it.
-    // Per-backend routing itself is tested in process-manager and the backend
-    // suites; here it only needs to resolve to something.
-    answerChoice,
-    readTranscript: () => {
-      reads.count++;
-      return transcript;
+async function startServer(options: { heartbeatTimeoutMs?: number } = {}): Promise<Fixture> {
+  const server = new RemoteServer(options);
+  // HTTPS ready, so pairing offers are made (ws-server.https.test.ts covers the gate).
+  server.setChecker({
+    check: async () => ({
+      tailscale: { state: "running", dnsName: "mac.example.ts.net" },
+      https: { state: "ready", origin: "https://mac.example.ts.net" },
+    }),
+    setUpHttps: async () => {
+      throw new Error("not in these tests");
     },
   });
+  const pm = new FakeProcessManager();
+  pm.add({ id: "inst-1", name: "demo" });
+  server.setHost(createRemoteHost(pm, server));
 
   // Port 0 = OS-assigned, so parallel test files never collide.
   const status = await server.start(0);
   if (!status.port) throw new Error(status.error ?? "server did not start");
 
-  const offer = server.createPairingOffer();
+  const offer = server.createPairingOffer()?.offer;
   if (!offer) throw new Error("no pairing offer");
 
   const fixture: Fixture = {
     server,
+    pm,
     url: `ws://127.0.0.1:${status.port}`,
     token: offer.deviceToken,
     hostPublicKey: offer.hostPublicKey,
-    writes,
-    prompts,
-    choices,
-    get transcriptReads() {
-      return reads.count;
-    },
   };
   fixtures.push(fixture);
   return fixture;
+}
+
+async function connected(fx: Fixture, token = fx.token) {
+  const client = new TestClient(fx.url);
+  await client.handshake(fx.hostPublicKey);
+  client.send({ type: "auth", deviceToken: token, deviceName: "phone" });
+  await client.waitFor("auth-ok");
+  await client.waitFor("instances");
+  return client;
 }
 
 afterEach(async () => {
@@ -393,6 +605,51 @@ describe("RemoteServer handshake", () => {
     expect(await client.waitClose()).toBe(4002);
   });
 
+  it("drops a socket whose frame isn't an object, before and after the seal, and keeps running", async () => {
+    // Any exception out of a frame's handling is an uncaught one in the main process,
+    // and before auth anyone who reaches the port can send these.
+    const fx = await startServer();
+    const uncaught: unknown[] = [];
+    const onUncaught = (err: unknown) => uncaught.push(err);
+    process.on("uncaughtException", onUncaught);
+    try {
+      const plain = new TestClient(fx.url);
+      await new Promise((r) => setTimeout(r, 50));
+      plain.sendRaw("null");
+      expect(await plain.waitClose()).toBe(4002);
+
+      for (const frame of [null, 7, { type: "auth" }, { type: "auth", deviceToken: 7 }]) {
+        const client = new TestClient(fx.url);
+        await client.handshake();
+        if (frame === null || typeof frame === "number") {
+          // `send` seals JSON of the value: a bare null or number inside the seal.
+          client.send(frame as unknown as AnyRecord);
+          expect(await client.waitClose(), JSON.stringify(frame)).toBe(4002);
+        } else {
+          client.send(frame);
+          expect(await client.waitFor("auth-failed"), JSON.stringify(frame)).toMatchObject({ reason: "unknown-token" });
+          expect(await client.waitClose()).toBe(4003);
+        }
+      }
+      await new Promise((r) => setTimeout(r, 50));
+      expect(uncaught).toEqual([]);
+      // A real phone still gets in.
+      (await connected(fx)).close();
+    } finally {
+      process.off("uncaughtException", onUncaught);
+    }
+  });
+
+  it("keeps the placeholder name when the phone's name isn't text", async () => {
+    const fx = await startServer();
+    const client = new TestClient(fx.url);
+    await client.handshake();
+    client.send({ type: "auth", deviceToken: fx.token, deviceName: { evil: true } });
+    await client.waitFor("auth-ok");
+    expect(fx.server.getStatus().devices[0].name).toBe("New device");
+    client.close();
+  });
+
   it("refuses commands before auth", async () => {
     const fx = await startServer();
     const client = new TestClient(fx.url);
@@ -401,22 +658,71 @@ describe("RemoteServer handshake", () => {
 
     expect(await client.waitClose()).toBe(4003);
     // Critically, the unauthenticated input must never have reached the PTY.
-    expect(fx.writes).toEqual([]);
+    expect(fx.pm.writes).toEqual([]);
+  });
+});
+
+describe("RemoteServer heartbeat", () => {
+  it("closes an authenticated socket that has sent nothing for the timeout", async () => {
+    const fx = await startServer({ heartbeatTimeoutMs: 300 });
+    const client = await connected(fx);
+    expect(fx.server.getStatus().devices[0].connected).toBe(true);
+
+    expect(await client.waitClose(2000)).toBe(4004);
+    expect(fx.server.getStatus().devices[0].connected).toBe(false);
+  });
+
+  it("arms one timer per socket, however many times it authenticates", async () => {
+    const fx = await startServer({ heartbeatTimeoutMs: 300 });
+    const client = await connected(fx);
+    client.send({ type: "auth", deviceToken: fx.token });
+    await client.waitFor("auth-ok");
+    let closed = false;
+    void client.waitClose(5000).then(() => (closed = true), () => {});
+    for (let i = 0; i < 6; i++) {
+      await new Promise((r) => setTimeout(r, 150));
+      client.send({ type: "ping", at: i });
+      await client.waitFor("pong", (f) => f.at === i);
+    }
+    expect(closed).toBe(false);
+    client.close();
+  });
+
+  it("keeps when a phone was last heard from as its last seen, once it goes", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    const authedAt = fx.server.getStatus().devices[0].lastSeenAt;
+    await new Promise((r) => setTimeout(r, 50));
+    const pingAt = Date.now();
+    client.send({ type: "ping", at: 1 });
+    await client.waitFor("pong");
+    client.close();
+    await vi.waitFor(() => expect(fx.server.getStatus().devices[0].connected).toBe(false));
+
+    const lastSeenAt = fx.server.getStatus().devices[0].lastSeenAt;
+    expect(lastSeenAt).toBeGreaterThan(authedAt);
+    expect(lastSeenAt).toBeGreaterThanOrEqual(pingAt);
+  });
+
+  it("keeps a socket that pings", async () => {
+    const fx = await startServer({ heartbeatTimeoutMs: 300 });
+    const client = await connected(fx);
+    let closed = false;
+    void client.waitClose(5000).then(() => (closed = true), () => {});
+    for (let i = 0; i < 6; i++) {
+      await new Promise((r) => setTimeout(r, 150));
+      client.send({ type: "ping", at: i });
+      await client.waitFor("pong", (f) => f.at === i);
+    }
+    expect(closed).toBe(false);
+    client.close();
   });
 });
 
 describe("RemoteServer streaming", () => {
-  async function connected(fx: Fixture) {
-    const client = new TestClient(fx.url);
-    await client.handshake(fx.hostPublicKey);
-    client.send({ type: "auth", deviceToken: fx.token, deviceName: "phone" });
-    await client.waitFor("auth-ok");
-    await client.waitFor("instances");
-    return client;
-  }
-
-  it("replays buffered output as a snapshot on subscribe", async () => {
+  it("replays buffered output as a snapshot on subscribe, at the PTY's size", async () => {
     const fx = await startServer();
+    fx.pm.sizes.set("inst-1", { cols: 132, rows: 41 });
     // Output produced before the phone ever connected.
     fx.server.broadcastOutput("inst-1", "earlier output\r\n");
 
@@ -425,6 +731,22 @@ describe("RemoteServer streaming", () => {
 
     const snapshot = await client.waitFor("snapshot");
     expect(snapshot.data).toContain("earlier output");
+    expect([snapshot.cols, snapshot.rows]).toEqual([132, 41]);
+
+    client.close();
+  });
+
+  it("sends the PTY's new size to subscribers when the desktop resizes it", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "inst-2" });
+    const client = await connected(fx);
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    await client.waitFor("snapshot");
+
+    fx.server.broadcastResize("inst-2", 80, 24);
+    fx.server.broadcastResize("inst-1", 100, 33);
+    const resize = await client.waitFor("resize");
+    expect(resize).toEqual({ type: "resize", instanceId: "inst-1", cols: 100, rows: 33 });
 
     client.close();
   });
@@ -455,59 +777,96 @@ describe("RemoteServer streaming", () => {
     // Give the unsubscribe time to land, then confirm nothing streams.
     await new Promise((r) => setTimeout(r, 100));
     fx.server.broadcastOutput("inst-1", "after unsubscribe");
-    fx.server.broadcastActivity("inst-1", "waiting");
 
-    // An activity frame still arrives (it isn't subscription-scoped), but no
-    // output frame should.
-    const frame = await client.waitFor("activity");
-    expect(frame.type).toBe("activity");
+    const seen = await client.drain();
+    expect(seen.map((f) => f.type)).not.toContain("output");
 
     client.close();
   });
 
-  it("forwards a typed prompt through the compose path", async () => {
+  it("passes raw input straight through to the PTY", async () => {
     const fx = await startServer();
     const client = await connected(fx);
-    client.send({ type: "prompt", instanceId: "inst-1", text: "use postgres" });
 
-    await vi.waitFor(() => expect(fx.prompts).toHaveLength(1));
-    expect(fx.prompts[0]).toEqual({ id: "inst-1", text: "use postgres" });
-
-    client.close();
-  });
-
-  it("delivers a pending prompt to a phone that connects late", async () => {
-    const fx = await startServer();
-    // The agent blocks before the phone is anywhere near.
-    fx.server.broadcastActivity("inst-1", "prompt", {
-      tool: "AskUserQuestion",
-      question: "Which database?",
-      options: [{ label: "Postgres" }, { label: "SQLite" }],
-    });
-
-    const client = await connected(fx);
-    client.send({ type: "subscribe", instanceId: "inst-1" });
-    const prompt = await client.waitFor("prompt-state");
-    expect(prompt.question).toBe("Which database?");
+    client.send({ type: "input", instanceId: "inst-1", data: "\x1b[A" });
+    await vi.waitFor(() => expect(fx.pm.writes).toHaveLength(1));
+    expect(fx.pm.writes[0]).toEqual({ id: "inst-1", data: "\x1b[A" });
 
     client.close();
   });
 
-  it("sends the readable transcript on subscribe", async () => {
+  it("sends the last turns the phone asked for on subscribe, 10 unless it says", async () => {
     // The transcript is what the phone shows instead of the 120-column terminal,
     // so it has to arrive without the phone asking for it.
     const fx = await startServer();
+    fx.pm.hasEarlier = true;
     const client = await connected(fx);
 
-    client.send({ type: "subscribe", instanceId: "inst-1" });
+    client.send({ type: "subscribe", instanceId: "inst-1", turns: 20 });
     const frame = await client.waitFor("transcript");
+    expect(frame).toEqual({
+      type: "transcript",
+      instanceId: "inst-1",
+      entries: fx.pm.transcript,
+      hasEarlier: true,
+    });
 
-    expect(frame.instanceId).toBe("inst-1");
-    expect(frame.entries).toEqual([
-      { kind: "user", text: "run the tests" },
-      { kind: "tool", tool: "Bash", text: "pnpm test", pending: true },
-    ]);
+    // A refresh keeps the count the phone asked for.
+    fx.pm.raise("inst-1", finished(1));
+    await client.waitFor("transcript");
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    await client.waitFor("transcript");
+    expect(fx.pm.transcriptTurns).toEqual([20, 20, 10]);
+    client.close();
+  });
 
+  it("sends an empty transcript too, so the phone knows the session has none yet", async () => {
+    const fx = await startServer();
+    fx.pm.transcript = [];
+    const client = await connected(fx);
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    expect((await client.waitFor("transcript")).entries).toEqual([]);
+    client.close();
+  });
+
+  it("sends the new session's transcript at once when the instance moves to another, empty as it may be", async () => {
+    // The builder's iPhone test: after `/new` the desk's terminal cleared and the
+    // phone kept the old chat. process-manager's attachSession broadcasts the list;
+    // that is what has to bring the new session's transcript.
+    const fx = await startServer();
+    fx.pm.instances.get("inst-1")!.sessionId = "ses-old";
+    const client = await connected(fx);
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    expect(await client.waitFor("transcript")).toMatchObject({ entries: fx.pm.transcript, session: "ses-old" });
+
+    fx.pm.instances.get("inst-1")!.sessionId = "ses-new";
+    fx.pm.transcript = [];
+    fx.server.broadcastInstances();
+    expect(await client.waitFor("transcript")).toEqual({
+      type: "transcript",
+      instanceId: "inst-1",
+      entries: [],
+      hasEarlier: false,
+      session: "ses-new",
+    });
+
+    // Once: a list that finds it on the same session sends none.
+    const reads = fx.pm.transcriptReads;
+    fx.server.broadcastInstances();
+    await client.drain();
+    expect(fx.pm.transcriptReads).toBe(reads);
+    client.close();
+  });
+
+  it("sends no transcript on a move to a phone that doesn't have the instance open", async () => {
+    const fx = await startServer();
+    fx.pm.instances.get("inst-1")!.sessionId = "ses-old";
+    const client = await connected(fx);
+    await vi.waitFor(() => expect(fx.pm.turnReads).toBe(1));
+    fx.pm.instances.get("inst-1")!.sessionId = "ses-new";
+    fx.server.broadcastInstances();
+    expect((await client.drain()).map((frame) => frame.type)).not.toContain("transcript");
+    expect(fx.pm.transcriptReads).toBe(0);
     client.close();
   });
 
@@ -517,36 +876,9 @@ describe("RemoteServer streaming", () => {
     client.send({ type: "subscribe", instanceId: "inst-1" });
     await client.waitFor("transcript");
 
-    // A prompt means the summary the phone is showing is now out of date.
-    fx.server.broadcastActivity("inst-1", "prompt", {
-      tool: "Permission",
-      question: "Permission required: Access external directory /etc",
-      options: [{ label: "Allow once" }, { label: "Reject" }],
-    });
-
+    fx.pm.raise("inst-1", bash(1));
     const refreshed = await client.waitFor("transcript");
     expect(refreshed.entries).toHaveLength(2);
-
-    client.close();
-  });
-
-  it("reports blocked instances in the list so a reopened phone sees them", async () => {
-    // Regression guard: `activity` used to be left undefined, so a phone that
-    // had been closed and reopened showed a clean list with an agent blocked.
-    const fx = await startServer();
-    const client = await connected(fx);
-
-    fx.server.broadcastActivity("inst-1", "prompt", {
-      tool: "Permission",
-      question: "Allow?",
-      options: [{ label: "Allow once" }],
-    });
-
-    await vi.waitFor(async () => {
-      const frame = await client.waitFor("instances");
-      const instances = frame.instances as Array<Record<string, unknown>>;
-      expect(instances[0].activity).toBe("prompt");
-    });
 
     client.close();
   });
@@ -576,13 +908,13 @@ describe("RemoteServer streaming", () => {
     client.send({ type: "subscribe", instanceId: "inst-1" });
     await client.waitFor("transcript");
 
-    const before = fx.transcriptReads;
+    const before = fx.pm.transcriptReads;
     for (let i = 0; i < 200; i++) {
       fx.server.broadcastOutput("inst-1", `line ${i}\r\n`);
     }
     await client.waitFor("transcript");
     // One refresh for the whole burst, not 200.
-    expect(fx.transcriptReads - before).toBe(1);
+    expect(fx.pm.transcriptReads - before).toBe(1);
 
     client.close();
   });
@@ -591,254 +923,1295 @@ describe("RemoteServer streaming", () => {
     const fx = await startServer();
     const client = await connected(fx);
     // Connected but not subscribed.
-    const before = fx.transcriptReads;
+    const before = fx.pm.transcriptReads;
 
     fx.server.broadcastOutput("inst-1", "background work\r\n");
     await new Promise((resolve) => setTimeout(resolve, 1300));
 
-    expect(fx.transcriptReads).toBe(before);
-
-    client.close();
-  });
-
-  it("clears the reported activity once the prompt is answered", async () => {
-    const fx = await startServer();
-    const client = await connected(fx);
-
-    fx.server.broadcastActivity("inst-1", "prompt", {
-      tool: "Permission",
-      question: "Allow?",
-      options: [{ label: "Allow once" }],
-    });
-    expect(fx.server.activityFor("inst-1")).toBe("prompt");
-
-    fx.server.broadcastActivity("inst-1", "prompt-cleared");
-    expect(fx.server.activityFor("inst-1")).toBeNull();
+    expect(fx.pm.transcriptReads).toBe(before);
 
     client.close();
   });
 });
 
-describe("RemoteServer remote decisions", () => {
-  async function connectedWithPrompt(fx: Fixture, optionCount: number) {
-    const client = new TestClient(fx.url);
-    await client.handshake(fx.hostPublicKey);
-    client.send({ type: "auth", deviceToken: fx.token, deviceName: "phone" });
-    await client.waitFor("auth-ok");
-    await client.waitFor("instances");
+describe("instance states and previews", () => {
+  const row = (client: TestClient, match: (r: AnyRecord) => boolean) => client.instance("inst-1", match);
 
-    const options = Array.from({ length: optionCount }, (_, i) => ({
-      label: `Option ${i + 1}`,
-    }));
-    fx.server.broadcastActivity("inst-1", "prompt", {
-      tool: "AskUserQuestion",
-      question: "Pick one",
-      options,
-    });
-    const prompt = await client.waitFor("prompt-state");
-    // The id a tap on these buttons names.
-    return Object.assign(client, { promptId: prompt.promptId as string });
-  }
-
-  it("translates a tapped option into the matching keystroke", async () => {
+  it("is Needs you while the live event is, with what the dialog asks", async () => {
     const fx = await startServer();
-    const client = await connectedWithPrompt(fx, 4);
-
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 2, promptId: client.promptId });
-    await vi.waitFor(() => expect(fx.writes).toHaveLength(1));
-    // Third option -> "3".
-    expect(fx.writes[0]).toEqual({ id: "inst-1", data: "3" });
-
+    const client = await connected(fx);
+    fx.pm.raise("inst-1", bash(7, 1234));
+    const needsYou = await row(client, (r) => r.state === "needs-you");
+    expect(needsYou).toMatchObject({ since: 1234, preview: "Bash: pnpm test:e2e" });
     client.close();
   });
 
-  it("refuses an out-of-range option instead of guessing", async () => {
+  it("is Working while the agent says a turn runs, with the tool it is on", async () => {
     const fx = await startServer();
-    const client = await connectedWithPrompt(fx, 3);
-
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 7, promptId: client.promptId });
-    const error = await client.waitFor("error");
-    expect(String(error.message)).toContain("no longer available");
-    // The important part: nothing was typed into the agent's terminal.
-    expect(fx.writes).toEqual([]);
-
+    fx.pm.turns.set("inst-1", [
+      { kind: "user", text: "fix it" },
+      { kind: "assistant", text: "Looking." },
+      { kind: "tool", tool: "Bash", text: "pnpm test", pending: true },
+    ]);
+    fx.pm.setWorking("inst-1", true, 5555);
+    const client = await connected(fx);
+    const working = await row(client, (r) => r.state === "working" && r.preview !== undefined);
+    expect(working).toMatchObject({ since: 5555, preview: "Bash: pnpm test" });
     client.close();
   });
 
-  it("refuses a choice for a prompt that already cleared", async () => {
+  it("is Finished from a finished event, with its conclusion's first sentence, until a phone opens it", async () => {
     const fx = await startServer();
-    const client = await connectedWithPrompt(fx, 3);
+    const client = await connected(fx);
+    fx.pm.turns.set("inst-1", [
+      { kind: "user", text: "fix it" },
+      { kind: "tool", tool: "Edit", text: "src/a.ts" },
+      { kind: "assistant", text: "## Done\n\nFixed the **flaky** test. It was a race." },
+    ]);
+    fx.pm.raise("inst-1", finished(8, 4321));
+    const done = await row(client, (r) => r.state === "finished" && r.preview !== undefined);
+    expect(done).toMatchObject({ since: 4321, preview: "Fixed the flaky test. It was a race." });
 
-    // Someone answered on the desktop first — the race that would otherwise send
-    // a keystroke into whatever replaced the prompt.
-    fx.server.broadcastActivity("inst-1", "prompt-cleared");
-    await client.waitFor("prompt-cleared");
-
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 0, promptId: client.promptId });
-    await client.waitFor("error");
-    expect(fx.writes).toEqual([]);
-
-    client.close();
-  });
-
-  it("refuses a tap on buttons a newer prompt has replaced, and takes one naming the live prompt", async () => {
-    const fx = await startServer();
-    const client = new TestClient(fx.url);
-    await client.handshake(fx.hostPublicKey);
-    client.send({ type: "auth", deviceToken: fx.token, deviceName: "phone" });
-    await client.waitFor("auth-ok");
-    await client.waitFor("instances");
-    const ask = (question: string) =>
-      fx.server.broadcastActivity("inst-1", "prompt", {
-        tool: "Permission",
-        question,
-        options: [{ label: "Allow once" }, { label: "Reject" }],
-      });
-    ask("A");
-    const first = await client.waitFor("prompt-state");
-    // A is answered at the desk and B comes up while the phone's tap on A travels.
-    fx.server.broadcastActivity("inst-1", "prompt-cleared");
-    ask("B");
-    const second = await client.waitFor("prompt-state");
-    expect(second.promptId).not.toBe(first.promptId);
-
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 0, promptId: first.promptId });
-    const error = await client.waitFor("error");
-    expect(String(error.message)).toContain("no longer available");
-    expect(fx.writes).toEqual([]);
-
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 0, promptId: second.promptId });
-    await vi.waitFor(() => expect(fx.writes).toHaveLength(1));
-
-    client.close();
-  });
-
-  it("gives a phone that subscribes late the live prompt's number", async () => {
-    const fx = await startServer();
-    const client = await connectedWithPrompt(fx, 2);
     client.send({ type: "subscribe", instanceId: "inst-1" });
-    const replayed = await client.waitFor("prompt-state");
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 1, promptId: replayed.promptId });
-    await vi.waitFor(() => expect(fx.writes).toHaveLength(1));
-
+    const seen = await row(client, (r) => r.state === "idle");
+    // Idle shows the last thing it said, cut the same way.
+    expect(seen.preview).toBe("Fixed the flaky test. It was a race.");
     client.close();
   });
 
-  it("shows a restated dialog's buttons without a second vibration", async () => {
+  it("goes back to Idle when the builder writes to it (the event goes)", async () => {
     const fx = await startServer();
-    const client = await connectedWithPrompt(fx, 2);
-    fx.server.broadcastActivity(
-      "inst-1",
-      "prompt",
-      { tool: "Permission", question: "Still open", options: [{ label: "Allow once" }] },
-      true
-    );
-    const seen: string[] = [];
-    for (;;) {
-      const frame = await client.next();
-      seen.push(String(frame.type));
-      if (frame.type === "prompt-state") {
-        expect(frame.question).toBe("Still open");
-        break;
-      }
-    }
-    // The `activity` frame is what makes the phone vibrate.
-    expect(seen).not.toContain("activity");
-    expect(fx.server.activityFor("inst-1")).toBe("prompt");
-
+    const client = await connected(fx);
+    fx.pm.raise("inst-1", finished(9));
+    await row(client, (r) => r.state === "finished");
+    fx.pm.clear("inst-1");
+    await row(client, (r) => r.state === "idle");
     client.close();
   });
 
-  it("refuses a tap that names no prompt, as a phone page from before prompt ids sends", async () => {
+  it("is Finished again for the next turn after the last one was seen", async () => {
     const fx = await startServer();
-    const client = await connectedWithPrompt(fx, 3);
-
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 0 });
-    const error = await client.waitFor("error");
-    expect(String(error.message)).toContain("no longer available");
-    expect(fx.writes).toEqual([]);
-    expect(fx.choices).toEqual([]);
-
+    const client = await connected(fx);
+    fx.pm.raise("inst-1", finished(10));
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    await row(client, (r) => r.state === "idle");
+    fx.pm.raise("inst-1", finished(11));
+    await row(client, (r) => r.state === "finished");
     client.close();
   });
 
-  it("names every prompt afresh, so a restart can't reuse a number a phone still holds", async () => {
+  it("sends a list again only when it changed, and every change to a phone that joined since", async () => {
     const fx = await startServer();
-    const client = await connectedWithPrompt(fx, 2);
-    fx.server.broadcastActivity("inst-1", "prompt", { tool: "Permission", options: [{ label: "Allow once" }] });
-    const next = await client.waitFor("prompt-state");
-    expect(typeof client.promptId).toBe("string");
-    expect(next.promptId).not.toBe(client.promptId);
-    expect(String(next.promptId)).toMatch(/^[0-9a-f-]{36}$/);
+    const a = await connected(fx);
+    fx.pm.raise("inst-1", finished(13, 7000));
+    await a.instance("inst-1", (r) => r.state === "finished");
+    await new Promise((r) => setTimeout(r, 50));
+    for (let i = 0; i < 3; i++) fx.server.broadcastInstances();
+    expect((await a.drain()).map((f) => f.type)).not.toContain("instances");
+    a.close();
+    await vi.waitFor(() => expect(fx.server.getStatus().devices[0].connected).toBe(false));
 
-    client.close();
+    // Changed back and forth while no phone was there: the one joining now was sent
+    // the list as it is, and the next change must reach it even though it reads like
+    // the last list broadcast.
+    fx.pm.clear("inst-1");
+    const b = await connected(fx);
+    fx.pm.raise("inst-1", finished(13, 7000));
+    await b.instance("inst-1", (r) => r.state === "finished");
+    b.close();
   });
 
-  it("hands the host the prompt the phone was shown, so it answers that one", async () => {
+  it("leaves the Manager out, and lists stopped instances as Idle", async () => {
     const fx = await startServer();
-    const client = await connectedWithPrompt(fx, 3);
-
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 1, promptId: client.promptId });
-    await vi.waitFor(() => expect(fx.choices).toHaveLength(1));
-    expect(fx.choices[0]).toMatchObject({
-      id: "inst-1",
-      index: 1,
-      detail: { tool: "AskUserQuestion", question: "Pick one" },
-    });
-
-    client.close();
-  });
-
-  it("says the choice is gone when an answer through the CLI's API doesn't land", async () => {
-    const fx = await startServer();
-    // An OpenCode host: nothing is written, the answer resolves later.
-    fx.answerChoice = () => new Promise((resolve) => setTimeout(() => resolve(false), 20));
-    const client = await connectedWithPrompt(fx, 3);
-
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 0, promptId: client.promptId });
-    const error = await client.waitFor("error");
-    expect(String(error.message)).toContain("no longer available");
-    expect(fx.writes).toEqual([]);
-
-    // A host that throws says the same, rather than leave the phone waiting.
-    fx.answerChoice = () => Promise.reject(new Error("service unreachable"));
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 0, promptId: client.promptId });
-    await client.waitFor("error");
-
-    client.close();
-  });
-
-  it("sends no error when an answer through the CLI's API lands", async () => {
-    const fx = await startServer();
-    fx.answerChoice = () => Promise.resolve(true);
-    const client = await connectedWithPrompt(fx, 2);
-
-    client.send({ type: "choose", instanceId: "inst-1", optionIndex: 1, promptId: client.promptId });
-    await vi.waitFor(() => expect(fx.choices).toHaveLength(1));
-    // Everything up to the reply to a ping sent after it: no error among it.
-    client.send({ type: "ping", at: 1 });
-    const seen: unknown[] = [];
-    for (let frame = await client.next(); ; frame = await client.next()) {
-      seen.push(frame.type);
-      if (frame.type === "pong") break;
-    }
-    expect(seen).not.toContain("error");
-
-    client.close();
-  });
-
-  it("passes raw input straight through to the PTY", async () => {
-    const fx = await startServer();
+    fx.pm.add({ id: "manager", isManager: true, working: true });
+    fx.pm.add({ id: "stopped", status: "stopped" });
     const client = new TestClient(fx.url);
     await client.handshake();
     client.send({ type: "auth", deviceToken: fx.token });
-    await client.waitFor("auth-ok");
-
-    client.send({ type: "input", instanceId: "inst-1", data: "\x1b[A" });
-    await vi.waitFor(() => expect(fx.writes).toHaveLength(1));
-    expect(fx.writes[0].data).toBe("\x1b[A");
-
+    const list = await client.waitFor("instances");
+    const ids = (list.instances as AnyRecord[]).map((r) => r.id);
+    expect(ids).toEqual(["inst-1", "stopped"]);
+    expect((list.instances as AnyRecord[])[1]).toMatchObject({ status: "stopped", state: "idle" });
     client.close();
+  });
+
+  it("reads each instance's line once, then only on events and while it works, never per list", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    await vi.waitFor(() => expect(fx.pm.turnReads).toBe(1));
+    for (let i = 0; i < 5; i++) fx.server.broadcastInstances();
+    client.send({ type: "list-instances" });
+    await client.drain();
+    expect(fx.pm.turnReads).toBe(1);
+
+    fx.pm.raise("inst-1", finished(12));
+    await vi.waitFor(() => expect(fx.pm.turnReads).toBe(2));
+    client.close();
+  });
+
+  it("reads an instance's line afresh when it moves to another session", async () => {
+    const fx = await startServer();
+    fx.pm.instances.get("inst-1")!.sessionId = "ses-old";
+    fx.pm.turns.set("inst-1", [{ kind: "assistant", text: "The old session's last word on it." }]);
+    const client = await connected(fx);
+    await row(client, (r) => r.preview === "The old session's last word on it.");
+
+    // `/clear` at the desk: a new, empty session.
+    fx.pm.instances.get("inst-1")!.sessionId = "ses-new";
+    fx.pm.turns.set("inst-1", []);
+    fx.server.broadcastInstances();
+    await row(client, (r) => r.preview === undefined);
+    expect(fx.pm.turnReads).toBe(2);
+    client.close();
+  });
+
+  it("lists the agent's last line, never a local command's output", async () => {
+    const fx = await startServer();
+    fx.pm.turns.set("inst-1", [
+      { kind: "user", text: "say something" },
+      { kind: "assistant", text: "Here is the answer you asked for." },
+      { kind: "user", text: "/token", local: true },
+      { kind: "assistant", text: "Unknown command: /token", local: true },
+    ]);
+    const client = await connected(fx);
+    await row(client, (r) => r.preview === "Here is the answer you asked for.");
+    client.close();
+  });
+
+  it("reads an instance's line afresh after events it heard with the phone link off", async () => {
+    const pm = new FakeProcessManager();
+    pm.add({ id: "inst-1" });
+    let running = true;
+    const push = {
+      isRunning: () => running,
+      broadcastInstances: () => {},
+      broadcastPromptState: () => {},
+      broadcastPromptCleared: () => {},
+      broadcastTranscript: () => {},
+      pushSession: () => {},
+    };
+    const host = createRemoteHost(pm, push);
+    pm.turns.set("inst-1", [{ kind: "assistant", text: "The old result, from the turn before." }]);
+    host.listInstances();
+    await vi.waitFor(() => expect(host.listInstances()[0].preview).toBe("The old result, from the turn before."));
+
+    running = false;
+    pm.turns.set("inst-1", [{ kind: "assistant", text: "The new result, from the latest turn." }]);
+    pm.raise("inst-1", finished(14));
+    running = true;
+    host.listInstances();
+    await vi.waitFor(() =>
+      expect(host.listInstances()[0]).toMatchObject({
+        state: "finished",
+        preview: "The new result, from the latest turn.",
+      })
+    );
+    host.dispose();
+  });
+
+  it("refreshes a working instance's tool from output at most every 5 s, and only with a phone connected", async () => {
+    const fx = await startServer();
+    fx.pm.setWorking("inst-1", true);
+    // No phone: output reads nothing.
+    fx.server.broadcastOutput("inst-1", "x");
+    expect(fx.pm.turnReads).toBe(0);
+
+    const client = await connected(fx);
+    await vi.waitFor(() => expect(fx.pm.turnReads).toBeGreaterThan(0));
+    const before = fx.pm.turnReads;
+    fx.pm.turns.set("inst-1", [
+      { kind: "user", text: "go" },
+      { kind: "tool", tool: "Read", text: "src/b.ts", pending: true },
+    ]);
+    for (let i = 0; i < 50; i++) fx.server.broadcastOutput("inst-1", "spinner");
+    await row(client, (r) => r.preview === "Read: src/b.ts");
+    expect(fx.pm.turnReads - before).toBe(1);
+    client.close();
+  });
+});
+
+// A session read on the phone is read at the desk too: opening it tells the desk
+// (index.ts clears its red dot), and while a phone that looks has it open, whatever
+// it reports is read there (process-manager.ts asks isReading).
+describe("read on the phone", () => {
+  it("tells the desk each time a phone opens a session", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "inst-2" });
+    const read: string[] = [];
+    fx.server.setReadListener((id) => read.push(id));
+    const client = await connected(fx);
+    expect(read).toEqual([]);
+
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    await client.waitFor("snapshot");
+    expect(read).toEqual(["inst-1"]);
+
+    client.send({ type: "unsubscribe", instanceId: "inst-1" });
+    client.send({ type: "subscribe", instanceId: "inst-2" });
+    await client.waitFor("snapshot");
+    expect(read).toEqual(["inst-1", "inst-2"]);
+    client.close();
+  });
+
+  it("is reading only a session a phone that looks has open", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "inst-2" });
+    const client = await connected(fx);
+    // Connected, on the list.
+    expect(fx.server.isReading("inst-1")).toBe(false);
+
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    await client.waitFor("snapshot");
+    expect(fx.server.isReading("inst-1")).toBe(true);
+    expect(fx.server.isReading("inst-2")).toBe(false);
+
+    // Locked with its socket half-open: no ping for longer than a phone that looks
+    // ever goes without one.
+    for (const conn of fx.server["connections"]) conn.heardAt -= 30_000;
+    expect(fx.server.isReading("inst-1")).toBe(false);
+    // Shown again: its next ping.
+    await client.drain();
+    expect(fx.server.isReading("inst-1")).toBe(true);
+
+    client.send({ type: "unsubscribe", instanceId: "inst-1" });
+    await client.drain();
+    expect(fx.server.isReading("inst-1")).toBe(false);
+    client.close();
+  });
+
+  it("tells the desk again when a phone that went quiet is heard from on the same socket", async () => {
+    const fx = await startServer();
+    const read: string[] = [];
+    fx.server.setReadListener((id) => read.push(id));
+    const client = await connected(fx);
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    await client.waitFor("snapshot");
+    // Pings while it looks say nothing new.
+    await client.drain();
+    expect(read).toEqual(["inst-1"]);
+
+    // A page shown again with its socket still held: its ping is the first frame in
+    // a while, and what was sent meanwhile has reached it.
+    for (const conn of fx.server["connections"]) conn.heardAt -= 30_000;
+    await client.drain();
+    expect(read).toEqual(["inst-1", "inst-1"]);
+
+    // Back on its list, a quiet spell reads nothing.
+    client.send({ type: "unsubscribe", instanceId: "inst-1" });
+    await client.drain();
+    for (const conn of fx.server["connections"]) conn.heardAt -= 30_000;
+    await client.drain();
+    expect(read).toEqual(["inst-1", "inst-1"]);
+    client.close();
+  });
+
+  it("stops reading when the phone's socket goes", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    await client.waitFor("snapshot");
+    client.close();
+    await vi.waitFor(() => expect(fx.server.isReading("inst-1")).toBe(false));
+  });
+});
+
+describe("prompt-state", () => {
+  it("is broadcast when a dialog opens, with the dialog in full", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    fx.pm.raise("inst-1", bash(21));
+    const frame = await client.waitFor("prompt-state");
+    expect(frame).toEqual({
+      type: "prompt-state",
+      instanceId: "inst-1",
+      seq: 21,
+      summary: "Bash: pnpm test:e2e",
+      dialog: {
+        kind: "permission",
+        tool: "Bash",
+        subject: "pnpm test:e2e",
+        description: "Run the end-to-end tests",
+        options: [
+          { effect: "allow-once", label: "Yes", description: "Allow this once" },
+          {
+            effect: "allow-always",
+            label: "Yes, and don't ask again",
+            description: "Allow it, and stop asking for calls like it",
+          },
+          { effect: "deny", label: "No", description: "Reject and tell the agent what to do instead" },
+        ],
+        reasonAllowed: true,
+      },
+    });
+    client.close();
+  });
+
+  it("is resent to a phone that subscribes while the dialog is open, under the same seq", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", questions(22));
+    const client = await connected(fx);
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    const frame = await client.waitFor("prompt-state");
+    expect(frame.seq).toBe(22);
+    expect(frame.summary).toBe("Which database?");
+    expect(frame.dialog).toEqual({
+      kind: "questions",
+      questions: [
+        {
+          question: "Which database?",
+          header: "DB",
+          multiSelect: false,
+          options: [{ label: "Postgres" }, { label: "SQLite", description: "One file" }],
+        },
+        {
+          question: "Which extras?",
+          header: "Extras",
+          multiSelect: true,
+          options: [{ label: "Cache" }, { label: "Metrics" }, { label: "Tracing" }],
+        },
+      ],
+      textAllowed: true,
+    });
+    client.close();
+  });
+
+  it("carries a plan and OpenCode's permission as the secretary reads them", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "oc", backend: "opencode" });
+    const client = await connected(fx);
+
+    fx.pm.raise("inst-1", plan(23));
+    const planFrame = await client.waitFor("prompt-state");
+    expect(planFrame.summary).toBe("Plan: Add dark mode");
+    expect(planFrame.dialog).toMatchObject({
+      kind: "plan",
+      plan: PLAN_INPUT.plan,
+      options: [
+        { effect: "approve-auto", label: "Yes, auto-accept edits" },
+        { effect: "approve", label: "Yes, manually approve edits" },
+        { effect: "revise", label: "Tell Claude what to change" },
+      ],
+    });
+
+    fx.pm.raise("oc", ocPermission(24));
+    const ocFrame = await client.waitFor("prompt-state", (f) => f.instanceId === "oc");
+    expect(ocFrame.summary).toBe("shell: rm -rf build");
+    expect(ocFrame.dialog).toMatchObject({
+      kind: "permission",
+      tool: "shell",
+      subject: "rm -rf build",
+      reasonAllowed: true,
+    });
+    const options = (ocFrame.dialog as { options: AnyRecord[] }).options;
+    expect(options.map((o) => [o.effect, o.label])).toEqual([
+      ["allow-once", "Allow once"],
+      ["allow-always", "Always allow"],
+      ["deny", "Reject"],
+    ]);
+    // The request's own wording of what "always" saves.
+    expect(options[1].description).toContain('"rm *"');
+    client.close();
+  });
+
+  it("has no dialog for one the desktop can't answer, so the phone offers the terminal", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    fx.pm.raise("inst-1", elicitation(25));
+    const frame = await client.waitFor("prompt-state");
+    expect(frame).toEqual({
+      type: "prompt-state",
+      instanceId: "inst-1",
+      seq: 25,
+      summary: "Waiting for you in the terminal",
+    });
+    client.close();
+  });
+
+  it("is restated under a new seq, and cleared naming the seq that closed", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    fx.pm.raise("inst-1", bash(26));
+    await client.waitFor("prompt-state", (f) => f.seq === 26);
+    fx.pm.raise("inst-1", bash(27));
+    await client.waitFor("prompt-state", (f) => f.seq === 27);
+    fx.pm.clear("inst-1");
+    expect(await client.waitFor("prompt-cleared")).toEqual({
+      type: "prompt-cleared",
+      instanceId: "inst-1",
+      seq: 27,
+    });
+    client.close();
+  });
+
+  it("is cleared when a finished event replaces the needs-you", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    fx.pm.raise("inst-1", bash(28));
+    await client.waitFor("prompt-state");
+    fx.pm.raise("inst-1", finished(29));
+    expect((await client.waitFor("prompt-cleared")).seq).toBe(28);
+    client.close();
+  });
+});
+
+describe("answer", () => {
+  const answer = (client: TestClient, clientMsgId: string, seq: number, choice: AnyRecord, confirmed?: boolean) =>
+    client.send({ type: "answer", instanceId: "inst-1", seq, choice, confirmed, clientMsgId });
+
+  it("goes through to answerDialog with the secretary's keys, and acks ok", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", bash(31));
+    const client = await connected(fx);
+    answer(client, "a1", 31, { effect: "allow-once" });
+    expect(await client.ack("a1")).toEqual({ type: "ack", clientMsgId: "a1", ok: true });
+    expect(fx.pm.answers).toEqual([{ id: "inst-1", seq: 31, plan: { keys: ["1"] } }]);
+    client.close();
+  });
+
+  it("sends a denial's reason after the keys (Claude) or with the Reject (OpenCode)", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "oc", backend: "opencode" });
+    fx.pm.raise("inst-1", bash(32));
+    fx.pm.raise("oc", ocPermission(33));
+    const client = await connected(fx);
+    answer(client, "a1", 32, { effect: "deny", feedback: "use the unit tests" });
+    await client.ack("a1");
+    client.send({
+      type: "answer",
+      instanceId: "oc",
+      seq: 33,
+      choice: { effect: "deny", feedback: "not that one" },
+      clientMsgId: "a2",
+    });
+    await client.ack("a2");
+    expect(fx.pm.answers.map((a) => a.plan)).toEqual([
+      { keys: ["3"], followUp: "use the unit tests" },
+      { keys: [], answer: { kind: "permission", decision: "reject", message: "not that one" } },
+    ]);
+    client.close();
+  });
+
+  it("answers a two-question box with a multi-select whole, in one go", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", questions(34));
+    const client = await connected(fx);
+    answer(client, "a1", 34, {
+      answers: [
+        { question: 1, picks: [2] },
+        { question: 2, picks: [1, 3] },
+      ],
+    });
+    expect((await client.ack("a1")).ok).toBe(true);
+    const DOWN = "\x1b[B";
+    expect(fx.pm.answers[0].plan.keys).toEqual(["2", "1", "3", DOWN, DOWN, DOWN, DOWN, "\r", "1"]);
+    // Acked once the keys are in: a session reports no record of the answers to
+    // wait for (no PostToolUse among its alert hooks).
+    expect(fx.pm.answers[0].plan.expect).toBeUndefined();
+    client.close();
+  });
+
+  it("is refused as gone for a seq that isn't the live dialog's, or with none open", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", bash(35));
+    const client = await connected(fx);
+    answer(client, "a1", 34, { effect: "allow-once" });
+    expect(await client.ack("a1")).toMatchObject({ ok: false, reason: "gone" });
+    fx.pm.clear("inst-1");
+    answer(client, "a2", 35, { effect: "allow-once" });
+    expect(await client.ack("a2")).toMatchObject({ ok: false, reason: "gone" });
+    expect(fx.pm.answers).toEqual([]);
+    client.close();
+  });
+
+  it("asks for confirmation before a wider option, then presses it once confirmed", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", bash(36));
+    fx.pm.add({ id: "plan" });
+    fx.pm.raise("plan", plan(37));
+    const client = await connected(fx);
+    answer(client, "a1", 36, { effect: "allow-always" });
+    expect(await client.ack("a1")).toMatchObject({ ok: false, reason: "needs-confirm" });
+    client.send({ type: "answer", instanceId: "plan", seq: 37, choice: { effect: "approve-auto" }, clientMsgId: "a2" });
+    expect(await client.ack("a2")).toMatchObject({ ok: false, reason: "needs-confirm" });
+    expect(fx.pm.answers).toEqual([]);
+
+    answer(client, "a3", 36, { effect: "allow-always" }, true);
+    expect((await client.ack("a3")).ok).toBe(true);
+    expect(fx.pm.answers).toEqual([{ id: "inst-1", seq: 36, plan: { keys: ["2"] } }]);
+    client.close();
+  });
+
+  it("fails with a message for an answer the dialog needs more of", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", plan(38));
+    fx.pm.add({ id: "q" });
+    fx.pm.raise("q", questions(39));
+    const client = await connected(fx);
+    answer(client, "a1", 38, { effect: "revise" });
+    expect(await client.ack("a1")).toEqual({
+      type: "ack",
+      clientMsgId: "a1",
+      ok: false,
+      reason: "failed",
+      message: "Say what the plan should change",
+    });
+    client.send({
+      type: "answer",
+      instanceId: "q",
+      seq: 39,
+      choice: { answers: [{ question: 1, picks: [1] }] },
+      clientMsgId: "a2",
+    });
+    expect(await client.ack("a2")).toMatchObject({ reason: "failed", message: "Answer every question first" });
+    expect(fx.pm.answers).toEqual([]);
+    client.close();
+  });
+
+  it("is unsupported for a dialog the desktop can't answer, or a choice it doesn't offer", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", elicitation(40));
+    fx.pm.add({ id: "b" });
+    fx.pm.raise("b", bash(41));
+    const client = await connected(fx);
+    answer(client, "a1", 40, { effect: "allow-once" });
+    expect(await client.ack("a1")).toMatchObject({ ok: false, reason: "unsupported" });
+    for (const [i, choice] of [
+      { effect: "approve" },
+      { effect: "launch-missiles" },
+      { answers: [{ question: 1, picks: [1] }] },
+      { answers: "all" },
+    ].entries()) {
+      client.send({ type: "answer", instanceId: "b", seq: 41, choice, clientMsgId: `b${i}` });
+      expect(await client.ack(`b${i}`)).toMatchObject({ ok: false, reason: "unsupported" });
+    }
+    expect(fx.pm.answers).toEqual([]);
+    client.close();
+  });
+
+  it("acks by what answerDialog did", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    const cases: [AnswerOutcome, string][] = [
+      [{ ok: false, reason: "answered" }, "gone"],
+      [{ ok: false, reason: "changed" }, "gone"],
+      [{ ok: false, reason: "interrupted" }, "gone"],
+      [{ ok: false, reason: "stopped" }, "not-running"],
+      [{ ok: false, reason: "failed" }, "failed"],
+    ];
+    for (const [i, [outcome, reason]] of cases.entries()) {
+      fx.pm.raise("inst-1", bash(50 + i));
+      fx.pm.answerOutcome = async () => outcome;
+      answer(client, `o${i}`, 50 + i, { effect: "allow-once" });
+      expect(await client.ack(`o${i}`)).toMatchObject({ ok: false, reason });
+    }
+    client.close();
+  });
+});
+
+describe("prompt", () => {
+  const prompt = (client: TestClient, clientMsgId: string, instanceId = "inst-1", text = "use postgres") =>
+    client.send({ type: "prompt", instanceId, text, clientMsgId });
+
+  it("goes through the compose path and acks ok", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    prompt(client, "m1");
+    expect(await client.ack("m1")).toEqual({ type: "ack", clientMsgId: "m1", ok: true });
+    expect(fx.pm.prompts).toEqual([{ id: "inst-1", text: "use postgres" }]);
+    client.close();
+  });
+
+  it("is refused while a dialog is open, so the text never lands in it", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", bash(70));
+    const client = await connected(fx);
+    prompt(client, "m1");
+    expect(await client.ack("m1")).toMatchObject({ ok: false, reason: "dialog-open" });
+    expect(fx.pm.prompts).toEqual([]);
+    client.close();
+  });
+
+  it("is refused while an answer's keys are still going in: the dialog is still on screen", async () => {
+    const fx = await startServer();
+    // The answer's first key has cleared the event; its last isn't in yet.
+    fx.pm.answering.add("inst-1");
+    fx.pm.setWorking("inst-1", true);
+    const client = await connected(fx);
+    prompt(client, "m1");
+    expect(await client.ack("m1")).toMatchObject({ ok: false, reason: "dialog-open" });
+    client.send({ type: "interrupt", instanceId: "inst-1", clientMsgId: "i1" });
+    expect(await client.ack("i1")).toMatchObject({ ok: false, reason: "dialog-open" });
+    expect(fx.pm.prompts).toEqual([]);
+    expect(fx.pm.interrupts).toEqual([]);
+    client.close();
+  });
+
+  it("is refused while the agent still shows a dialog a keystroke into it took the event of", async () => {
+    // An arrow key in the terminal dropped the needs-you, so the phone's card went,
+    // but the plan is still up: its Return would pick the highlighted option.
+    const fx = await startServer();
+    fx.pm.dialogsUp.add("inst-1");
+    fx.pm.setWorking("inst-1", true);
+    const client = await connected(fx);
+    prompt(client, "m1");
+    expect(await client.ack("m1")).toMatchObject({
+      ok: false,
+      reason: "dialog-open",
+      message: "A dialog is open in its terminal; answer it there first",
+    });
+    client.send({ type: "interrupt", instanceId: "inst-1", clientMsgId: "i1" });
+    expect(await client.ack("i1")).toMatchObject({ ok: false, reason: "dialog-open" });
+    expect(fx.pm.prompts).toEqual([]);
+    expect(fx.pm.interrupts).toEqual([]);
+
+    fx.pm.dialogsUp.delete("inst-1");
+    prompt(client, "m2");
+    expect(await client.ack("m2")).toMatchObject({ ok: true });
+    client.close();
+  });
+
+  it("is refused for an instance that isn't running, or doesn't exist", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "stopped", status: "stopped" });
+    const client = await connected(fx);
+    prompt(client, "m1", "stopped");
+    expect(await client.ack("m1")).toMatchObject({ ok: false, reason: "not-running" });
+    prompt(client, "m2", "nobody");
+    expect(await client.ack("m2")).toMatchObject({ ok: false, reason: "not-running" });
+    expect(fx.pm.prompts).toEqual([]);
+    client.close();
+  });
+
+  it("is still sent while the agent works (the CLI queues it)", async () => {
+    const fx = await startServer();
+    fx.pm.setWorking("inst-1", true);
+    const client = await connected(fx);
+    prompt(client, "m1");
+    expect((await client.ack("m1")).ok).toBe(true);
+    client.close();
+  });
+
+  it("fails a malformed frame without acting on it", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    client.send({ type: "prompt", instanceId: "inst-1", text: 42, clientMsgId: "m1" });
+    expect(await client.ack("m1")).toMatchObject({ ok: false, reason: "failed" });
+    // No id, no ack, and nothing done.
+    client.send({ type: "prompt", instanceId: "inst-1", text: "x" });
+    await client.drain();
+    expect(fx.pm.prompts).toEqual([]);
+    client.close();
+  });
+});
+
+describe("interrupt", () => {
+  const interrupt = (client: TestClient, clientMsgId: string, instanceId = "inst-1") =>
+    client.send({ type: "interrupt", instanceId, clientMsgId });
+
+  it("stops a running turn and acks ok", async () => {
+    const fx = await startServer();
+    fx.pm.setWorking("inst-1", true);
+    const client = await connected(fx);
+    interrupt(client, "i1");
+    expect(await client.ack("i1")).toEqual({ type: "ack", clientMsgId: "i1", ok: true });
+    expect(fx.pm.interrupts).toEqual(["inst-1"]);
+    client.close();
+  });
+
+  it("is refused while a dialog is open: Esc would answer it", async () => {
+    const fx = await startServer();
+    fx.pm.setWorking("inst-1", true);
+    fx.pm.raise("inst-1", bash(80));
+    const client = await connected(fx);
+    interrupt(client, "i1");
+    expect(await client.ack("i1")).toMatchObject({ ok: false, reason: "dialog-open" });
+    expect(fx.pm.interrupts).toEqual([]);
+    client.close();
+  });
+
+  it("is refused when nothing runs, or the instance isn't running", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "stopped", status: "stopped" });
+    const client = await connected(fx);
+    interrupt(client, "i1");
+    expect(await client.ack("i1")).toMatchObject({ ok: false, reason: "not-working" });
+    interrupt(client, "i2", "stopped");
+    expect(await client.ack("i2")).toMatchObject({ ok: false, reason: "not-running" });
+    expect(fx.pm.interrupts).toEqual([]);
+    client.close();
+  });
+
+  it("is refused again for the same turn until the agent has had time to say it stopped", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const fx = await startServer();
+      fx.pm.setWorking("inst-1", true, 100);
+      const client = await connected(fx);
+      interrupt(client, "i1");
+      await client.ack("i1");
+      // The agent hasn't reported the turn over yet.
+      interrupt(client, "i2");
+      expect(await client.ack("i2")).toMatchObject({ ok: false, reason: "not-working" });
+      // A new turn may be stopped at once.
+      fx.pm.setWorking("inst-1", true, 200);
+      interrupt(client, "i3");
+      expect((await client.ack("i3")).ok).toBe(true);
+      // Still running 3 s on: the Esc didn't take, and trying again is allowed.
+      vi.setSystemTime(Date.now() + 3000);
+      interrupt(client, "i4");
+      expect((await client.ack("i4")).ok).toBe(true);
+      expect(fx.pm.interrupts).toEqual(["inst-1", "inst-1", "inst-1"]);
+      client.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("is refused when the terminal isn't showing the running turn (OpenCode)", async () => {
+    const fx = await startServer();
+    fx.pm.setWorking("inst-1", true);
+    fx.pm.offScreen.add("inst-1");
+    const client = await connected(fx);
+    interrupt(client, "i1");
+    expect(await client.ack("i1")).toMatchObject({ ok: false, reason: "unsupported" });
+    expect(fx.pm.interrupts).toEqual([]);
+    client.close();
+  });
+
+  it("says why when not every key went in", async () => {
+    const fx = await startServer();
+    fx.pm.setWorking("inst-1", true);
+    const client = await connected(fx);
+    // A dialog came up between OpenCode's two Escs.
+    fx.pm.interruptInstance = async (id) => {
+      fx.pm.interrupts.push(id);
+      fx.pm.events.set("inst-1", bash(81));
+      return false;
+    };
+    interrupt(client, "i1");
+    expect(await client.ack("i1")).toMatchObject({ ok: false, reason: "dialog-open" });
+    client.close();
+  });
+});
+
+describe("acks are kept per device", () => {
+  it("gives a resent prompt the same ack, on a new socket, without sending it twice", async () => {
+    const fx = await startServer();
+    const first = await connected(fx);
+    first.send({ type: "prompt", instanceId: "inst-1", text: "once", clientMsgId: "m1" });
+    const ack = await first.ack("m1");
+    first.close();
+
+    // Reconnected, the phone resends what it never saw acked.
+    const second = await connected(fx);
+    second.send({ type: "prompt", instanceId: "inst-1", text: "once", clientMsgId: "m1" });
+    expect(await second.ack("m1")).toEqual(ack);
+    expect(fx.pm.prompts).toHaveLength(1);
+    second.close();
+  });
+
+  it("keeps a refusal too, so a resend isn't tried again", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", bash(90));
+    const client = await connected(fx);
+    client.send({ type: "prompt", instanceId: "inst-1", text: "x", clientMsgId: "m1" });
+    const refused = await client.ack("m1");
+    expect(refused).toMatchObject({ ok: false, reason: "dialog-open" });
+    fx.pm.clear("inst-1");
+    client.send({ type: "prompt", instanceId: "inst-1", text: "x", clientMsgId: "m1" });
+    expect(await client.ack("m1")).toEqual(refused);
+    expect(fx.pm.prompts).toEqual([]);
+    client.close();
+  });
+
+  it("waits for an answer still being worked on, and presses its keys once", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", bash(91));
+    let finish: (outcome: AnswerOutcome) => void = () => {};
+    fx.pm.answerOutcome = () => new Promise((resolve) => (finish = resolve));
+    const client = await connected(fx);
+    const frame = { type: "answer", instanceId: "inst-1", seq: 91, choice: { effect: "allow-once" }, clientMsgId: "a1" };
+    client.send(frame);
+    await vi.waitFor(() => expect(fx.pm.answers).toHaveLength(1));
+    client.send(frame);
+    await client.drain();
+    finish({ ok: true });
+    await client.ack("a1");
+    await client.ack("a1");
+    expect(fx.pm.answers).toHaveLength(1);
+    client.close();
+  });
+
+  it("are not shared between devices", async () => {
+    const fx = await startServer();
+    const other = fx.server.createPairingOffer()!.offer;
+    const a = await connected(fx);
+    const b = await connected(fx, other.deviceToken);
+    a.send({ type: "prompt", instanceId: "inst-1", text: "from a", clientMsgId: "m1" });
+    await a.ack("m1");
+    b.send({ type: "prompt", instanceId: "inst-1", text: "from b", clientMsgId: "m1" });
+    await b.ack("m1");
+    expect(fx.pm.prompts.map((p) => p.text)).toEqual(["from a", "from b"]);
+    a.close();
+    b.close();
+  });
+
+  it("remembers the last 200, then lets the oldest go", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    for (let i = 0; i <= 200; i++) {
+      client.send({ type: "prompt", instanceId: "inst-1", text: `p${i}`, clientMsgId: `m${i}` });
+    }
+    await client.ack("m200");
+    expect(fx.pm.prompts).toHaveLength(201);
+    // m1 is still known; m0 has been let go and counts as new.
+    client.send({ type: "prompt", instanceId: "inst-1", text: "p1", clientMsgId: "m1" });
+    client.send({ type: "prompt", instanceId: "inst-1", text: "p0", clientMsgId: "m0" });
+    await client.drain();
+    expect(fx.pm.prompts.map((p) => p.text).slice(201)).toEqual(["p0"]);
+    client.close();
+  });
+});
+
+describe("Web Push (T-810)", () => {
+  // A phone's real-shaped subscription to Apple's push service.
+  const P256DH = crypto.createECDH("prime256v1").generateKeys().toString("base64url");
+  const AUTH = crypto.randomBytes(16).toString("base64url");
+  const subscription = (n = 1) => ({
+    endpoint: `https://web.push.apple.com/QK${n}`,
+    keys: { p256dh: P256DH, auth: AUTH },
+  });
+  const devicesFile = () =>
+    JSON.parse(fs.readFileSync(path.join(userData, "remote-devices.json"), "utf8")) as AnyRecord[];
+  const vapidPublicKey = () =>
+    (JSON.parse(fs.readFileSync(path.join(userData, "remote-push.json"), "utf8")) as AnyRecord).publicKey;
+  const payloadOf = (call: number) => JSON.parse(sendNotification.mock.calls[call][1] as string);
+  const endpoints = () => sendNotification.mock.calls.map(([sub]) => (sub as { endpoint: string }).endpoint);
+  const refused = (statusCode: number, body = "") =>
+    new webpush.WebPushError("Received unexpected response code", statusCode, {}, body, subscription().endpoint);
+  // Long enough for a read and a send that are going to happen to have happened.
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+  beforeEach(() => {
+    sendNotification.mockReset();
+    sendNotification.mockResolvedValue({ statusCode: 201, body: "", headers: {} });
+  });
+
+  // A phone that turned notifications on, then put the app away: its socket closed.
+  // Connect phones one at a time: the device connected now is taken to be this one.
+  async function subscribedAway(fx: Fixture, token = fx.token, sub = subscription()): Promise<string> {
+    const client = await connected(fx, token);
+    const id = fx.server.getStatus().devices.find((d) => d.connected)!.id;
+    client.send({ type: "push-subscribe", subscription: sub, clientMsgId: `on-${id}` });
+    expect(await client.ack(`on-${id}`)).toMatchObject({ ok: true });
+    client.close();
+    await vi.waitFor(() => expect(fx.server.getStatus().devices.find((d) => d.id === id)?.connected).toBe(false));
+    return id;
+  }
+
+  it("keeps a phone's subscription on its device, says so in auth-ok and the status, and null removes it", async () => {
+    const fx = await startServer();
+    expect(fx.server.getStatus().checks.push).toEqual({ state: "ready" });
+    const client = await connected(fx);
+    client.send({ type: "push-subscribe", subscription: subscription(), clientMsgId: "on" });
+    expect(await client.ack("on")).toEqual({ type: "ack", clientMsgId: "on", ok: true });
+    expect(fx.server.getStatus().devices[0].pushEnabled).toBe(true);
+    expect(devicesFile()[0].push).toEqual(subscription());
+    client.close();
+
+    const again = new TestClient(fx.url);
+    await again.handshake(fx.hostPublicKey);
+    again.send({ type: "auth", deviceToken: fx.token });
+    const ok = await again.waitFor("auth-ok");
+    expect(ok).toMatchObject({ pushEnabled: true, vapidPublicKey: vapidPublicKey() });
+    expect(Buffer.from(String(ok.vapidPublicKey), "base64url")).toHaveLength(65);
+
+    again.send({ type: "push-subscribe", subscription: null, clientMsgId: "off" });
+    expect(await again.ack("off")).toMatchObject({ ok: true });
+    expect(fx.server.getStatus().devices[0].pushEnabled).toBe(false);
+    expect(devicesFile()[0].push).toBeUndefined();
+    again.close();
+  });
+
+  it("refuses a subscription Web Push can't use, and keeps the one it had", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    client.send({ type: "push-subscribe", subscription: subscription(), clientMsgId: "on" });
+    await client.ack("on");
+    const bad = [
+      { ...subscription(), endpoint: "http://web.push.apple.com/QK1" },
+      { ...subscription(), endpoint: "not a url" },
+      { endpoint: "https://web.push.apple.com/QK1" },
+      { ...subscription(), keys: { p256dh: P256DH, auth: "" } },
+      "on",
+      undefined,
+    ];
+    for (const [i, value] of bad.entries()) {
+      client.send({ type: "push-subscribe", subscription: value, clientMsgId: `bad${i}` });
+      expect(await client.ack(`bad${i}`), JSON.stringify(value)).toMatchObject({ ok: false, reason: "failed" });
+    }
+    expect(devicesFile()[0].push).toEqual(subscription());
+    client.close();
+  });
+
+  it("undoes a subscription it couldn't save, so the phone's resend is saved", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    const file = path.join(userData, "remote-devices.json");
+    fs.chmodSync(file, 0o400);
+    try {
+      client.send({ type: "push-subscribe", subscription: subscription(), clientMsgId: "on" });
+      expect(await client.ack("on")).toMatchObject({ ok: false, reason: "failed" });
+      expect(fx.server.getStatus().devices[0].pushEnabled).toBe(false);
+    } finally {
+      fs.chmodSync(file, 0o600);
+    }
+    client.send({ type: "push-subscribe", subscription: subscription(), clientMsgId: "again" });
+    expect(await client.ack("again")).toMatchObject({ ok: true });
+    expect(devicesFile()[0].push).toEqual(subscription());
+
+    // The same for turning it off.
+    fs.chmodSync(file, 0o400);
+    try {
+      client.send({ type: "push-subscribe", subscription: null, clientMsgId: "off" });
+      expect(await client.ack("off")).toMatchObject({ ok: false, reason: "failed" });
+      expect(fx.server.getStatus().devices[0].pushEnabled).toBe(true);
+    } finally {
+      fs.chmodSync(file, 0o600);
+    }
+    client.send({ type: "push-subscribe", subscription: null, clientMsgId: "off-again" });
+    expect(await client.ack("off-again")).toMatchObject({ ok: true });
+    expect(devicesFile()[0].push).toBeUndefined();
+    client.close();
+  });
+
+  it("pushes a Needs you to a phone that isn't looking, as Declarative Web Push", async () => {
+    const fx = await startServer();
+    await subscribedAway(fx);
+    fx.pm.raise("inst-1", bash(31));
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(1));
+
+    const [sub, payload, options] = sendNotification.mock.calls[0];
+    expect(sub).toEqual(subscription());
+    expect(JSON.parse(payload)).toEqual({
+      web_push: 8030,
+      notification: {
+        title: "demo · Needs you",
+        body: "Bash: pnpm test:e2e",
+        navigate: "https://mac.example.ts.net/#/s/inst-1",
+        tag: "inst-1",
+      },
+      app_badge: 1,
+    });
+    expect(options).toMatchObject({ TTL: 3600, urgency: "high", topic: topicOf("inst-1") });
+    expect(options.topic).toMatch(/^[A-Za-z0-9_-]{1,32}$/);
+    // Signed for Apple's service, with the HTTPS origin as the contact (Apple refuses a
+    // .local or localhost one) and the key the phone subscribed with.
+    const authorization = String(options.headers.Authorization);
+    expect(authorization).toMatch(new RegExp(`^vapid t=[\\w-]+\\.[\\w-]+\\.[\\w-]+, k=${vapidPublicKey()}$`));
+    const jwt = JSON.parse(Buffer.from(authorization.split(".")[1], "base64url").toString("utf8"));
+    expect(jwt).toMatchObject({ aud: "https://web.push.apple.com", sub: "https://mac.example.ts.net" });
+  });
+
+  it("pushes a Finished with its conclusion's first sentence, read after the event", async () => {
+    const fx = await startServer();
+    fx.pm.turns.set("inst-1", [{ kind: "assistant", text: "The old result, from the turn before." }]);
+    await subscribedAway(fx);
+    await vi.waitFor(() => expect(fx.pm.turnReads).toBe(1));
+    fx.pm.turns.set("inst-1", [
+      { kind: "user", text: "fix it" },
+      { kind: "tool", tool: "Edit", text: "src/a.ts" },
+      { kind: "assistant", text: "## Done\n\nFixed the **flaky** test. It was a race." },
+    ]);
+    fx.pm.raise("inst-1", finished(32));
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(1));
+    expect(payloadOf(0)).toEqual({
+      web_push: 8030,
+      notification: {
+        title: "demo · Finished",
+        body: "Fixed the flaky test. It was a race.",
+        navigate: "https://mac.example.ts.net/#/s/inst-1",
+        tag: "inst-1",
+      },
+      app_badge: 0,
+    });
+  });
+
+  it("badges the number of sessions that need the builder when it is sent", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "inst-2", name: "other" });
+    fx.pm.add({ id: "inst-3", name: "third" });
+    await subscribedAway(fx);
+    const raised = async (id: string, event: SecretaryEvent) => {
+      const before = sendNotification.mock.calls.length;
+      fx.pm.raise(id, event);
+      await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(before + 1));
+      return payloadOf(before).app_badge;
+    };
+    expect(await raised("inst-2", bash(40))).toBe(1);
+    expect(await raised("inst-3", finished(41))).toBe(1);
+    expect(await raised("inst-1", questions(42))).toBe(2);
+    // The builder answered inst-2 at the desk; its next turn finished.
+    fx.pm.clear("inst-2");
+    expect(await raised("inst-2", finished(43))).toBe(1);
+  });
+
+  it("skips a phone with the app open, until it has gone quiet", async () => {
+    const fx = await startServer();
+    const second = fx.server.createPairingOffer()!.offer;
+    await subscribedAway(fx, second.deviceToken, subscription(2));
+    const looking = await connected(fx);
+    looking.send({ type: "push-subscribe", subscription: subscription(1), clientMsgId: "on" });
+    await looking.ack("on");
+
+    fx.pm.raise("inst-1", bash(50));
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(endpoints()).toEqual(["https://web.push.apple.com/QK2"]);
+
+    // Locked with its socket half-open: no ping for longer than a phone that looks
+    // ever goes without one.
+    for (const conn of fx.server["connections"]) conn.heardAt -= 30_000;
+    fx.pm.raise("inst-1", finished(51));
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(3));
+    expect(endpoints().slice(1).sort()).toEqual(["https://web.push.apple.com/QK1", "https://web.push.apple.com/QK2"]);
+    looking.close();
+  });
+
+  it("sends nothing for a restated dialog, or for the Manager", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "manager", name: "Manager", isManager: true });
+    await subscribedAway(fx);
+    fx.pm.raise("inst-1", { ...bash(60), restated: true });
+    fx.pm.raise("manager", bash(61));
+    await settle();
+    expect(sendNotification).not.toHaveBeenCalled();
+    // The restated dialog is still the live one; only its second push is skipped.
+    expect(fx.server["host"]!.listInstances()[0]).toMatchObject({ state: "needs-you" });
+  });
+
+  it("still pushes an event a restatement followed at once: the restatement has no push of its own", async () => {
+    const fx = await startServer();
+    await subscribedAway(fx);
+    // An OpenCode turn ends beside an open dialog: Finished, then the dialog said again.
+    fx.pm.raise("inst-1", finished(72));
+    fx.pm.raise("inst-1", { ...bash(73), restated: true });
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(1));
+    expect(payloadOf(0)).toMatchObject({ notification: { title: "demo · Finished" }, app_badge: 1 });
+
+    // A fresh dialog said again before its line was read.
+    fx.pm.raise("inst-1", bash(74));
+    fx.pm.raise("inst-1", { ...bash(75), restated: true });
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(2));
+    await settle();
+    expect(sendNotification).toHaveBeenCalledTimes(2);
+    expect(payloadOf(1).notification.title).toBe("demo · Needs you");
+  });
+
+  it("sends only the newer of two events that came before the first's line was read", async () => {
+    const fx = await startServer();
+    await subscribedAway(fx);
+    fx.pm.raise("inst-1", finished(70));
+    fx.pm.raise("inst-1", bash(71));
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+    expect(payloadOf(0).notification.title).toBe("demo · Needs you");
+  });
+
+  it("sends a phone's pushes one after the other, so an older one can't land after a newer one", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "inst-2", name: "other" });
+    await subscribedAway(fx);
+    let release!: () => void;
+    sendNotification.mockImplementationOnce(
+      () => new Promise((resolve) => (release = () => resolve({ statusCode: 201, body: "", headers: {} })))
+    );
+    fx.pm.raise("inst-1", bash(100));
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(1));
+    fx.pm.raise("inst-2", finished(101));
+    await settle();
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+    release();
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(2));
+    expect(payloadOf(1).notification.title).toBe("other · Finished");
+  });
+
+  it("sends no push still queued behind one in flight once the phone link is off", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "inst-2", name: "other" });
+    await subscribedAway(fx);
+    let release!: () => void;
+    sendNotification.mockImplementationOnce(
+      () => new Promise((resolve) => (release = () => resolve({ statusCode: 201, body: "", headers: {} })))
+    );
+    fx.pm.raise("inst-1", bash(102));
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(1));
+    fx.pm.raise("inst-2", finished(103));
+    await settle();
+    await fx.server.stop();
+    release();
+    await settle();
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([404, 410])("deletes a subscription the push service says is gone (%i)", async (statusCode) => {
+    const fx = await startServer();
+    const id = await subscribedAway(fx);
+    const pushed: boolean[] = [];
+    fx.server.setStatusListener(() => pushed.push(fx.server.getStatus().devices[0].pushEnabled));
+    sendNotification.mockRejectedValueOnce(refused(statusCode));
+    fx.pm.raise("inst-1", bash(80));
+    await vi.waitFor(() => expect(fx.server.getStatus().devices[0].pushEnabled).toBe(false));
+    expect(pushed.at(-1)).toBe(false);
+    expect(devicesFile()[0].push).toBeUndefined();
+    expect(fx.server.getStatus().devices[0].lastPushError).toBeUndefined();
+
+    fx.pm.raise("inst-1", finished(81));
+    await settle();
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+    expect((await fx.server.sendTestPush(id)).ok).toBe(false);
+  });
+
+  it("records any other failure on the device until a push to it works, and never throws into the event", async () => {
+    const fx = await startServer();
+    await subscribedAway(fx);
+    const device = () => fx.server.getStatus().devices[0];
+
+    sendNotification.mockRejectedValueOnce(refused(403, JSON.stringify({ reason: "BadJwtToken" })));
+    fx.pm.raise("inst-1", bash(90));
+    await vi.waitFor(() => expect(device().lastPushError).toBe("The push service refused it: 403 BadJwtToken"));
+    expect(device().pushEnabled).toBe(true);
+    expect(devicesFile()[0].lastPushError).toBe("The push service refused it: 403 BadJwtToken");
+
+    sendNotification.mockRejectedValueOnce(new Error("getaddrinfo ENOTFOUND web.push.apple.com"));
+    fx.pm.raise("inst-1", finished(91));
+    await vi.waitFor(() =>
+      expect(device().lastPushError).toBe("Couldn't send it: getaddrinfo ENOTFOUND web.push.apple.com")
+    );
+
+    sendNotification.mockImplementationOnce(() => {
+      throw new Error("boom");
+    });
+    expect(() => fx.pm.raise("inst-1", bash(92))).not.toThrow();
+    await vi.waitFor(() => expect(device().lastPushError).toBe("Couldn't send it: boom"));
+
+    fx.pm.raise("inst-1", finished(93));
+    await vi.waitFor(() => expect(device().lastPushError).toBeUndefined());
+    expect(devicesFile()[0].lastPushError).toBeUndefined();
+    expect(sendNotification).toHaveBeenCalledTimes(4);
+  });
+
+  it("sends nothing until HTTPS is ready, nor with the phone link off", async () => {
+    const fx = await startServer();
+    const id = await subscribedAway(fx);
+    fx.server.setChecker({
+      check: async () => ({
+        tailscale: { state: "running", dnsName: "mac.example.ts.net" },
+        https: { state: "serve-missing", command: "tailscale serve --bg --https=443 http://127.0.0.1:6768" },
+      }),
+      setUpHttps: async () => {
+        throw new Error("not in these tests");
+      },
+    });
+    await fx.server["checks"].refresh(true);
+    fx.pm.raise("inst-1", bash(95));
+    await settle();
+    expect(sendNotification).not.toHaveBeenCalled();
+    expect(await fx.server.sendTestPush(id)).toEqual({ ok: false, error: "HTTPS isn't set up yet." });
+
+    await fx.server.stop();
+    fx.pm.raise("inst-1", finished(96));
+    await settle();
+    expect(sendNotification).not.toHaveBeenCalled();
+    expect(await fx.server.sendTestPush(id)).toEqual({ ok: false, error: "Turn the phone link on first." });
+  });
+
+  it("stops pushing to a revoked phone", async () => {
+    const fx = await startServer();
+    const id = await subscribedAway(fx);
+    fx.server.revokeDevice(id);
+    fx.pm.raise("inst-1", bash(97));
+    await settle();
+    expect(sendNotification).not.toHaveBeenCalled();
+    expect(await fx.server.sendTestPush(id)).toEqual({ ok: false, error: "This phone isn't paired any more." });
+  });
+
+  it("forgets every subscription when the keys are lost: they were made for the old key", async () => {
+    const fx = await startServer();
+    await subscribedAway(fx);
+    const before = vapidPublicKey();
+    await fx.server.stop();
+    fs.rmSync(path.join(userData, "remote-push.json"));
+
+    const server = new RemoteServer();
+    expect(server.getStatus().devices[0].pushEnabled).toBe(false);
+    expect(devicesFile()[0].push).toBeUndefined();
+    expect(vapidPublicKey()).not.toBe(before);
+  });
+
+  it("sends a test push to a phone whether or not it is looking, and says how it went", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    const id = fx.server.getStatus().devices[0].id;
+    expect(await fx.server.sendTestPush(id)).toEqual({
+      ok: false,
+      error: "Notifications are off on this phone. Turn them on in its app.",
+    });
+    client.send({ type: "push-subscribe", subscription: subscription(), clientMsgId: "on" });
+    await client.ack("on");
+
+    expect(await fx.server.sendTestPush(id)).toEqual({ ok: true });
+    // No badge: a test leaves the icon's number as it is.
+    expect(payloadOf(0)).toEqual({
+      web_push: 8030,
+      notification: {
+        title: "Multi-Code · Test",
+        body: "Notifications from this Mac work.",
+        navigate: "https://mac.example.ts.net/#/",
+        tag: "multi-code-test",
+      },
+    });
+
+    sendNotification.mockRejectedValueOnce(refused(500, JSON.stringify({ reason: "InternalServerError" })));
+    expect(await fx.server.sendTestPush(id)).toEqual({
+      ok: false,
+      error: "The push service refused it: 500 InternalServerError",
+    });
+    expect(fx.server.getStatus().devices[0].lastPushError).toBe("The push service refused it: 500 InternalServerError");
+
+    sendNotification.mockRejectedValueOnce(refused(410));
+    expect(await fx.server.sendTestPush(id)).toEqual({
+      ok: false,
+      error: "This phone's subscription has expired. Open the app on it to turn notifications on again.",
+    });
+    expect(fx.server.getStatus().devices[0]).toMatchObject({ pushEnabled: false });
+    client.close();
+  });
+});
+
+describe("firstSentence", () => {
+  it("cuts at the first sentence end past a few words, in either script, or at 120 characters", () => {
+    expect(firstSentence("The flaky test was a race between timers. I fixed it.")).toBe(
+      "The flaky test was a race between timers."
+    );
+    // "Done." alone says nothing.
+    expect(firstSentence("Done. Created a.txt in the current directory. Nothing else.")).toBe(
+      "Done. Created a.txt in the current directory."
+    );
+    expect(firstSentence("修好了。测试都过了。")).toBe("修好了。测试都过了。");
+    expect(firstSentence("Updated README.md and v1.2 notes")).toBe("Updated README.md and v1.2 notes");
+    const long = firstSentence("word ".repeat(60));
+    expect(long).toHaveLength(120);
+    expect(long.endsWith("…")).toBe(true);
+  });
+
+  it("reads past headings, fences and Markdown marks", () => {
+    expect(firstSentence("## Summary\n\n- **Fixed** the `parser` [bug](http://x). More.")).toBe(
+      "Fixed the parser bug. More."
+    );
+    expect(firstSentence("Renamed run_tests to run_all. Then more")).toBe("Renamed run_tests to run_all.");
+    expect(firstSentence("# Only a heading")).toBe("Only a heading");
   });
 });
 
@@ -866,31 +2239,60 @@ describe("RemoteServer device revocation", () => {
 
   it("leaves other devices connected when one is revoked", async () => {
     const fx = await startServer();
-    const secondOffer = fx.server.createPairingOffer();
+    const secondOffer = fx.server.createPairingOffer()?.offer;
     if (!secondOffer) throw new Error("no second offer");
 
-    const a = new TestClient(fx.url);
-    await a.handshake();
-    a.send({ type: "auth", deviceToken: fx.token, deviceName: "phone-a" });
-    await a.waitFor("auth-ok");
+    const a = await connected(fx);
+    const b = await connected(fx, secondOffer.deviceToken);
 
-    const b = new TestClient(fx.url);
-    await b.handshake();
-    b.send({ type: "auth", deviceToken: secondOffer.deviceToken, deviceName: "phone-b" });
-    await b.waitFor("auth-ok");
-
-    const deviceA = fx.server
-      .getStatus()
-      .devices.find((d) => d.name === "phone-a");
-    fx.server.revokeDevice(deviceA!.id);
+    const deviceA = fx.server.getStatus().devices[0];
+    fx.server.revokeDevice(deviceA.id);
     expect(await a.waitClose()).toBe(4003);
 
-    // b must still be live and receiving.
-    fx.server.broadcastActivity("inst-1", "waiting");
-    const activity = await b.waitFor("activity");
-    expect(activity.instanceId).toBe("inst-1");
+    // b must still be live and receiving: the list it gets next shows the change.
+    fx.pm.raise("inst-1", finished(100));
+    await b.instance("inst-1", (r) => r.state === "finished");
 
     b.close();
+  });
+
+  // The Phone section's "New code" revokes the code it replaces by this id (T-813).
+  it("names the row each code made, and revoking it cancels that code only", async () => {
+    const fx = await startServer();
+    const made = fx.server.createPairingOffer();
+    if (!made) throw new Error("no offer");
+    // The id is for the desktop: the QR's offer is the contract's fields only.
+    expect(Object.keys(made.offer).sort()).toEqual(["deviceToken", "hostName", "hostPublicKey", "origin", "v"]);
+    const row = fx.server.getStatus().devices.find((d) => d.id === made.deviceId);
+    expect(row).toMatchObject({ name: "New device", lastSeenAt: 0, connected: false });
+
+    fx.server.revokeDevice(made.deviceId);
+    expect(fx.server.getStatus().devices.map((d) => d.id)).not.toContain(made.deviceId);
+    const replaced = new TestClient(fx.url);
+    await replaced.handshake(fx.hostPublicKey);
+    replaced.send({ type: "auth", deviceToken: made.offer.deviceToken });
+    expect((await replaced.waitFor("auth-failed")).reason).toBe("unknown-token");
+
+    // The fixture's own code still pairs.
+    (await connected(fx)).close();
+  });
+
+  // "New code" with the code it replaces (T-813): main checks and revokes in one step.
+  it("revokes a replaced code only while no phone has used it", async () => {
+    const fx = await startServer();
+    const unused = fx.server.createPairingOffer()!;
+    expect(fx.server.revokeUnusedDevice(unused.deviceId)).toBe(true);
+    expect(fx.server.getStatus().devices.map((d) => d.id)).not.toContain(unused.deviceId);
+    expect(fx.server.revokeUnusedDevice(unused.deviceId)).toBe(false);
+
+    // A phone that paired with the code a moment before keeps it, connected or gone.
+    const used = fx.server.createPairingOffer()!;
+    const phone = await connected(fx, used.offer.deviceToken);
+    expect(fx.server.revokeUnusedDevice(used.deviceId)).toBe(false);
+    phone.close();
+    await vi.waitFor(() => expect(fx.server.getStatus().devices.find((d) => d.id === used.deviceId)?.connected).toBe(false));
+    expect(fx.server.revokeUnusedDevice(used.deviceId)).toBe(false);
+    expect(fx.server.getStatus().devices.map((d) => d.id)).toContain(used.deviceId);
   });
 });
 
@@ -915,5 +2317,27 @@ describe("RemoteServer static file serving", () => {
     const base = fx.url.replace("ws://", "http://");
     const res = await get(`${base}/definitely-not-here.js`);
     expect(res.status).toBe(404);
+  });
+
+  // The phone's service worker fetches every file through the HTTP cache: each
+  // must be checked with the server every time, and cheaply (mobile-v2 T-806).
+  it("serves the app's files no-cache with a tag, and answers an unchanged one 304", async () => {
+    const fx = await startServer();
+    const base = fx.url.replace("ws://", "http://");
+    for (const [file, type] of [
+      ["/", "text/html; charset=utf-8"],
+      ["/manifest.webmanifest", "application/manifest+json; charset=utf-8"],
+      ["/icons/icon-180.png", "image/png"],
+    ]) {
+      const res = await fetch(`${base}${file}`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toBe(type);
+      expect(res.headers.get("cache-control")).toBe("no-cache");
+      const etag = res.headers.get("etag");
+      expect(etag).toMatch(/^W\/".+"$/);
+      const again = await fetch(`${base}${file}`, { headers: { "if-none-match": etag! } });
+      expect(again.status).toBe(304);
+      expect(again.headers.get("etag")).toBe(etag);
+    }
   });
 });

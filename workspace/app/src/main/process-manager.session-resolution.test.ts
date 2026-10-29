@@ -23,11 +23,13 @@ const disk: {
   lookups: number;
   discoverCalls: Array<{ cwd: string; onFound: (id: string) => void; isClaimed?: (id: string) => boolean }>;
   transcriptReads: string[];
+  turnReads: Array<{ sessionId: string; turns: number }>;
 } = {
   latestByCwd: new Map(),
   lookups: 0,
   discoverCalls: [],
   transcriptReads: [],
+  turnReads: [],
 };
 
 vi.mock("node-pty", () => ({
@@ -48,11 +50,9 @@ vi.mock("electron", () => ({
 
 vi.mock("./remote/ws-server", () => ({
   remoteServer: {
-    broadcastActivity: () => {},
     broadcastExit: () => {},
     broadcastInstances: () => {},
     broadcastOutput: () => {},
-    clearActivity: () => {},
   },
 }));
 
@@ -82,6 +82,11 @@ vi.mock("./backends", () => ({
       disk.transcriptReads.push(sessionId);
       return [{ kind: "assistant", text: `transcript of ${sessionId}` }];
     },
+    readRecentTurns: (sessionId: string, turns: number) => {
+      if (sessionId === "ses-broken") throw new Error("unreadable");
+      disk.turnReads.push({ sessionId, turns });
+      return { entries: [{ kind: "user", text: `turns of ${sessionId}` }], hasEarlier: true };
+    },
     readContextUsage: (sessionId: string) => ({
       inputTokens: sessionId === "ses-disk" ? 4242 : 100,
       updatedAt: 1000,
@@ -90,7 +95,6 @@ vi.mock("./backends", () => ({
       disk.lookups++;
       return disk.latestByCwd.get(cwd) ?? null;
     },
-    keystrokeForChoice: () => null,
     buildResumeCommand: () => "claude --resume x",
   }),
 }));
@@ -105,6 +109,7 @@ beforeEach(() => {
   disk.lookups = 0;
   disk.discoverCalls = [];
   disk.transcriptReads = [];
+  disk.turnReads = [];
   manager = new ProcessManager();
 });
 
@@ -143,6 +148,38 @@ describe("reading a stopped instance", () => {
     const id = stoppedInstance("/Users/x/code/fresh");
     expect(manager.hasReadableTranscript(id)).toBe(false);
     expect(manager.readTranscript(id, 10)).toEqual([]);
+  });
+
+  it("reads the last turns of the same session, for the phone, and says which session", () => {
+    disk.latestByCwd.set(CWD, "ses-disk");
+    const id = stoppedInstance();
+    expect(manager.readRecentTurns(id, 10)).toEqual({
+      entries: [{ kind: "user", text: "turns of ses-disk" }],
+      hasEarlier: true,
+      session: "ses-disk",
+    });
+    expect(disk.turnReads).toEqual([{ sessionId: "ses-disk", turns: 10 }]);
+  });
+
+  it("reads at least one turn, whatever number the phone sent", () => {
+    disk.latestByCwd.set(CWD, "ses-disk");
+    const id = stoppedInstance();
+    for (const turns of [0, -3, Number.NaN, 2.7]) manager.readRecentTurns(id, turns);
+    expect(disk.turnReads.map((read) => read.turns)).toEqual([1, 1, 1, 2]);
+  });
+
+  it("has no turns for an unknown instance, a directory with no history or a failed read", () => {
+    expect(manager.readRecentTurns("nope", 10)).toEqual({ entries: [], hasEarlier: false });
+    expect(manager.readRecentTurns(stoppedInstance("/Users/x/code/fresh"), 10)).toEqual({
+      entries: [],
+      hasEarlier: false,
+    });
+    disk.latestByCwd.set("/Users/x/code/broken", "ses-broken");
+    expect(manager.readRecentTurns(stoppedInstance("/Users/x/code/broken"), 10)).toEqual({
+      entries: [],
+      hasEarlier: false,
+      session: "ses-broken",
+    });
   });
 
   // The other half of what a stopped contact was missing: the contact list showed

@@ -1,0 +1,16 @@
+{
+  "TCP": {
+    "443": {
+      "HTTPS": true
+    }
+  },
+  "Web": {
+    "jasenpanmacbook-air.taile5fb0f.ts.net:443": {
+      "Handlers": {
+        "/": {
+          "Proxy": "http://192.168.0.20:6768"
+        }
+      }
+    }
+  }
+}

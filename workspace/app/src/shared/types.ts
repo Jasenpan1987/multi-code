@@ -92,14 +92,26 @@ export interface SecretaryExchange {
 
 export type SecretaryEventKind = "finished" | "needs-you";
 
-// Result of minting a pairing offer: the QR image the user scans plus the same
-// payload as text, for the case where scanning isn't practical.
+// Result of minting a pairing offer: the QR image the user scans, and the URL it
+// encodes (`<origin>/#pair=<offer>`), shown instead when the image couldn't be made.
+// `deviceId` is the paired-phones row the code made ("New device" until a phone uses it).
 export interface RemotePairing {
-  pairingUrl: string;
-  webUrl: string | null;
+  deviceId: string;
+  webUrl: string;
   qrDataUrl: string | null;
-  endpoints: string[];
 }
+
+// What the Phone section's "Set up HTTPS" did: the status after it, and why the serve
+// command didn't run or didn't work, when it didn't.
+export interface RemoteHttpsSetup {
+  status: RemoteStatus;
+  error?: string;
+}
+
+// What the Phone section's "Send test" did: the push went to the phone's push service,
+// or why it didn't. The phone's `pushEnabled` and `lastPushError` follow in the next
+// "remote-status" push, as for any push.
+export type RemoteTestPush = { ok: true } | { ok: false; error: string };
 
 // How full a session's context window is, read from the newest assistant turn in
 // its transcript.
@@ -381,6 +393,9 @@ export interface ElectronAPI {
   openExternal: (url: string) => Promise<{ ok: boolean; error?: string }>;
   // Total unread alerts, shown on the Dock icon; 0 clears it.
   setDockBadge: (count: number) => void;
+  // The builder acknowledged an instance that had unread alerts; a Finished session
+  // stops being Finished on the phone.
+  acknowledgeInstance: (id: string) => void;
 
   // App
   getAppVersion: () => Promise<string>;
@@ -395,9 +410,16 @@ export interface ElectronAPI {
   // Phone link
   getRemoteStatus: () => Promise<RemoteStatus>;
   setRemoteEnabled: (enabled: boolean) => Promise<RemoteStatus>;
-  createRemotePairing: () => Promise<RemotePairing | null>;
+  // `replacing`: the code "New code" replaces, revoked unless a phone has used it.
+  createRemotePairing: (replacing?: string) => Promise<RemotePairing | null>;
   revokeRemoteDevice: (deviceId: string) => Promise<RemoteStatus>;
-  hasTailscale: () => Promise<boolean>;
+  // Runs `checks.https.command` when the checks say `serve-missing`; never anything
+  // else. The admin console link (`certs-off`) opens through openExternal.
+  setUpRemoteHttps: () => Promise<RemoteHttpsSetup>;
+  // Opens the Tailscale app, for the builder to turn it on.
+  openTailscale: () => Promise<{ ok: boolean; error?: string }>;
+  // Sends "Multi-Code · Test" to that phone, whether or not its app is open.
+  sendRemoteTestPush: (deviceId: string) => Promise<RemoteTestPush>;
 
   // Secretary. setSpeechServer saves the address ("" for text only) and applies
   // the key change; testSpeechServer tests what is saved.
@@ -477,6 +499,9 @@ export interface ElectronAPI {
   // through a tool rather than the user clicking play.
   onInstanceStarted: (callback: (instance: Instance) => void) => () => void;
   onInstanceActivity: (callback: (id: string, type: string) => void) => () => void;
+  // A paired phone read the instance: opened it, or had it open when it reported.
+  // Its unread alerts clear here too.
+  onInstanceReadOnPhone: (callback: (id: string) => void) => () => void;
   onInstanceSessionId: (callback: (id: string, sessionId: string) => void) => () => void;
   onInstanceAlertsDegraded: (
     callback: (id: string, degraded: boolean, reason?: AlertsDegradedReason) => void

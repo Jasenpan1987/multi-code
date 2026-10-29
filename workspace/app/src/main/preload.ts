@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   openExternal: (url: string) => ipcRenderer.invoke("open-external", url),
 
   setDockBadge: (count: number) => ipcRenderer.send("set-dock-badge", count),
+  acknowledgeInstance: (id: string) => ipcRenderer.send("instance-acknowledged", id),
 
   // App
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
@@ -56,10 +57,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getRemoteStatus: () => ipcRenderer.invoke("remote-get-status"),
   setRemoteEnabled: (enabled: boolean) =>
     ipcRenderer.invoke("remote-set-enabled", enabled),
-  createRemotePairing: () => ipcRenderer.invoke("remote-create-pairing"),
+  createRemotePairing: (replacing?: string) => ipcRenderer.invoke("remote-create-pairing", replacing),
   revokeRemoteDevice: (deviceId: string) =>
     ipcRenderer.invoke("remote-revoke-device", deviceId),
-  hasTailscale: () => ipcRenderer.invoke("remote-has-tailscale"),
+  setUpRemoteHttps: () => ipcRenderer.invoke("remote-setup-https"),
+  openTailscale: () => ipcRenderer.invoke("remote-open-tailscale"),
+  sendRemoteTestPush: (deviceId: string) =>
+    ipcRenderer.invoke("remote-test-push", deviceId),
 
   // Secretary. `key` is a SpeechKeyChange; typed loose here like `backend`
   // above, and validated in main.
@@ -156,6 +160,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("instance-activity", listener);
     return () => {
       ipcRenderer.removeListener("instance-activity", listener);
+    };
+  },
+  onInstanceReadOnPhone: (callback: (id: string) => void) => {
+    const listener = (_event: unknown, id: string) => callback(id);
+    ipcRenderer.on("instance-read-on-phone", listener);
+    return () => {
+      ipcRenderer.removeListener("instance-read-on-phone", listener);
     };
   },
   onInstanceStarted: (callback: (instance: unknown) => void) => {

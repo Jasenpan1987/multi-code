@@ -154,6 +154,15 @@ export interface BuilderTurn {
 }
 
 /**
+ * The end of a session as the phone reads it, turn by turn (`Backend.readRecentTurns`):
+ * the entries oldest first, and whether the session has more before them.
+ */
+export interface RecentTurns {
+  entries: TranscriptEntry[];
+  hasEarlier: boolean;
+}
+
+/**
  * Activity callback. `detail` is populated only for the "prompt" event, and
  * only when the blocking tool_use could be decoded into a question plus
  * options — it's what lets a paired phone render real buttons instead of a
@@ -184,6 +193,16 @@ export interface HookAttention {
   // screen. Absent for a backend whose terminal shows only the contact's session
   // (Claude).
   shownSession?(): string | undefined;
+  // The session the backend's interrupt keys (Backend.interrupt) would stop now, or
+  // undefined when they would stop nothing: OpenCode's TUI interrupts only the
+  // session it shows, and only while that one runs. Absent for a backend whose
+  // terminal shows only the contact's session (Claude): its keys stop whatever runs.
+  interruptTarget?(): string | undefined;
+  // Whether the terminal shows a dialog now, by the agent's own record of it (Claude's
+  // registry reads `waiting`, OpenCode holds an open request). Typing into a dialog
+  // drops the secretary's needs-you event while the dialog stays open (an arrow key,
+  // a half-typed answer), so that event alone can't say text would land in one.
+  dialogOnScreen?(): boolean;
 }
 
 // What createHookAttention is told about the process it watches.
@@ -292,24 +311,13 @@ export interface Backend {
   ): HookAttention;
 
   /**
-   * Translate "the user tapped option N on their phone" into the keystrokes
-   * this CLI's option box expects, or null when the choice can't be made
-   * safely (out of range, or a box this backend can't drive reliably).
-   *
-   * This MUST be per-backend: the CLIs do not agree, and the wrong family of keys
-   * doesn't error, it silently does nothing or picks the wrong option, which for a
-   * permission dialog means granting the wrong thing. Claude's boxes take the
-   * option's number directly. OpenCode 2's are answered through its API instead
-   * (HookAttention.answer), so it returns null for every choice.
-   *
-   * `tool` is the PromptDetail.tool the backend itself reported, so each
-   * backend can dispatch on values it defined.
+   * The keys that stop a running turn the way the builder does at the desk, written
+   * one at a time, `gapMs` apart (a paired phone's Stop, mobile-v2 Story 6). Only
+   * while a turn runs and no dialog is open: on a dialog the same Esc answers it.
+   * Per backend because the CLIs differ: Claude stops on one Esc, OpenCode 2 on a
+   * second Esc within 5 s of the first.
    */
-  keystrokeForChoice(
-    tool: string,
-    index: number,
-    optionCount: number
-  ): string | null;
+  readonly interrupt: { keys: readonly string[]; gapMs: number };
 
   /**
    * Read the tail of the session as reflowable text, newest last.
@@ -325,6 +333,25 @@ export interface Backend {
    * shows as "no transcript" while leaving the terminal view available.
    */
   readTranscript(sessionId: string, limit: number): TranscriptEntry[];
+
+  /**
+   * The session's last `turns` turns (at least one) for the phone's chat view, and
+   * whether earlier ones exist. A turn starts at each message the builder typed, and
+   * those are the only "user" entries here besides `local` ones: a command the CLI ran
+   * itself (`/model`, an unknown `/token`), which starts no turn, with its output as a
+   * `local` "assistant" entry. Rows the CLI adds to the conversation (reminders,
+   * notifications) are left out, where `readTranscript` keeps some of them for the
+   * manager. A backend that records no local commands (OpenCode) has no `local`
+   * entries. Entries carry `id` and `at`
+   * from the record; tool entries their `outcome`, and edits and writes the lines they
+   * added and removed, wherever the CLI recorded them. At most
+   * RECENT_TURNS_ENTRY_CAP entries (recentTurns.ts), the oldest turns dropped first.
+   *
+   * Called about once a second for every session a phone has open, so a read stops
+   * as soon as it has the turns it needs. `{ entries: [], hasEarlier: false }` when the
+   * session can't be read.
+   */
+  readRecentTurns(sessionId: string, turns: number): RecentTurns;
 
   /**
    * What the builder last typed in this session, up to three messages before it,

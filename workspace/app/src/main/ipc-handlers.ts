@@ -41,13 +41,14 @@ import type {
   DroppedItem,
   FileDiff,
   ReadFileResult,
+  RemotePairing,
   SpeechKeyChange,
 } from "../shared/types";
 import { OPENCODE_VIEW_KEYS, replyConclusion } from "../shared/replyStart";
 import type { OpencodeViewCommand } from "../shared/replyStart";
 import { remoteServer } from "./remote/ws-server";
-import { setRemoteEnabled } from "./remote";
-import { hasTailscaleEndpoint } from "./remote/endpoints";
+import { acknowledgeInstance, setRemoteEnabled } from "./remote";
+import { openTailscaleApp } from "./remote/tailscale";
 import { ensureManagerMcpStarted, getManagerActivity } from "./manager-mcp";
 import { ensureManagerWorkspace } from "./manager-workspace";
 import QRCode from "qrcode";
@@ -450,6 +451,12 @@ export function registerIpcHandlers() {
     app.setBadgeCount(count);
   });
 
+  // The builder acknowledged an instance that had unread alerts (markRead in
+  // useNotifications.ts): it stops being Finished on the phone too.
+  ipcMain.on("instance-acknowledged", (_event, id: unknown) => {
+    if (typeof id === "string") acknowledgeInstance(id);
+  });
+
   ipcMain.on("pty-input", (_event, id: string, data: string) => {
     processManager.writeToInstance(id, data);
   });
@@ -622,7 +629,9 @@ export function registerIpcHandlers() {
   // Phone link
   // ---------------------------------------------------------------------
 
-  ipcMain.handle("remote-get-status", () => remoteServer.getStatus());
+  // Also refreshes the Tailscale checks behind the answer (at most every 5 s); a change
+  // arrives as a "remote-status" push.
+  ipcMain.handle("remote-get-status", () => remoteServer.requestStatus());
 
   ipcMain.handle("remote-set-enabled", (_event, enabled: boolean) =>
     setRemoteEnabled(enabled)
@@ -631,28 +640,28 @@ export function registerIpcHandlers() {
   // Mint a pairing token and render the offer as a QR data URL. The renderer
   // only ever sees the image plus the URL text, never the raw token by itself,
   // so a screenshot of the UI is the only thing that leaks it — same exposure as
-  // showing the QR at all. Returns null when the server isn't listening yet
-  // (nothing to point a phone at).
-  ipcMain.handle("remote-create-pairing", async () => {
-    const offer = remoteServer.createPairingOffer();
-    if (!offer) return null;
+  // showing the QR at all. Returns null unless the server listens and HTTPS is
+  // ready (nothing to point a phone at). `replacing`: the row of the code "New code"
+  // replaces, revoked once the new one is made unless a phone has used it ("Done"
+  // keeps a code: the Home Screen app's paste hand-off may still use it).
+  ipcMain.handle("remote-create-pairing", async (_event, replacing?: unknown): Promise<RemotePairing | null> => {
+    const pairing = remoteServer.createPairingOffer();
+    if (!pairing) return null;
+    if (typeof replacing === "string") remoteServer.revokeUnusedDevice(replacing);
+    const { offer, deviceId } = pairing;
     const code = Buffer.from(JSON.stringify(offer), "utf8").toString("base64url");
-    const pairingUrl = `multicode://pair?code=${code}`;
-    // The phone opens the served web client and pastes/scans there, so the
-    // human-usable form is an http URL with the payload in the fragment. A
-    // fragment never reaches a server, which matters because the token is in it.
-    const firstEndpoint = offer.endpoints[0];
-    const webUrl = firstEndpoint
-      ? `${firstEndpoint.replace(/^ws:/, "http:")}/#${code}`
-      : null;
+    // The phone opens the served web client at the offer's origin, with the payload
+    // in the fragment (`#pair=`, as remote-protocol.ts specifies). A fragment never
+    // reaches a server, which matters because the token is in it.
+    const webUrl = `${offer.origin}/#pair=${code}`;
     try {
-      const qrDataUrl = await QRCode.toDataURL(webUrl ?? pairingUrl, {
+      const qrDataUrl = await QRCode.toDataURL(webUrl, {
         margin: 1,
         width: 240,
       });
-      return { pairingUrl, webUrl, qrDataUrl, endpoints: offer.endpoints };
+      return { deviceId, webUrl, qrDataUrl };
     } catch {
-      return { pairingUrl, webUrl, qrDataUrl: null, endpoints: offer.endpoints };
+      return { deviceId, webUrl, qrDataUrl: null };
     }
   });
 
@@ -661,15 +670,21 @@ export function registerIpcHandlers() {
     return remoteServer.getStatus();
   });
 
+  // The Phone section's "Set up HTTPS" button, the only caller: runs
+  // `tailscale serve --bg --https=443 http://127.0.0.1:<port>` when nothing serves
+  // port 443 yet, and changes nothing otherwise (remote/tailscale.ts).
+  ipcMain.handle("remote-setup-https", () => remoteServer.setUpHttps());
+
+  // The Phone section's "Open Tailscale", for a Tailscale that is stopped or quit.
+  ipcMain.handle("remote-open-tailscale", () => openTailscaleApp());
+
+  // The Phone section's "Send test" for one paired phone.
+  ipcMain.handle("remote-test-push", (_event, deviceId: string) => remoteServer.sendTestPush(deviceId));
+
   // Everything the manager has done, newest first. Live updates arrive on the
   // "manager-activity" event; this is for a renderer that just mounted or
   // reloaded.
   ipcMain.handle("manager-activity-list", () => getManagerActivity());
-
-  // Whether a Tailscale address exists on this machine — i.e. whether the phone
-  // will still reach the desktop after leaving the house. Surfaced so the user
-  // isn't surprised by a LAN-only pairing.
-  ipcMain.handle("remote-has-tailscale", () => hasTailscaleEndpoint());
 
   // ---------------------------------------------------------------------
   // Secretary. The settings replies are SecretarySettings or a test result:

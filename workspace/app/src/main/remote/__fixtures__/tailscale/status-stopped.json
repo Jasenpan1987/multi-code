@@ -1,0 +1,36 @@
+{
+  "Version": "1.98.9-t4fb758c39-g200941d74",
+  "TUN": true,
+  "BackendState": "Stopped",
+  "HaveNodeKey": true,
+  "AuthURL": "",
+  "TailscaleIPs": [
+    "100.103.73.2",
+    "fd7a:115c:a1e0::b301:49a2"
+  ],
+  "Self": {
+    "HostName": "jasenpan的MacBook Air",
+    "DNSName": "jasenpanmacbook-air.taile5fb0f.ts.net.",
+    "OS": "macOS",
+    "TailscaleIPs": [
+      "100.103.73.2",
+      "fd7a:115c:a1e0::b301:49a2"
+    ],
+    "Online": false,
+    "InNetworkMap": true,
+    "KeyExpiry": "2027-01-22T11:06:03Z"
+  },
+  "Health": [
+    "Tailscale could not connect to the 'Sydney' relay server. Your Internet connection might be down, or the server might be temporarily unavailable.",
+    "Tailscale is stopped."
+  ],
+  "MagicDNSSuffix": "taile5fb0f.ts.net",
+  "CurrentTailnet": {
+    "MagicDNSSuffix": "taile5fb0f.ts.net",
+    "MagicDNSEnabled": true
+  },
+  "CertDomains": null,
+  "Peer": {},
+  "User": {},
+  "ClientVersion": null
+}

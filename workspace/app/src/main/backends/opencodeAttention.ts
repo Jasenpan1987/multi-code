@@ -285,6 +285,20 @@ export class OpencodeAttention implements HookAttention {
     return this.lastShown;
   }
 
+  // The session Esc Esc would interrupt: the shown one, while it runs. The TUI's
+  // `session.interrupt` acts on the session its prompt shows and is enabled only
+  // while that one runs (packages/tui/src/component/prompt/index.tsx:499-528, 2.0.32);
+  // shown home, or an idle tab while another runs, the keys stop nothing.
+  interruptTarget(): string | undefined {
+    const shown = this.lastShown;
+    return shown !== undefined && this.running.has(shown) ? shown : undefined;
+  }
+
+  // A request of the contact's tree still waits on the builder, whoever typed at it.
+  dialogOnScreen(): boolean {
+    return this.dialogs.size > 0;
+  }
+
   // The contact takes the shown session as its own (the one its next start reopens)
   // only when it is a root. The TUI can show a subagent's session too, and reopening
   // that would put the contact in the middle of someone else's turn. Its family is

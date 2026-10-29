@@ -36,6 +36,7 @@ export type {
   SpawnOptions,
   HookAttention,
   PromptToolCall,
+  RecentTurns,
   SessionDiscovery,
   SessionStart,
 } from "./types";

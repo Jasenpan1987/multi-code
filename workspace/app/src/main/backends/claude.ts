@@ -8,10 +8,10 @@ import type {
   SpawnConfig,
   SpawnOptions,
 } from "./types";
-import { keystrokeForOption } from "../remote/promptExtract";
 import { ClaudeHookAttention, ClaudeWorkingWatch } from "./claudeHooks";
 import type { TranscriptEntry } from "../../shared/remote-protocol";
-import { claudeTranscriptEntries, readBuilderTurn } from "./claudeTranscript";
+import { claudeTranscriptEntries, readBuilderTurn, readClaudeRecentTurns } from "./claudeTranscript";
+import { noTurns } from "./recentTurns";
 import type { ContextUsage } from "../../shared/types";
 import { resolvePath } from "./resolvePath";
 import { INSTANCE_ENV, SPAWN_ENV, withUtf8Locale } from "./instance-env";
@@ -439,19 +439,24 @@ export const claudeBackend: Backend = {
         attention.stop();
         working.stop();
       },
+      // A dialog, or a panel the builder opened (`/cost`): text would land in it either way.
+      dialogOnScreen: () => readStatus() === "waiting",
     };
   },
 
-  // Claude's option boxes accept the option's number directly, for every kind of
-  // prompt it raises, so the tool name doesn't change the answer.
-  keystrokeForChoice(_tool, index, optionCount): string | null {
-    return keystrokeForOption(index, optionCount);
-  },
+  // Esc ends the turn at once and fires no hook; the registry leaves `busy`
+  // (docs/timeline/2026-10-06_attention-alerts-investigation.md, "Esc interrupt").
+  interrupt: { keys: ["\x1b"], gapMs: 0 },
 
   readTranscript(sessionId, limit): TranscriptEntry[] {
     const jsonlPath = findJsonlBySessionId(sessionId);
     if (!jsonlPath) return [];
     return readClaudeTranscript(jsonlPath, limit);
+  },
+
+  readRecentTurns(sessionId, turns) {
+    const jsonlPath = findJsonlBySessionId(sessionId);
+    return jsonlPath ? readClaudeRecentTurns(jsonlPath, turns) : noTurns();
   },
 
   async readBuilderTurn(sessionId) {
