@@ -598,7 +598,7 @@ shows each check state, gates the QR, sends a test push and revokes.
 ### T-813: QA and docs
 
 - **Type:** qa
-- **Status:** automated QA and docs done (`mv2/t-813`); the builder's iPhone test is next
+- **Status:** done. Automated QA and docs merged (b52a966); the builder tests the released 0.10.0 on the iPhone (`test-plan-iphone.md`)
 - **Story:** all
 - **Description:**
   - Every acceptance criterion of PRD v1.0 checked: automated where possible (harness +
@@ -662,3 +662,5 @@ shows each check state, gates the QR, sends a test push and revokes.
 - 2026-10-29: Epic review-loop done (gpt-6.1-sol): desktop 13 rounds over 5 areas, $3.81 (2c4d4f7, merged b605887); phone 12 rounds over 5 areas, $4.24 (0365a94, merged ef7ad55). Every area ended clean or at its limit. 1968 tests pass.
 - 2026-10-29: T-813 automated QA and docs done on `mv2/t-813`: 59 of 67 criteria pass, 7 iPhone-only, 1 fail (touch targets, builder's call). Plan answers within ~100 ms were lost (fixed, 500 ms settle); New code revokes an unused replaced code. iPhone session: `scripts/mobile-qa/iphone-qa.sh`.
 - 2026-10-30: iPhone test found G-321 (read on the phone stayed unread on the desk); fixed on mv2/read-sync (56616a3) and merged.
+- 2026-10-30: iPhone test also found G-322 (`/new` from the phone kept the old chat), G-323 (slash commands and their replies never reached the phone) and G-324 (the keyboard pushed a short chat out of view). Contract gained `TranscriptEntry.local` and `TranscriptFrame.session` (fb80c5c); fixed on mv2/deskfix (0085331, merged 69ae7c9) and mv2/phonefix (4ca5ce7, merged 0a609e5). 2023 tests pass.
+- 2026-10-30: feat/mobile-v2 merged into master (308c115), released as 0.10.0 (1b97adb, `release/Multi-Code-0.10.0-arm64.dmg`), pushed. Open for the next round: G-325 (bash mode and other CLI notices on the phone), G-326 (OpenCode `/new`), the touch-target call on the terminal's key row (QA), and the iPhone-only checks still open in gaps.md.

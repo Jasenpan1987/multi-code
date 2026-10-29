@@ -57,6 +57,8 @@ When working with multiple coding-agent sessions across different projects simul
 - **Every session at a glance** — One list grouped by state: Needs you, Working, Finished, Idle. Each row says what the dialog asks, the tool the agent is on, the first sentence of its conclusion, or the last thing it said
 - **Read a session like a chat** — Your messages as bubbles, the agent's text as Markdown. A finished turn's tool calls fold into one line ("12 tools · 6 read · 3 edited · 2 commands"); tap it for one line per tool. The conclusion is always shown, and opening a finished session lands on it
 - **Reply, answer, stop** — Type a reply; only Send sends, so a Chinese IME's Return never does. Answer every dialog in full: a permission with the CLI's own options and a reason for No, every question of a question box (multi-select included), a plan with "tell Claude what to change". Stop a running turn, as Esc does at the desk
+- **Slash commands from the phone** — Send `/compact`, `/model` or any other command as a message; the command and the CLI's reply show as a grey line ("/token · Unknown command: /token"). After `/new` or `/clear` the chat starts afresh on the new session
+- **Read on one, read on both** — Open a session on the phone and its red dot on the desk goes out (a session the phone is watching doesn't light one); read it at the desk and it stops being Finished on the phone
 - **Opens with no connection** — It shows what it had last, with its age, and says what is out of reach: the phone's network, your Mac, or Multi-Code on it. A reply typed offline waits on the phone and is sent once when the Mac is back
 - **Notifications** — A push every time a session finishes or needs you, with the app closed and the phone locked. A newer one replaces the older one for the same session, the icon's badge counts the sessions that need you, and tapping one opens that session. A phone with the app open gets none: it shows the change itself
 - **Terminal fallback** — The real terminal at the Mac's width, with a key row (Esc, Tab, Shift+Tab, arrows, Space, Return, Ctrl+C), for anything the chat can't show
@@ -221,8 +223,10 @@ pnpm lint         # Run oxlint + eslint
 pnpm lint:fix     # Auto-fix lint issues
 pnpm type         # Type check without emit
 pnpm test         # Run vitest
-pnpm pack         # Package app (directory output)
-pnpm dist         # Build distributable (dmg on macOS)
+pnpm run pack     # Package the .app only (directory output; for testing, not a release)
+pnpm dist         # Build the installer (.dmg in workspace/app/release/)
+pnpm harness      # Phone dev harness: the phone app against scripted sessions
+pnpm harness:shot # Screenshot a phone screen at iPhone size (Playwright WebKit)
 ```
 
 ## Usage Guide
@@ -420,6 +424,12 @@ The app's first screen shows which of the three steps is done and which is next.
   the message still goes and the CLI queues it ("Queued until this turn ends").
   With no connection it waits ("Waiting to send"), can be cancelled, and is sent
   once when the Mac is back
+- A slash command goes like any message. It and the CLI's reply show as a grey
+  line; a long reply (`/cost`, say) folds after three lines. After `/new` or
+  `/clear` the chat empties and says "New session". (OpenCode starts its new session
+  only with the next message, so its old chat stays until then)
+- Reading is shared: opening a session on the phone clears its red dot on the desk,
+  and reading it at the desk makes it Idle on the phone. The desk still chimes
 - When a session needs you, the dialog takes the compose box's place: the CLI's
   own options as buttons, a field for a reason on No (OpenCode: Reject), every
   question of a question box with **Submit answers**, the whole plan. "Always

@@ -180,3 +180,20 @@ call. Bug 1 would have left a plan approved from the phone silently unapproved; 
 fixed and re-checked live. The epic is ready for the builder's iPhone test
 (`test-plan-iphone.md`, `workspace/app/scripts/mobile-qa/iphone-qa.sh`), which covers the
 7 iPhone-only rows and closes G-302, G-305, G-306 and the 10-minute part of G-301.
+
+## After QA: found on the builder's iPhone (2026-10-30)
+
+Using the dev build on the real phone turned up four bugs the automated checks missed. All
+were fixed and merged before 0.10.0; the fixes were checked live against Claude 2.1.312 and
+in the harness, and each has unit tests. 2023 tests pass on the release.
+
+| Gap | Bug | Fix |
+|-----|-----|-----|
+| G-321 | A session read on the phone stayed unread (red dot) on the desk | `instance-read-on-phone(id)` from main; the renderer clears the count (56616a3) |
+| G-322 | `/new` sent from the phone left the old chat on the phone | SessionStart moves the session at once; transcripts carry `session`; the phone starts afresh (0085331, 4ca5ce7) |
+| G-323 | `/token` and the CLI's "Unknown command" reply never reached the phone | `TranscriptEntry.local`, shown as grey lines (0085331, 4ca5ce7) |
+| G-324 | Opening the keyboard pushed a short chat out of view | The session screen follows `visualViewport` while a field has focus; a short chat sits above the compose box (4ca5ce7) |
+
+The harness's keyboard simulation (`pnpm harness:shot --focus <selector> --keyboard 336 --pan 336`)
+reproduced G-324 on the build before the fix, so it is worth using for future keyboard
+work. Still open after the release: G-325, G-326, and the iPhone-only rows above.

@@ -19,6 +19,9 @@ Multi-Code is an Electron desktop app that manages multiple Claude Code CLI inst
 - `workspace/app/src/main/` — Electron main process (process-manager, session-watcher, IPC, store)
 - `workspace/app/src/renderer/` — React UI (App.tsx, components/, hooks/, audio/, styles/)
 - `workspace/app/src/shared/types.ts` — Shared TypeScript interfaces
+- `workspace/app/src/shared/remote-protocol.ts` — Phone link wire protocol (v3), the phone ↔ desktop contract
+- `workspace/app/src/renderer-mobile/` — The phone web app (served to the iPhone, built by `rspack.mobile.config.ts`)
+- `workspace/app/scripts/mobile-harness/` — Phone dev harness: the real server with scripted sessions, Playwright WebKit screenshots at iPhone size (`pnpm harness`, `pnpm harness:shot`)
 - `docs/` — Business docs, specs, PRD, kanban
 
 ## Tech Stack & Conventions
@@ -53,6 +56,12 @@ When building to **release/ship** a version (not a routine dev build):
    lives — the root package.json is private and has none). Ask which part to
    bump (patch/minor/major); default suggestion is **patch**.
 3. Commit the bump on its own (e.g. `chore: bump version to X.Y.Z`).
+4. Bring `README.md` and `README.zh-CN.md` up to date with what the release changes.
+5. Build the installer with `pnpm dist` in `workspace/app`: it writes
+   `release/Multi-Code-X.Y.Z-arm64.dmg` (and its `.blockmap`). Then delete the
+   intermediate `release/mac-arm64/` folder. Never ship `pnpm run pack`'s output: it
+   is only the `.app` (`--dir`), for testing the Dock badge.
+6. `git push origin master`.
 
 Routine dev builds during development do NOT bump the version — only do this in
 a release context so the number isn't pushed on every build.

@@ -296,3 +296,28 @@ are away it's a browser window opening on an empty desk. With the override the c
 once with the credential error, which is the right outcome. It must stay the call's only
 `--settings`, since a second one replaces the first. (source:
 docs/timeline/2026-10-08_brief-writer-spike.md, T-504 addendum)
+
+## Verifying the phone app without an iPhone (added 2026-10-30)
+
+There is no iOS Simulator here (no Xcode). Phone screens are checked against the dev
+harness (`workspace/app/scripts/mobile-harness/README.md`), which runs the real compiled
+`RemoteServer` under Electron with scripted sessions and an isolated `/tmp` userData:
+
+```bash
+cd workspace/app
+pnpm harness                       # free ports, its own /tmp/mc-harness-<pid>; prints the URLs
+pnpm harness:shot --control http://127.0.0.1:<control-port> --scenario short --route '#/s/multi-code' --out /tmp/shot
+```
+
+To keep one userData across runs (a page stays paired), start it as `npx electron
+scripts/mobile-harness/main.ts --user-data-dir=/tmp/mc-harness-mine --port 7700`. Shots are
+Playwright WebKit at 393 × 852, scale 3, touch, dark and light; read every PNG.
+`--focus <selector> --keyboard 336 --pan 336` simulates the iOS keyboard (a shorter `visualViewport`
+and iOS's page pan): it reproduced the "keyboard pushes the chat away" bug (G-324) on the
+build before its fix, so use it for any layout near the compose box.
+
+What WebKit can't show, only the iPhone can: the Home Screen app's own storage, real
+notifications, the real keyboard and IME, lock/unlock. The builder prefers to install the
+packaged release and use it rather than run a long scripted checklist against a dev build;
+real use found four bugs the automated checks missed (`docs/specs/mobile-v2/qa-report-m1.md`,
+"After QA"). (source: mobile-v2, T-802, G-321..G-324)

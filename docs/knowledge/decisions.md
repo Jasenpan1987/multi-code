@@ -4,6 +4,56 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-10-30 — A session read on one side is read on the other
+
+**Decision:** Reading is shared between the desk and the phone. Opening a session on the phone, a Finished or Needs-you reported while a phone that is looking (an authenticated socket heard from in the last 20 s) has that session open, and a quiet phone resuming with it open, all clear the desk's unread for it: main sends `instance-read-on-phone(id)` and the renderer drops the count and any pending increment, without acknowledging back. Reading it at the desk (the renderer's `markRead`) makes it Idle on the phone (`instance-acknowledged(id)`, G-304). The desk chime is unchanged.
+
+**Why:** The builder found on the iPhone that a session read there stayed unread on the desk (G-321). Only the other direction had been built.
+
+**Consequences:** With Secretary Mode on, a session read on the phone has no red dot, so a click at the desk no longer opens its brief by itself; the header's Secretary button still does. An OpenCode finish in a background session isn't cleared by a phone watching the contact's own session.
+
+**Source:** builder's iPhone test, 2026-10-30 (G-321); fix 56616a3
+**Affects:** `main/remote/ws-server.ts` (`isReading`, the subscribe and resume paths), `main/process-manager.ts` (`reportActivity`, `readOnPhone`), `main/remote/index.ts`, `renderer/hooks/useNotifications.ts`, `renderer/App.tsx`
+
+---
+
+## 2026-10-30 — The phone follows the CLI's session, and sees the CLI's own lines
+
+**Decision:** Every transcript sent to the phone names the CLI session it comes from (`TranscriptFrame.session`). A Claude SessionStart hook (as after `/new` or `/clear`) moves the contact to its new session at once, without waiting for the 4 s registry poll, and the phone gets the new session's transcript right away, empty until it has entries; the phone then drops the old chat, shows "New session" and settles bubbles sent before the change. A slash command the builder runs and the CLI's own reply to it (`<local-command-stdout>`, "Unknown command: /token") reach the phone as `local` entries, shown as grey lines; they start no turn, stay out of fold counts and are never a turn's conclusion. `readTranscript` and `readBuilderTurn` (manager, secretary) are unchanged.
+
+**Why:** On the iPhone, `/new` sent from the phone left the old chat on screen though the desk had cleared, and `/token` showed nothing on the phone while the desk said the command was unknown (G-322, G-323). The turn reader had left all local rows out on purpose.
+
+**Consequences:** OpenCode records no comparable rows, and its `/new` makes no session until the next prompt, so there the old chat stays until then. Bash mode (`!cmd`) and other CLI notices still don't reach the phone (G-325).
+
+**Source:** builder's iPhone test, 2026-10-30 (G-322, G-323); fixes 0085331, 4ca5ce7
+**Affects:** `shared/remote-protocol.ts` (`TranscriptEntry.local`, `TranscriptFrame.session`), `main/backends/claudeTranscript.ts`, `main/backends/recentTurns.ts`, `main/process-manager.ts` (`handleAlertDelivery`, `readRecentTurns`), `main/remote/remote-host.ts`, `renderer-mobile/state.ts`, `renderer-mobile/turns.ts`, `renderer-mobile/screens/SessionScreen.tsx`
+
+---
+
+## 2026-10-30 — The phone's chat follows the keyboard
+
+**Decision:** While the compose box (or a dialog's text field) has focus, the session screen is sized and placed to `visualViewport`, so iOS has nothing to pan out of view; a chat shorter than the screen sits right above the compose box, as in a messaging app. The same hook (`renderer-mobile/keyboard.ts`) serves the terminal's key row. Sizing applies only while a field has focus, because in a standalone app `visualViewport.height` can stay about 68 pt short after the first keyboard (WebKit 322900).
+
+**Why:** On the iPhone, opening the keyboard in a short chat pushed every message out of view; the builder thought the chat was empty (G-324).
+
+**Source:** builder's iPhone test, 2026-10-30 (G-324); fix 4ca5ce7
+**Affects:** `renderer-mobile/keyboard.ts`, `renderer-mobile/screens/SessionScreen.tsx`, `session.css`, `components/DialogSlot.tsx`, `screens/TerminalScreen.tsx`
+
+---
+
+## 2026-10-29 — A Claude plan dialog gets 500 ms before the first key
+
+**Decision:** `answerDialog` writes no key until the dialog it answers is 500 ms old (`AnswerTiming.dialogSettleMs`), then checks that the instance, its terminal and the same needs-you event are still there. This holds for the phone and the secretary.
+
+**Why:** At QA, Claude Code 2.1.312 dropped an ExitPlanMode answer written 40 or 100 ms after the dialog's PermissionRequest hook (5 of 5); one at 250 ms was taken. The first key clears the needs-you event, so a dropped key left phone and desk showing Idle over a dialog still waiting (G-320).
+
+**Consequences:** A tap on a plan right after it opens takes up to half a second to land. This is the knob if it ever feels slow.
+
+**Source:** mobile-v2 T-813 QA (`docs/specs/mobile-v2/qa-report-m1.md`, Bug 1)
+**Affects:** `main/process-manager.ts` (`answerDialog`, `ANSWER_TIMING`)
+
+---
+
 ## 2026-10-29 — A pairing code is one phone's secret, and the Home Screen app is paired by paste
 
 **Decision:** Each "Pair a phone" or "New code" mints a device row with its own token at once, valid until the builder revokes it, so a code can be used later. "New code" revokes the code it replaces when no phone ever connected with it; "Done" keeps the shown code. After pairing in Safari, the phone's setup screen offers "Copy pairing link" (rebuilt from the stored pairing); the Home Screen app, when unpaired, offers "Paste pairing link" (one tap, iOS's Paste bubble) and empties the clipboard after. The desktop's Phone panel has its own "Copy pairing link", which Universal Clipboard carries to the iPhone.

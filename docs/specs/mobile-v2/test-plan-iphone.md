@@ -5,6 +5,13 @@ build from `workspace/app/scripts/mobile-qa/iphone-qa.sh` (userData `/tmp/mc-iph
 phone server `127.0.0.1:6799`, real Tailscale) beside the installed Multi-Code, which
 keeps port 6768 and its own data.
 
+**Since 0.10.0 (2026-10-30):** the builder tests the installed release instead of the dev
+build (it keeps port 6768 and the real userData). For it, skip 0.1 and 0.2 (use real
+contacts); in 0.5 the command reads `http://127.0.0.1:6768`, and if the panel shows a
+conflict left by the dev build (443 → 6799), run `tailscale serve --https=443 off` first.
+Pair again (§1): the dev build's pairing doesn't carry over. Also check the 0.10.0 fixes
+in §14.
+
 This plan covers what only the iPhone can check (`qa-report-m1.md`: rows 1, 19, 39, 41,
 43, 49, 60), repeats on the device the rows automation passed in WebKit (2, 3, 25, 42,
 45, 52, 56, 58), and closes G-302, G-305, G-306 and the 10-minute part of G-301. Write ✓
@@ -157,3 +164,14 @@ asks nothing. Both run Haiku.
 | 13.1 | Stop qa-ask and qa-plain, quit the DEV window | No dialog about running sessions | |
 | 13.2 | Fill in gaps.md: G-301 (9.2), G-302 (§10, 11.4), G-305 (3.1, 5.2), G-306 (1.6–1.9) | | |
 | 13.3 | Keep `/tmp/mc-iphone-qa` until the release; the serve stays on 6799 until then | After the release: `tailscale serve --https=443 off`, then Set up HTTPS in the released app, and pair the phone again (`scripts/mobile-qa/README.md`, "After the release") | |
+
+## 14. The fixes found on the iPhone (0.10.0)
+
+| # | Do | Expect | ✓/✗ |
+|---|----|--------|-----|
+| 14.1 | Let a session finish while the phone is on the list; check its red dot on the Mac, then open it on the phone | The Mac's red dot goes out within a second (G-321) | |
+| 14.2 | Keep the phone on a session and send it a message; let it finish | No red dot lights on the Mac for it; the Mac still chimes | |
+| 14.3 | In a short chat, tap the compose box; close and open the keyboard 2–3 times | The messages sit right above the box, the header stays (G-324); note any ~68 pt gap | |
+| 14.4 | Send `/token` | The bubble becomes the grey line "/token · Unknown command: /token" (G-323) | |
+| 14.5 | Send `/cost` | A grey line that folds after three lines; tap opens it | |
+| 14.6 | Send `/new`, then a message | The old chat goes, "New session" at the top, a "/clear" line; the message is answered normally (G-322) | |

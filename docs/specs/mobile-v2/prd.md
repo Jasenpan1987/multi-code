@@ -1,8 +1,8 @@
 # PRD: Mobile v2
 
-**Version:** 1.0
-**Last Updated:** 2026-10-29
-**Status:** approved (builder, 2026-10-29: "第一个我选方案A 其他的都很好 你先做吧")
+**Version:** 1.1
+**Last Updated:** 2026-10-30
+**Status:** released in 0.10.0 (2026-10-30); approved by the builder 2026-10-29 ("第一个我选方案A 其他的都很好 你先做吧")
 **Owner:** Jasen
 **Replaces:** `docs/specs/phone-link/prd.md` v1.1
 
@@ -81,6 +81,9 @@ PRD and a mockup differ, this PRD wins.
 - [ ] The header shows the Mac's name and the connection state.
 - [ ] The Manager is not in the list (phase 2).
 - [ ] The list updates live while the app is open.
+- [ ] Reading is shared: a session read at the desk stops being Finished on the phone,
+      and one opened on the phone stops being unread on the desk (red dot, Dock count).
+      (v1.1)
 
 ### Story 3: Read a session
 
@@ -101,6 +104,10 @@ PRD and a mockup differ, this PRD wins.
 - [ ] Opening a session whose last turn finished lands on the start of that turn's conclusion.
 - [ ] The last 10 turns load first; "Earlier turns" loads 10 more each time.
 - [ ] Works the same for Claude and OpenCode sessions.
+- [ ] A slash command and the CLI's own reply to it ("/token · Unknown command: /token")
+      show as grey lines, not as messages; a long reply folds. (v1.1)
+- [ ] After `/new` or `/clear` the chat starts afresh on the new session, marked "New
+      session". (v1.1)
 
 ### Story 4: Reply
 
@@ -120,6 +127,8 @@ PRD and a mockup differ, this PRD wins.
       cancelled, and is sent once on reconnect. The Mac never sends the same message twice.
 - [ ] A message the Mac refused says why and keeps its text.
 - [ ] The draft survives the app being closed.
+- [ ] With the keyboard up, the latest messages stay visible right above the compose
+      box; iOS doesn't push them out of view. (v1.1)
 
 ### Story 5: Answer every dialog
 
@@ -276,3 +285,9 @@ during the work:
 - Every Finished and Needs you reaches the locked phone as a push.
 - Over the two-week trial after release, the app opens to content or a clear reason every
   time.
+
+## Changelog
+
+- v1.1 (2026-10-30): Released in 0.10.0. Added the criteria the builder's iPhone test
+  turned up: shared reading (Story 2, G-304, G-321), slash commands and a new session
+  (Story 3, G-322, G-323), the chat above the keyboard (Story 4, G-324).
