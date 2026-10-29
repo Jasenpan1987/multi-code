@@ -44,8 +44,11 @@ export function useNotifications() {
         debounceTimers.current.delete(instanceId);
       }
       // Every key press on the shown instance lands here, so only a real change
-      // re-renders the app.
-      if (unreadRef.current.delete(instanceId)) publish();
+      // re-renders the app, and only a real change tells main (a session read here
+      // stops being Finished on the phone).
+      const hadUnread = unreadRef.current.delete(instanceId);
+      if (hadUnread) publish();
+      if (pending || hadUnread) window.electronAPI.acknowledgeInstance(instanceId);
     },
     [publish]
   );

@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   openExternal: (url: string) => ipcRenderer.invoke("open-external", url),
 
   setDockBadge: (count: number) => ipcRenderer.send("set-dock-badge", count),
+  acknowledgeInstance: (id: string) => ipcRenderer.send("instance-acknowledged", id),
 
   // App
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),

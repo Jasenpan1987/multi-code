@@ -41,12 +41,13 @@ import type {
   DroppedItem,
   FileDiff,
   ReadFileResult,
+  RemotePairing,
   SpeechKeyChange,
 } from "../shared/types";
 import { OPENCODE_VIEW_KEYS, replyConclusion } from "../shared/replyStart";
 import type { OpencodeViewCommand } from "../shared/replyStart";
 import { remoteServer } from "./remote/ws-server";
-import { setRemoteEnabled } from "./remote";
+import { acknowledgeInstance, setRemoteEnabled } from "./remote";
 import { openTailscaleApp } from "./remote/tailscale";
 import { ensureManagerMcpStarted, getManagerActivity } from "./manager-mcp";
 import { ensureManagerWorkspace } from "./manager-workspace";
@@ -450,6 +451,12 @@ export function registerIpcHandlers() {
     app.setBadgeCount(count);
   });
 
+  // The builder acknowledged an instance that had unread alerts (markRead in
+  // useNotifications.ts): it stops being Finished on the phone too.
+  ipcMain.on("instance-acknowledged", (_event, id: unknown) => {
+    if (typeof id === "string") acknowledgeInstance(id);
+  });
+
   ipcMain.on("pty-input", (_event, id: string, data: string) => {
     processManager.writeToInstance(id, data);
   });
@@ -633,28 +640,24 @@ export function registerIpcHandlers() {
   // Mint a pairing token and render the offer as a QR data URL. The renderer
   // only ever sees the image plus the URL text, never the raw token by itself,
   // so a screenshot of the UI is the only thing that leaks it — same exposure as
-  // showing the QR at all. Returns null when the server isn't listening yet
-  // (nothing to point a phone at).
-  ipcMain.handle("remote-create-pairing", async () => {
+  // showing the QR at all. Returns null unless the server listens and HTTPS is
+  // ready (nothing to point a phone at).
+  ipcMain.handle("remote-create-pairing", async (): Promise<RemotePairing | null> => {
     const offer = remoteServer.createPairingOffer();
     if (!offer) return null;
     const code = Buffer.from(JSON.stringify(offer), "utf8").toString("base64url");
-    const pairingUrl = `multicode://pair?code=${code}`;
     // The phone opens the served web client at the offer's origin, with the payload
     // in the fragment (`#pair=`, as remote-protocol.ts specifies). A fragment never
     // reaches a server, which matters because the token is in it.
     const webUrl = `${offer.origin}/#pair=${code}`;
-    // mobile-v2 T-812: `endpoints` kept only so RemotePairing's shape holds until
-    // T-812 rewrites the Phone section.
-    const endpoints = [offer.origin];
     try {
       const qrDataUrl = await QRCode.toDataURL(webUrl, {
         margin: 1,
         width: 240,
       });
-      return { pairingUrl, webUrl, qrDataUrl, endpoints };
+      return { webUrl, qrDataUrl };
     } catch {
-      return { pairingUrl, webUrl, qrDataUrl: null, endpoints };
+      return { webUrl, qrDataUrl: null };
     }
   });
 

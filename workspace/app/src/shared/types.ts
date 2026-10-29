@@ -92,13 +92,11 @@ export interface SecretaryExchange {
 
 export type SecretaryEventKind = "finished" | "needs-you";
 
-// Result of minting a pairing offer: the QR image the user scans plus the same
-// payload as text, for the case where scanning isn't practical.
+// Result of minting a pairing offer: the QR image the user scans, and the URL it
+// encodes (`<origin>/#pair=<offer>`), shown instead when the image couldn't be made.
 export interface RemotePairing {
-  pairingUrl: string;
-  webUrl: string | null;
+  webUrl: string;
   qrDataUrl: string | null;
-  endpoints: string[];
 }
 
 // What the Phone section's "Set up HTTPS" did: the status after it, and why the serve
@@ -393,6 +391,9 @@ export interface ElectronAPI {
   openExternal: (url: string) => Promise<{ ok: boolean; error?: string }>;
   // Total unread alerts, shown on the Dock icon; 0 clears it.
   setDockBadge: (count: number) => void;
+  // The builder acknowledged an instance that had unread alerts; a Finished session
+  // stops being Finished on the phone.
+  acknowledgeInstance: (id: string) => void;
 
   // App
   getAppVersion: () => Promise<string>;

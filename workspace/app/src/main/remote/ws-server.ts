@@ -811,12 +811,23 @@ export class RemoteServer {
     socket.on("close", () => {
       stopTimers();
       this.connections.delete(conn);
+      this.rememberSeen(conn);
       this.notifyStatus();
     });
     socket.on("error", () => {
       stopTimers();
       this.connections.delete(conn);
     });
+  }
+
+  // A phone's socket went: it was last seen when it was last heard from, not when it
+  // authenticated, or a phone that had the app open for an hour would read as seen an
+  // hour ago. Nothing to keep for a socket that never authenticated, or a phone revoked.
+  private rememberSeen(conn: Connection) {
+    const device = conn.authed ? this.devices.find((d) => d.id === conn.deviceId) : undefined;
+    if (!device || device.lastSeenAt >= conn.heardAt) return;
+    device.lastSeenAt = conn.heardAt;
+    this.saveDevicesSafely();
   }
 
   // Nothing from this phone for HEARTBEAT_TIMEOUT_MS. It stops counting as connected

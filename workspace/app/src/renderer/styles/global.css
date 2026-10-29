@@ -50,6 +50,14 @@
   /* The message after a file drop: copied, not copied. */
   --drop-ok-fg: #1f7a3d;
   --drop-failed-fg: #c62828;
+  /* Phone section: its checks (passes, fails), notes, rules and commands. */
+  --phone-ok-fg: #1f7a3d;
+  --phone-bad-fg: #c62828;
+  --phone-muted-fg: #6a7280;
+  --phone-rule: rgba(45, 90, 138, 0.16);
+  --phone-code-fg: #2d5a8a;
+  --phone-code-bg: rgba(0, 0, 0, 0.04);
+  --phone-panel-bg: rgba(0, 0, 0, 0.03);
 }
 
 [data-theme="dark"] {
@@ -95,6 +103,13 @@
   --secretary-warn-fg: #e0b060;
   --drop-ok-fg: #8fd9a3;
   --drop-failed-fg: #ff8a80;
+  --phone-ok-fg: #8fd9a3;
+  --phone-bad-fg: #ff8a80;
+  --phone-muted-fg: #9a9a9a;
+  --phone-rule: #3c3c3c;
+  --phone-code-fg: #9cc4e4;
+  --phone-code-bg: rgba(255, 255, 255, 0.05);
+  --phone-panel-bg: rgba(255, 255, 255, 0.04);
 }
 
 [data-theme="dark"] .alerts-degraded-bar {
@@ -193,6 +208,13 @@
   --secretary-warn-fg: #9a5200;
   --drop-ok-fg: #4f7a2a;
   --drop-failed-fg: #b5332a;
+  --phone-ok-fg: #4f7a2a;
+  --phone-bad-fg: #b5332a;
+  --phone-muted-fg: #8a7855;
+  --phone-rule: #d6c8a4;
+  --phone-code-fg: #5a4a30;
+  --phone-code-bg: rgba(90, 74, 48, 0.08);
+  --phone-panel-bg: rgba(90, 74, 48, 0.06);
 }
 
 * {
@@ -2292,7 +2314,6 @@ body,
 }
 
 .phone-hint,
-.phone-warn,
 .phone-error,
 .secretary-hint,
 .secretary-error {
@@ -2307,11 +2328,6 @@ body,
   background: rgba(0, 0, 0, 0.03);
 }
 
-.phone-warn {
-  color: #8a5200;
-  background: rgba(217, 130, 43, 0.1);
-}
-
 .phone-error,
 .secretary-error {
   color: #c62828;
@@ -2319,71 +2335,135 @@ body,
 }
 
 .phone-muted {
-  color: #888;
+  color: var(--phone-muted-fg);
+  line-height: 1.45;
 }
 
-.phone-endpoints {
+/* The three checks, one row each as in the mockup: mark, name, what was found, and
+   the fix at the right; a note or the serve command's confirmation under it. */
+.phone-checks {
   display: flex;
   flex-direction: column;
-  gap: 3px;
 }
 
-.phone-ok {
-  color: #1f7a3d;
-  background: rgba(75, 176, 102, 0.12);
+.phone-check {
+  display: grid;
+  grid-template-columns: 12px 58px minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 6px;
+  row-gap: 4px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--phone-rule);
   line-height: 1.45;
-  padding: 5px 7px;
-  border-radius: 3px;
 }
 
-.phone-warn a {
-  color: #8a5200;
+.phone-check-mark {
   font-weight: bold;
+  color: var(--phone-muted-fg);
 }
 
-/* Each address is labelled with how far it reaches, so a VPN or LAN-only
-   address can't be mistaken for one that works from outside. */
-.phone-endpoint {
+.phone-check[data-tone="ok"] .phone-check-mark {
+  color: var(--phone-ok-fg);
+}
+
+.phone-check[data-tone="bad"] .phone-check-mark {
+  color: var(--phone-bad-fg);
+}
+
+.phone-check-label {
+  color: var(--phone-muted-fg);
+}
+
+.phone-check-text[data-mono="true"] {
+  font-family: Menlo, Monaco, monospace;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.phone-check[data-tone="unknown"] .phone-check-text {
+  color: var(--phone-muted-fg);
+}
+
+.phone-check-note,
+.phone-check .phone-confirm {
+  grid-column: 3 / -1;
+}
+
+.phone-check-note {
+  color: var(--phone-muted-fg);
+  font-size: 10px;
+}
+
+/* A second press before anything that changes the machine or cuts a phone off: the
+   serve command, shown before it runs, and Revoke. */
+.phone-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px 7px;
+  border: 1px dashed var(--phone-rule);
+  border-radius: 3px;
+  background: var(--phone-panel-bg);
+  line-height: 1.45;
+}
+
+.phone-code {
+  font-family: Menlo, Monaco, monospace;
+  font-size: 10px;
+  color: var(--phone-code-fg);
+  background: var(--phone-code-bg);
+  padding: 1px 4px;
+  border-radius: 2px;
+  white-space: nowrap;
+  user-select: text;
+}
+
+/* The serve command and a pairing URL, on lines of their own: long, so they wrap
+   anywhere, and stay copyable verbatim. */
+.phone-confirm > .phone-code,
+.phone-pairing > .phone-code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Why no code is offered yet, and which check comes first. */
+.phone-gate {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
+  padding: 5px 7px;
+  border-radius: 3px;
+  background: var(--phone-panel-bg);
+  line-height: 1.45;
 }
 
-.phone-endpoint-tag {
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 9px;
-  white-space: nowrap;
-  flex: none;
-  opacity: 0.85;
-}
-
-.phone-endpoint[data-kind="tailscale"] {
-  background: rgba(75, 176, 102, 0.12);
-  color: #1f7a3d;
-}
-
-.phone-endpoint[data-kind="vpn"] {
-  /* Dimmed: it will be in the QR (harmless, the phone just skips it) but the
-     user should not expect it to work. */
-  opacity: 0.6;
-  text-decoration: line-through;
-}
-
-.phone-endpoint[data-kind="vpn"] .phone-endpoint-tag {
-  text-decoration: none;
-}
-
-.phone-endpoint,
-.phone-url {
-  font-family: Menlo, Monaco, monospace;
+/* A row's fix, a phone's Send test: small, like Revoke beside them. */
+.phone-act {
+  padding: 2px 6px;
   font-size: 10px;
-  color: #2d5a8a;
-  background: rgba(0, 0, 0, 0.04);
-  padding: 3px 5px;
+  background: linear-gradient(180deg, #e8eef8 0%, #c6d9f1 100%);
+  border: 1px solid #7b9cc7;
   border-radius: 2px;
-  /* Endpoints and pairing URLs are long and must stay copyable verbatim. */
-  overflow-wrap: anywhere;
+  color: #2d5a8a;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.phone-act:hover:not(:disabled) {
+  background: linear-gradient(180deg, #f0f4fa 0%, #d0e0f5 100%);
+}
+
+.phone-act:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.phone-caption {
+  color: var(--phone-muted-fg);
+  text-align: center;
+  line-height: 1.45;
+  max-width: 300px;
 }
 
 .phone-pairing {
@@ -2392,7 +2472,7 @@ body,
   align-items: center;
   gap: 7px;
   padding: 8px;
-  background: rgba(0, 0, 0, 0.03);
+  background: var(--phone-panel-bg);
   border-radius: 3px;
 }
 
@@ -2418,6 +2498,14 @@ body,
   color: #555;
 }
 
+.phone-device-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--phone-rule);
+}
+
 .phone-device {
   display: flex;
   align-items: center;
@@ -2438,15 +2526,36 @@ body,
 
 .phone-device-name {
   font-weight: bold;
-  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .phone-device-state {
-  color: #888;
+  color: var(--phone-muted-fg);
   font-size: 10px;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.phone-device-note {
+  padding-left: 13px;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.phone-device-note[data-tone="ok"] {
+  color: var(--phone-ok-fg);
+}
+
+.phone-device-note[data-tone="bad"] {
+  color: var(--phone-bad-fg);
+}
+
+.phone-device-item .phone-confirm {
+  margin-left: 13px;
 }
 
 .phone-revoke,
@@ -2467,6 +2576,7 @@ body,
 
 [data-theme="dark"] .toolbox-section-body .phone-toggle,
 [data-theme="dark"] .toolbox-section-body .phone-btn,
+[data-theme="dark"] .toolbox-section-body .phone-act,
 [data-theme="dark"] .toolbox-section-body .secretary-toggle,
 [data-theme="dark"] .toolbox-section-body .secretary-btn {
   background: linear-gradient(180deg, #3c3c3c 0%, #2d2d2d 100%);
@@ -2486,25 +2596,10 @@ body,
   background: rgba(255, 255, 255, 0.04);
 }
 
-[data-theme="dark"] .toolbox-section-body .phone-ok {
-  color: #8fd9a3;
-  background: rgba(75, 176, 102, 0.15);
-}
-
-[data-theme="dark"] .toolbox-section-body .phone-endpoint[data-kind="tailscale"] {
-  color: #8fd9a3;
-  background: rgba(75, 176, 102, 0.15);
-}
-
-[data-theme="dark"] .toolbox-section-body .phone-endpoint,
-[data-theme="dark"] .toolbox-section-body .phone-url {
-  color: #9cc4e4;
-  background: rgba(255, 255, 255, 0.05);
-}
-
-
-[data-theme="dark"] .toolbox-section-body .phone-pairing {
-  background: rgba(255, 255, 255, 0.04);
+[data-theme="dark"] .toolbox-section-body .phone-error,
+[data-theme="dark"] .toolbox-section-body .secretary-error {
+  color: #ff8a80;
+  background: rgba(255, 138, 128, 0.1);
 }
 
 [data-theme="dark"] .toolbox-section-body .phone-devices,
@@ -2513,7 +2608,6 @@ body,
 }
 
 [data-theme="dark"] .toolbox-section-body .phone-devices-title,
-[data-theme="dark"] .toolbox-section-body .phone-muted,
 [data-theme="dark"] .toolbox-section-body .secretary-server-title,
 [data-theme="dark"] .toolbox-section-body .secretary-label,
 [data-theme="dark"] .toolbox-section-body .secretary-tag {
