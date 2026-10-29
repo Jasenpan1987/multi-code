@@ -130,7 +130,7 @@ describe("RemoteServer pairing offer", () => {
 
   it("carries the HTTPS origin once ready", async () => {
     const { server } = await startWith(stubChecker(READY).checker);
-    const offer = server.createPairingOffer();
+    const offer = server.createPairingOffer()?.offer;
     expect(offer?.origin).toBe(`https://${DNS}`);
     expect(offer?.v).toBe(3);
     expect(server.getStatus().devices).toHaveLength(1);
@@ -249,7 +249,7 @@ describe("RemoteServer.setUpHttps", () => {
     expect(stub.setupCalls).toEqual([port]);
     expect(result.error).toBeUndefined();
     expect(result.status.checks.https).toEqual(READY.https);
-    expect(server.createPairingOffer()?.origin).toBe(`https://${DNS}`);
+    expect(server.createPairingOffer()?.offer.origin).toBe(`https://${DNS}`);
   });
 
   it("passes on why nothing was changed", async () => {

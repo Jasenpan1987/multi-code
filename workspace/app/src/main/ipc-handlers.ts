@@ -641,10 +641,14 @@ export function registerIpcHandlers() {
   // only ever sees the image plus the URL text, never the raw token by itself,
   // so a screenshot of the UI is the only thing that leaks it — same exposure as
   // showing the QR at all. Returns null unless the server listens and HTTPS is
-  // ready (nothing to point a phone at).
-  ipcMain.handle("remote-create-pairing", async (): Promise<RemotePairing | null> => {
-    const offer = remoteServer.createPairingOffer();
-    if (!offer) return null;
+  // ready (nothing to point a phone at). `replacing`: the row of the code "New code"
+  // replaces, revoked once the new one is made unless a phone has used it ("Done"
+  // keeps a code: the Home Screen app's paste hand-off may still use it).
+  ipcMain.handle("remote-create-pairing", async (_event, replacing?: unknown): Promise<RemotePairing | null> => {
+    const pairing = remoteServer.createPairingOffer();
+    if (!pairing) return null;
+    if (typeof replacing === "string") remoteServer.revokeUnusedDevice(replacing);
+    const { offer, deviceId } = pairing;
     const code = Buffer.from(JSON.stringify(offer), "utf8").toString("base64url");
     // The phone opens the served web client at the offer's origin, with the payload
     // in the fragment (`#pair=`, as remote-protocol.ts specifies). A fragment never
@@ -655,9 +659,9 @@ export function registerIpcHandlers() {
         margin: 1,
         width: 240,
       });
-      return { webUrl, qrDataUrl };
+      return { deviceId, webUrl, qrDataUrl };
     } catch {
-      return { webUrl, qrDataUrl: null };
+      return { deviceId, webUrl, qrDataUrl: null };
     }
   });
 

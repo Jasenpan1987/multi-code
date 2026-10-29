@@ -330,8 +330,9 @@ export class RemoteServer {
   // token is valid the moment the phone scans, and so a half-finished pairing
   // is visible and revocable in the desktop UI. Null unless HTTPS is ready: the
   // origin is the only address the phone gets, and a pairing to an origin that
-  // doesn't answer is a phone that can't connect.
-  createPairingOffer(): PairingOffer | null {
+  // doesn't answer is a phone that can't connect. `deviceId` is that row's id, so the
+  // Phone section can revoke a code it replaces (it never goes in the offer).
+  createPairingOffer(): { offer: PairingOffer; deviceId: string } | null {
     const https = this.checks.current().https;
     if (!this.port || https.state !== "ready") return null;
 
@@ -349,12 +350,27 @@ export class RemoteServer {
     this.notifyStatus();
 
     return {
-      v: REMOTE_PROTOCOL_VERSION,
-      origin: https.origin,
-      hostPublicKey: identity.publicKeyB64,
-      deviceToken: token,
-      hostName: this.hostName(),
+      offer: {
+        v: REMOTE_PROTOCOL_VERSION,
+        origin: https.origin,
+        hostPublicKey: identity.publicKeyB64,
+        deviceToken: token,
+        hostName: this.hostName(),
+      },
+      deviceId: device.id,
     };
+  }
+
+  // "New code" with the code it replaces: revoked only while no phone has used it
+  // (never heard from, no socket authenticated with it), checked and done in one
+  // step, so a phone that pairs with it a moment earlier keeps its row. True when
+  // it was revoked.
+  revokeUnusedDevice(deviceId: string): boolean {
+    const device = this.devices.find((d) => d.id === deviceId);
+    if (!device || device.lastSeenAt !== 0) return false;
+    if ([...this.connections].some((c) => c.authed && c.deviceId === deviceId)) return false;
+    this.revokeDevice(deviceId);
+    return true;
   }
 
   revokeDevice(deviceId: string) {

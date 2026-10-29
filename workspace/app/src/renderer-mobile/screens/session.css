@@ -106,11 +106,11 @@
   font: inherit;
   text-align: left;
 }
-/* 44 pt to tap, drawn 36 px tall. */
+/* 44 pt to tap, drawn 35 px tall (measured in WebKit at iPhone size, T-813). */
 .fold .fh::after {
   content: "";
   position: absolute;
-  inset: -4px 0;
+  inset: -5px 0;
 }
 .fold .fh .chev { width: 12px; font-size: 11px; flex: none; }
 .fold .fh .t { flex: 1; min-width: 0; }
