@@ -77,11 +77,9 @@ vi.mock("electron", () => ({
 
 vi.mock("./remote/ws-server", () => ({
   remoteServer: {
-    broadcastActivity: () => {},
     broadcastExit: () => {},
     broadcastInstances: () => {},
     broadcastOutput: () => {},
-    clearActivity: () => {},
   },
 }));
 
@@ -122,7 +120,6 @@ vi.mock("./backends", () => ({
         inputTokens: sessionId === "ses-1" ? 300_000 : 12_000,
         updatedAt: Date.now(),
       },
-    keystrokeForChoice: () => null,
     buildResumeCommand: () => "claude --resume x",
   }),
 }));

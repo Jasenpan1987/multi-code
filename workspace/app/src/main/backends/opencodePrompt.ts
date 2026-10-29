@@ -4,8 +4,8 @@
 // The dialogs come from the user's shared OpenCode service: `permission.asked` and
 // `form.created` on its event stream, or its pending lists after a reconnect
 // (backends/opencodeAttention.ts). Both are answered through the service's API by
-// the request's id (backends/opencodeAnswer.ts, secretary/dialog.ts), so every
-// prompt reported here carries a DialogRef and no keystrokes are involved. Shapes
+// the request's id (secretary/dialog.ts, for the secretary and a paired phone alike),
+// so every prompt reported here carries a DialogRef and no keystrokes are involved. Shapes
 // as OpenCode 2.0.32 sends them: docs/timeline/2026-10-20_opencode-v2-spike.md
 // (G-603) and the fixtures in __fixtures__/opencode-v2/.
 
@@ -13,13 +13,13 @@ import type { PromptToolCall } from "./types";
 import type { PromptDetail } from "../remote/promptExtract";
 import type { FormInfo, PermissionRequest } from "./opencodeService";
 
-// Tool names this module reports. The answer paths dispatch on them (opencodeAnswer.ts,
-// secretary/dialog.ts), so the values are load-bearing rather than cosmetic.
+// Tool names this module reports. The answer path dispatches on them
+// (secretary/dialog.ts), so the values are load-bearing rather than cosmetic.
 export const PERMISSION_TOOL = "Permission";
 export const QUESTION_TOOL_LABEL = "Question";
-// A question box one tap can't answer: a multi-select field, or several questions in
-// one form. Reported under its own name so the phone's answer path refuses it and
-// shows it read-only; the secretary still answers it in one go through the API.
+// A question box with a multi-select field, or several questions in one form. Named
+// apart from the one-question box for the summary line; both are answered whole, in
+// one go through the API, from the questions in the tool call (formToolCall).
 export const MULTI_QUESTION_TOOL_LABEL = "Question (multi-select)";
 
 // Same shape as the Claude side's PromptDetail (the activity callback carries
@@ -31,8 +31,8 @@ const MAX_QUESTION_CHARS = 240;
 // The TUI's own labels, in its order (packages/tui/src/routes/session/permission.tsx:
 // 232-240). "Always allow" is there only when the request has something to save; with
 // nothing to save the TUI offers Allow once / Reject (permission-no-save), and an
-// `always` reply would act as `once` anyway. The answer paths map these labels back
-// to decisions, so they must stay exactly these strings.
+// `always` reply would act as `once` anyway. The answer path maps these labels back
+// to decisions (secretary/dialog.ts), so they must stay exactly these strings.
 const ALLOW_ONCE = "Allow once";
 const ALWAYS_ALLOW = "Always allow";
 const REJECT = "Reject";
@@ -105,11 +105,10 @@ function fieldOptions(field: FormInfo["fields"][number]): OpencodePromptDetail["
   return options;
 }
 
-// What the phone shows for a form. Only a question form has options to show, and
-// only the first field's: the phone answers one single-select question with one tap
-// (field `q0`, opencodeAnswer.ts) and shows anything bigger read-only. No "Type your
-// own answer" row: OpenCode 1.x's TUI listed one and the phone navigated to it, but an
-// API answer takes typed text directly, so the phone has nothing to tap for it.
+// The summary of a form: its first question and that question's options. Only a
+// question form has options to show. The whole box, every question of it, reaches
+// the secretary and a paired phone through formToolCall. No "Type your own answer"
+// row: an API answer takes typed text directly, so there is no row to pick for it.
 // Undefined when there is nothing to offer: the phone then shows the terminal.
 export function formDetail(form: FormInfo): OpencodePromptDetail | undefined {
   if (!isQuestionForm(form)) return undefined;

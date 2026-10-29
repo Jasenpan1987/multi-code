@@ -1,40 +1,33 @@
 // The harness's only contact with the real RemoteServer (main/remote/ws-server.ts):
-// the RemoteHost it is given, over the scripted world; a Tailscale checker that says
-// HTTPS is ready at the port itself, so no tailscale command ever runs; and the part
-// of protocol v3 the server doesn't do yet, done here the way the kanban says the
-// desktop will (mobile-v2 T-803, T-810):
-//   - subscribe: the last `turns` turns with `hasEarlier`, the PTY's size, the
-//     dialog in full, and a Finished session marked seen;
-//   - acks for prompt / answer / interrupt / push-subscribe, refusals included, and
-//     the last 200 clientMsgIds per device remembered so a resend gets the same ack
-//     and isn't acted on twice;
-//   - auth-ok with a VAPID key and whether the device subscribed to push.
-// Those are grafted onto the server's private frame handler and `send`, reached by
-// bracket access, which TypeScript still checks: when the server renames or
-// reshapes them, `pnpm type` fails here instead of the harness drifting quietly.
-// Adapting it then means deleting the graft for whatever the server now does
-// itself, and implementing the new RemoteHost members over the world.
+// the RemoteHost it is given, over the scripted world, and a Tailscale checker that
+// says HTTPS is ready at the port itself, so no tailscale command ever runs. The
+// server does protocol v3 itself (T-803): subscribe by turns, the PTY's size, the
+// dialog in full, acks and their refusals, the last 200 clientMsgIds per device. The
+// host below gates each frame the way the desktop's (main/remote/remote-host.ts)
+// does, holding answers to the dialog with the secretary's checkChoice.
+//
+// What is still grafted onto the server's private members, by bracket access (which
+// TypeScript still checks, so `pnpm type` fails here when the server reshapes them):
+//   - Web Push, until T-810: `push-subscribe` is acked and remembered, and `auth-ok`
+//     carries a VAPID key and whether the device subscribed;
+//   - the log of what phones sent, with each ack and whether it was a resend;
+//   - sockets told to play dead (half-open), and the host name;
+//   - the connection list, for `drop`, `half-open` and `sockets`.
 
 import crypto from "node:crypto";
 import type { TailnetChecks } from "../../src/main/remote/tailscale";
-import type { RemoteServer } from "../../src/main/remote/ws-server";
+import type { HostAck, RemoteServer } from "../../src/main/remote/ws-server";
 import type { Dialog, checkChoice as CheckChoice } from "../../src/main/secretary/dialog";
 import type {
   AckFrame,
-  AckRefusal,
-  AnswerFrame,
   ClientFrame,
-  InterruptFrame,
-  PromptFrame,
   PushSubscribeFrame,
   RemoteChoice,
   RemoteDialog,
-  ServerFrame,
 } from "../../src/shared/remote-protocol";
 import type { World } from "./world.ts";
 
 type Conn = Parameters<RemoteServer["send"]>[0];
-type AckedFrame = PromptFrame | AnswerFrame | InterruptFrame | PushSubscribeFrame;
 
 // Everything a phone sent that the phone tickets check: what a key sent, which
 // answer went out, whether a resent prompt was acted on once.
@@ -48,8 +41,16 @@ export interface LogEntry {
 }
 
 const LOG_LIMIT = 500;
-const ACKS_PER_DEVICE = 200;
-const DEFAULT_TURNS = 10;
+// Home and clear: a stopped session's screen, which has nothing on it.
+const CLEAR_SCREEN = "\x1b[H\x1b[2J";
+// As many as the server remembers, so `resent` says what the server did.
+const IDS_PER_DEVICE = 200;
+
+const refuse = (reason: Extract<HostAck, { ok: false }>["reason"], message: string): HostAck => ({
+  ok: false,
+  reason,
+  message,
+});
 
 export function attach(
   server: RemoteServer,
@@ -63,8 +64,8 @@ export function attach(
   const log: LogEntry[] = [];
   // Sockets told to play dead: nothing in, nothing out, pings included.
   const silent = new WeakSet<Conn>();
-  const turnsOf = new WeakMap<Conn, Map<string, number>>();
-  const acks = new Map<string, Map<string, AckFrame>>();
+  // The clientMsgIds each device sent, for the log's `resent`.
+  const sentIds = new Map<string, Set<string>>();
   const pushDevices = new Set<string>();
   // A real P-256 key, so a browser's pushManager.subscribe accepts it.
   const vapidPublicKey = crypto.createECDH("prime256v1").generateKeys().toString("base64url");
@@ -75,13 +76,80 @@ export function attach(
     if (d) shownSeq.set(id, d.seq);
   }
 
+  // An accepted action changes the world at once, with the check it passed, so a
+  // scenario reset or a tick can't slip in between; what it changed goes out after
+  // the ack, as at the desk: the desktop acks once it has written the keys, and the
+  // CLI reacts after.
+  let held: { ids: Set<string>; reset: boolean } | null = null;
+  const after = (change: () => void): HostAck => {
+    if (!held) {
+      held = { ids: new Set(), reset: false };
+      setTimeout(release, 0);
+    }
+    change();
+    return { ok: true };
+  };
+  function release() {
+    const told = held;
+    held = null;
+    if (told && (told.ids.size > 0 || told.reset)) changed([...told.ids], told.reset);
+  }
+
   server.setHost({
     listInstances: () => world.list(),
+    liveDialog: (id) => world.dialogOf(id) ?? null,
+    markSeen: (id) => world.markSeen(id),
+    readTranscript: (id, turns) => world.transcript(id, turns),
+    ptySize: (id) => {
+      if (!world.has(id)) return null;
+      const { cols, rows } = world.terminal(id);
+      return { cols, rows };
+    },
+    // The world says what each session is doing itself.
+    refreshPreview: () => {},
     writeToInstance: (id, data) => world.input(id, data),
-    // Never called: `prompt` frames are handled below, with their acks.
-    sendPrompt: () => {},
-    // Transcripts go out below, by turns; the server's own fixed-size read finds nothing.
-    readTranscript: () => [],
+
+    async sendPrompt(id, text) {
+      const session = world.stateOf(id);
+      if (!session?.running) return refuse("not-running", "This session isn't running.");
+      if (session.state === "needs-you") {
+        return refuse("dialog-open", "A dialog is open: answer it first, so the text doesn't land in it.");
+      }
+      return after(() => world.prompt(id, text));
+    },
+
+    async interrupt(id) {
+      const session = world.stateOf(id);
+      if (!session?.running) return refuse("not-running", "This session isn't running.");
+      if (session.state === "needs-you") {
+        return refuse("dialog-open", "A dialog is open, and Esc would answer it. Answer it instead.");
+      }
+      if (session.state !== "working") return refuse("not-working", "Nothing to stop: the session isn't in a turn.");
+      return after(() => world.interrupt(id));
+    },
+
+    async answer(id, seq, choice, confirmed) {
+      const session = world.stateOf(id);
+      const d = world.dialogOf(id);
+      if (!session || !d || d.seq !== seq) {
+        return refuse("gone", "That dialog was already answered, or replaced by a newer one.");
+      }
+      if (!d.dialog) return refuse("unsupported", "The phone can't answer this dialog. Use the terminal.");
+      const checked = checkChoice(secretaryDialog(d.dialog, session.backend), explicit(choice), confirmed);
+      if (checked.ok) return after(() => world.answer(id, choice));
+      if ("refuse" in checked) return refuse("unsupported", "That answer doesn't fit this dialog. Use the terminal.");
+      switch (checked.ask) {
+        case "confirm-always":
+        case "confirm-auto":
+          return refuse("needs-confirm", "This lets the agent do more from now on: confirm it first.");
+        case "what-to-change":
+          return refuse("failed", "Say what the plan should change.");
+        case "unanswered":
+          return refuse("failed", "Answer every question first.");
+        default:
+          return refuse("failed", "Pick one of the dialog's options.");
+      }
+    },
   });
   server["hostName"] = () => `Multi-Code on ${options.hostName}`;
   // Tailscale is never asked: the harness says HTTPS is ready at the port itself,
@@ -98,6 +166,7 @@ export function attach(
   const send = server["send"].bind(server);
   server["send"] = (conn, frame) => {
     if (silent.has(conn)) return;
+    if (frame.type === "ack") noteAck(conn, frame);
     send(
       conn,
       frame.type === "auth-ok"
@@ -105,20 +174,18 @@ export function attach(
         : frame
     );
   };
-  const out = (conn: Conn, frame: ServerFrame) => server["send"](conn, frame);
 
   const handle = server["handleClientFrame"].bind(server);
   server["handleClientFrame"] = (conn, frame) => {
     if (silent.has(conn)) return;
     if (!conn.authed || frame.type === "auth") return handle(conn, frame);
     switch (frame.type) {
-      case "subscribe":
-        return subscribe(conn, frame.instanceId, frame.turns ?? DEFAULT_TURNS);
+      case "push-subscribe":
+        record(conn, frame);
+        return pushSubscribe(conn, frame);
       case "prompt":
       case "answer":
       case "interrupt":
-      case "push-subscribe":
-        return acked(conn, frame);
       case "input":
         record(conn, frame);
         return handle(conn, frame);
@@ -127,149 +194,91 @@ export function attach(
     }
   };
 
+  // The screen each session starts at, streamed, so a phone's snapshot (the server
+  // replays the tail of what was streamed) ends on it: every paint starts by
+  // clearing the screen, and a stopped session's screen is just that.
+  const repaintAll = () => {
+    for (const { id } of world.list()) server.broadcastOutput(id, world.repaint(id) ?? CLEAR_SCREEN);
+  };
+  repaintAll();
+
   world.onChange = (ids, reset) => {
+    if (!held) return changed(ids, reset);
+    for (const id of ids) held.ids.add(id);
+    held.reset ||= reset;
+  };
+
+  function changed(ids: string[], reset: boolean) {
     for (const id of ids) {
       const d = world.dialogOf(id);
       const shown = shownSeq.get(id);
-      if (shown !== undefined && shown !== d?.seq) {
-        server["broadcast"]({ type: "prompt-cleared", instanceId: id, seq: shown });
-      }
-      if (d && d.seq !== shown) server["broadcast"](promptState(id));
+      if (shown !== undefined && shown !== d?.seq) server.broadcastPromptCleared(id, shown);
+      if (d && d.seq !== shown) server.broadcastPromptState(id);
       if (d) shownSeq.set(id, d.seq);
       else shownSeq.delete(id);
-
-      for (const conn of subscribers(id)) {
-        sendTranscript(conn, id);
-        // A new scenario is a new screen at the scenario's size.
-        if (reset) out(conn, { type: "snapshot", instanceId: id, ...world.terminal(id) });
+      server.broadcastTranscript(id);
+      if (!reset) {
+        const paint = world.repaint(id);
+        if (paint) server.broadcastOutput(id, paint);
       }
-      const paint = reset ? null : world.repaint(id);
-      if (paint) server.broadcastOutput(id, paint);
     }
     if (reset) {
+      // A new scenario is a new screen at the scenario's size.
+      for (const { id } of world.list()) {
+        const { cols, rows } = world.terminal(id);
+        server.broadcastResize(id, cols, rows);
+      }
+      repaintAll();
       // Sessions the new scenario doesn't have take their dialogs with them.
       for (const [id, seq] of shownSeq) {
         if (world.has(id)) continue;
-        server["broadcast"]({ type: "prompt-cleared", instanceId: id, seq });
+        server.broadcastPromptCleared(id, seq);
         shownSeq.delete(id);
       }
     }
     server.broadcastInstances();
-  };
-
-  function subscribers(id: string): Conn[] {
-    return [...server["connections"]].filter((c) => c.authed && c.subscriptions.has(id));
   }
 
-  function promptState(id: string): ServerFrame {
-    const d = world.dialogOf(id)!;
-    return {
-      type: "prompt-state",
-      instanceId: id,
-      seq: d.seq,
-      summary: d.summary,
-      ...(d.dialog ? { dialog: d.dialog } : {}),
-    };
+  // Web Push isn't built yet (T-810): the harness remembers who subscribed, so the
+  // phone's settings show it. Through the server's own once-per-clientMsgId acks, so
+  // an old subscribe resent after a newer unsubscribe isn't acted on again.
+  function pushSubscribe(conn: Conn, frame: PushSubscribeFrame) {
+    server["acked"](conn, frame.clientMsgId, async () => {
+      const device = conn.deviceId ?? "";
+      if (frame.subscription) pushDevices.add(device);
+      else pushDevices.delete(device);
+      return { ok: true };
+    });
   }
 
-  function sendTranscript(conn: Conn, id: string) {
-    const turns = turnsOf.get(conn)?.get(id) ?? DEFAULT_TURNS;
-    out(conn, { type: "transcript", instanceId: id, ...world.transcript(id, turns) });
-  }
-
-  function subscribe(conn: Conn, id: string, turns: number) {
-    // Opening a Finished session marks it seen (the contract's SubscribeFrame).
-    // Before subscribing, so this phone gets one transcript, not two.
-    world.markSeen(id);
-    conn.subscriptions.add(id);
-    let turnsById = turnsOf.get(conn);
-    if (!turnsById) turnsOf.set(conn, (turnsById = new Map()));
-    turnsById.set(id, Math.max(1, turns));
-    sendTranscript(conn, id);
-    out(conn, { type: "snapshot", instanceId: id, ...world.terminal(id) });
-    if (world.dialogOf(id)) out(conn, promptState(id));
-  }
-
-  function acked(conn: Conn, frame: AckedFrame) {
-    const device = conn.deviceId ?? "";
-    let seen = acks.get(device);
-    if (!seen) acks.set(device, (seen = new Map()));
-    const earlier = seen.get(frame.clientMsgId);
-    if (earlier) {
-      record(conn, frame, earlier, true);
-      out(conn, earlier);
-      return;
+  function record(conn: Conn, frame: ClientFrame) {
+    let resent = false;
+    if ("clientMsgId" in frame && conn.deviceId) {
+      let ids = sentIds.get(conn.deviceId);
+      if (!ids) sentIds.set(conn.deviceId, (ids = new Set()));
+      resent = ids.has(frame.clientMsgId);
+      ids.add(frame.clientMsgId);
+      if (ids.size > IDS_PER_DEVICE) ids.delete(ids.values().next().value!);
     }
-    const checked = check(device, frame);
-    const ack: AckFrame =
-      typeof checked === "function"
-        ? { type: "ack", clientMsgId: frame.clientMsgId, ok: true }
-        : { type: "ack", clientMsgId: frame.clientMsgId, ok: false, reason: checked[0], message: checked[1] };
-    seen.set(frame.clientMsgId, ack);
-    if (seen.size > ACKS_PER_DEVICE) seen.delete(seen.keys().next().value!);
-    record(conn, frame, ack);
-    // The ack first, then what the action changed, as the desktop answers once it
-    // has handled the frame and the CLI reacts after.
-    out(conn, ack);
-    if (typeof checked === "function") checked();
-  }
-
-  // The desktop's gating, as T-803 specifies it: a refusal, or the action to take.
-  function check(device: string, frame: AckedFrame): [AckRefusal, string] | (() => void) {
-    if (frame.type === "push-subscribe") {
-      return () => {
-        if (frame.subscription) pushDevices.add(device);
-        else pushDevices.delete(device);
-      };
-    }
-    const id = frame.instanceId;
-    const session = world.stateOf(id);
-
-    if (frame.type === "prompt") {
-      if (!session?.running) return ["not-running", "This session isn't running."];
-      if (session.state === "needs-you") {
-        return ["dialog-open", "A dialog is open: answer it first, so the text doesn't land in it."];
-      }
-      return () => world.prompt(id, frame.text);
-    }
-
-    if (frame.type === "interrupt") {
-      if (session?.state === "needs-you") {
-        return ["dialog-open", "A dialog is open, and Esc would answer it. Answer it instead."];
-      }
-      if (session?.state !== "working") return ["not-working", "Nothing to stop: the session isn't in a turn."];
-      // Until G-303 measures which keys stop an OpenCode 2 turn.
-      if (session.backend === "opencode") return ["unsupported", "Stopping an OpenCode turn isn't supported yet."];
-      return () => world.interrupt(id);
-    }
-
-    const d = world.dialogOf(id);
-    if (!session || !d || d.seq !== frame.seq) {
-      return ["gone", "That dialog was already answered, or replaced by a newer one."];
-    }
-    if (!d.dialog) return ["unsupported", "The phone can't answer this dialog. Use the terminal."];
-    const checked = checkChoice(secretaryDialog(d.dialog, session.backend), explicit(frame.choice), frame.confirmed === true);
-    if (checked.ok) return () => world.answer(id, frame.choice);
-    if ("refuse" in checked) return ["unsupported", "That answer doesn't fit this dialog. Use the terminal."];
-    switch (checked.ask) {
-      case "confirm-always":
-      case "confirm-auto":
-        return ["needs-confirm", "This lets the agent do more from now on: confirm it first."];
-      case "what-to-change":
-        return ["failed", "Say what the plan should change."];
-      case "unanswered":
-        return ["failed", "Answer every question first."];
-      default:
-        return ["failed", "Pick one of the dialog's options."];
-    }
-  }
-
-  function record(conn: Conn, frame: ClientFrame, ack?: AckFrame, resent = false) {
-    log.push({ at: Date.now(), device: conn.deviceId, frame, ...(ack ? { ack } : {}), ...(resent ? { resent } : {}) });
+    log.push({ at: Date.now(), device: conn.deviceId, frame, ...(resent ? { resent } : {}) });
     if (log.length > LOG_LIMIT) log.shift();
+    if (frame.type === "input") print(line(frame));
+  }
+
+  // The ack goes on the newest entry for its clientMsgId that has none yet.
+  function noteAck(conn: Conn, ack: AckFrame) {
+    const entry = log.findLast(
+      (e) => !e.ack && e.device === conn.deviceId && "clientMsgId" in e.frame && e.frame.clientMsgId === ack.clientMsgId
+    );
+    if (!entry) return;
+    entry.ack = ack;
+    print(line(entry.frame, ack, entry.resent));
+  }
+
+  function line(frame: ClientFrame, ack?: AckFrame, resent?: boolean): string {
     const { type, ...rest } = frame;
     const result = ack ? ` → ${ack.ok ? "ok" : ack.reason}` : "";
-    print(`${new Date().toTimeString().slice(0, 8)} ${type} ${JSON.stringify(rest)}${result}${resent ? " (resent)" : ""}`);
+    return `${new Date().toTimeString().slice(0, 8)} ${type} ${JSON.stringify(rest)}${result}${resent ? " (resent)" : ""}`;
   }
 
   return {
@@ -315,9 +324,11 @@ export function attach(
       if (!status.port) throw new Error(status.error ?? `the server didn't start on port ${port}`);
     },
 
+    // The desktop resized that terminal: the server tells subscribers, the world
+    // repaints at the new size.
     resize(id: string, cols: number, rows: number): boolean {
       if (!world.has(id)) return false;
-      for (const conn of subscribers(id)) out(conn, { type: "resize", instanceId: id, cols, rows });
+      server.broadcastResize(id, cols, rows);
       return world.resize(id, cols, rows);
     },
 
@@ -325,7 +336,7 @@ export function attach(
       return [...server["connections"]].map((c) => ({
         device: c.deviceId,
         authed: c.authed,
-        subscriptions: [...c.subscriptions],
+        subscriptions: [...c.subscriptions.keys()],
         halfOpen: silent.has(c),
       }));
     },

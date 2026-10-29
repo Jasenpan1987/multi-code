@@ -193,6 +193,11 @@ export interface HookAttention {
   // screen. Absent for a backend whose terminal shows only the contact's session
   // (Claude).
   shownSession?(): string | undefined;
+  // The session the backend's interrupt keys (Backend.interrupt) would stop now, or
+  // undefined when they would stop nothing: OpenCode's TUI interrupts only the
+  // session it shows, and only while that one runs. Absent for a backend whose
+  // terminal shows only the contact's session (Claude): its keys stop whatever runs.
+  interruptTarget?(): string | undefined;
 }
 
 // What createHookAttention is told about the process it watches.
@@ -301,24 +306,13 @@ export interface Backend {
   ): HookAttention;
 
   /**
-   * Translate "the user tapped option N on their phone" into the keystrokes
-   * this CLI's option box expects, or null when the choice can't be made
-   * safely (out of range, or a box this backend can't drive reliably).
-   *
-   * This MUST be per-backend: the CLIs do not agree, and the wrong family of keys
-   * doesn't error, it silently does nothing or picks the wrong option, which for a
-   * permission dialog means granting the wrong thing. Claude's boxes take the
-   * option's number directly. OpenCode 2's are answered through its API instead
-   * (HookAttention.answer), so it returns null for every choice.
-   *
-   * `tool` is the PromptDetail.tool the backend itself reported, so each
-   * backend can dispatch on values it defined.
+   * The keys that stop a running turn the way the builder does at the desk, written
+   * one at a time, `gapMs` apart (a paired phone's Stop, mobile-v2 Story 6). Only
+   * while a turn runs and no dialog is open: on a dialog the same Esc answers it.
+   * Per backend because the CLIs differ: Claude stops on one Esc, OpenCode 2 on a
+   * second Esc within 5 s of the first.
    */
-  keystrokeForChoice(
-    tool: string,
-    index: number,
-    optionCount: number
-  ): string | null;
+  readonly interrupt: { keys: readonly string[]; gapMs: number };
 
   /**
    * Read the tail of the session as reflowable text, newest last.

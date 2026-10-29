@@ -581,6 +581,22 @@ describe("turns", () => {
     expect(h.attention.shownSession()).toBeUndefined();
   });
 
+  it("aims an interrupt at the session on screen, and only while it runs", async () => {
+    // Esc Esc acts on the session the TUI's prompt shows, enabled only while that one
+    // runs (a paired phone's Stop, mobile-v2 T-803).
+    const h = await live();
+    await h.publish(created("ses_root"), created("ses_child", "ses_root"), started("ses_child"));
+    h.attention.handle(route("ses_root"));
+    await flush();
+    // The root is shown and idle while its subagent runs: the keys would stop nothing.
+    expect(h.attention.interruptTarget()).toBeUndefined();
+    await h.publish(started("ses_root"));
+    expect(h.attention.interruptTarget()).toBe("ses_root");
+    h.attention.handle(route());
+    await flush();
+    expect(h.attention.interruptTarget()).toBeUndefined();
+  });
+
   it("a finish names the session whose turn ended", async () => {
     // The terminal may be showing another of the contact's sessions by then (a tab),
     // which a reply jump must not move (read-reply-conclusion).

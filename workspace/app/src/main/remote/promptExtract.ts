@@ -1,14 +1,8 @@
-// Turns the tool_use that blocked the agent into something a phone can render
-// as buttons, and turns a button tap back into the keystrokes the CLI's TUI
-// expects.
-//
-// FRAGILITY WARNING. The *reading* half is stable: it parses the session JSONL,
-// which is structured data the CLI writes for its own use. The *answering* half
-// (`keystrokeForOption`) is not — it depends on Claude Code's option boxes
-// accepting number keys, which is a UI convention, not an API. If a CLI release
-// changes its key handling, remote answering breaks while remote viewing keeps
-// working. That is why the phone always keeps a raw terminal view: the buttons
-// are a convenience layered on top, never the only way in.
+// Turns the tool_use that blocked the agent into the dialog's one-line summary and
+// options (PromptDetail): what the secretary's dialog reader (secretary/dialog.ts)
+// starts from, and the line a paired phone shows. It parses the session's hook
+// payload, structured data the CLI sends for its own use. Answering is not done
+// here: secretary/dialog.ts plans the keys, with flows measured on the CLI.
 
 import type { PromptOption } from "../../shared/remote-protocol";
 
@@ -19,10 +13,12 @@ export interface PromptDetail {
 }
 
 // Permission prompts (Bash, Write, Edit, …) all render the same three-choice
-// box. The exact wording differs slightly per tool but the positions don't.
+// box. The exact wording differs slightly per tool but the positions don't. How
+// long "don't ask again" lasts differs too (a Bash rule is kept for the project,
+// edits are allowed for the session), so its description doesn't say.
 const PERMISSION_OPTIONS: PromptOption[] = [
   { label: "Yes", description: "Allow this once" },
-  { label: "Yes, and don't ask again", description: "Allow for this session" },
+  { label: "Yes, and don't ask again", description: "Allow it, and stop asking for calls like it" },
   { label: "No", description: "Reject and tell the agent what to do instead" },
 ];
 
@@ -136,20 +132,4 @@ export function extractPromptDetail(
     question: summary ? `${toolName}: ${summary}` : `Allow ${toolName}?`,
     options: PERMISSION_OPTIONS,
   };
-}
-
-// Keystrokes that select option `index` in an on-screen option box.
-//
-// Claude Code's boxes accept the option's number directly (1-based). Returns
-// null for an out-of-range index or for boxes with more than 9 options, where
-// digits stop being unambiguous — the caller then declines the request rather
-// than sending a keystroke that might pick the wrong thing.
-export function keystrokeForOption(
-  index: number,
-  optionCount: number
-): string | null {
-  if (!Number.isInteger(index)) return null;
-  if (index < 0 || index >= optionCount) return null;
-  if (optionCount > 9) return null;
-  return String(index + 1);
 }

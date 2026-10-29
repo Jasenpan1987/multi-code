@@ -50,11 +50,9 @@ vi.mock("electron", () => ({
 
 vi.mock("./remote/ws-server", () => ({
   remoteServer: {
-    broadcastActivity: () => {},
     broadcastExit: () => {},
     broadcastInstances: () => {},
     broadcastOutput: () => {},
-    clearActivity: () => {},
   },
 }));
 
@@ -97,7 +95,6 @@ vi.mock("./backends", () => ({
       disk.lookups++;
       return disk.latestByCwd.get(cwd) ?? null;
     },
-    keystrokeForChoice: () => null,
     buildResumeCommand: () => "claude --resume x",
   }),
 }));

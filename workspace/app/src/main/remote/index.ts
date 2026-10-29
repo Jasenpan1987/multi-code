@@ -6,9 +6,9 @@
 import { BrowserWindow } from "electron";
 import { processManager } from "../process-manager";
 import { loadSettings, saveSettings } from "../settings-store";
+import { createRemoteHost } from "./remote-host";
 import { remoteServer } from "./ws-server";
 import { createTailscaleChecker } from "./tailscale";
-import type { RemoteInstance } from "../../shared/remote-protocol";
 
 // Push status to the renderer so the Phone section reflects connect/disconnect
 // without polling.
@@ -22,24 +22,8 @@ function emitStatus() {
 }
 
 export function initRemote() {
-  remoteServer.setHost({
-    listInstances: (): RemoteInstance[] =>
-      processManager.listInstances().map((i) => ({
-        id: i.id,
-        name: i.name,
-        cwd: i.cwd,
-        backend: i.backend,
-        status: i.status,
-        // Populated so the phone's list can show which agents need attention
-        // without opening each one. Previously always undefined, which meant a
-        // phone that had just been reopened showed no badges at all.
-        // mobile-v2 T-803: no `since`/`preview` yet.
-        state: remoteServer.stateFor(i.id),
-      })),
-    writeToInstance: (id, data) => processManager.writeToInstance(id, data),
-    sendPrompt: (id, text) => processManager.sendPrompt(id, text),
-    readTranscript: (id, limit) => processManager.readTranscript(id, limit),
-  });
+  // What the phone sees and may do, from process-manager's own state.
+  remoteServer.setHost(createRemoteHost(processManager, remoteServer));
 
   remoteServer.setStatusListener(emitStatus);
   remoteServer.setChecker(createTailscaleChecker());
