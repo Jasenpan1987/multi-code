@@ -141,7 +141,7 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
 ### T-803: Desktop live state, answers, acks and Stop
 
 - **Type:** feature
-- **Status:** in-progress
+- **Status:** done (bf2bd69, merged dd85e29)
 - **Story:** 2, 4, 5, 6
 - **Description:** Make the desktop side of protocol v3 real, in
   `main/remote/ws-server.ts`, `main/remote/index.ts`, `main/process-manager.ts` and the
@@ -430,7 +430,7 @@ shows each check state, gates the QR, sends a test push and revokes.
 ### T-810: Desktop Web Push
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** in-progress
 - **Story:** 7
 - **Description:**
   - Add `web-push` (and its types). VAPID keys generated once, kept at
@@ -451,6 +451,13 @@ shows each check state, gates the QR, sends a test push and revokes.
   - IPC `remote-test-push(deviceId)` → sends "Multi-Code · Test" and returns the outcome.
   - `RemoteChecks.push`: ready when keys load; error with the reason otherwise.
 - **Note:** From T-805: replace the push placeholder in `getStatus()`; the VAPID subject is `checks.https.origin` when ready.
+- **Note:** From T-803: the phone side follows the secretary event (`onSecretaryEvent`) in
+  `main/remote/remote-host.ts`; hang the push trigger on the same events rather than on
+  `reportActivity`. A Finished preview is filled asynchronously after the `waiting` event
+  (one tail read): the push must wait for it (or the host exposes the read's promise).
+  `broadcastInstances` is skipped with no phone connected, so read `host.listInstances()`
+  directly. Remove the push graft from `scripts/mobile-harness/bridge.ts` once the server
+  does push itself.
 - **Acceptance:** unit tests with `web-push` mocked: payload shape per trigger, badge
   count, skip-connected, restated skipped, Manager skipped, 404/410 cleanup, error
   recorded and cleared, key file mode 0600, subscribe/unsubscribe/revoke.
@@ -495,6 +502,12 @@ shows each check state, gates the QR, sends a test push and revokes.
   paired before mobile-v2 must be paired again. Compact, in the desktop's style and both
   themes.
 - **Note:** From T-805: setup errors come back in `RemoteHttpsSetup.error` (show them); explain how to undo the serve (`tailscale serve --https=443 off`; Multi-Code never removes it); drop `RemotePairing.endpoints` and the `multicode://` `pairingUrl`; for CDP state checks add a dev-only hook that calls `remoteServer.setChecker(fake)`.
+- **Note:** G-304 (from T-803): the renderer tracks unread per instance
+  (`renderer/hooks/useNotifications.ts`, `markRead` on select, keydown, pointerdown, remove),
+  but only the total reaches main (`set-dock-badge`). Add an IPC `instance-acknowledged(id)`
+  sent from `markRead` only when it changed something (useNotifications.ts, preload.ts,
+  shared/types.ts, ipc-handlers.ts), and have main call the remote host's `markSeen(id)`, so a
+  session read at the desk stops being Finished on the phone. About 10 lines.
 - **Acceptance:** CDP checks on an isolated dev build (`--user-data-dir`) with the checks
   forced into each state (inject a fake checker): rows, buttons, QR gating, test push and
   revoke call the right IPC.
@@ -543,3 +556,4 @@ shows each check state, gates the QR, sends a test push and revokes.
 - 2026-10-29: T-805 done and merged (33a143a); endpoints.ts removed, port bound to 127.0.0.1.
 - 2026-10-29: T-804 done and merged (e154a82); `readRecentTurns(id, turns)` in process-manager.
 - 2026-10-29: T-802 done and merged (e85b622): `pnpm harness`, `pnpm harness:shot`, README in `workspace/app/scripts/mobile-harness/`. T-806 started.
+- 2026-10-29: T-803 done and merged (dd85e29). G-303 resolved (OpenCode Stop = two Escs 250 ms apart, only for the running session the terminal shows). G-304 wiring added to T-812. T-810 started.
