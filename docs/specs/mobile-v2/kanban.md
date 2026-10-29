@@ -503,7 +503,7 @@ shows each check state, gates the QR, sends a test push and revokes.
 ### T-811: Phone notifications
 
 - **Type:** feature
-- **Status:** in-progress
+- **Status:** done (978028e, merged 8d2d812)
 - **Story:** 7, 10 (step 3)
 - **Description:** Setup step 3's button (Home Screen only, from a tap):
   `Notification.requestPermission()`, then
@@ -641,3 +641,4 @@ shows each check state, gates the QR, sends a test push and revokes.
 - 2026-10-29: G-301 measured: stable through `tailscale serve` (Node and WebKit 10 min, iPhone 4 min visible, 0 drops).
 - 2026-10-29: T-806 done and merged (4af00c1). Home Screen pairing hand-off added to T-811 and T-812 (G-306). T-807, T-809, T-811 started in parallel.
 - 2026-10-29: T-812 done and merged (c3e88c6), with G-304 wired (`instance-acknowledged`) and Copy pairing link.
+- 2026-10-29: T-811 done and merged (8d2d812): `renderer-mobile/push.ts`, service worker push handlers, settings on the setup screen, copy/paste hand-off. iPhone steps in `test-plan-iphone.md`.
