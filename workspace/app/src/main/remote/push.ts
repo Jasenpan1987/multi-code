@@ -87,6 +87,18 @@ function isKey(value: unknown, bytes: number): value is string {
   );
 }
 
+// Whether the private half is a P-256 key whose public half is the one stored: a pair
+// that isn't signs JWTs no push service accepts, and would never be replaced.
+function isPair(publicKey: string, privateKey: string): boolean {
+  try {
+    const ecdh = crypto.createECDH("prime256v1");
+    ecdh.setPrivateKey(Buffer.from(privateKey, "base64url"));
+    return ecdh.getPublicKey().equals(Buffer.from(publicKey, "base64url"));
+  } catch {
+    return false;
+  }
+}
+
 // The VAPID keypair, generated once and kept in `userData/remote-push.json` at 0600
 // (the private half is what lets anyone push to every paired phone). A missing or
 // corrupt file gets a new pair, as remote-identity.json does: a phone subscribed with
@@ -98,7 +110,25 @@ export function loadVapidKeys(): VapidLoad {
   try {
     if (fs.existsSync(file)) {
       const stored = JSON.parse(fs.readFileSync(file, "utf8")) as Partial<VapidKeys> | null;
-      if (isKey(stored?.publicKey, 65) && isKey(stored?.privateKey, 32)) {
+      if (
+        isKey(stored?.publicKey, 65) &&
+        isKey(stored?.privateKey, 32) &&
+        isPair(stored.publicKey, stored.privateKey)
+      ) {
+        // A copy restored from a backup, say, may have come back readable by others.
+        // One this can't chmod (another user's) is never replaced, since it holds the
+        // pair every phone subscribed with, but nor is it used while others can read
+        // it: the Phone section says why push is off.
+        try {
+          fs.chmodSync(file, 0o600);
+        } catch (err) {
+          if ((fs.statSync(file).mode & 0o077) !== 0) {
+            return {
+              ok: false,
+              error: `The push keys file is readable by other users and couldn't be made private (${(err as Error)?.message ?? err}): ${file}`,
+            };
+          }
+        }
         return { ok: true, keys: { publicKey: stored.publicKey, privateKey: stored.privateKey }, created: false };
       }
     }
@@ -110,10 +140,10 @@ export function loadVapidKeys(): VapidLoad {
   const keys: VapidKeys = { publicKey: generated.publicKey, privateKey: generated.privateKey };
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(keys, null, 2), { mode: 0o600 });
-    // The mode above applies only to a file that is created; a corrupt one being
-    // replaced keeps whatever it had.
-    fs.chmodSync(file, 0o600);
+    // A fresh file, so the private key is never written into one that a corrupt
+    // predecessor left readable by others: `mode` applies only to a file it creates.
+    fs.rmSync(file, { force: true });
+    fs.writeFileSync(file, JSON.stringify(keys, null, 2), { mode: 0o600, flag: "wx" });
   } catch (err) {
     return { ok: false, error: `Couldn't save the push keys: ${(err as Error)?.message ?? err}` };
   }

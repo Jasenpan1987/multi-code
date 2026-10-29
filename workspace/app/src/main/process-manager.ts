@@ -538,6 +538,13 @@ export class ProcessManager {
     return (this.instances.get(id)?.answering ?? 0) > 0;
   }
 
+  // Whether the agent says a dialog is on its screen (HookAttention.dialogOnScreen),
+  // with or without the needs-you event that a keystroke into it drops.
+  dialogOnScreen(id: string): boolean {
+    const instance = this.instances.get(id);
+    return !!instance?.ptyProcess && instance.hookAttention?.dialogOnScreen?.() === true;
+  }
+
   // The agent's report that a question box cleared with its answers: a clearing whose
   // call has `answers`, so an unrelated tool finishing meanwhile (a subagent's Bash)
   // isn't taken for it. The timer starts only once every key is in; the process
@@ -1132,6 +1139,8 @@ export class ProcessManager {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send("instance-session-id", id, sessionId);
     }
+    // A paired phone's line for it is the new session's (remote-host.ts).
+    remoteServer.broadcastInstances();
   }
 
   // One activity event, from the agent's own reports, to everything that
@@ -1335,12 +1344,16 @@ export class ProcessManager {
     // The turn the keys are aimed at, held to between them: a view moved meanwhile
     // would take the next Esc somewhere else.
     const target = attention?.interruptTarget?.();
+    // And the turn: one that ended meanwhile is stopped, and the next one, started from
+    // a queued message, isn't the one the builder asked to stop.
+    const turn = instance.workingSince;
     const { keys, gapMs } = getBackend(instance.backend).interrupt;
     for (const [i, key] of keys.entries()) {
       if (i > 0) {
         await delay(gapMs);
         if (this.instances.get(id) !== instance || instance.ptyProcess !== ptyProcess) return false;
-        if (instance.secretaryEvent?.kind === "needs-you") return false;
+        if (instance.secretaryEvent?.kind === "needs-you" || this.dialogOnScreen(id)) return false;
+        if (instance.workingSince !== turn) return !instance.working;
         if (attention?.interruptTarget && attention.interruptTarget() !== target) return false;
       }
       this.noteWrite(instance, key);

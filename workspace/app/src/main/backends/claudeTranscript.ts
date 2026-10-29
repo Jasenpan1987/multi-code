@@ -403,7 +403,8 @@ export function claudeTurnEntries(rows: Iterable<unknown>): TranscriptEntry[] {
       const text = typedText(row);
       if (text !== null) {
         entries.push(fromRecord({ kind: "user", text }, row.uuid, row.timestamp));
-      } else {
+      } else if (row.isCompactSummary !== true) {
+        // A compaction summary may quote an old command's tags; it is never one.
         const line = commandLine(content);
         if (line) command = fromRecord({ kind: "user", text: line }, row.uuid, row.timestamp);
       }

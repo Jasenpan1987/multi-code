@@ -198,6 +198,11 @@ export interface HookAttention {
   // session it shows, and only while that one runs. Absent for a backend whose
   // terminal shows only the contact's session (Claude): its keys stop whatever runs.
   interruptTarget?(): string | undefined;
+  // Whether the terminal shows a dialog now, by the agent's own record of it (Claude's
+  // registry reads `waiting`, OpenCode holds an open request). Typing into a dialog
+  // drops the secretary's needs-you event while the dialog stays open (an arrow key,
+  // a half-typed answer), so that event alone can't say text would land in one.
+  dialogOnScreen?(): boolean;
 }
 
 // What createHookAttention is told about the process it watches.

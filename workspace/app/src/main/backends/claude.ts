@@ -439,6 +439,8 @@ export const claudeBackend: Backend = {
         attention.stop();
         working.stop();
       },
+      // A dialog, or a panel the builder opened (`/cost`): text would land in it either way.
+      dialogOnScreen: () => readStatus() === "waiting",
     };
   },
 

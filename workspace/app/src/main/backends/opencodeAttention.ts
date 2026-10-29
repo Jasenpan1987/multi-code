@@ -294,6 +294,11 @@ export class OpencodeAttention implements HookAttention {
     return shown !== undefined && this.running.has(shown) ? shown : undefined;
   }
 
+  // A request of the contact's tree still waits on the builder, whoever typed at it.
+  dialogOnScreen(): boolean {
+    return this.dialogs.size > 0;
+  }
+
   // The contact takes the shown session as its own (the one its next start reopens)
   // only when it is a root. The TUI can show a subagent's session too, and reopening
   // that would put the contact in the middle of someone else's turn. Its family is

@@ -233,6 +233,8 @@ class FakeProcessManager implements HostProcessManager {
   answering = new Set<string>();
   // Instances whose terminal shows no running turn (OpenCode on another session).
   offScreen = new Set<string>();
+  // Instances whose agent says a dialog is on screen (HookAttention.dialogOnScreen).
+  dialogsUp = new Set<string>();
   answers: { id: string; seq: number; plan: AnswerPlan }[] = [];
   prompts: { id: string; text: string }[] = [];
   writes: { id: string; data: string }[] = [];
@@ -293,6 +295,9 @@ class FakeProcessManager implements HostProcessManager {
   }
   canInterrupt(id: string) {
     return !this.offScreen.has(id);
+  }
+  dialogOnScreen(id: string) {
+    return this.dialogsUp.has(id);
   }
   sendPrompt(id: string, text: string) {
     this.prompts.push({ id, text });
@@ -596,6 +601,51 @@ describe("RemoteServer handshake", () => {
       JSON.stringify({ type: "sealed", nonce: "AAAA", body: "BBBB" })
     );
     expect(await client.waitClose()).toBe(4002);
+  });
+
+  it("drops a socket whose frame isn't an object, before and after the seal, and keeps running", async () => {
+    // Any exception out of a frame's handling is an uncaught one in the main process,
+    // and before auth anyone who reaches the port can send these.
+    const fx = await startServer();
+    const uncaught: unknown[] = [];
+    const onUncaught = (err: unknown) => uncaught.push(err);
+    process.on("uncaughtException", onUncaught);
+    try {
+      const plain = new TestClient(fx.url);
+      await new Promise((r) => setTimeout(r, 50));
+      plain.sendRaw("null");
+      expect(await plain.waitClose()).toBe(4002);
+
+      for (const frame of [null, 7, { type: "auth" }, { type: "auth", deviceToken: 7 }]) {
+        const client = new TestClient(fx.url);
+        await client.handshake();
+        if (frame === null || typeof frame === "number") {
+          // `send` seals JSON of the value: a bare null or number inside the seal.
+          client.send(frame as unknown as AnyRecord);
+          expect(await client.waitClose(), JSON.stringify(frame)).toBe(4002);
+        } else {
+          client.send(frame);
+          expect(await client.waitFor("auth-failed"), JSON.stringify(frame)).toMatchObject({ reason: "unknown-token" });
+          expect(await client.waitClose()).toBe(4003);
+        }
+      }
+      await new Promise((r) => setTimeout(r, 50));
+      expect(uncaught).toEqual([]);
+      // A real phone still gets in.
+      (await connected(fx)).close();
+    } finally {
+      process.off("uncaughtException", onUncaught);
+    }
+  });
+
+  it("keeps the placeholder name when the phone's name isn't text", async () => {
+    const fx = await startServer();
+    const client = new TestClient(fx.url);
+    await client.handshake();
+    client.send({ type: "auth", deviceToken: fx.token, deviceName: { evil: true } });
+    await client.waitFor("auth-ok");
+    expect(fx.server.getStatus().devices[0].name).toBe("New device");
+    client.close();
   });
 
   it("refuses commands before auth", async () => {
@@ -953,6 +1003,22 @@ describe("instance states and previews", () => {
 
     fx.pm.raise("inst-1", finished(12));
     await vi.waitFor(() => expect(fx.pm.turnReads).toBe(2));
+    client.close();
+  });
+
+  it("reads an instance's line afresh when it moves to another session", async () => {
+    const fx = await startServer();
+    fx.pm.instances.get("inst-1")!.sessionId = "ses-old";
+    fx.pm.turns.set("inst-1", [{ kind: "assistant", text: "The old session's last word on it." }]);
+    const client = await connected(fx);
+    await row(client, (r) => r.preview === "The old session's last word on it.");
+
+    // `/clear` at the desk: a new, empty session.
+    fx.pm.instances.get("inst-1")!.sessionId = "ses-new";
+    fx.pm.turns.set("inst-1", []);
+    fx.server.broadcastInstances();
+    await row(client, (r) => r.preview === undefined);
+    expect(fx.pm.turnReads).toBe(2);
     client.close();
   });
 
@@ -1336,6 +1402,30 @@ describe("prompt", () => {
     expect(await client.ack("i1")).toMatchObject({ ok: false, reason: "dialog-open" });
     expect(fx.pm.prompts).toEqual([]);
     expect(fx.pm.interrupts).toEqual([]);
+    client.close();
+  });
+
+  it("is refused while the agent still shows a dialog a keystroke into it took the event of", async () => {
+    // An arrow key in the terminal dropped the needs-you, so the phone's card went,
+    // but the plan is still up: its Return would pick the highlighted option.
+    const fx = await startServer();
+    fx.pm.dialogsUp.add("inst-1");
+    fx.pm.setWorking("inst-1", true);
+    const client = await connected(fx);
+    prompt(client, "m1");
+    expect(await client.ack("m1")).toMatchObject({
+      ok: false,
+      reason: "dialog-open",
+      message: "A dialog is open in its terminal; answer it there first",
+    });
+    client.send({ type: "interrupt", instanceId: "inst-1", clientMsgId: "i1" });
+    expect(await client.ack("i1")).toMatchObject({ ok: false, reason: "dialog-open" });
+    expect(fx.pm.prompts).toEqual([]);
+    expect(fx.pm.interrupts).toEqual([]);
+
+    fx.pm.dialogsUp.delete("inst-1");
+    prompt(client, "m2");
+    expect(await client.ack("m2")).toMatchObject({ ok: true });
     client.close();
   });
 
@@ -1804,6 +1894,24 @@ describe("Web Push (T-810)", () => {
     release();
     await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(2));
     expect(payloadOf(1).notification.title).toBe("other · Finished");
+  });
+
+  it("sends no push still queued behind one in flight once the phone link is off", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "inst-2", name: "other" });
+    await subscribedAway(fx);
+    let release!: () => void;
+    sendNotification.mockImplementationOnce(
+      () => new Promise((resolve) => (release = () => resolve({ statusCode: 201, body: "", headers: {} })))
+    );
+    fx.pm.raise("inst-1", bash(102));
+    await vi.waitFor(() => expect(sendNotification).toHaveBeenCalledTimes(1));
+    fx.pm.raise("inst-2", finished(103));
+    await settle();
+    await fx.server.stop();
+    release();
+    await settle();
+    expect(sendNotification).toHaveBeenCalledTimes(1);
   });
 
   it.each([404, 410])("deletes a subscription the push service says is gone (%i)", async (statusCode) => {

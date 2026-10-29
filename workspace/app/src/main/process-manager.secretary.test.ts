@@ -24,6 +24,8 @@ interface Spawn {
   written: string[];
   exit: (e: { exitCode: number }) => void;
   report: ActivityCallback;
+  // The agent's report that a turn runs (AttentionContext.onWorking).
+  working: (working: boolean) => void;
 }
 const spawns: Spawn[] = [];
 let nextPid = 500;
@@ -37,6 +39,8 @@ const apiAnswers: { ref: DialogRef; answer: DialogAnswer }[] = [];
 let apiResult: () => Promise<AnswerResult> = async () => ({ ok: true });
 // The session an OpenCode terminal's Esc Esc would interrupt now.
 let ocTarget: () => string | undefined = () => "ses_1";
+// Whether an OpenCode instance's attention holds an open request.
+let ocDialogOpen = false;
 
 vi.mock("node-pty", () => ({
   spawn: (_cmd: string, _args: string[], o: { env: Record<string, string> }) => {
@@ -47,6 +51,7 @@ vi.mock("node-pty", () => ({
       written: [],
       exit: () => {},
       report: () => {},
+      working: () => {},
     };
     spawns.push(spawn);
     return {
@@ -89,10 +94,14 @@ vi.mock("./backends", async () => {
     createHookAttention: (
       pid: number,
       onActivity: ActivityCallback,
-      onHooksHealth: (ok: boolean) => void
+      onHooksHealth: (ok: boolean) => void,
+      context: { onWorking: (working: boolean) => void }
     ) => {
       const spawn = spawns.find((s) => s.pid === pid);
-      if (spawn) spawn.report = onActivity;
+      if (spawn) {
+        spawn.report = onActivity;
+        spawn.working = context.onWorking;
+      }
       const attention = new ClaudeHookAttention(
         onActivity,
         () => registryStatus(),
@@ -100,13 +109,16 @@ vi.mock("./backends", async () => {
         onHooksHealth
       );
       // OpenCode answers its dialogs through its API; Claude's attention can't.
-      if (name !== "opencode") return attention;
+      if (name !== "opencode") {
+        return Object.assign(attention, { dialogOnScreen: () => registryStatus() === "waiting" });
+      }
       return Object.assign(attention, {
         answer: (ref: DialogRef, answer: DialogAnswer) => {
           apiAnswers.push({ ref, answer });
           return apiResult();
         },
         interruptTarget: () => ocTarget(),
+        dialogOnScreen: () => ocDialogOpen,
       });
     },
     readTranscript: () => [],
@@ -179,6 +191,7 @@ beforeEach(() => {
   apiAnswers.length = 0;
   apiResult = async () => ({ ok: true });
   ocTarget = () => "ses_1";
+  ocDialogOpen = false;
 });
 
 afterEach(() => {
@@ -1035,5 +1048,64 @@ describe("a paired phone's Stop (mobile-v2 T-803)", () => {
     latestSpawn(id).exit({ exitCode: 0 });
     await expect(manager.interruptInstance(id)).resolves.toBe(false);
     expect(latestSpawn(id).written).toEqual([]);
+  });
+
+  it("stops before OpenCode's second Esc when the turn ended meanwhile, which counts as stopped", async () => {
+    const manager = new ProcessManager();
+    const id = create(manager, "opencode");
+    latestSpawn(id).working(true);
+    const done = manager.interruptInstance(id);
+    await vi.advanceTimersByTimeAsync(100);
+    latestSpawn(id).working(false);
+    await vi.advanceTimersByTimeAsync(150);
+    await expect(done).resolves.toBe(true);
+    expect(latestSpawn(id).written).toEqual(["\x1b"]);
+  });
+
+  it("leaves a turn that started meanwhile alone: it isn't the one asked to stop", async () => {
+    const manager = new ProcessManager();
+    const id = create(manager, "opencode");
+    latestSpawn(id).working(true);
+    const done = manager.interruptInstance(id);
+    await vi.advanceTimersByTimeAsync(100);
+    // A queued message starts the next turn in the same session.
+    latestSpawn(id).working(false);
+    latestSpawn(id).working(true);
+    await vi.advanceTimersByTimeAsync(150);
+    await expect(done).resolves.toBe(false);
+    expect(latestSpawn(id).written).toEqual(["\x1b"]);
+  });
+
+  it("stops before OpenCode's second Esc when a dialog is on screen though its event went", async () => {
+    const manager = new ProcessManager();
+    const id = create(manager, "opencode");
+    const done = manager.interruptInstance(id);
+    ocDialogOpen = true;
+    await vi.advanceTimersByTimeAsync(250);
+    await expect(done).resolves.toBe(false);
+    expect(latestSpawn(id).written).toEqual(["\x1b"]);
+  });
+});
+
+describe("dialogOnScreen (mobile-v2 review)", () => {
+  it("follows the agent's record of a dialog, not the event a keystroke into it drops", () => {
+    const manager = new ProcessManager();
+    const id = create(manager);
+    latestSpawn(id).report("prompt", { tool: "ExitPlanMode", options: [] }, { toolName: "ExitPlanMode", toolInput: {} });
+    registryStatus = () => "waiting";
+    // The builder moves the highlight with an arrow key: the plan is still up.
+    manager.writeToInstance(id, "\x1b[B");
+    expect(manager.secretaryEventOf(id)).toBeUndefined();
+    expect(manager.dialogOnScreen(id)).toBe(true);
+    registryStatus = () => "busy";
+    expect(manager.dialogOnScreen(id)).toBe(false);
+  });
+
+  it("is false for an instance that isn't running", () => {
+    const manager = new ProcessManager();
+    const id = create(manager);
+    registryStatus = () => "waiting";
+    latestSpawn(id).exit({ exitCode: 0 });
+    expect(manager.dialogOnScreen(id)).toBe(false);
   });
 });

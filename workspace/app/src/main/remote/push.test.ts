@@ -28,6 +28,11 @@ const { declarativePayload, loadVapidKeys, sendPush, topicOf } = await import(".
 const { default: webpush } = await import("web-push");
 
 const keysFile = () => path.join(userData, "remote-push.json");
+// Another keypair's halves, as push.ts stores them.
+const loadVapidKeysFrom = (ecdh: crypto.ECDH) => {
+  ecdh.generateKeys();
+  return { publicKey: ecdh.getPublicKey().toString("base64url"), privateKey: ecdh.getPrivateKey().toString("base64url") };
+};
 const mode = (file: string) => fs.statSync(file).mode & 0o777;
 
 beforeEach(() => {
@@ -61,6 +66,51 @@ describe("the VAPID keys", () => {
       expect(loaded, corrupt).toMatchObject({ ok: true, created: true });
       expect(mode(keysFile())).toBe(0o600);
       expect(loadVapidKeys()).toMatchObject({ ok: true, created: false });
+    }
+  });
+
+  it("are replaced when the two halves aren't one pair", () => {
+    const first = loadVapidKeys();
+    const other = loadVapidKeysFrom(crypto.createECDH("prime256v1"));
+    if (!first.ok) throw new Error(first.error);
+    fs.writeFileSync(keysFile(), JSON.stringify({ publicKey: first.keys.publicKey, privateKey: other.privateKey }));
+    const loaded = loadVapidKeys();
+    expect(loaded).toMatchObject({ ok: true, created: true });
+    if (loaded.ok) expect(loaded.keys.publicKey).not.toBe(first.keys.publicKey);
+  });
+
+  it("put a kept file back to 0600 when it was found readable by others", () => {
+    const first = loadVapidKeys();
+    fs.chmodSync(keysFile(), 0o644);
+    expect(loadVapidKeys()).toEqual({ ...first, created: false });
+    expect(mode(keysFile())).toBe(0o600);
+  });
+
+  it("are never replaced when the file's mode can't be changed, nor used while others can read it", () => {
+    const first = loadVapidKeys();
+    const before = fs.readFileSync(keysFile(), "utf8");
+    const denied = () => {
+      throw Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" });
+    };
+    // Readable by others first, as a restored copy may be; the chmod below is denied.
+    fs.chmodSync(keysFile(), 0o644);
+    const chmod = vi.spyOn(fs, "chmodSync").mockImplementation(denied);
+    try {
+      const loaded = loadVapidKeys();
+      expect(chmod).toHaveBeenCalled();
+      expect(loaded.ok).toBe(false);
+      if (!loaded.ok) expect(loaded.error).toMatch(/readable by other users/);
+      expect(fs.readFileSync(keysFile(), "utf8")).toBe(before);
+    } finally {
+      chmod.mockRestore();
+    }
+    // Already private, and the chmod denied all the same: used as it is.
+    fs.chmodSync(keysFile(), 0o600);
+    const again = vi.spyOn(fs, "chmodSync").mockImplementation(denied);
+    try {
+      expect(loadVapidKeys()).toEqual({ ...first, created: false });
+    } finally {
+      again.mockRestore();
     }
   });
 

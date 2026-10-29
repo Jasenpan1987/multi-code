@@ -597,6 +597,21 @@ describe("turns", () => {
     expect(h.attention.interruptTarget()).toBeUndefined();
   });
 
+  it("says a dialog is on screen while a request of the contact's is open, typed at or not", async () => {
+    // A keystroke into the dialog drops the secretary's event; the request stays open
+    // until OpenCode says it was answered (mobile-v2 review).
+    const h = await live();
+    await h.publish(created("ses_root"), started("ses_root"));
+    expect(h.attention.dialogOnScreen()).toBe(false);
+    await h.publish(asked("per_1", "ses_root"));
+    expect(h.attention.dialogOnScreen()).toBe(true);
+    await h.publish(replied("per_1", "ses_root"));
+    expect(h.attention.dialogOnScreen()).toBe(false);
+    // Another client's dialog on the service is not on the contact's screen.
+    await h.publish(created("ses_vscode"), started("ses_vscode"), asked("per_2", "ses_vscode"));
+    expect(h.attention.dialogOnScreen()).toBe(false);
+  });
+
   it("a finish names the session whose turn ended", async () => {
     // The terminal may be showing another of the contact's sessions by then (a tab),
     // which a reply jump must not move (read-reply-conclusion).

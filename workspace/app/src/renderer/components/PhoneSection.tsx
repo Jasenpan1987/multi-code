@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RemotePairing, RemoteTestPush } from "../../shared/types";
 import type { RemoteChecks, RemoteStatus } from "../../shared/remote-protocol";
-import { checkRows, deviceLine, firstToFix, type CheckRow } from "./phoneText";
+import { checkRows, deviceLine, firstToFix, pairingIsFor, pairingOrigin, type CheckRow } from "./phoneText";
 
 const GET_TAILSCALE_URL = "https://tailscale.com/download/mac";
 const UNDO_SERVE = "tailscale serve --https=443 off";
@@ -42,6 +42,9 @@ export function PhoneSection({ active }: PhoneSectionProps) {
   // The checks last shown, so a push that changes them drops the last action's error,
   // which was about a state that is gone.
   const shownChecks = useRef("");
+  // Bumped whenever a code being made would no longer be wanted (Done, the checks
+  // changed), so its late reply doesn't put it back.
+  const pairRequest = useRef(0);
 
   const show = useCallback((next: RemoteStatus) => {
     shownChecks.current = JSON.stringify(next.checks);
@@ -72,13 +75,15 @@ export function PhoneSection({ active }: PhoneSectionProps) {
 
   const rows = status?.enabled ? checkRows(status.checks) : null;
   const blocker = rows ? firstToFix(rows) : null;
-  const ready = rows !== null && blocker === null;
+  const origin = pairingOrigin(status);
+  const ready = origin !== null;
 
-  // A code is shown only while every check passes: one that stopped passing has a
-  // phone pair with a Mac it can't reach.
+  // A code is shown only while every check passes, and only for the address it was
+  // made for: either change has a phone pair with a Mac it can't reach.
   useEffect(() => {
-    if (!ready) setPairing(null);
-  }, [ready]);
+    pairRequest.current++;
+    setPairing(null);
+  }, [origin]);
 
   if (!active) return null;
 
@@ -95,10 +100,12 @@ export function PhoneSection({ active }: PhoneSectionProps) {
   };
 
   const pairNew = async () => {
+    const request = ++pairRequest.current;
     setBusy(true);
     setActionError(null);
     try {
       const next = await window.electronAPI.createRemotePairing();
+      if (request !== pairRequest.current) return;
       setPairing(next);
       setCopied(false);
       if (!next) setActionError("No code was made: HTTPS isn't ready any more. Check again.");
@@ -267,7 +274,7 @@ export function PhoneSection({ active }: PhoneSectionProps) {
                 Check again
               </button>
             </div>
-          ) : pairing ? (
+          ) : pairing && pairingIsFor(pairing.webUrl, origin) ? (
             <div className="phone-pairing">
               {pairing.qrDataUrl ? (
                 <img
@@ -282,8 +289,8 @@ export function PhoneSection({ active }: PhoneSectionProps) {
               )}
               <div className="phone-caption">
                 Scan with the iPhone camera to pair a new phone, or copy the link and
-                paste it in the phone app. Both hold a secret for that one phone: make a
-                new code if it leaks.
+                paste it in the phone app. Both hold a secret for that one phone: if it
+                leaks, revoke its row below (a new code doesn't cancel this one).
               </div>
               <div className="phone-row">
                 <button className="phone-btn" onClick={() => void copyLink(pairing.webUrl)}>
@@ -292,7 +299,13 @@ export function PhoneSection({ active }: PhoneSectionProps) {
                 <button className="phone-btn" onClick={pairNew} disabled={busy}>
                   New code
                 </button>
-                <button className="phone-btn" onClick={() => setPairing(null)}>
+                <button
+                  className="phone-btn"
+                  onClick={() => {
+                    pairRequest.current++;
+                    setPairing(null);
+                  }}
+                >
                   Done
                 </button>
               </div>

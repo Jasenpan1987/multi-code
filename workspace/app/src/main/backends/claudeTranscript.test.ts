@@ -395,6 +395,24 @@ describe("claudeTurnEntries", () => {
     ]);
   });
 
+  it("never takes a compaction summary for a command, though it quotes one's tags", () => {
+    const entries = claudeTurnEntries([
+      { ...typed("add a cache"), uuid: "u1" },
+      { ...says("Added."), uuid: "a1" },
+      {
+        ...typed("Summary: the builder ran <command-name>/omt:work</command-name> <command-args>T-1</command-args>…", {
+          isCompactSummary: true,
+        }),
+        uuid: "s1",
+      },
+      typed([{ type: "text", text: "Continue." }], { isMeta: true, uuid: "m1", parentUuid: "s1" }),
+    ]);
+    expect(entries.map((entry) => [entry.kind, entry.text])).toEqual([
+      ["user", "add a cache"],
+      ["assistant", "Added."],
+    ]);
+  });
+
   it("reads a denied or interrupted call as an error, and counts no lines for it", () => {
     const entries = claudeTurnEntries([
       calls("t1", "Edit", { file_path: "/a.ts" }),
