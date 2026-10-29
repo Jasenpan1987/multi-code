@@ -31,7 +31,6 @@ import { RunStateTracker, type RunState, type WriteVerdict } from "./run-state";
 import { INSTANCE_ENV, SPAWN_ENV } from "./backends/instance-env";
 import { KEY_GAP_MS } from "./secretary/dialog";
 import type { AnswerPlan } from "./secretary/dialog";
-import { answerForChoice } from "./backends/opencodeAnswer";
 
 export interface InstanceInfo {
   id: string;
@@ -49,8 +48,10 @@ export interface InstanceInfo {
   runState?: RunState;
   // A turn is running and nothing waits on the builder, from the agent's own
   // reports (AttentionContext.onWorking). Only while running. Display only: the
-  // contact list's avatar moves.
+  // contact list's avatar moves, and a paired phone lists it as Working.
   working?: boolean;
+  // When `working` last became true; with it.
+  workingSince?: number;
   // This instance's hooks aren't reaching Multi-Code, so it raises no alerts (PRD
   // Story 6). The renderer shows a bar on its page.
   alertsDegraded?: boolean;
@@ -64,8 +65,10 @@ export interface InstanceInfo {
  * with yet: what the voice secretary writes its brief from, and what it checks
  * before answering (docs/specs/voice-secretary/prd.md, Stories 2 and 6).
  *
- * `seq` is unique per event and only ever grows for an instance, across restarts
- * too, so "is this still the event I was working on" is one comparison.
+ * `seq` is unique per event and only ever grows, across instance restarts and app
+ * launches too (it follows the clock), so "is this still the event I was working
+ * on" is one comparison, and a paired phone's answer naming a dialog from before a
+ * relaunch can't name a new one (remote-protocol.ts, PromptStateFrame).
  * `prompt` is there when the dialog decoded into options: the detail the phone
  * would show, plus the tool call exactly as the agent sent it (for a Bash
  * permission, `toolInput.command` is the command). Read-only for consumers.
@@ -122,8 +125,12 @@ interface ManagedInstance {
   // Turns what the agent reports about itself (Claude's hooks, OpenCode's plugin)
   // into its activity. Null while stopped.
   hookAttention: HookAttention | null;
-  // See InstanceInfo.working. Reset when the process exits.
+  // See InstanceInfo.working and workingSince. Reset when the process exits.
   working?: boolean;
+  workingSince?: number;
+  // The PTY's size, as last set: what a paired phone's terminal is drawn at.
+  cols: number;
+  rows: number;
   // The terminal shows no session (AttentionContext.onHomeShown), so the contact
   // shows no context figure: the one it had is the session it left. Cleared when
   // it shows a session again, and when the process exits.
@@ -187,10 +194,8 @@ interface ManagedInstance {
   // Writes that carried input, from anyone. answerDialog stops when one lands
   // between its own keys: the builder typed in the terminal, or the phone answered.
   inputWrites?: number;
-  // The dialog the agent last reported it is stopped on, with the request to answer
-  // when its backend answers through the CLI's API. Set on `prompt`, cleared on
-  // `prompt-cleared` and exit; a phone's tap is held to it (answerPhoneChoice).
-  livePrompt?: { detail: PromptDetail; dialog?: DialogRef };
+  // How many answerDialog calls are writing their keys now (isAnswering).
+  answering?: number;
 }
 
 // What answerDialog did. `answered`: the event it was asked about isn't the live
@@ -238,6 +243,10 @@ function sameUsage(a: ContextUsage | undefined, b: ContextUsage | undefined): bo
 
 const DEFAULT_BACKEND: BackendName = "claude";
 
+// The size every PTY starts at, until the desktop's terminal fits it.
+const SPAWN_COLS = 120;
+const SPAWN_ROWS = 30;
+
 // How long to let the slash-command autocomplete menu draw before submitting, and
 // again between the two submissions. Both CLIs render a TUI frame in well under
 // this; the cost of being generous is a fifth of a second on a command the manager
@@ -265,7 +274,9 @@ export class ProcessManager {
   private secretaryListeners = new Set<SecretaryEventListener>();
   // One counter for every instance's secretary events. A per-record one would
   // restart at zero when start or restart builds a fresh record, and an old
-  // event's seq could then outrank the new spawn's.
+  // event's seq could then outrank the new spawn's. Each seq is at least the clock
+  // in ms, so a relaunch, which takes far longer than a millisecond, starts above
+  // every seq the previous launch handed out; nothing keeps them across launches.
   private secretarySeq = 0;
   // Set from outside rather than resolved here: the options carry the manager MCP
   // server's port and bearer token, and importing that module would close a cycle
@@ -460,7 +471,6 @@ export class ProcessManager {
         result = { ok: false, reason: "failed" };
       }
       if (!result.ok) return { ok: false, reason: result.reason === "gone" ? "answered" : "failed" };
-      this.clearPhonePrompt(instance, ref);
       return { ok: true };
     }
 
@@ -477,20 +487,26 @@ export class ProcessManager {
       return null;
     };
 
-    for (const [i, key] of plan.keys.entries()) {
-      if (i > 0) {
-        await delay(timing.keyGapMs);
-        const stop = stillOurs();
-        if (stop) {
-          record?.cancel();
-          return stop;
+    // The dialog stays open until the last key, though the first one cleared its
+    // event: a paired phone's compose and Stop wait until then (isAnswering).
+    instance.answering = (instance.answering ?? 0) + 1;
+    try {
+      for (const [i, key] of plan.keys.entries()) {
+        if (i > 0) {
+          await delay(timing.keyGapMs);
+          const stop = stillOurs();
+          if (stop) {
+            record?.cancel();
+            return stop;
+          }
         }
+        this.noteWrite(instance, key);
+        ptyProcess.write(key);
+        mine = instance.inputWrites ?? 0;
       }
-      this.noteWrite(instance, key);
-      ptyProcess.write(key);
-      mine = instance.inputWrites ?? 0;
+    } finally {
+      instance.answering -= 1;
     }
-    remoteServer.clearActivity(id);
 
     if (plan.followUp) {
       await delay(timing.followUpDelayMs);
@@ -502,6 +518,20 @@ export class ProcessManager {
     const recorded = await record.wait(timing.clearWaitMs);
     if (!same()) return { ok: false, reason: "stopped" };
     return { ok: true, recorded };
+  }
+
+  // Whether Stop's keys would stop a turn now (HookAttention.interruptTarget): for
+  // OpenCode, its terminal shows the running session; Claude's shows only its own.
+  canInterrupt(id: string): boolean {
+    const attention = this.instances.get(id)?.hookAttention;
+    return !attention?.interruptTarget || attention.interruptTarget() !== undefined;
+  }
+
+  // Whether answerDialog is writing a dialog's keys to this instance now. Its first
+  // key clears the needs-you event while the dialog is still on screen, so text or an
+  // Esc written meanwhile would land in the dialog.
+  isAnswering(id: string): boolean {
+    return (this.instances.get(id)?.answering ?? 0) > 0;
   }
 
   // The agent's report that a question box cleared with its answers: a clearing whose
@@ -537,51 +567,6 @@ export class ProcessManager {
       },
       cancel: () => finish(undefined),
     };
-  }
-
-  // A paired phone tapped option `index` of the dialog it shows, `detail` being the
-  // buttons it was sent. Resolves true when that answered it, false when nothing was
-  // answered: the phone then says the choice is no longer available.
-  //
-  // A backend that answers through the CLI's API (OpenCode) gets no keys from a tap
-  // at all. The answer goes to the request the live prompt names, and only while the
-  // tapped buttons are that prompt's own: an index into an older dialog's options
-  // would pick the wrong thing. Otherwise (Claude) the backend's keys for the option
-  // are written, as typed.
-  async answerPhoneChoice(id: string, detail: PromptDetail, index: number): Promise<boolean> {
-    const instance = this.instances.get(id);
-    if (!instance) return false;
-    const attention = instance.hookAttention;
-    if (attention?.answer) {
-      const live = instance.livePrompt;
-      if (!live?.dialog || live.detail !== detail) return false;
-      const answer = answerForChoice(live.detail, live.dialog, index);
-      if (!answer) return false;
-      let result: AnswerResult;
-      try {
-        result = await attention.answer(live.dialog, answer);
-      } catch {
-        return false;
-      }
-      if (!result.ok) return false;
-      this.clearPhonePrompt(instance, live.dialog);
-      return true;
-    }
-    const keys = this.keystrokeForChoice(id, detail.tool, index, detail.options.length);
-    if (keys === null) return false;
-    this.writeToInstance(id, keys);
-    return true;
-  }
-
-  // After an answer through the API, drop the phone's badge and buttons as a key
-  // written from it does (writeToInstance). Only while that dialog is still the live
-  // one: the CLI may already have reported the next dialog while the answer was in
-  // flight, and its buttons must stay.
-  private clearPhonePrompt(instance: ManagedInstance, ref: DialogRef) {
-    if (this.instances.get(instance.id) !== instance) return;
-    const live = instance.livePrompt?.dialog;
-    if (live?.kind !== ref.kind || live.requestId !== ref.requestId) return;
-    remoteServer.clearActivity(instance.id);
   }
 
   // What the secretary's brief writer reads for an instance: the name the builder
@@ -638,8 +623,8 @@ export class ProcessManager {
     // A record a restart has replaced reports nothing any more.
     if (this.instances.get(instance.id) !== instance) return;
 
-    const seq = ++this.secretarySeq;
     const at = Date.now();
+    const seq = (this.secretarySeq = Math.max(this.secretarySeq + 1, at));
     const event: SecretaryEvent =
       type === "waiting"
         ? { kind: "finished", seq, at }
@@ -752,6 +737,8 @@ export class ProcessManager {
           status: "stopped",
           startedAt: 0,
           ptyProcess: null,
+          cols: SPAWN_COLS,
+          rows: SPAWN_ROWS,
           backend: contact.backend ?? DEFAULT_BACKEND,
           discovery: null,
           hookAttention: null,
@@ -923,8 +910,8 @@ export class ProcessManager {
     isManager: boolean | undefined,
     session: SessionStart
   ): ManagedInstance {
-    const cols = 120;
-    const rows = 30;
+    const cols = SPAWN_COLS;
+    const rows = SPAWN_ROWS;
 
     const backend: Backend = getBackend(backendName);
     // Manager options only for the manager. A project session must never get the
@@ -966,6 +953,8 @@ export class ProcessManager {
         runState: new RunStateTracker(),
         ownSessionId: session.kind === "own" ? session.sessionId : undefined,
         startError: refusal,
+        cols,
+        rows,
       };
     }
 
@@ -994,6 +983,8 @@ export class ProcessManager {
       lastPtyByteAt: Date.now(),
       isManager,
       runState: new RunStateTracker(),
+      cols,
+      rows,
       alertsDegraded: spawnedWithoutAlertHooks || undefined,
       alertsDegradedReason: spawnedWithoutAlertHooks
         ? backendName === "claude" ? "hooks" : "plugin"
@@ -1042,9 +1033,12 @@ export class ProcessManager {
         onWorking: (working) => {
           if (this.instances.get(id) !== instance || !instance.ptyProcess) return;
           instance.working = working || undefined;
+          instance.workingSince = working ? Date.now() : undefined;
           if (this.mainWindow && !this.mainWindow.isDestroyed()) {
             this.mainWindow.webContents.send("instance-working", id, working);
           }
+          // A paired phone lists it as Working, or no longer.
+          remoteServer.broadcastInstances();
         },
       }
     );
@@ -1082,9 +1076,9 @@ export class ProcessManager {
       instance.status = "stopped";
       instance.ptyProcess = null;
       instance.runState.onExit();
-      // A dead process has no dialog to answer and no turn to report on.
-      instance.livePrompt = undefined;
+      // A dead process has no turn to report on.
       instance.working = undefined;
+      instance.workingSince = undefined;
       // Stopped, it shows its own session's figure again.
       if (instance.homeShown) {
         instance.homeShown = undefined;
@@ -1135,8 +1129,8 @@ export class ProcessManager {
   }
 
   // One activity event, from the agent's own reports, to everything that
-  // listens: run state, the renderer's chime and red dot, a paired phone, the
-  // manager's waiters, and the secretary.
+  // listens: run state, the renderer's chime and red dot, the manager's waiters,
+  // and the secretary's event, which a paired phone follows (remote/remote-host.ts).
   private reportActivity(
     instance: ManagedInstance,
     type: string,
@@ -1160,13 +1154,6 @@ export class ProcessManager {
       this.refreshContextUsageAfterTurn(instance);
       instance.endedSession = endedSession;
     }
-    // What a phone's tap answers. A newer dialog with nothing to offer replaces the
-    // older one all the same: those buttons are no longer what's on screen.
-    if (type === "prompt") {
-      instance.livePrompt = detail ? { detail, dialog: toolCall?.dialog } : undefined;
-    } else if (type === "prompt-cleared") {
-      instance.livePrompt = undefined;
-    }
     // Before anything else hears of it, so a write made in reaction to this
     // activity clears the event it raised instead of landing before it exists.
     this.updateSecretaryEvent(instance, type, detail, toolCall);
@@ -1176,10 +1163,10 @@ export class ProcessManager {
       // A copy: each waiter removes itself as it runs.
       for (const waiter of (instance.dialogClearWaiters ?? []).slice()) waiter(toolCall);
     }
-    // "prompt-cleared" exists for paired phones (drop the stale option buttons);
-    // the desktop UI has nothing to do with it, so it isn't forwarded to the
-    // renderer. Nor is a restatement: the renderer chimes and counts every event it
-    // hears, and this dialog has had its chime.
+    // "prompt-cleared" ends the secretary's needs-you (and with it a paired phone's
+    // dialog card); the desktop UI has nothing to do with it, so it isn't forwarded
+    // to the renderer. Nor is a restatement: the renderer chimes and counts every
+    // event it hears, and this dialog has had its chime.
     if (
       type !== "prompt-cleared" &&
       !restated &&
@@ -1188,7 +1175,6 @@ export class ProcessManager {
     ) {
       this.mainWindow.webContents.send("instance-activity", id, type);
     }
-    remoteServer.broadcastActivity(id, type, detail, restated);
     this.emitActivity(id, type);
   }
 
@@ -1282,12 +1268,11 @@ export class ProcessManager {
   writeToInstance(id: string, data: string) {
     const instance = this.instances.get(id);
     if (instance?.ptyProcess) {
+      // Typing at the desk answers whatever was pending: noteWrite drops the
+      // secretary's event, and with it a paired phone's dialog card, rather than
+      // waiting for the agent to report it.
       this.noteWrite(instance, data);
       instance.ptyProcess.write(data);
-      // Typing at the desk answers whatever was pending, so drop the phone's
-      // badge and stale option buttons now rather than waiting for the agent to
-      // report it. Harmless when nothing was pending.
-      remoteServer.clearActivity(id);
     }
   }
 
@@ -1329,6 +1314,33 @@ export class ProcessManager {
     this.noteWrite(instance, `${pasted}\r`);
     instance.ptyProcess.write(pasted);
     instance.ptyProcess.write("\r");
+  }
+
+  // Stop the running turn the way Esc does at the desk, for a paired phone's Stop:
+  // the backend's interrupt keys, as typed, `gapMs` apart. The caller checks that a
+  // turn runs and no dialog is open; between keys this checks the second part again,
+  // since on a dialog the next Esc would answer it. Resolves false when not every key
+  // went in: the process went, or a dialog came up.
+  async interruptInstance(id: string): Promise<boolean> {
+    const instance = this.instances.get(id);
+    const ptyProcess = instance?.ptyProcess;
+    if (!instance || !ptyProcess || !this.canInterrupt(id)) return false;
+    const attention = instance.hookAttention;
+    // The turn the keys are aimed at, held to between them: a view moved meanwhile
+    // would take the next Esc somewhere else.
+    const target = attention?.interruptTarget?.();
+    const { keys, gapMs } = getBackend(instance.backend).interrupt;
+    for (const [i, key] of keys.entries()) {
+      if (i > 0) {
+        await delay(gapMs);
+        if (this.instances.get(id) !== instance || instance.ptyProcess !== ptyProcess) return false;
+        if (instance.secretaryEvent?.kind === "needs-you") return false;
+        if (attention?.interruptTarget && attention.interruptTarget() !== target) return false;
+      }
+      this.noteWrite(instance, key);
+      ptyProcess.write(key);
+    }
+    return true;
   }
 
   // Dispatch a task to an instance on behalf of something automated, refusing when
@@ -1393,24 +1405,6 @@ export class ProcessManager {
     }, MENU_SETTLE_MS);
 
     return { ok: true };
-  }
-
-  // Ask the backend that owns this instance how to select option `index`.
-  // Routed through the backend because the CLIs use different keys and a wrong
-  // guess can confirm the wrong choice — see Backend.keystrokeForChoice.
-  keystrokeForChoice(
-    id: string,
-    tool: string,
-    index: number,
-    optionCount: number
-  ): string | null {
-    const instance = this.instances.get(id);
-    if (!instance) return null;
-    return getBackend(instance.backend).keystrokeForChoice(
-      tool,
-      index,
-      optionCount
-    );
   }
 
   // Reflowable conversation tail for the phone and for the manager's read tools.
@@ -1484,7 +1478,19 @@ export class ProcessManager {
     const instance = this.instances.get(id);
     if (instance?.ptyProcess) {
       instance.ptyProcess.resize(cols, rows);
+      // A phone's terminal is drawn at the PTY's width, so it is told when that
+      // changes. The resize itself goes through either way, as it always has.
+      if (instance.cols === cols && instance.rows === rows) return;
+      instance.cols = cols;
+      instance.rows = rows;
+      remoteServer.broadcastResize(id, cols, rows);
     }
+  }
+
+  // The PTY's size, for a paired phone's terminal. Null when it isn't running.
+  ptySizeOf(id: string): { cols: number; rows: number } | null {
+    const instance = this.instances.get(id);
+    return instance?.ptyProcess ? { cols: instance.cols, rows: instance.rows } : null;
   }
 
   killInstance(id: string) {
@@ -1538,6 +1544,12 @@ export class ProcessManager {
   listInstances(): InstanceInfo[] {
     this.refreshStaleContextUsage();
     return Array.from(this.instances.values()).map((i) => this.toInfo(i));
+  }
+
+  // One instance as listInstances shows it, from what is cached: no read.
+  infoOf(id: string): InstanceInfo | undefined {
+    const instance = this.instances.get(id);
+    return instance ? this.toInfo(instance) : undefined;
   }
 
   // Re-read context usage for any instance whose cached figure has aged out.
@@ -1677,6 +1689,7 @@ export class ProcessManager {
       isManager: instance.isManager,
       runState: instance.ptyProcess ? instance.runState.state() : undefined,
       working: instance.ptyProcess ? instance.working : undefined,
+      workingSince: instance.ptyProcess ? instance.workingSince : undefined,
       alertsDegraded: instance.ptyProcess ? instance.alertsDegraded : undefined,
       alertsDegradedReason: instance.ptyProcess ? instance.alertsDegradedReason : undefined,
       startError: instance.startError,

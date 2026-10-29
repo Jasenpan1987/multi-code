@@ -1,6 +1,8 @@
 // Integration test: drives the real RemoteServer over a real socket with a real
-// NaCl handshake. This is the part where a subtle framing or auth bug would be
-// invisible to unit tests but break every phone.
+// NaCl handshake, with the desktop's real RemoteHost (remote-host.ts) on top of a
+// fake process manager. This is the part where a subtle framing, auth or ack bug
+// would be invisible to unit tests but break every phone, and where an answer is
+// followed through to the keys process-manager would write.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
@@ -19,9 +21,18 @@ vi.mock("electron", () => ({
 }));
 
 const { RemoteServer } = await import("./ws-server");
+const { createRemoteHost, firstSentence } = await import("./remote-host");
 const { REMOTE_PROTOCOL_VERSION } = await import("../../shared/remote-protocol");
-type TranscriptEntry =
-  import("../../shared/remote-protocol").TranscriptEntry;
+const { extractPromptDetail } = await import("./promptExtract");
+const { permissionDetail, permissionToolCall } = await import("../backends/opencodePrompt");
+
+type TranscriptEntry = import("../../shared/remote-protocol").TranscriptEntry;
+type HostProcessManager = import("./remote-host").HostProcessManager;
+type InstanceInfo = import("../process-manager").InstanceInfo;
+type SecretaryEvent = import("../process-manager").SecretaryEvent;
+type SecretaryEventListener = import("../process-manager").SecretaryEventListener;
+type AnswerOutcome = import("../process-manager").AnswerOutcome;
+type AnswerPlan = import("../secretary/dialog").AnswerPlan;
 
 type AnyRecord = Record<string, unknown>;
 
@@ -46,7 +57,7 @@ class TestClient {
 
     this.socket.on("message", (raw) => this.onMessage(raw.toString()));
 
-    const helloPromise = this.nextPlain();
+    const helloPromise = this.next();
     this.socket.send(
       JSON.stringify({
         type: "client-hello",
@@ -118,10 +129,6 @@ class TestClient {
     this.socket.send(text);
   }
 
-  private nextPlain(): Promise<AnyRecord> {
-    return this.next();
-  }
-
   next(timeoutMs = 3000): Promise<AnyRecord> {
     const queued = this.queue.shift();
     if (queued) return Promise.resolve(queued);
@@ -137,15 +144,43 @@ class TestClient {
     });
   }
 
-  // Skip frames until one of `type` arrives, so a test doesn't depend on the
-  // exact ordering of unrelated pushes.
-  async waitFor(type: string, timeoutMs = 3000): Promise<AnyRecord> {
+  // Skip frames until one of `type` (that `match` accepts) arrives, so a test
+  // doesn't depend on the exact ordering of unrelated pushes.
+  async waitFor(
+    type: string,
+    match: (frame: AnyRecord) => boolean = () => true,
+    timeoutMs = 3000
+  ): Promise<AnyRecord> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new Error(`timed out waiting for ${type}`);
       const frame = await this.next(remaining);
-      if (frame.type === type) return frame;
+      if (frame.type === type && match(frame)) return frame;
+    }
+  }
+
+  ack(clientMsgId: string): Promise<AnyRecord> {
+    return this.waitFor("ack", (f) => f.clientMsgId === clientMsgId);
+  }
+
+  // The first list in which instance `id` matches.
+  async instance(id: string, match: (row: AnyRecord) => boolean): Promise<AnyRecord> {
+    const frame = await this.waitFor("instances", (f) =>
+      (f.instances as AnyRecord[]).some((row) => row.id === id && match(row))
+    );
+    return (frame.instances as AnyRecord[]).find((row) => row.id === id)!;
+  }
+
+  // Every frame up to the reply to a ping sent now.
+  async drain(): Promise<AnyRecord[]> {
+    const at = Math.random();
+    this.send({ type: "ping", at });
+    const seen: AnyRecord[] = [];
+    for (;;) {
+      const frame = await this.next();
+      if (frame.type === "pong" && frame.at === at) return seen;
+      seen.push(frame);
     }
   }
 
@@ -167,22 +202,213 @@ class TestClient {
   }
 }
 
+// What process-manager would say about its instances, and what was asked of it.
+class FakeProcessManager implements HostProcessManager {
+  instances = new Map<string, InstanceInfo>();
+  events = new Map<string, SecretaryEvent>();
+  // The latest turn per instance, which the list's line is read from (one turn).
+  turns = new Map<string, TranscriptEntry[]>();
+  sizes = new Map<string, { cols: number; rows: number }>();
+  // What a subscribed phone is sent (the turns it asked for).
+  transcript: TranscriptEntry[] = [
+    { kind: "user", text: "run the tests" },
+    { kind: "tool", tool: "Bash", text: "pnpm test", pending: true },
+  ];
+  hasEarlier = false;
+  transcriptTurns: number[] = [];
+  answerOutcome: () => Promise<AnswerOutcome> = async () => ({ ok: true });
+  interruptResult = true;
+  // Instances whose answer's keys are still going in.
+  answering = new Set<string>();
+  // Instances whose terminal shows no running turn (OpenCode on another session).
+  offScreen = new Set<string>();
+  answers: { id: string; seq: number; plan: AnswerPlan }[] = [];
+  prompts: { id: string; text: string }[] = [];
+  writes: { id: string; data: string }[] = [];
+  interrupts: string[] = [];
+  turnReads = 0;
+  transcriptReads = 0;
+  private listeners = new Set<SecretaryEventListener>();
+
+  add(info: Partial<InstanceInfo> & { id: string }) {
+    this.instances.set(info.id, {
+      cwd: `/tmp/${info.id}`,
+      name: info.id,
+      status: "running",
+      startedAt: 1,
+      backend: "claude",
+      ...info,
+    });
+  }
+
+  raise(id: string, event: SecretaryEvent) {
+    this.events.set(id, event);
+    for (const listener of this.listeners) listener(id, event);
+  }
+
+  clear(id: string) {
+    this.events.delete(id);
+    for (const listener of this.listeners) listener(id, null);
+  }
+
+  setWorking(id: string, working: boolean, since = Date.now()) {
+    const info = this.instances.get(id)!;
+    info.working = working || undefined;
+    info.workingSince = working ? since : undefined;
+  }
+
+  listInstances() {
+    return [...this.instances.values()].map((i) => ({ ...i }));
+  }
+  infoOf(id: string) {
+    const info = this.instances.get(id);
+    return info ? { ...info } : undefined;
+  }
+  secretaryEventOf(id: string) {
+    return this.events.get(id);
+  }
+  onSecretaryEvent(listener: SecretaryEventListener) {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+  async answerDialog(id: string, seq: number, plan: AnswerPlan) {
+    this.answers.push({ id, seq, plan });
+    return this.answerOutcome();
+  }
+  isAnswering(id: string) {
+    return this.answering.has(id);
+  }
+  canInterrupt(id: string) {
+    return !this.offScreen.has(id);
+  }
+  sendPrompt(id: string, text: string) {
+    this.prompts.push({ id, text });
+  }
+  writeToInstance(id: string, data: string) {
+    this.writes.push({ id, data });
+  }
+  async interruptInstance(id: string) {
+    this.interrupts.push(id);
+    return this.interruptResult;
+  }
+  // The host reads one turn for a list line, and the phone's own count of turns
+  // for a transcript; the fake keeps the two apart to count them.
+  readRecentTurns(id: string, turns: number) {
+    if (turns === 1) {
+      this.turnReads++;
+      return { entries: this.turns.get(id) ?? [], hasEarlier: false };
+    }
+    this.transcriptReads++;
+    this.transcriptTurns.push(turns);
+    return { entries: this.transcript, hasEarlier: this.hasEarlier };
+  }
+  ptySizeOf(id: string) {
+    if (this.instances.get(id)?.status !== "running") return null;
+    return this.sizes.get(id) ?? { cols: 120, rows: 30 };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Dialogs, as the agents report them
+// ---------------------------------------------------------------------------
+
+const BASH_INPUT = { command: "pnpm test:e2e", description: "Run the end-to-end tests" };
+
+function bash(seq: number, at = 1000): SecretaryEvent {
+  return {
+    kind: "needs-you",
+    seq,
+    at,
+    prompt: { detail: extractPromptDetail("Bash", BASH_INPUT)!, toolName: "Bash", toolInput: BASH_INPUT },
+  };
+}
+
+const QUESTIONS_INPUT = {
+  questions: [
+    {
+      question: "Which database?",
+      header: "DB",
+      multiSelect: false,
+      options: [{ label: "Postgres" }, { label: "SQLite", description: "One file" }],
+    },
+    {
+      question: "Which extras?",
+      header: "Extras",
+      multiSelect: true,
+      options: [{ label: "Cache" }, { label: "Metrics" }, { label: "Tracing" }],
+    },
+  ],
+};
+
+function questions(seq: number): SecretaryEvent {
+  return {
+    kind: "needs-you",
+    seq,
+    at: 1000,
+    prompt: {
+      detail: extractPromptDetail("AskUserQuestion", QUESTIONS_INPUT)!,
+      toolName: "AskUserQuestion",
+      toolInput: QUESTIONS_INPUT,
+    },
+  };
+}
+
+const PLAN_INPUT = { plan: "# Add dark mode\n\n1. Theme tokens\n2. A toggle" };
+
+function plan(seq: number): SecretaryEvent {
+  return {
+    kind: "needs-you",
+    seq,
+    at: 1000,
+    prompt: {
+      detail: extractPromptDetail("ExitPlanMode", PLAN_INPUT)!,
+      toolName: "ExitPlanMode",
+      toolInput: PLAN_INPUT,
+    },
+  };
+}
+
+const OC_REQUEST = {
+  id: "per_1",
+  sessionID: "ses_1",
+  action: "shell",
+  resources: ["rm -rf build"],
+  save: ["rm *"],
+};
+
+function ocPermission(seq: number): SecretaryEvent {
+  const call = permissionToolCall(OC_REQUEST);
+  return {
+    kind: "needs-you",
+    seq,
+    at: 1000,
+    prompt: { detail: permissionDetail(OC_REQUEST), ...call },
+  };
+}
+
+// An MCP elicitation: needs you, with nothing the desktop can answer.
+const elicitation = (seq: number): SecretaryEvent => ({ kind: "needs-you", seq, at: 1000 });
+
+const finished = (seq: number, at = 2000): SecretaryEvent => ({ kind: "finished", seq, at });
+
+// ---------------------------------------------------------------------------
+// Fixture
+// ---------------------------------------------------------------------------
+
 interface Fixture {
   server: InstanceType<typeof RemoteServer>;
+  pm: FakeProcessManager;
   url: string;
   token: string;
   hostPublicKey: string;
-  writes: Array<{ id: string; data: string }>;
-  prompts: Array<{ id: string; text: string }>;
-  // How many times the host's transcript source has been read. A getter, so it
-  // reflects the live count rather than its value at fixture creation.
-  readonly transcriptReads: number;
 }
 
 const fixtures: Fixture[] = [];
 
-async function startServer(): Promise<Fixture> {
-  const server = new RemoteServer();
+async function startServer(options: { heartbeatTimeoutMs?: number } = {}): Promise<Fixture> {
+  const server = new RemoteServer(options);
   // HTTPS ready, so pairing offers are made (ws-server.https.test.ts covers the gate).
   server.setChecker({
     check: async () => ({
@@ -193,36 +419,9 @@ async function startServer(): Promise<Fixture> {
       throw new Error("not in these tests");
     },
   });
-  const writes: Array<{ id: string; data: string }> = [];
-  const prompts: Array<{ id: string; text: string }> = [];
-  const transcript: TranscriptEntry[] = [
-    { kind: "user", text: "run the tests" },
-    { kind: "tool", tool: "Bash", text: "pnpm test", pending: true },
-  ];
-  // Counts reads so the throttling tests can assert how often the (real-world:
-  // file/sqlite-backed) transcript source is hit.
-  const reads = { count: 0 };
-
-  server.setHost({
-    // Mirrors the real wiring in remote/index.ts, which fills `state` from the
-    // server. A stub that hardcoded it would hide the bug this guards.
-    listInstances: () => [
-      {
-        id: "inst-1",
-        name: "demo",
-        cwd: "/tmp/demo",
-        backend: "claude",
-        status: "running",
-        state: server.stateFor("inst-1"),
-      },
-    ],
-    writeToInstance: (id, data) => writes.push({ id, data }),
-    sendPrompt: (id, text) => prompts.push({ id, text }),
-    readTranscript: () => {
-      reads.count++;
-      return transcript;
-    },
-  });
+  const pm = new FakeProcessManager();
+  pm.add({ id: "inst-1", name: "demo" });
+  server.setHost(createRemoteHost(pm, server));
 
   // Port 0 = OS-assigned, so parallel test files never collide.
   const status = await server.start(0);
@@ -233,17 +432,22 @@ async function startServer(): Promise<Fixture> {
 
   const fixture: Fixture = {
     server,
+    pm,
     url: `ws://127.0.0.1:${status.port}`,
     token: offer.deviceToken,
     hostPublicKey: offer.hostPublicKey,
-    writes,
-    prompts,
-    get transcriptReads() {
-      return reads.count;
-    },
   };
   fixtures.push(fixture);
   return fixture;
+}
+
+async function connected(fx: Fixture, token = fx.token) {
+  const client = new TestClient(fx.url);
+  await client.handshake(fx.hostPublicKey);
+  client.send({ type: "auth", deviceToken: token, deviceName: "phone" });
+  await client.waitFor("auth-ok");
+  await client.waitFor("instances");
+  return client;
 }
 
 afterEach(async () => {
@@ -391,22 +595,55 @@ describe("RemoteServer handshake", () => {
 
     expect(await client.waitClose()).toBe(4003);
     // Critically, the unauthenticated input must never have reached the PTY.
-    expect(fx.writes).toEqual([]);
+    expect(fx.pm.writes).toEqual([]);
+  });
+});
+
+describe("RemoteServer heartbeat", () => {
+  it("closes an authenticated socket that has sent nothing for the timeout", async () => {
+    const fx = await startServer({ heartbeatTimeoutMs: 300 });
+    const client = await connected(fx);
+    expect(fx.server.getStatus().devices[0].connected).toBe(true);
+
+    expect(await client.waitClose(2000)).toBe(4004);
+    expect(fx.server.getStatus().devices[0].connected).toBe(false);
+  });
+
+  it("arms one timer per socket, however many times it authenticates", async () => {
+    const fx = await startServer({ heartbeatTimeoutMs: 300 });
+    const client = await connected(fx);
+    client.send({ type: "auth", deviceToken: fx.token });
+    await client.waitFor("auth-ok");
+    let closed = false;
+    void client.waitClose(5000).then(() => (closed = true), () => {});
+    for (let i = 0; i < 6; i++) {
+      await new Promise((r) => setTimeout(r, 150));
+      client.send({ type: "ping", at: i });
+      await client.waitFor("pong", (f) => f.at === i);
+    }
+    expect(closed).toBe(false);
+    client.close();
+  });
+
+  it("keeps a socket that pings", async () => {
+    const fx = await startServer({ heartbeatTimeoutMs: 300 });
+    const client = await connected(fx);
+    let closed = false;
+    void client.waitClose(5000).then(() => (closed = true), () => {});
+    for (let i = 0; i < 6; i++) {
+      await new Promise((r) => setTimeout(r, 150));
+      client.send({ type: "ping", at: i });
+      await client.waitFor("pong", (f) => f.at === i);
+    }
+    expect(closed).toBe(false);
+    client.close();
   });
 });
 
 describe("RemoteServer streaming", () => {
-  async function connected(fx: Fixture) {
-    const client = new TestClient(fx.url);
-    await client.handshake(fx.hostPublicKey);
-    client.send({ type: "auth", deviceToken: fx.token, deviceName: "phone" });
-    await client.waitFor("auth-ok");
-    await client.waitFor("instances");
-    return client;
-  }
-
-  it("replays buffered output as a snapshot on subscribe", async () => {
+  it("replays buffered output as a snapshot on subscribe, at the PTY's size", async () => {
     const fx = await startServer();
+    fx.pm.sizes.set("inst-1", { cols: 132, rows: 41 });
     // Output produced before the phone ever connected.
     fx.server.broadcastOutput("inst-1", "earlier output\r\n");
 
@@ -415,6 +652,22 @@ describe("RemoteServer streaming", () => {
 
     const snapshot = await client.waitFor("snapshot");
     expect(snapshot.data).toContain("earlier output");
+    expect([snapshot.cols, snapshot.rows]).toEqual([132, 41]);
+
+    client.close();
+  });
+
+  it("sends the PTY's new size to subscribers when the desktop resizes it", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "inst-2" });
+    const client = await connected(fx);
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    await client.waitFor("snapshot");
+
+    fx.server.broadcastResize("inst-2", 80, 24);
+    fx.server.broadcastResize("inst-1", 100, 33);
+    const resize = await client.waitFor("resize");
+    expect(resize).toEqual({ type: "resize", instanceId: "inst-1", cols: 100, rows: 33 });
 
     client.close();
   });
@@ -446,86 +699,54 @@ describe("RemoteServer streaming", () => {
     await new Promise((r) => setTimeout(r, 100));
     fx.server.broadcastOutput("inst-1", "after unsubscribe");
 
-    // Everything up to the reply to a ping sent after it: no output among it.
-    client.send({ type: "ping", at: 1 });
-    const seen: unknown[] = [];
-    for (let frame = await client.next(); ; frame = await client.next()) {
-      seen.push(frame.type);
-      if (frame.type === "pong") break;
-    }
-    expect(seen).not.toContain("output");
+    const seen = await client.drain();
+    expect(seen.map((f) => f.type)).not.toContain("output");
 
     client.close();
   });
 
-  it("forwards a typed prompt through the compose path", async () => {
-    const fx = await startServer();
-    const client = await connected(fx);
-    client.send({ type: "prompt", instanceId: "inst-1", text: "use postgres", clientMsgId: "m1" });
-
-    await vi.waitFor(() => expect(fx.prompts).toHaveLength(1));
-    expect(fx.prompts[0]).toEqual({ id: "inst-1", text: "use postgres" });
-
-    client.close();
-  });
-
-  it("acks a prompt, and refuses an answer as not built yet", async () => {
+  it("passes raw input straight through to the PTY", async () => {
     const fx = await startServer();
     const client = await connected(fx);
 
-    client.send({ type: "prompt", instanceId: "inst-1", text: "go on", clientMsgId: "m1" });
-    expect(await client.waitFor("ack")).toEqual({ type: "ack", clientMsgId: "m1", ok: true });
-
-    client.send({
-      type: "answer",
-      instanceId: "inst-1",
-      seq: 1,
-      choice: { effect: "allow-once" },
-      clientMsgId: "m2",
-    });
-    expect(await client.waitFor("ack")).toMatchObject({
-      clientMsgId: "m2",
-      ok: false,
-      reason: "unsupported",
-    });
-    expect(fx.writes).toEqual([]);
+    client.send({ type: "input", instanceId: "inst-1", data: "\x1b[A" });
+    await vi.waitFor(() => expect(fx.pm.writes).toHaveLength(1));
+    expect(fx.pm.writes[0]).toEqual({ id: "inst-1", data: "\x1b[A" });
 
     client.close();
   });
 
-  it("delivers a pending prompt to a phone that connects late", async () => {
-    const fx = await startServer();
-    // The agent blocks before the phone is anywhere near.
-    fx.server.broadcastActivity("inst-1", "prompt", {
-      tool: "AskUserQuestion",
-      question: "Which database?",
-      options: [{ label: "Postgres" }, { label: "SQLite" }],
-    });
-
-    const client = await connected(fx);
-    client.send({ type: "subscribe", instanceId: "inst-1" });
-    const prompt = await client.waitFor("prompt-state");
-    expect(prompt.summary).toBe("Which database?");
-    expect(typeof prompt.seq).toBe("number");
-
-    client.close();
-  });
-
-  it("sends the readable transcript on subscribe", async () => {
+  it("sends the last turns the phone asked for on subscribe, 10 unless it says", async () => {
     // The transcript is what the phone shows instead of the 120-column terminal,
     // so it has to arrive without the phone asking for it.
     const fx = await startServer();
+    fx.pm.hasEarlier = true;
     const client = await connected(fx);
 
-    client.send({ type: "subscribe", instanceId: "inst-1" });
+    client.send({ type: "subscribe", instanceId: "inst-1", turns: 20 });
     const frame = await client.waitFor("transcript");
+    expect(frame).toEqual({
+      type: "transcript",
+      instanceId: "inst-1",
+      entries: fx.pm.transcript,
+      hasEarlier: true,
+    });
 
-    expect(frame.instanceId).toBe("inst-1");
-    expect(frame.entries).toEqual([
-      { kind: "user", text: "run the tests" },
-      { kind: "tool", tool: "Bash", text: "pnpm test", pending: true },
-    ]);
+    // A refresh keeps the count the phone asked for.
+    fx.pm.raise("inst-1", finished(1));
+    await client.waitFor("transcript");
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    await client.waitFor("transcript");
+    expect(fx.pm.transcriptTurns).toEqual([20, 20, 10]);
+    client.close();
+  });
 
+  it("sends an empty transcript too, so the phone knows the session has none yet", async () => {
+    const fx = await startServer();
+    fx.pm.transcript = [];
+    const client = await connected(fx);
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    expect((await client.waitFor("transcript")).entries).toEqual([]);
     client.close();
   });
 
@@ -535,37 +756,9 @@ describe("RemoteServer streaming", () => {
     client.send({ type: "subscribe", instanceId: "inst-1" });
     await client.waitFor("transcript");
 
-    // A prompt means the summary the phone is showing is now out of date.
-    fx.server.broadcastActivity("inst-1", "prompt", {
-      tool: "Permission",
-      question: "Permission required: Access external directory /etc",
-      options: [{ label: "Allow once" }, { label: "Reject" }],
-    });
-
+    fx.pm.raise("inst-1", bash(1));
     const refreshed = await client.waitFor("transcript");
     expect(refreshed.entries).toHaveLength(2);
-
-    client.close();
-  });
-
-  it("reports blocked instances in the list so a reopened phone sees them", async () => {
-    // Regression guard: the list's attention state used to be left undefined, so a
-    // phone that had been closed and reopened showed a clean list with an agent
-    // blocked.
-    const fx = await startServer();
-    const client = await connected(fx);
-
-    fx.server.broadcastActivity("inst-1", "prompt", {
-      tool: "Permission",
-      question: "Allow?",
-      options: [{ label: "Allow once" }],
-    });
-
-    await vi.waitFor(async () => {
-      const frame = await client.waitFor("instances");
-      const instances = frame.instances as Array<Record<string, unknown>>;
-      expect(instances[0].state).toBe("needs-you");
-    });
 
     client.close();
   });
@@ -595,13 +788,13 @@ describe("RemoteServer streaming", () => {
     client.send({ type: "subscribe", instanceId: "inst-1" });
     await client.waitFor("transcript");
 
-    const before = fx.transcriptReads;
+    const before = fx.pm.transcriptReads;
     for (let i = 0; i < 200; i++) {
       fx.server.broadcastOutput("inst-1", `line ${i}\r\n`);
     }
     await client.waitFor("transcript");
     // One refresh for the whole burst, not 200.
-    expect(fx.transcriptReads - before).toBe(1);
+    expect(fx.pm.transcriptReads - before).toBe(1);
 
     client.close();
   });
@@ -610,91 +803,747 @@ describe("RemoteServer streaming", () => {
     const fx = await startServer();
     const client = await connected(fx);
     // Connected but not subscribed.
-    const before = fx.transcriptReads;
+    const before = fx.pm.transcriptReads;
 
     fx.server.broadcastOutput("inst-1", "background work\r\n");
     await new Promise((resolve) => setTimeout(resolve, 1300));
 
-    expect(fx.transcriptReads).toBe(before);
-
-    client.close();
-  });
-
-  it("clears the reported activity once the prompt is answered", async () => {
-    const fx = await startServer();
-    const client = await connected(fx);
-
-    fx.server.broadcastActivity("inst-1", "prompt", {
-      tool: "Permission",
-      question: "Allow?",
-      options: [{ label: "Allow once" }],
-    });
-    expect(fx.server.stateFor("inst-1")).toBe("needs-you");
-
-    fx.server.broadcastActivity("inst-1", "prompt-cleared");
-    expect(fx.server.stateFor("inst-1")).toBe("idle");
-    await client.waitFor("prompt-cleared");
+    expect(fx.pm.transcriptReads).toBe(before);
 
     client.close();
   });
 });
 
-describe("RemoteServer remote decisions", () => {
-  async function connectedWithPrompt(fx: Fixture, optionCount: number) {
-    const client = new TestClient(fx.url);
-    await client.handshake(fx.hostPublicKey);
-    client.send({ type: "auth", deviceToken: fx.token, deviceName: "phone" });
-    await client.waitFor("auth-ok");
-    await client.waitFor("instances");
+describe("instance states and previews", () => {
+  const row = (client: TestClient, match: (r: AnyRecord) => boolean) => client.instance("inst-1", match);
 
-    const options = Array.from({ length: optionCount }, (_, i) => ({
-      label: `Option ${i + 1}`,
-    }));
-    fx.server.broadcastActivity("inst-1", "prompt", {
-      tool: "AskUserQuestion",
-      question: "Pick one",
-      options,
-    });
-    const prompt = await client.waitFor("prompt-state");
-    // The seq an answer to this dialog names.
-    return Object.assign(client, { seq: prompt.seq as number });
-  }
-
-  it("gives a phone that subscribes late the live prompt's seq", async () => {
+  it("is Needs you while the live event is, with what the dialog asks", async () => {
     const fx = await startServer();
-    const client = await connectedWithPrompt(fx, 2);
+    const client = await connected(fx);
+    fx.pm.raise("inst-1", bash(7, 1234));
+    const needsYou = await row(client, (r) => r.state === "needs-you");
+    expect(needsYou).toMatchObject({ since: 1234, preview: "Bash: pnpm test:e2e" });
+    client.close();
+  });
+
+  it("is Working while the agent says a turn runs, with the tool it is on", async () => {
+    const fx = await startServer();
+    fx.pm.turns.set("inst-1", [
+      { kind: "user", text: "fix it" },
+      { kind: "assistant", text: "Looking." },
+      { kind: "tool", tool: "Bash", text: "pnpm test", pending: true },
+    ]);
+    fx.pm.setWorking("inst-1", true, 5555);
+    const client = await connected(fx);
+    const working = await row(client, (r) => r.state === "working" && r.preview !== undefined);
+    expect(working).toMatchObject({ since: 5555, preview: "Bash: pnpm test" });
+    client.close();
+  });
+
+  it("is Finished from a finished event, with its conclusion's first sentence, until a phone opens it", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    fx.pm.turns.set("inst-1", [
+      { kind: "user", text: "fix it" },
+      { kind: "tool", tool: "Edit", text: "src/a.ts" },
+      { kind: "assistant", text: "## Done\n\nFixed the **flaky** test. It was a race." },
+    ]);
+    fx.pm.raise("inst-1", finished(8, 4321));
+    const done = await row(client, (r) => r.state === "finished" && r.preview !== undefined);
+    expect(done).toMatchObject({ since: 4321, preview: "Fixed the flaky test. It was a race." });
+
     client.send({ type: "subscribe", instanceId: "inst-1" });
-    const replayed = await client.waitFor("prompt-state");
-    expect(replayed.seq).toBe(client.seq);
-    expect(replayed.summary).toBe("Pick one");
-
+    const seen = await row(client, (r) => r.state === "idle");
+    // Idle shows the last thing it said, cut the same way.
+    expect(seen.preview).toBe("Fixed the flaky test. It was a race.");
     client.close();
   });
 
-  it("numbers each new prompt afresh", async () => {
+  it("goes back to Idle when the builder writes to it (the event goes)", async () => {
     const fx = await startServer();
-    const client = await connectedWithPrompt(fx, 2);
-    fx.server.broadcastActivity("inst-1", "prompt", { tool: "Permission", options: [{ label: "Allow once" }] });
-    const next = await client.waitFor("prompt-state");
-    expect(next.seq).toBeGreaterThan(client.seq);
-    // No question: the summary is the tool.
-    expect(next.summary).toBe("Permission");
-
+    const client = await connected(fx);
+    fx.pm.raise("inst-1", finished(9));
+    await row(client, (r) => r.state === "finished");
+    fx.pm.clear("inst-1");
+    await row(client, (r) => r.state === "idle");
     client.close();
   });
 
-  it("passes raw input straight through to the PTY", async () => {
+  it("is Finished again for the next turn after the last one was seen", async () => {
     const fx = await startServer();
+    const client = await connected(fx);
+    fx.pm.raise("inst-1", finished(10));
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    await row(client, (r) => r.state === "idle");
+    fx.pm.raise("inst-1", finished(11));
+    await row(client, (r) => r.state === "finished");
+    client.close();
+  });
+
+  it("sends a list again only when it changed, and every change to a phone that joined since", async () => {
+    const fx = await startServer();
+    const a = await connected(fx);
+    fx.pm.raise("inst-1", finished(13, 7000));
+    await a.instance("inst-1", (r) => r.state === "finished");
+    await new Promise((r) => setTimeout(r, 50));
+    for (let i = 0; i < 3; i++) fx.server.broadcastInstances();
+    expect((await a.drain()).map((f) => f.type)).not.toContain("instances");
+    a.close();
+    await vi.waitFor(() => expect(fx.server.getStatus().devices[0].connected).toBe(false));
+
+    // Changed back and forth while no phone was there: the one joining now was sent
+    // the list as it is, and the next change must reach it even though it reads like
+    // the last list broadcast.
+    fx.pm.clear("inst-1");
+    const b = await connected(fx);
+    fx.pm.raise("inst-1", finished(13, 7000));
+    await b.instance("inst-1", (r) => r.state === "finished");
+    b.close();
+  });
+
+  it("leaves the Manager out, and lists stopped instances as Idle", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "manager", isManager: true, working: true });
+    fx.pm.add({ id: "stopped", status: "stopped" });
     const client = new TestClient(fx.url);
     await client.handshake();
     client.send({ type: "auth", deviceToken: fx.token });
-    await client.waitFor("auth-ok");
-
-    client.send({ type: "input", instanceId: "inst-1", data: "\x1b[A" });
-    await vi.waitFor(() => expect(fx.writes).toHaveLength(1));
-    expect(fx.writes[0].data).toBe("\x1b[A");
-
+    const list = await client.waitFor("instances");
+    const ids = (list.instances as AnyRecord[]).map((r) => r.id);
+    expect(ids).toEqual(["inst-1", "stopped"]);
+    expect((list.instances as AnyRecord[])[1]).toMatchObject({ status: "stopped", state: "idle" });
     client.close();
+  });
+
+  it("reads each instance's line once, then only on events and while it works, never per list", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    await vi.waitFor(() => expect(fx.pm.turnReads).toBe(1));
+    for (let i = 0; i < 5; i++) fx.server.broadcastInstances();
+    client.send({ type: "list-instances" });
+    await client.drain();
+    expect(fx.pm.turnReads).toBe(1);
+
+    fx.pm.raise("inst-1", finished(12));
+    await vi.waitFor(() => expect(fx.pm.turnReads).toBe(2));
+    client.close();
+  });
+
+  it("reads an instance's line afresh after events it heard with the phone link off", async () => {
+    const pm = new FakeProcessManager();
+    pm.add({ id: "inst-1" });
+    let running = true;
+    const push = {
+      isRunning: () => running,
+      broadcastInstances: () => {},
+      broadcastPromptState: () => {},
+      broadcastPromptCleared: () => {},
+      broadcastTranscript: () => {},
+    };
+    const host = createRemoteHost(pm, push);
+    pm.turns.set("inst-1", [{ kind: "assistant", text: "The old result, from the turn before." }]);
+    host.listInstances();
+    await vi.waitFor(() => expect(host.listInstances()[0].preview).toBe("The old result, from the turn before."));
+
+    running = false;
+    pm.turns.set("inst-1", [{ kind: "assistant", text: "The new result, from the latest turn." }]);
+    pm.raise("inst-1", finished(14));
+    running = true;
+    host.listInstances();
+    await vi.waitFor(() =>
+      expect(host.listInstances()[0]).toMatchObject({
+        state: "finished",
+        preview: "The new result, from the latest turn.",
+      })
+    );
+    host.dispose();
+  });
+
+  it("refreshes a working instance's tool from output at most every 5 s, and only with a phone connected", async () => {
+    const fx = await startServer();
+    fx.pm.setWorking("inst-1", true);
+    // No phone: output reads nothing.
+    fx.server.broadcastOutput("inst-1", "x");
+    expect(fx.pm.turnReads).toBe(0);
+
+    const client = await connected(fx);
+    await vi.waitFor(() => expect(fx.pm.turnReads).toBeGreaterThan(0));
+    const before = fx.pm.turnReads;
+    fx.pm.turns.set("inst-1", [
+      { kind: "user", text: "go" },
+      { kind: "tool", tool: "Read", text: "src/b.ts", pending: true },
+    ]);
+    for (let i = 0; i < 50; i++) fx.server.broadcastOutput("inst-1", "spinner");
+    await row(client, (r) => r.preview === "Read: src/b.ts");
+    expect(fx.pm.turnReads - before).toBe(1);
+    client.close();
+  });
+});
+
+describe("prompt-state", () => {
+  it("is broadcast when a dialog opens, with the dialog in full", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    fx.pm.raise("inst-1", bash(21));
+    const frame = await client.waitFor("prompt-state");
+    expect(frame).toEqual({
+      type: "prompt-state",
+      instanceId: "inst-1",
+      seq: 21,
+      summary: "Bash: pnpm test:e2e",
+      dialog: {
+        kind: "permission",
+        tool: "Bash",
+        subject: "pnpm test:e2e",
+        description: "Run the end-to-end tests",
+        options: [
+          { effect: "allow-once", label: "Yes", description: "Allow this once" },
+          {
+            effect: "allow-always",
+            label: "Yes, and don't ask again",
+            description: "Allow it, and stop asking for calls like it",
+          },
+          { effect: "deny", label: "No", description: "Reject and tell the agent what to do instead" },
+        ],
+        reasonAllowed: true,
+      },
+    });
+    client.close();
+  });
+
+  it("is resent to a phone that subscribes while the dialog is open, under the same seq", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", questions(22));
+    const client = await connected(fx);
+    client.send({ type: "subscribe", instanceId: "inst-1" });
+    const frame = await client.waitFor("prompt-state");
+    expect(frame.seq).toBe(22);
+    expect(frame.summary).toBe("Which database?");
+    expect(frame.dialog).toEqual({
+      kind: "questions",
+      questions: [
+        {
+          question: "Which database?",
+          header: "DB",
+          multiSelect: false,
+          options: [{ label: "Postgres" }, { label: "SQLite", description: "One file" }],
+        },
+        {
+          question: "Which extras?",
+          header: "Extras",
+          multiSelect: true,
+          options: [{ label: "Cache" }, { label: "Metrics" }, { label: "Tracing" }],
+        },
+      ],
+      textAllowed: true,
+    });
+    client.close();
+  });
+
+  it("carries a plan and OpenCode's permission as the secretary reads them", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "oc", backend: "opencode" });
+    const client = await connected(fx);
+
+    fx.pm.raise("inst-1", plan(23));
+    const planFrame = await client.waitFor("prompt-state");
+    expect(planFrame.summary).toBe("Plan: Add dark mode");
+    expect(planFrame.dialog).toMatchObject({
+      kind: "plan",
+      plan: PLAN_INPUT.plan,
+      options: [
+        { effect: "approve-auto", label: "Yes, auto-accept edits" },
+        { effect: "approve", label: "Yes, manually approve edits" },
+        { effect: "revise", label: "Tell Claude what to change" },
+      ],
+    });
+
+    fx.pm.raise("oc", ocPermission(24));
+    const ocFrame = await client.waitFor("prompt-state", (f) => f.instanceId === "oc");
+    expect(ocFrame.summary).toBe("shell: rm -rf build");
+    expect(ocFrame.dialog).toMatchObject({
+      kind: "permission",
+      tool: "shell",
+      subject: "rm -rf build",
+      reasonAllowed: true,
+    });
+    const options = (ocFrame.dialog as { options: AnyRecord[] }).options;
+    expect(options.map((o) => [o.effect, o.label])).toEqual([
+      ["allow-once", "Allow once"],
+      ["allow-always", "Always allow"],
+      ["deny", "Reject"],
+    ]);
+    // The request's own wording of what "always" saves.
+    expect(options[1].description).toContain('"rm *"');
+    client.close();
+  });
+
+  it("has no dialog for one the desktop can't answer, so the phone offers the terminal", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    fx.pm.raise("inst-1", elicitation(25));
+    const frame = await client.waitFor("prompt-state");
+    expect(frame).toEqual({
+      type: "prompt-state",
+      instanceId: "inst-1",
+      seq: 25,
+      summary: "Waiting for you in the terminal",
+    });
+    client.close();
+  });
+
+  it("is restated under a new seq, and cleared naming the seq that closed", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    fx.pm.raise("inst-1", bash(26));
+    await client.waitFor("prompt-state", (f) => f.seq === 26);
+    fx.pm.raise("inst-1", bash(27));
+    await client.waitFor("prompt-state", (f) => f.seq === 27);
+    fx.pm.clear("inst-1");
+    expect(await client.waitFor("prompt-cleared")).toEqual({
+      type: "prompt-cleared",
+      instanceId: "inst-1",
+      seq: 27,
+    });
+    client.close();
+  });
+
+  it("is cleared when a finished event replaces the needs-you", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    fx.pm.raise("inst-1", bash(28));
+    await client.waitFor("prompt-state");
+    fx.pm.raise("inst-1", finished(29));
+    expect((await client.waitFor("prompt-cleared")).seq).toBe(28);
+    client.close();
+  });
+});
+
+describe("answer", () => {
+  const answer = (client: TestClient, clientMsgId: string, seq: number, choice: AnyRecord, confirmed?: boolean) =>
+    client.send({ type: "answer", instanceId: "inst-1", seq, choice, confirmed, clientMsgId });
+
+  it("goes through to answerDialog with the secretary's keys, and acks ok", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", bash(31));
+    const client = await connected(fx);
+    answer(client, "a1", 31, { effect: "allow-once" });
+    expect(await client.ack("a1")).toEqual({ type: "ack", clientMsgId: "a1", ok: true });
+    expect(fx.pm.answers).toEqual([{ id: "inst-1", seq: 31, plan: { keys: ["1"] } }]);
+    client.close();
+  });
+
+  it("sends a denial's reason after the keys (Claude) or with the Reject (OpenCode)", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "oc", backend: "opencode" });
+    fx.pm.raise("inst-1", bash(32));
+    fx.pm.raise("oc", ocPermission(33));
+    const client = await connected(fx);
+    answer(client, "a1", 32, { effect: "deny", feedback: "use the unit tests" });
+    await client.ack("a1");
+    client.send({
+      type: "answer",
+      instanceId: "oc",
+      seq: 33,
+      choice: { effect: "deny", feedback: "not that one" },
+      clientMsgId: "a2",
+    });
+    await client.ack("a2");
+    expect(fx.pm.answers.map((a) => a.plan)).toEqual([
+      { keys: ["3"], followUp: "use the unit tests" },
+      { keys: [], answer: { kind: "permission", decision: "reject", message: "not that one" } },
+    ]);
+    client.close();
+  });
+
+  it("answers a two-question box with a multi-select whole, in one go", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", questions(34));
+    const client = await connected(fx);
+    answer(client, "a1", 34, {
+      answers: [
+        { question: 1, picks: [2] },
+        { question: 2, picks: [1, 3] },
+      ],
+    });
+    expect((await client.ack("a1")).ok).toBe(true);
+    const DOWN = "\x1b[B";
+    expect(fx.pm.answers[0].plan.keys).toEqual(["2", "1", "3", DOWN, DOWN, DOWN, DOWN, "\r", "1"]);
+    // Acked once the keys are in: a session reports no record of the answers to
+    // wait for (no PostToolUse among its alert hooks).
+    expect(fx.pm.answers[0].plan.expect).toBeUndefined();
+    client.close();
+  });
+
+  it("is refused as gone for a seq that isn't the live dialog's, or with none open", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", bash(35));
+    const client = await connected(fx);
+    answer(client, "a1", 34, { effect: "allow-once" });
+    expect(await client.ack("a1")).toMatchObject({ ok: false, reason: "gone" });
+    fx.pm.clear("inst-1");
+    answer(client, "a2", 35, { effect: "allow-once" });
+    expect(await client.ack("a2")).toMatchObject({ ok: false, reason: "gone" });
+    expect(fx.pm.answers).toEqual([]);
+    client.close();
+  });
+
+  it("asks for confirmation before a wider option, then presses it once confirmed", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", bash(36));
+    fx.pm.add({ id: "plan" });
+    fx.pm.raise("plan", plan(37));
+    const client = await connected(fx);
+    answer(client, "a1", 36, { effect: "allow-always" });
+    expect(await client.ack("a1")).toMatchObject({ ok: false, reason: "needs-confirm" });
+    client.send({ type: "answer", instanceId: "plan", seq: 37, choice: { effect: "approve-auto" }, clientMsgId: "a2" });
+    expect(await client.ack("a2")).toMatchObject({ ok: false, reason: "needs-confirm" });
+    expect(fx.pm.answers).toEqual([]);
+
+    answer(client, "a3", 36, { effect: "allow-always" }, true);
+    expect((await client.ack("a3")).ok).toBe(true);
+    expect(fx.pm.answers).toEqual([{ id: "inst-1", seq: 36, plan: { keys: ["2"] } }]);
+    client.close();
+  });
+
+  it("fails with a message for an answer the dialog needs more of", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", plan(38));
+    fx.pm.add({ id: "q" });
+    fx.pm.raise("q", questions(39));
+    const client = await connected(fx);
+    answer(client, "a1", 38, { effect: "revise" });
+    expect(await client.ack("a1")).toEqual({
+      type: "ack",
+      clientMsgId: "a1",
+      ok: false,
+      reason: "failed",
+      message: "Say what the plan should change",
+    });
+    client.send({
+      type: "answer",
+      instanceId: "q",
+      seq: 39,
+      choice: { answers: [{ question: 1, picks: [1] }] },
+      clientMsgId: "a2",
+    });
+    expect(await client.ack("a2")).toMatchObject({ reason: "failed", message: "Answer every question first" });
+    expect(fx.pm.answers).toEqual([]);
+    client.close();
+  });
+
+  it("is unsupported for a dialog the desktop can't answer, or a choice it doesn't offer", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", elicitation(40));
+    fx.pm.add({ id: "b" });
+    fx.pm.raise("b", bash(41));
+    const client = await connected(fx);
+    answer(client, "a1", 40, { effect: "allow-once" });
+    expect(await client.ack("a1")).toMatchObject({ ok: false, reason: "unsupported" });
+    for (const [i, choice] of [
+      { effect: "approve" },
+      { effect: "launch-missiles" },
+      { answers: [{ question: 1, picks: [1] }] },
+      { answers: "all" },
+    ].entries()) {
+      client.send({ type: "answer", instanceId: "b", seq: 41, choice, clientMsgId: `b${i}` });
+      expect(await client.ack(`b${i}`)).toMatchObject({ ok: false, reason: "unsupported" });
+    }
+    expect(fx.pm.answers).toEqual([]);
+    client.close();
+  });
+
+  it("acks by what answerDialog did", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    const cases: [AnswerOutcome, string][] = [
+      [{ ok: false, reason: "answered" }, "gone"],
+      [{ ok: false, reason: "changed" }, "gone"],
+      [{ ok: false, reason: "interrupted" }, "gone"],
+      [{ ok: false, reason: "stopped" }, "not-running"],
+      [{ ok: false, reason: "failed" }, "failed"],
+    ];
+    for (const [i, [outcome, reason]] of cases.entries()) {
+      fx.pm.raise("inst-1", bash(50 + i));
+      fx.pm.answerOutcome = async () => outcome;
+      answer(client, `o${i}`, 50 + i, { effect: "allow-once" });
+      expect(await client.ack(`o${i}`)).toMatchObject({ ok: false, reason });
+    }
+    client.close();
+  });
+});
+
+describe("prompt", () => {
+  const prompt = (client: TestClient, clientMsgId: string, instanceId = "inst-1", text = "use postgres") =>
+    client.send({ type: "prompt", instanceId, text, clientMsgId });
+
+  it("goes through the compose path and acks ok", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    prompt(client, "m1");
+    expect(await client.ack("m1")).toEqual({ type: "ack", clientMsgId: "m1", ok: true });
+    expect(fx.pm.prompts).toEqual([{ id: "inst-1", text: "use postgres" }]);
+    client.close();
+  });
+
+  it("is refused while a dialog is open, so the text never lands in it", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", bash(70));
+    const client = await connected(fx);
+    prompt(client, "m1");
+    expect(await client.ack("m1")).toMatchObject({ ok: false, reason: "dialog-open" });
+    expect(fx.pm.prompts).toEqual([]);
+    client.close();
+  });
+
+  it("is refused while an answer's keys are still going in: the dialog is still on screen", async () => {
+    const fx = await startServer();
+    // The answer's first key has cleared the event; its last isn't in yet.
+    fx.pm.answering.add("inst-1");
+    fx.pm.setWorking("inst-1", true);
+    const client = await connected(fx);
+    prompt(client, "m1");
+    expect(await client.ack("m1")).toMatchObject({ ok: false, reason: "dialog-open" });
+    client.send({ type: "interrupt", instanceId: "inst-1", clientMsgId: "i1" });
+    expect(await client.ack("i1")).toMatchObject({ ok: false, reason: "dialog-open" });
+    expect(fx.pm.prompts).toEqual([]);
+    expect(fx.pm.interrupts).toEqual([]);
+    client.close();
+  });
+
+  it("is refused for an instance that isn't running, or doesn't exist", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "stopped", status: "stopped" });
+    const client = await connected(fx);
+    prompt(client, "m1", "stopped");
+    expect(await client.ack("m1")).toMatchObject({ ok: false, reason: "not-running" });
+    prompt(client, "m2", "nobody");
+    expect(await client.ack("m2")).toMatchObject({ ok: false, reason: "not-running" });
+    expect(fx.pm.prompts).toEqual([]);
+    client.close();
+  });
+
+  it("is still sent while the agent works (the CLI queues it)", async () => {
+    const fx = await startServer();
+    fx.pm.setWorking("inst-1", true);
+    const client = await connected(fx);
+    prompt(client, "m1");
+    expect((await client.ack("m1")).ok).toBe(true);
+    client.close();
+  });
+
+  it("fails a malformed frame without acting on it", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    client.send({ type: "prompt", instanceId: "inst-1", text: 42, clientMsgId: "m1" });
+    expect(await client.ack("m1")).toMatchObject({ ok: false, reason: "failed" });
+    // No id, no ack, and nothing done.
+    client.send({ type: "prompt", instanceId: "inst-1", text: "x" });
+    await client.drain();
+    expect(fx.pm.prompts).toEqual([]);
+    client.close();
+  });
+});
+
+describe("interrupt", () => {
+  const interrupt = (client: TestClient, clientMsgId: string, instanceId = "inst-1") =>
+    client.send({ type: "interrupt", instanceId, clientMsgId });
+
+  it("stops a running turn and acks ok", async () => {
+    const fx = await startServer();
+    fx.pm.setWorking("inst-1", true);
+    const client = await connected(fx);
+    interrupt(client, "i1");
+    expect(await client.ack("i1")).toEqual({ type: "ack", clientMsgId: "i1", ok: true });
+    expect(fx.pm.interrupts).toEqual(["inst-1"]);
+    client.close();
+  });
+
+  it("is refused while a dialog is open: Esc would answer it", async () => {
+    const fx = await startServer();
+    fx.pm.setWorking("inst-1", true);
+    fx.pm.raise("inst-1", bash(80));
+    const client = await connected(fx);
+    interrupt(client, "i1");
+    expect(await client.ack("i1")).toMatchObject({ ok: false, reason: "dialog-open" });
+    expect(fx.pm.interrupts).toEqual([]);
+    client.close();
+  });
+
+  it("is refused when nothing runs, or the instance isn't running", async () => {
+    const fx = await startServer();
+    fx.pm.add({ id: "stopped", status: "stopped" });
+    const client = await connected(fx);
+    interrupt(client, "i1");
+    expect(await client.ack("i1")).toMatchObject({ ok: false, reason: "not-working" });
+    interrupt(client, "i2", "stopped");
+    expect(await client.ack("i2")).toMatchObject({ ok: false, reason: "not-running" });
+    expect(fx.pm.interrupts).toEqual([]);
+    client.close();
+  });
+
+  it("is refused again for the same turn until the agent has had time to say it stopped", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const fx = await startServer();
+      fx.pm.setWorking("inst-1", true, 100);
+      const client = await connected(fx);
+      interrupt(client, "i1");
+      await client.ack("i1");
+      // The agent hasn't reported the turn over yet.
+      interrupt(client, "i2");
+      expect(await client.ack("i2")).toMatchObject({ ok: false, reason: "not-working" });
+      // A new turn may be stopped at once.
+      fx.pm.setWorking("inst-1", true, 200);
+      interrupt(client, "i3");
+      expect((await client.ack("i3")).ok).toBe(true);
+      // Still running 3 s on: the Esc didn't take, and trying again is allowed.
+      vi.setSystemTime(Date.now() + 3000);
+      interrupt(client, "i4");
+      expect((await client.ack("i4")).ok).toBe(true);
+      expect(fx.pm.interrupts).toEqual(["inst-1", "inst-1", "inst-1"]);
+      client.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("is refused when the terminal isn't showing the running turn (OpenCode)", async () => {
+    const fx = await startServer();
+    fx.pm.setWorking("inst-1", true);
+    fx.pm.offScreen.add("inst-1");
+    const client = await connected(fx);
+    interrupt(client, "i1");
+    expect(await client.ack("i1")).toMatchObject({ ok: false, reason: "unsupported" });
+    expect(fx.pm.interrupts).toEqual([]);
+    client.close();
+  });
+
+  it("says why when not every key went in", async () => {
+    const fx = await startServer();
+    fx.pm.setWorking("inst-1", true);
+    const client = await connected(fx);
+    // A dialog came up between OpenCode's two Escs.
+    fx.pm.interruptInstance = async (id) => {
+      fx.pm.interrupts.push(id);
+      fx.pm.events.set("inst-1", bash(81));
+      return false;
+    };
+    interrupt(client, "i1");
+    expect(await client.ack("i1")).toMatchObject({ ok: false, reason: "dialog-open" });
+    client.close();
+  });
+});
+
+describe("acks are kept per device", () => {
+  it("gives a resent prompt the same ack, on a new socket, without sending it twice", async () => {
+    const fx = await startServer();
+    const first = await connected(fx);
+    first.send({ type: "prompt", instanceId: "inst-1", text: "once", clientMsgId: "m1" });
+    const ack = await first.ack("m1");
+    first.close();
+
+    // Reconnected, the phone resends what it never saw acked.
+    const second = await connected(fx);
+    second.send({ type: "prompt", instanceId: "inst-1", text: "once", clientMsgId: "m1" });
+    expect(await second.ack("m1")).toEqual(ack);
+    expect(fx.pm.prompts).toHaveLength(1);
+    second.close();
+  });
+
+  it("keeps a refusal too, so a resend isn't tried again", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", bash(90));
+    const client = await connected(fx);
+    client.send({ type: "prompt", instanceId: "inst-1", text: "x", clientMsgId: "m1" });
+    const refused = await client.ack("m1");
+    expect(refused).toMatchObject({ ok: false, reason: "dialog-open" });
+    fx.pm.clear("inst-1");
+    client.send({ type: "prompt", instanceId: "inst-1", text: "x", clientMsgId: "m1" });
+    expect(await client.ack("m1")).toEqual(refused);
+    expect(fx.pm.prompts).toEqual([]);
+    client.close();
+  });
+
+  it("waits for an answer still being worked on, and presses its keys once", async () => {
+    const fx = await startServer();
+    fx.pm.raise("inst-1", bash(91));
+    let finish: (outcome: AnswerOutcome) => void = () => {};
+    fx.pm.answerOutcome = () => new Promise((resolve) => (finish = resolve));
+    const client = await connected(fx);
+    const frame = { type: "answer", instanceId: "inst-1", seq: 91, choice: { effect: "allow-once" }, clientMsgId: "a1" };
+    client.send(frame);
+    await vi.waitFor(() => expect(fx.pm.answers).toHaveLength(1));
+    client.send(frame);
+    await client.drain();
+    finish({ ok: true });
+    await client.ack("a1");
+    await client.ack("a1");
+    expect(fx.pm.answers).toHaveLength(1);
+    client.close();
+  });
+
+  it("are not shared between devices", async () => {
+    const fx = await startServer();
+    const other = fx.server.createPairingOffer()!;
+    const a = await connected(fx);
+    const b = await connected(fx, other.deviceToken);
+    a.send({ type: "prompt", instanceId: "inst-1", text: "from a", clientMsgId: "m1" });
+    await a.ack("m1");
+    b.send({ type: "prompt", instanceId: "inst-1", text: "from b", clientMsgId: "m1" });
+    await b.ack("m1");
+    expect(fx.pm.prompts.map((p) => p.text)).toEqual(["from a", "from b"]);
+    a.close();
+    b.close();
+  });
+
+  it("remembers the last 200, then lets the oldest go", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    for (let i = 0; i <= 200; i++) {
+      client.send({ type: "prompt", instanceId: "inst-1", text: `p${i}`, clientMsgId: `m${i}` });
+    }
+    await client.ack("m200");
+    expect(fx.pm.prompts).toHaveLength(201);
+    // m1 is still known; m0 has been let go and counts as new.
+    client.send({ type: "prompt", instanceId: "inst-1", text: "p1", clientMsgId: "m1" });
+    client.send({ type: "prompt", instanceId: "inst-1", text: "p0", clientMsgId: "m0" });
+    await client.drain();
+    expect(fx.pm.prompts.map((p) => p.text).slice(201)).toEqual(["p0"]);
+    client.close();
+  });
+
+  it("refuses push-subscribe until Web Push is built", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    client.send({ type: "push-subscribe", subscription: null, clientMsgId: "s1" });
+    expect(await client.ack("s1")).toMatchObject({ ok: false, reason: "unsupported" });
+    client.close();
+  });
+});
+
+describe("firstSentence", () => {
+  it("cuts at the first sentence end past a few words, in either script, or at 120 characters", () => {
+    expect(firstSentence("The flaky test was a race between timers. I fixed it.")).toBe(
+      "The flaky test was a race between timers."
+    );
+    // "Done." alone says nothing.
+    expect(firstSentence("Done. Created a.txt in the current directory. Nothing else.")).toBe(
+      "Done. Created a.txt in the current directory."
+    );
+    expect(firstSentence("修好了。测试都过了。")).toBe("修好了。测试都过了。");
+    expect(firstSentence("Updated README.md and v1.2 notes")).toBe("Updated README.md and v1.2 notes");
+    const long = firstSentence("word ".repeat(60));
+    expect(long).toHaveLength(120);
+    expect(long.endsWith("…")).toBe(true);
+  });
+
+  it("reads past headings, fences and Markdown marks", () => {
+    expect(firstSentence("## Summary\n\n- **Fixed** the `parser` [bug](http://x). More.")).toBe(
+      "Fixed the parser bug. More."
+    );
+    expect(firstSentence("Renamed run_tests to run_all. Then more")).toBe("Renamed run_tests to run_all.");
+    expect(firstSentence("# Only a heading")).toBe("Only a heading");
   });
 });
 
@@ -725,29 +1574,16 @@ describe("RemoteServer device revocation", () => {
     const secondOffer = fx.server.createPairingOffer();
     if (!secondOffer) throw new Error("no second offer");
 
-    const a = new TestClient(fx.url);
-    await a.handshake();
-    a.send({ type: "auth", deviceToken: fx.token, deviceName: "phone-a" });
-    await a.waitFor("auth-ok");
+    const a = await connected(fx);
+    const b = await connected(fx, secondOffer.deviceToken);
 
-    const b = new TestClient(fx.url);
-    await b.handshake();
-    b.send({ type: "auth", deviceToken: secondOffer.deviceToken, deviceName: "phone-b" });
-    await b.waitFor("auth-ok");
-
-    const deviceA = fx.server
-      .getStatus()
-      .devices.find((d) => d.name === "phone-a");
-    fx.server.revokeDevice(deviceA!.id);
+    const deviceA = fx.server.getStatus().devices[0];
+    fx.server.revokeDevice(deviceA.id);
     expect(await a.waitClose()).toBe(4003);
 
     // b must still be live and receiving: the list it gets next shows the change.
-    fx.server.broadcastActivity("inst-1", "waiting");
-    for (;;) {
-      const frame = await b.waitFor("instances");
-      const instances = frame.instances as Array<Record<string, unknown>>;
-      if (instances[0].state === "finished") break;
-    }
+    fx.pm.raise("inst-1", finished(100));
+    await b.instance("inst-1", (r) => r.state === "finished");
 
     b.close();
   });

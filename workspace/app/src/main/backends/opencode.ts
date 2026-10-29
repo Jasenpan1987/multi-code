@@ -396,11 +396,13 @@ export const opencodeBackend: Backend = {
     return null;
   },
 
-  // OpenCode 2's dialogs are answered through its API by request id
-  // (HookAttention.answer, opencodeAnswer.ts), never by keystrokes.
-  keystrokeForChoice(): string | null {
-    return null;
-  },
+  // Esc is `session.interrupt`, which counts: the second press within 5 s of the
+  // first interrupts the session the prompt shows, while it runs and the prompt has
+  // focus (packages/tui/src/component/prompt/index.tsx:499-528, keybind
+  // "escape" in packages/tui/src/config/keybind.ts:128, OpenCode 2.0.32). Two
+  // Escs 250 ms apart were measured to end a turn `interrupted{reason:"user"}`
+  // (fixture interrupt-esc). Back to back they could read as one Alt+Esc.
+  interrupt: { keys: ["\x1b", "\x1b"], gapMs: 250 },
 
   // What the TUI itself prints on exit (`Continue  opencode -s <id>`,
   // `packages/tui/src/util/presentation.ts:32`); it works from any directory.

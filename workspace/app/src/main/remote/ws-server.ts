@@ -21,11 +21,15 @@ import nacl from "tweetnacl";
 import {
   DEFAULT_REMOTE_PORT,
   REMOTE_PROTOCOL_VERSION,
+  type AckFrame,
+  type AckRefusal,
   type ClientFrame,
   type PairedDevice,
   type PairingOffer,
+  type PromptStateFrame,
+  type RemoteChoice,
+  type RemoteDialog,
   type RemoteInstance,
-  type RemoteSessionState,
   type RemoteStatus,
   type ServerFrame,
   type TranscriptEntry,
@@ -33,13 +37,33 @@ import {
 import { SealedChannel, getHostIdentity, mintDeviceToken, tokensMatch } from "./crypto";
 import { loadDevices, saveDevices, type StoredDevice } from "./device-store";
 import { outputBuffer } from "./output-buffer";
-import { type PromptDetail } from "./promptExtract";
 import { ChecksCache, type RemoteChecker } from "./tailscale";
 import type { RemoteHttpsSetup } from "../../shared/types";
 
 // A phone that never completes its handshake + auth in this window gets dropped,
 // so a port scanner can't hold sockets open.
 const AUTH_TIMEOUT_MS = 10_000;
+
+// An authenticated phone pings every 15 s while it is visible; one that has sent
+// nothing for this long is gone (iOS leaves half-open sockets after a lock), and its
+// socket is closed so it no longer counts as connected.
+const HEARTBEAT_TIMEOUT_MS = 45_000;
+
+// How many acks are kept per device, so a frame resent after a reconnect gets the
+// ack it already had instead of being acted on again. In memory: a desktop restart
+// forgets them, and the phone resends only what it never saw acked.
+const ACKS_KEPT = 200;
+
+// What a subscribe gets when it doesn't say how many turns.
+const DEFAULT_TURNS = 10;
+
+// At most this often per instance, the list's line for a working agent is
+// refreshed from its transcript, and only while a phone is connected to see it.
+const PREVIEW_REFRESH_MS = 5000;
+
+// The size a terminal is drawn at when its PTY's isn't known (not running): the
+// size every PTY starts at.
+const DEFAULT_PTY_SIZE = { cols: 120, rows: 30 };
 
 // Static files for the mobile client are only served from this directory, and
 // only for paths that resolve inside it.
@@ -63,43 +87,74 @@ interface Connection {
   channel: SealedChannel | null;
   deviceId: string | null;
   authed: boolean;
-  // Instances this phone is mirroring. Output for anything else is not sent.
-  subscriptions: Set<string>;
+  // Instances this phone is mirroring, with how many turns of transcript it asked
+  // for. Output for anything else is not sent.
+  subscriptions: Map<string, number>;
   authTimer: ReturnType<typeof setTimeout> | null;
+  // Re-armed by every frame once authed; see HEARTBEAT_TIMEOUT_MS.
+  heartbeat: ReturnType<typeof setTimeout> | null;
 }
 
-// What the server needs from the rest of the app. Injected rather than imported
-// so this module stays testable and doesn't reach into process-manager directly.
+// How the desktop answered a frame carrying a `clientMsgId`, before it becomes an
+// `ack`.
+export type HostAck = { ok: true } | { ok: false; reason: AckRefusal; message: string };
+
+// The dialog an instance is stopped on, as `prompt-state` carries it.
+export interface LiveDialog {
+  seq: number;
+  summary: string;
+  dialog?: RemoteDialog;
+}
+
+// What the server needs from the rest of the app, in the protocol's own terms.
+// Injected rather than imported so this module stays testable and doesn't reach
+// into process-manager directly; remote/remote-host.ts is the desktop's.
 export interface RemoteHost {
+  // The phone's list: every instance but the Manager, with its state and one line.
+  // Runs on every broadcast, so it reads nothing from disk.
   listInstances: () => RemoteInstance[];
+  // The dialog the instance is stopped on, or null.
+  liveDialog: (id: string) => LiveDialog | null;
+  // A phone opened the instance: Finished becomes Idle.
+  markSeen: (id: string) => void;
+  // The last `turns` turns of the reflowable transcript, which is what the phone
+  // shows instead of the 120-column terminal.
+  readTranscript: (
+    id: string,
+    turns: number
+  ) => { entries: TranscriptEntry[]; hasEarlier: boolean };
+  // The PTY's size, or null when it isn't running.
+  ptySize: (id: string) => { cols: number; rows: number } | null;
+  // The instance streams output and a phone is connected: refresh the list's line
+  // if a turn runs. Throttled here (PREVIEW_REFRESH_MS); the host pushes
+  // `broadcastInstances` itself when the line changed.
+  refreshPreview: (id: string) => void;
+  // Raw keys from the terminal fallback, as given.
   writeToInstance: (id: string, data: string) => void;
-  // Send a whole prompt as one paste + Enter (same path as the compose box).
-  sendPrompt: (id: string, text: string) => void;
-  // Reflowable conversation tail, which is what the phone shows instead of the
-  // 120-column terminal.
-  readTranscript: (id: string, limit: number) => TranscriptEntry[];
+  // A message from the compose box, as one paste + Enter.
+  sendPrompt: (id: string, text: string) => Promise<HostAck>;
+  // Answer the dialog `seq` names, whole.
+  answer: (id: string, seq: number, choice: RemoteChoice, confirmed: boolean) => Promise<HostAck>;
+  // Stop the running turn.
+  interrupt: (id: string) => Promise<HostAck>;
 }
 
-// How many transcript entries to send. Enough to see how the agent got to where
-// it is, few enough to stay a glance rather than a scroll.
-const TRANSCRIPT_LIMIT = 40;
+export interface RemoteServerOptions {
+  heartbeatTimeoutMs?: number;
+}
 
 // Trailing delay before refreshing a watched instance's transcript. Long enough
 // that a fast-scrolling agent costs one file read per second rather than
 // thousands, short enough that the summary tracks what's on screen.
 const TRANSCRIPT_REFRESH_MS = 1000;
 
-// mobile-v2 T-803 (answering dialogs): placeholder `prompt-state` with a one-line
-// summary and no `dialog`, so the phone falls back to the terminal; replaced by the
-// dialog in full.
-function promptStateFrame(instanceId: string, detail: PromptDetail, seq: number): ServerFrame {
-  return {
-    type: "prompt-state",
-    instanceId,
-    seq,
-    summary: detail.question ?? detail.tool,
-  };
+function ackFrame(clientMsgId: string, result: HostAck): AckFrame {
+  return result.ok
+    ? { type: "ack", clientMsgId, ok: true }
+    : { type: "ack", clientMsgId, ok: false, reason: result.reason, message: result.message };
 }
+
+const MALFORMED: HostAck = { ok: false, reason: "failed", message: "Malformed frame" };
 
 export class RemoteServer {
   private httpServer: http.Server | null = null;
@@ -110,22 +165,26 @@ export class RemoteServer {
   private startError: string | undefined;
   private host: RemoteHost | null = null;
   private onStatusChange: (() => void) | null = null;
-  // The prompt each instance is blocked on, as the phone was last shown it, and the
-  // seq its `prompt-state` carried, so a phone that subscribes while the agent is
-  // already blocked gets the same dialog under the same seq.
-  private activePrompts = new Map<string, { detail: PromptDetail; seq: number }>();
-  // mobile-v2 T-803: placeholder seq source; T-803 uses the secretary event's seq.
-  private promptSeq = 0;
-  // Latest activity signal per instance. Kept server-side rather than only in
-  // the phone's memory so that reopening the app (or a reconnect after a screen
-  // lock) still shows which agents are waiting, instead of a clean list that
-  // hides a blocked agent.
-  private activity = new Map<string, "waiting" | "prompt">();
   // Pending throttled transcript refreshes, one per instance.
   private transcriptTimers = new Map<string, ReturnType<typeof setTimeout>>();
   // Tailscale and HTTPS, checked in the background while listening; a change is
   // pushed like any other status change.
   private checks = new ChecksCache(() => this.notifyStatus());
+  // When each instance's list line was last refreshed (PREVIEW_REFRESH_MS).
+  private previewRefreshedAt = new Map<string, number>();
+  // Per device, the ack of each frame it sent, by clientMsgId, oldest first: settled,
+  // or still being worked on (an answer takes seconds of measured key gaps).
+  private acks = new Map<string, Map<string, Promise<AckFrame>>>();
+  // The list as last broadcast. One change is often reported several ways at once
+  // (the event, the agent's working flag, the refreshed line), and a phone needs
+  // the list again only when it differs. Forgotten whenever a phone is sent the list
+  // directly, so the next change reaches every phone whatever it was last sent.
+  private lastInstances = "";
+  private readonly heartbeatTimeoutMs: number;
+
+  constructor(options: RemoteServerOptions = {}) {
+    this.heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? HEARTBEAT_TIMEOUT_MS;
+  }
 
   setHost(host: RemoteHost) {
     this.host = host;
@@ -208,6 +267,8 @@ export class RemoteServer {
     for (const timer of this.transcriptTimers.values()) clearTimeout(timer);
     this.transcriptTimers.clear();
     this.checks.unwatch();
+    this.previewRefreshedAt.clear();
+    this.lastInstances = "";
 
     const wss = this.wss;
     const server = this.httpServer;
@@ -259,6 +320,7 @@ export class RemoteServer {
   revokeDevice(deviceId: string) {
     this.devices = this.devices.filter((d) => d.id !== deviceId);
     saveDevices(this.devices);
+    this.acks.delete(deviceId);
     // Drop any live connection using the revoked token. Snapshot first: the loop
     // deletes from the same set it iterates.
     const live = Array.from(this.connections);
@@ -326,9 +388,11 @@ export class RemoteServer {
 
   broadcastOutput(instanceId: string, data: string) {
     outputBuffer.append(instanceId, data);
+    let phones = false;
     let hasWatcher = false;
     for (const conn of this.connections) {
       if (!conn.authed) continue;
+      phones = true;
       if (!conn.subscriptions.has(instanceId)) continue;
       hasWatcher = true;
       this.send(conn, { type: "output", instanceId, data });
@@ -338,75 +402,90 @@ export class RemoteServer {
     // chunk: PTY output arrives thousands of times a second, and each refresh
     // re-reads a session file or queries sqlite.
     if (hasWatcher) this.scheduleTranscriptRefresh(instanceId);
+    // And the tool a working agent is on may have changed, which the list shows.
+    if (phones) this.refreshPreview(instanceId);
   }
 
-  // Current state of an instance for the phone's list, so a freshly-opened phone
-  // sees which agents need it immediately.
-  // mobile-v2 T-803: placeholder mapping of the activity map; T-803 derives the
-  // state (and `since`/`preview`) properly, including "working".
-  stateFor(instanceId: string): RemoteSessionState {
-    const activity = this.activity.get(instanceId);
-    if (activity === "prompt") return "needs-you";
-    if (activity === "waiting") return "finished";
-    return "idle";
+  // The desktop resized the instance's PTY: a phone's terminal follows it.
+  broadcastResize(instanceId: string, cols: number, rows: number) {
+    this.toSubscribers(instanceId, { type: "resize", instanceId, cols, rows });
   }
 
-  // `_restated`: a dialog the phone was told about before is the live one again.
-  // Unused since the `activity` frame went (mobile-v2 T-803 decides what it means,
-  // with the secretary event's seq).
-  broadcastActivity(
-    instanceId: string,
-    activity: string,
-    detail?: PromptDetail,
-    _restated = false
-  ) {
-    if (activity === "prompt-cleared") {
-      this.activePrompts.delete(instanceId);
-      this.activity.delete(instanceId);
-      this.broadcast({ type: "prompt-cleared", instanceId });
-      // The badge lives on the instance list, so that has to be resent too.
-      this.broadcastInstances();
-      return;
-    }
-
-    if (activity !== "waiting" && activity !== "prompt") return;
-    this.activity.set(instanceId, activity);
-    // The agent just changed state, so whoever is watching wants the updated
-    // summary, not the one from when they subscribed.
-    this.broadcastTranscript(instanceId);
-
-    if (activity === "prompt" && detail) {
-      const seq = ++this.promptSeq;
-      this.activePrompts.set(instanceId, { detail, seq });
-      this.broadcast(promptStateFrame(instanceId, detail, seq));
-    }
-    this.broadcastInstances();
+  // The instance is stopped on a dialog: it opened, or the agent restated it.
+  broadcastPromptState(instanceId: string) {
+    const frame = this.promptStateFrame(instanceId);
+    if (frame) this.broadcast(frame);
   }
 
-  // Called when the user acts at the desk, so a phone's badge doesn't stay lit
-  // for something already handled.
-  clearActivity(instanceId: string) {
-    if (!this.activity.has(instanceId) && !this.activePrompts.has(instanceId)) {
-      return;
-    }
-    this.activity.delete(instanceId);
-    this.activePrompts.delete(instanceId);
-    this.broadcast({ type: "prompt-cleared", instanceId });
-    this.broadcastInstances();
+  // The dialog `seq` named closed: answered on either side, or the instance stopped.
+  broadcastPromptCleared(instanceId: string, seq: number) {
+    this.broadcast({ type: "prompt-cleared", instanceId, seq });
   }
 
   broadcastExit(instanceId: string, code: number) {
-    this.activePrompts.delete(instanceId);
-    this.activity.delete(instanceId);
     this.clearTranscriptTimer(instanceId);
+    this.previewRefreshedAt.delete(instanceId);
     outputBuffer.clear(instanceId);
     this.broadcast({ type: "exit", instanceId, code });
     this.broadcastInstances();
   }
 
   broadcastInstances() {
+    if (!this.host || !this.hasPhones()) return;
+    const instances = this.host.listInstances();
+    const json = JSON.stringify(instances);
+    if (json === this.lastInstances) return;
+    this.lastInstances = json;
+    this.broadcast({ type: "instances", instances });
+  }
+
+  // Push a refreshed transcript to everyone watching this instance. Called when
+  // the agent's state changes, so the phone's summary doesn't go stale while the
+  // terminal keeps streaming.
+  broadcastTranscript(instanceId: string) {
+    this.clearTranscriptTimer(instanceId);
+    for (const conn of this.connections) {
+      if (!conn.authed) continue;
+      const turns = conn.subscriptions.get(instanceId);
+      if (turns === undefined) continue;
+      this.sendTranscript(conn, instanceId, turns);
+    }
+  }
+
+  private sendInstances(conn: Connection) {
     if (!this.host) return;
-    this.broadcast({ type: "instances", instances: this.host.listInstances() });
+    this.lastInstances = "";
+    this.send(conn, { type: "instances", instances: this.host.listInstances() });
+  }
+
+  private hasPhones(): boolean {
+    for (const conn of this.connections) if (conn.authed) return true;
+    return false;
+  }
+
+  private refreshPreview(instanceId: string) {
+    const now = Date.now();
+    if (now - (this.previewRefreshedAt.get(instanceId) ?? 0) < PREVIEW_REFRESH_MS) return;
+    this.previewRefreshedAt.set(instanceId, now);
+    this.host?.refreshPreview(instanceId);
+  }
+
+  private promptStateFrame(instanceId: string): PromptStateFrame | null {
+    const live = this.host?.liveDialog(instanceId);
+    if (!live) return null;
+    return {
+      type: "prompt-state",
+      instanceId,
+      seq: live.seq,
+      summary: live.summary,
+      ...(live.dialog ? { dialog: live.dialog } : {}),
+    };
+  }
+
+  private toSubscribers(instanceId: string, frame: ServerFrame) {
+    for (const conn of this.connections) {
+      if (conn.authed && conn.subscriptions.has(instanceId)) this.send(conn, frame);
+    }
   }
 
   private broadcast(frame: ServerFrame) {
@@ -482,8 +561,9 @@ export class RemoteServer {
       channel: null,
       deviceId: null,
       authed: false,
-      subscriptions: new Set(),
+      subscriptions: new Map(),
       authTimer: null,
+      heartbeat: null,
     };
     this.connections.add(conn);
 
@@ -491,16 +571,33 @@ export class RemoteServer {
       if (!conn.authed) socket.close(4001, "auth timeout");
     }, AUTH_TIMEOUT_MS);
 
-    socket.on("message", (raw) => this.handleMessage(conn, raw.toString()));
-    socket.on("close", () => {
+    const stopTimers = () => {
       if (conn.authTimer) clearTimeout(conn.authTimer);
+      if (conn.heartbeat) clearTimeout(conn.heartbeat);
+    };
+    socket.on("message", (raw) => {
+      conn.heartbeat?.refresh();
+      this.handleMessage(conn, raw.toString());
+    });
+    socket.on("close", () => {
+      stopTimers();
       this.connections.delete(conn);
       this.notifyStatus();
     });
     socket.on("error", () => {
-      if (conn.authTimer) clearTimeout(conn.authTimer);
+      stopTimers();
       this.connections.delete(conn);
     });
+  }
+
+  // Nothing from this phone for HEARTBEAT_TIMEOUT_MS. It stops counting as connected
+  // at once; the close frame goes to a peer that is most likely gone, so the socket
+  // is torn down shortly after rather than when the OS notices.
+  private dropSilent(conn: Connection) {
+    if (!this.connections.delete(conn)) return;
+    conn.socket.close(4004, "heartbeat timeout");
+    setTimeout(() => conn.socket.terminate(), 1000).unref?.();
+    this.notifyStatus();
   }
 
   private handleMessage(conn: Connection, raw: string) {
@@ -586,6 +683,11 @@ export class RemoteServer {
       }
       conn.authed = true;
       conn.deviceId = device.id;
+      // Once per socket: a second auth must not leave the first timer running.
+      if (!conn.heartbeat) {
+        conn.heartbeat = setTimeout(() => this.dropSilent(conn), this.heartbeatTimeoutMs);
+        conn.heartbeat.unref?.();
+      }
       device.lastSeenAt = Date.now();
       // First successful connect is when we learn what to call this phone; the
       // placeholder name from pairing is replaced here.
@@ -598,9 +700,7 @@ export class RemoteServer {
         vapidPublicKey: "",
         pushEnabled: false,
       });
-      if (this.host) {
-        this.send(conn, { type: "instances", instances: this.host.listInstances() });
-      }
+      this.sendInstances(conn);
       this.notifyStatus();
       return;
     }
@@ -617,30 +717,27 @@ export class RemoteServer {
         return;
 
       case "list-instances":
-        if (this.host) {
-          this.send(conn, { type: "instances", instances: this.host.listInstances() });
-        }
+        this.sendInstances(conn);
         return;
 
       case "subscribe": {
-        conn.subscriptions.add(frame.instanceId);
+        if (typeof frame.instanceId !== "string") return;
+        const id = frame.instanceId;
+        const turns =
+          Number.isInteger(frame.turns) && (frame.turns as number) > 0
+            ? (frame.turns as number)
+            : DEFAULT_TURNS;
+        conn.subscriptions.set(id, turns);
+        this.host?.markSeen(id);
         // Send the readable transcript first: it's what the phone shows by
         // default, so it should be populated before the terminal replay.
-        this.sendTranscript(conn, frame.instanceId);
-        // Replay the tail so the terminal fallback isn't blank when opened, then
-        // any prompt that's already on screen.
-        this.send(conn, {
-          type: "snapshot",
-          instanceId: frame.instanceId,
-          data: outputBuffer.snapshot(frame.instanceId),
-          // mobile-v2 T-803 (terminal sizing): placeholder; replaced by the PTY's size.
-          cols: 120,
-          rows: 40,
-        });
-        const prompt = this.activePrompts.get(frame.instanceId);
-        if (prompt) {
-          this.send(conn, promptStateFrame(frame.instanceId, prompt.detail, prompt.seq));
-        }
+        this.sendTranscript(conn, id, turns);
+        // Replay the tail so the terminal fallback isn't blank when opened, at the
+        // width the CLI painted it for, then any dialog that's already open.
+        const size = this.host?.ptySize(id) ?? DEFAULT_PTY_SIZE;
+        this.send(conn, { type: "snapshot", instanceId: id, data: outputBuffer.snapshot(id), ...size });
+        const prompt = this.promptStateFrame(id);
+        if (prompt) this.send(conn, prompt);
         return;
       }
 
@@ -649,25 +746,48 @@ export class RemoteServer {
         return;
 
       case "input":
+        if (typeof frame.instanceId !== "string" || typeof frame.data !== "string") return;
         this.host?.writeToInstance(frame.instanceId, frame.data);
         return;
 
       case "prompt":
-        this.host?.sendPrompt(frame.instanceId, frame.text);
-        this.send(conn, { type: "ack", clientMsgId: frame.clientMsgId, ok: true });
+        this.acked(conn, frame.clientMsgId, async () => {
+          if (!this.host) return MALFORMED;
+          if (typeof frame.instanceId !== "string" || typeof frame.text !== "string") return MALFORMED;
+          return this.host.sendPrompt(frame.instanceId, frame.text);
+        });
         return;
 
-      // mobile-v2 T-803 (answer, interrupt) and T-810 (Web Push): refused until each is built.
       case "answer":
+        this.acked(conn, frame.clientMsgId, async () => {
+          if (!this.host) return MALFORMED;
+          if (
+            typeof frame.instanceId !== "string" ||
+            typeof frame.seq !== "number" ||
+            typeof frame.choice !== "object" ||
+            frame.choice === null
+          ) {
+            return MALFORMED;
+          }
+          return this.host.answer(frame.instanceId, frame.seq, frame.choice, frame.confirmed === true);
+        });
+        return;
+
       case "interrupt":
+        this.acked(conn, frame.clientMsgId, async () => {
+          if (!this.host) return MALFORMED;
+          if (typeof frame.instanceId !== "string") return MALFORMED;
+          return this.host.interrupt(frame.instanceId);
+        });
+        return;
+
+      // mobile-v2 T-810 (Web Push): refused until it is built.
       case "push-subscribe":
-        this.send(conn, {
-          type: "ack",
-          clientMsgId: frame.clientMsgId,
+        this.acked(conn, frame.clientMsgId, async () => ({
           ok: false,
           reason: "unsupported",
           message: "Not built yet",
-        });
+        }));
         return;
 
       default:
@@ -675,31 +795,43 @@ export class RemoteServer {
     }
   }
 
-  private sendTranscript(conn: Connection, instanceId: string) {
+  // Run a frame that carries a `clientMsgId` once per device, and ack it. A resend
+  // (the phone resends `prompt` and `push-subscribe` until acked, on a new socket
+  // after a reconnect) gets the ack the first one got, or waits for it while that one
+  // is still being worked on, and is not acted on again. A frame without an id can't
+  // be acked, and so isn't acted on either.
+  private acked(conn: Connection, clientMsgId: unknown, act: () => Promise<HostAck>) {
+    if (typeof clientMsgId !== "string" || !clientMsgId || !conn.deviceId) return;
+    let acks = this.acks.get(conn.deviceId);
+    if (!acks) {
+      acks = new Map();
+      this.acks.set(conn.deviceId, acks);
+    }
+    let ack = acks.get(clientMsgId);
+    if (!ack) {
+      ack = act()
+        .catch((): HostAck => ({ ok: false, reason: "failed", message: "Something went wrong on the Mac" }))
+        .then((result) => ackFrame(clientMsgId, result));
+      acks.set(clientMsgId, ack);
+      if (acks.size > ACKS_KEPT) {
+        const oldest = acks.keys().next().value;
+        if (oldest !== undefined) acks.delete(oldest);
+      }
+    }
+    void ack.then((frame) => this.send(conn, frame));
+  }
+
+  private sendTranscript(conn: Connection, instanceId: string, turns: number) {
     if (!this.host) return;
-    let entries: TranscriptEntry[];
+    let read: { entries: TranscriptEntry[]; hasEarlier: boolean };
     try {
-      entries = this.host.readTranscript(instanceId, TRANSCRIPT_LIMIT);
+      read = this.host.readTranscript(instanceId, turns);
     } catch {
       // A session file that isn't readable yet shouldn't break subscribing; the
       // terminal view still works.
       return;
     }
-    if (entries.length === 0) return;
-    // mobile-v2 T-803 + T-804 (transcript turns): placeholder; replaced by `turns` paging.
-    this.send(conn, { type: "transcript", instanceId, entries, hasEarlier: false });
-  }
-
-  // Push a refreshed transcript to everyone watching this instance. Called when
-  // the agent's state changes, so the phone's summary doesn't go stale while the
-  // terminal keeps streaming.
-  private broadcastTranscript(instanceId: string) {
-    this.clearTranscriptTimer(instanceId);
-    for (const conn of this.connections) {
-      if (!conn.authed) continue;
-      if (!conn.subscriptions.has(instanceId)) continue;
-      this.sendTranscript(conn, instanceId);
-    }
+    this.send(conn, { type: "transcript", instanceId, ...read });
   }
 
   // Coalesce a burst of PTY output into one refresh. A single timer per instance,

@@ -8,7 +8,6 @@ import type {
   SpawnConfig,
   SpawnOptions,
 } from "./types";
-import { keystrokeForOption } from "../remote/promptExtract";
 import { ClaudeHookAttention, ClaudeWorkingWatch } from "./claudeHooks";
 import type { TranscriptEntry } from "../../shared/remote-protocol";
 import { claudeTranscriptEntries, readBuilderTurn, readClaudeRecentTurns } from "./claudeTranscript";
@@ -443,11 +442,9 @@ export const claudeBackend: Backend = {
     };
   },
 
-  // Claude's option boxes accept the option's number directly, for every kind of
-  // prompt it raises, so the tool name doesn't change the answer.
-  keystrokeForChoice(_tool, index, optionCount): string | null {
-    return keystrokeForOption(index, optionCount);
-  },
+  // Esc ends the turn at once and fires no hook; the registry leaves `busy`
+  // (docs/timeline/2026-10-06_attention-alerts-investigation.md, "Esc interrupt").
+  interrupt: { keys: ["\x1b"], gapMs: 0 },
 
   readTranscript(sessionId, limit): TranscriptEntry[] {
     const jsonlPath = findJsonlBySessionId(sessionId);

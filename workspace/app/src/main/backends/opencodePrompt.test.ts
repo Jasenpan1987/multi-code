@@ -1,7 +1,7 @@
 // What a paired phone is shown for an OpenCode 2 dialog, and the request the secretary
 // gets with it. The dialogs are the ones OpenCode 2.0.32's service published (T-601
-// fixtures, __fixtures__/opencode-v2/); the shapes are the ones the answer paths read
-// (opencodeAnswer.ts, secretary/dialog.ts, opencode-v2 T-607).
+// fixtures, __fixtures__/opencode-v2/); the shapes are the ones the answer path reads
+// (secretary/dialog.ts, opencode-v2 T-607).
 
 import { describe, expect, it } from "vitest";
 import fs from "fs";
@@ -17,7 +17,7 @@ import {
   QUESTION_TOOL_LABEL,
 } from "./opencodePrompt";
 import { toFormInfo, toPermissionRequest, type FormInfo, type PermissionRequest } from "./opencodeService";
-import { answerForChoice } from "./opencodeAnswer";
+import { dialogOf } from "../secretary/dialog";
 import { opencodeBackend } from "./opencode";
 
 function firstEvent(fixture: string, type: string): Record<string, unknown> {
@@ -80,13 +80,22 @@ describe("permissionDetail", () => {
     expect(long).toHaveLength(240);
   });
 
-  it("is answered by the label the phone taps, in both shapes", () => {
-    // The shapes opencodeAnswer.ts reads (T-607).
-    const three = permissionDetail(permissionOf("permission-once"));
-    const two = permissionDetail(permissionOf("permission-no-save"));
-    const ref = permissionToolCall(permissionOf("permission-once")).dialog!;
-    expect(answerForChoice(three, ref, 1)).toEqual({ kind: "permission", decision: "always" });
-    expect(answerForChoice(two, ref, 1)).toEqual({ kind: "permission", decision: "reject" });
+  it("is read by its labels, in both shapes", () => {
+    // The shapes secretary/dialog.ts reads (T-607), which a paired phone answers with.
+    const effects = (fixture: string) => {
+      const request = permissionOf(fixture);
+      const call = permissionToolCall(request);
+      const event = {
+        kind: "needs-you" as const,
+        seq: 1,
+        at: 0,
+        prompt: { detail: permissionDetail(request), ...call },
+      };
+      const dialog = dialogOf(event, "opencode");
+      return dialog?.kind === "permission" ? dialog.options.map((o) => o.effect) : null;
+    };
+    expect(effects("permission-once")).toEqual(["allow-once", "allow-always", "deny"]);
+    expect(effects("permission-no-save")).toEqual(["allow-once", "deny"]);
   });
 });
 
@@ -202,12 +211,10 @@ describe("formToolCall", () => {
   });
 });
 
-// OpenCode 2's dialogs are answered through its API, so no option maps to keys:
-// a phone's tap must never reach the TUI as keystrokes (PRD Story 5).
-describe("keystrokeForChoice", () => {
-  it("is null for every dialog", () => {
-    expect(opencodeBackend.keystrokeForChoice(PERMISSION_TOOL, 0, 3)).toBeNull();
-    expect(opencodeBackend.keystrokeForChoice(QUESTION_TOOL_LABEL, 1, 3)).toBeNull();
-    expect(opencodeBackend.keystrokeForChoice(MULTI_QUESTION_TOOL_LABEL, 0, 4)).toBeNull();
+// A paired phone's Stop (mobile-v2 Story 6): two Escs, far enough apart that they
+// aren't read as one Alt+Esc, well inside the 5 s the TUI counts them in (G-303).
+describe("interrupt", () => {
+  it("is Esc twice, 250 ms apart, as measured", () => {
+    expect(opencodeBackend.interrupt).toEqual({ keys: ["\x1b", "\x1b"], gapMs: 250 });
   });
 });

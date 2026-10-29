@@ -64,8 +64,9 @@ finishes, about 30 s after the scenario starts; `infra-terraform` finished 15 mi
 Protocol v3 (`src/shared/remote-protocol.ts`) is the contract. The server's Tailscale
 checker is replaced by one that says HTTPS is ready at `http://127.0.0.1:<port>`, so
 the server makes its pairing offer for that origin and no `tailscale` command ever
-runs. Until T-803 and T-810 land in the server, `bridge.ts` does their part the way the
-kanban specifies:
+runs. The server does protocol v3 itself (T-803); `bridge.ts` gives it a `RemoteHost`
+over the scripted world that gates each frame as the desktop's does, and does Web Push's
+part until T-810 lands:
 
 - `subscribe` sends the last `turns` turns (default 10) with `hasEarlier`, a snapshot
   at the session's size, and the dialog in full; opening a Finished session makes it
@@ -77,8 +78,8 @@ kanban specifies:
   `confirmed`, `failed` for a plan revised without feedback or a question unanswered,
   `unsupported` for what doesn't fit, or a dialog without `dialog`). Then the session
   moves on: allowed calls run, a revised plan comes back under a new `seq`.
-- `interrupt`: `dialog-open` on a dialog, `not-working` outside a turn, `unsupported`
-  for OpenCode (G-303), else the turn stops and the session is Idle.
+- `interrupt`: `dialog-open` on a dialog, `not-working` outside a turn, else the turn
+  stops and the session is Idle (OpenCode too: two Escs, G-303).
 - `push-subscribe` acks ok; `auth-ok` carries a real P-256 VAPID key and whether this
   phone subscribed.
 - A `clientMsgId` already handled gets the same ack again and isn't acted on (last 200
@@ -129,11 +130,11 @@ pairs, authenticates and prints the sessions of every scenario. `HarnessClient`
 ## Files
 
 - `main.ts`: the Electron entry; loads the compiled server from `dist/`.
-- `bridge.ts`: the only file that touches the server: the fake `RemoteHost`, and the
-  v3 behaviour above, grafted onto the server's private frame handler by bracket access
-  so `pnpm type` checks every name. When T-803 / T-810 change the server, adapt this
-  file: drop the graft for what the server now does, implement the new `RemoteHost`
-  members over the world.
+- `bridge.ts`: the only file that touches the server: the fake `RemoteHost`, and what
+  the server doesn't do yet (Web Push) or is the harness's own (the log, half-open
+  sockets), grafted onto its private members by bracket access so `pnpm type` checks
+  every name. When T-810 changes the server, drop the push graft and implement the new
+  `RemoteHost` members over the world.
 - `world.ts`: the sessions as they change. `scenarios.ts`: what they start as.
 - `control.ts`, `screenshot.ts`, `client.ts`, `harness.test.ts`.
 

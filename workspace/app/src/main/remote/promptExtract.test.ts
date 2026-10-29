@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractPromptDetail, keystrokeForOption } from "./promptExtract";
+import { extractPromptDetail } from "./promptExtract";
 
 describe("extractPromptDetail", () => {
   it("reads options out of an AskUserQuestion payload", () => {
@@ -102,29 +102,5 @@ describe("extractPromptDetail", () => {
     // prompt with no buttons.
     const detail = extractPromptDetail("AskUserQuestion", { questions: [] });
     expect(detail?.options.length).toBeGreaterThan(0);
-  });
-});
-
-describe("keystrokeForOption", () => {
-  it("maps an index to its 1-based option number", () => {
-    expect(keystrokeForOption(0, 4)).toBe("1");
-    expect(keystrokeForOption(3, 4)).toBe("4");
-  });
-
-  it("rejects an out-of-range index", () => {
-    expect(keystrokeForOption(-1, 3)).toBeNull();
-    expect(keystrokeForOption(3, 3)).toBeNull();
-  });
-
-  it("rejects a non-integer index", () => {
-    expect(keystrokeForOption(1.5, 4)).toBeNull();
-  });
-
-  it("declines when a prompt has no options", () => {
-    expect(keystrokeForOption(0, 0)).toBeNull();
-  });
-
-  it("declines past 9 options, where digit keys stop being unambiguous", () => {
-    expect(keystrokeForOption(0, 10)).toBeNull();
   });
 });

@@ -85,12 +85,13 @@ export const KEY_GAP_MS = 150;
 const DOWN = "\x1b[B";
 const ENTER = "\r";
 
-// The plan box on 2.1.295. In auto mode the first reads "Yes, and use auto mode";
-// the positions are the same.
+// The plan box, labelled as 2.1.312 draws it (a paired phone answered it live,
+// 2026-10-29; the plan-approval fixture's 2.1.291 reads the same). In auto mode the
+// first reads "Yes, and use auto mode"; the positions are the same.
 const CLAUDE_PLAN_OPTIONS: EffectOption[] = [
-  { effect: "approve-auto", label: "Yes, and auto-accept edits" },
+  { effect: "approve-auto", label: "Yes, auto-accept edits" },
   { effect: "approve", label: "Yes, manually approve edits" },
-  { effect: "revise", label: "No, tell Claude what to change" },
+  { effect: "revise", label: "Tell Claude what to change" },
 ];
 
 // OpenCode 2's permission labels (opencodePrompt.ts reports the TUI's own), and the

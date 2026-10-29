@@ -175,6 +175,9 @@ describe("phone dev harness", () => {
     expect(await client.next("prompt-cleared")).toMatchObject({ instanceId: "multi-code", seq });
     await client.next("instances", hasState("multi-code", "working"));
 
+    // The world moved when the answer was taken, before its ack went out.
+    expect(world.dialogOf("multi-code")).toBeUndefined();
+
     // Resent after a lost ack: the same ack, and nothing done twice.
     client.send({ type: "answer", instanceId: "multi-code", seq, choice: { effect: "allow-once" }, clientMsgId: yes });
     expect(await client.next("ack")).toEqual({ type: "ack", clientMsgId: yes, ok: true });
@@ -223,7 +226,7 @@ describe("phone dev harness", () => {
     expect(revised.dialog?.kind === "plan" && revised.dialog.plan).toContain("先不删旧分支");
   });
 
-  it("stops only a working Claude turn", async () => {
+  it("stops only a working turn, OpenCode's too", async () => {
     const client = await connect();
     await scenario(client, "home");
     const interrupt = async (instanceId: string) => {
@@ -240,7 +243,8 @@ describe("phone dev harness", () => {
     client.send({ type: "prompt", instanceId: "docs-site", text: "再改一下标题", clientMsgId: id() });
     expect(await client.next("ack")).toMatchObject({ ok: true });
     await client.next("instances", hasState("docs-site", "working"));
-    expect(await interrupt("docs-site")).toMatchObject({ ok: false, reason: "unsupported" });
+    expect(await interrupt("docs-site")).toMatchObject({ ok: true });
+    await client.next("instances", hasState("docs-site", "idle"));
   });
 
   it("takes prompts queued during a turn once it stops, oldest first", async () => {
@@ -295,6 +299,22 @@ describe("phone dev harness", () => {
     const again = await HarnessClient.connect(bridge.pairingUrl());
     clients.push(again);
     expect(again.authOk?.pushEnabled).toBe(true);
+  });
+
+  it("doesn't let an old push-subscribe resent after a newer unsubscribe turn push back on", async () => {
+    const client = await connect();
+    const on = id();
+    const subscription = { endpoint: "https://push.example/y", keys: { p256dh: "p", auth: "a" } };
+    client.send({ type: "push-subscribe", subscription, clientMsgId: on });
+    expect(await client.next("ack")).toMatchObject({ clientMsgId: on, ok: true });
+    client.send({ type: "push-subscribe", subscription: null, clientMsgId: id() });
+    expect(await client.next("ack")).toMatchObject({ ok: true });
+    client.send({ type: "push-subscribe", subscription, clientMsgId: on });
+    expect(await client.next("ack")).toMatchObject({ clientMsgId: on, ok: true });
+
+    const again = await HarnessClient.connect(bridge.pairingUrl());
+    clients.push(again);
+    expect(again.authOk?.pushEnabled).toBe(false);
   });
 
   it("drops sockets, plays dead, and goes offline on command", async () => {

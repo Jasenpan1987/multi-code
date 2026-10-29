@@ -36,11 +36,9 @@ vi.mock("electron", () => ({
 
 vi.mock("./remote/ws-server", () => ({
   remoteServer: {
-    broadcastActivity: () => {},
     broadcastExit: () => {},
     broadcastInstances: () => {},
     broadcastOutput: () => {},
-    clearActivity: () => {},
   },
 }));
 
@@ -67,7 +65,6 @@ vi.mock("./backends", () => ({
     createHookAttention: () => ({ handle: () => {}, stop: () => {} }),
     readTranscript: () => [],
     readContextUsage: () => null,
-    keystrokeForChoice: () => null,
     findLatestSessionId: () => null,
     findLiveSessionId: () => null,
     buildResumeCommand: () => "x",
