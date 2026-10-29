@@ -104,7 +104,7 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
 ### T-802: Phone dev harness
 
 - **Type:** setup
-- **Status:** in-progress
+- **Status:** done (a393709, merged e85b622)
 - **Story:** all phone stories (verification)
 - **Description:** A way to run the phone app against the real `RemoteServer`
   (`main/remote/ws-server.ts`) with scripted sessions, so phone tickets can be built and
@@ -276,7 +276,7 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
 ### T-806: Phone app shell
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** in-progress
 - **Story:** 1, 4 (outbox), 10 (steps 1–2)
 - **Description:** The new phone app's foundation in `workspace/app/src/renderer-mobile/`,
   on which T-807..T-809 and T-811 build:
@@ -352,6 +352,11 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
   (show "✗ failed", not "✗ 3 failed"); some writes have no line counts; turn duration =
   `at` of its first and last entries; an OpenCode `!command` arrives as a `shell` tool
   entry.
+- **Note:** From T-802 (supervisor's calls): opening a Finished session makes it Idle in
+  the list (contract), but the session header keeps the pill the session had when it was
+  opened (mockup 2.1 shows "Finished") until its state changes. The header and list show
+  the Mac's name without the `Multi-Code on ` prefix (mockup 1A: "MacBook Air"). The
+  working row's preview is the running tool, whatever the mockup's example says.
 - **Acceptance:** harness screenshots in Playwright WebKit (dark and light) of each mockup
   screen listed above, compared by eye with the mockups and attached to the report; a test
   that a Return in the textarea doesn't send; a test of the turn grouping and fold counts.
@@ -378,6 +383,8 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
     should never happen (log it); `failed`/`unsupported` → the message and a terminal
     button. No `dialog` → "The phone can't show this dialog" with a terminal button.
   - Sheets can be pulled down to read the chat and pulled up again. Disabled offline.
+- **Note:** The protocol has no question line for a permission dialog: show the fixed
+  "Do you want to proceed?" (Claude's own wording) for every permission card.
 - **Acceptance:** harness screenshots of each dialog (dark and light); with the harness,
   each dialog is answered and the harness records the exact `answer` frame (effects,
   1-based picks, text, feedback, confirmed). On an isolated dev build with a real Claude
@@ -535,3 +542,4 @@ shows each check state, gates the QR, sends a test push and revokes.
 - 2026-10-29: T-801 done (6f4155d). T-802..T-805 started in parallel worktrees.
 - 2026-10-29: T-805 done and merged (33a143a); endpoints.ts removed, port bound to 127.0.0.1.
 - 2026-10-29: T-804 done and merged (e154a82); `readRecentTurns(id, turns)` in process-manager.
+- 2026-10-29: T-802 done and merged (e85b622): `pnpm harness`, `pnpm harness:shot`, README in `workspace/app/scripts/mobile-harness/`. T-806 started.
