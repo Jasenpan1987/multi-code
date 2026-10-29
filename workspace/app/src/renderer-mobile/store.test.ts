@@ -223,6 +223,74 @@ describe("store", () => {
     ]);
   });
 
+  it("starts the open session afresh on a new CLI session: the first page of turns, and a cache of the new one only", () => {
+    const store = make();
+    store.actions.pair(offer);
+    const link = lastLink();
+    link.up();
+    store.actions.open("a");
+    const old = [
+      { kind: "user", id: "o1", text: "你是谁" },
+      { kind: "assistant", id: "o2", text: "我是 Claude。" },
+    ] as const;
+    link.frame({ type: "transcript", instanceId: "a", entries: [...old], hasEarlier: true, session: "s1" });
+    store.actions.loadEarlier("a");
+    link.frame({ type: "transcript", instanceId: "a", entries: [...old], hasEarlier: false, session: "s1" });
+    const item = store.actions.sendPrompt("a", "/new");
+    link.frame({ type: "ack", clientMsgId: item.frame.clientMsgId, ok: true });
+    store.flush();
+    expect(JSON.parse(storage.getItem("multicode.cache")!).sessions.a.cli).toBe("s1");
+    link.sent.length = 0;
+
+    link.frame({ type: "transcript", instanceId: "a", entries: [], hasEarlier: false, session: "s2" });
+    // The Mac sends the new session at the first page from now on.
+    expect(link.sent).toEqual([{ type: "subscribe", instanceId: "a", turns: 10 }]);
+    expect(store.getState().outbox).toEqual([]);
+    vi.advanceTimersByTime(600);
+    const cached = JSON.parse(storage.getItem("multicode.cache")!).sessions.a;
+    expect(cached).toMatchObject({ transcript: [], cli: "s2", renewed: true });
+    // Relaunched, it opens on the new session.
+    expect(sessionOf(make().getState(), "a")).toMatchObject({ transcript: [], cli: "s2", renewed: true });
+
+    // At the first page already, nothing is asked again.
+    link.sent.length = 0;
+    link.frame({ type: "transcript", instanceId: "a", entries: [], hasEarlier: false, session: "s3" });
+    expect(link.sent).toEqual([]);
+  });
+
+  it("on a new CLI session found at a reconnect, settles a dropped prompt by its ack and lets one typed offline wait to show", () => {
+    const store = make();
+    store.actions.pair(offer);
+    const link = lastLink();
+    link.up();
+    store.actions.open("a");
+    link.frame({ type: "transcript", instanceId: "a", entries: [], hasEarlier: false, session: "s1" });
+    // "/new" goes out, and the socket drops before its ack.
+    const renew = store.actions.sendPrompt("a", "/new");
+    link.down();
+    const typed = store.actions.sendPrompt("a", "typed offline");
+    expect(typed.status).toBe("waiting");
+
+    // Back: the resubscribe, then the outbox, then what the Mac says.
+    link.sent.length = 0;
+    link.up();
+    expect(ids(link.sent)).toEqual(["subscribe", renew.frame.clientMsgId, typed.frame.clientMsgId]);
+    link.frame({ type: "transcript", instanceId: "a", entries: [], hasEarlier: false, session: "s2" });
+    link.frame({ type: "ack", clientMsgId: renew.frame.clientMsgId, ok: true });
+    link.frame({ type: "ack", clientMsgId: typed.frame.clientMsgId, ok: true });
+    // "/new" made the new session; "typed offline" went to it, and is on its way
+    // through the CLI until the transcript shows it.
+    expect(store.getState().outbox.map((i) => [i.frame.clientMsgId, i.status])).toEqual([[typed.frame.clientMsgId, "acked"]]);
+    link.frame({
+      type: "transcript",
+      instanceId: "a",
+      entries: [{ kind: "user", id: "n1", text: "typed offline", at: clock }],
+      hasEarlier: false,
+      session: "s2",
+    });
+    expect(store.getState().outbox).toEqual([]);
+  });
+
   it("replays the terminal to a late sink, then streams to it", () => {
     const store = make();
     store.actions.pair(offer);

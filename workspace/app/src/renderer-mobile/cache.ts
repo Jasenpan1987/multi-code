@@ -17,7 +17,9 @@ const MAX_ENTRIES = 300;
 // the origin's storage to the outbox and the pairing.
 const MAX_CHARS = 1_000_000;
 
-type CachedSession = Pick<Session, "transcript" | "hasEarlier" | "dialog" | "refreshedAt">;
+// With the CLI session it is from, so a new one (`/new`) that comes while the app is
+// closed replaces it at the next launch.
+type CachedSession = Pick<Session, "transcript" | "hasEarlier" | "cli" | "renewed" | "dialog" | "refreshedAt">;
 
 interface Cached {
   v: typeof VERSION;
@@ -59,6 +61,8 @@ function trimSession(s: Session): CachedSession {
   return {
     transcript,
     hasEarlier: s.hasEarlier || transcript !== s.transcript,
+    cli: s.cli,
+    renewed: s.renewed,
     dialog: s.dialog,
     refreshedAt: s.refreshedAt,
   };

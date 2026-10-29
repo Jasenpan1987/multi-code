@@ -50,14 +50,18 @@ scenario decides which moment of `multi-code` is on screen.
 | `questions`  | Needs you: two questions, the second multi-select, "Type something" rows  | 3.2      |
 | `plan`       | Needs you: a plan (Markdown, long enough to scroll)                        | 3.3      |
 | `terminal`   | Needs you: an MCP form the phone can't show (no `dialog`)                  | 4.1      |
+| `short`      | Idle: two short questions and answers, far shorter than the screen (the builder's iPhone test) | |
+| `commands`   | `short`, then CLI commands run at the desk: `/token`, `/model opus`, `/cost` (a table), `/compact` (`local` entries) | |
 | `empty`      | no sessions                                                                |          |
 
 The other five, in every scenario: `data-pipeline` (OpenCode) needs you on one
 question; `apra-portal` is working (mockup 2.3) and adds a tool every 4 s until it
 finishes, about 30 s after the scenario starts; `infra-terraform` finished 15 min ago
 (its conversation is mockup 4.2's); `docs-site` (OpenCode) idle since yesterday;
-`multi-code (review)` stopped since Monday. `multi-code` has 13 turns, so the first
+`multi-code (review)` stopped since Monday. `multi-code` has 13 turns (2 in `short` and `commands`), so the first
 10 come with `hasEarlier`. Every terminal is 120 × 36 and repaints like a CLI.
+Every transcript names its CLI `session`; a new scenario is a new one for every
+session.
 
 ## What the harness does as the desktop
 
@@ -72,7 +76,12 @@ desktop's does:
   at the session's size, and the dialog in full; opening a Finished session makes it
   Idle.
 - `prompt`: `not-running` for a stopped session, `dialog-open` on a dialog, else ok (a
-  working session queues it). The session runs a short scripted turn.
+  working session queues it). The session runs a short scripted turn; a slash
+  command runs at once with no turn, as a command line (`local` entries):
+  `/model …`, `/cost`, `/compact` answer as Claude's would, anything else is "Unknown
+  command: /…"; `/new` and `/clear` start a new CLI session, whose transcript comes
+  empty, then 0.1 s later with the `/clear` line Claude records for either.
+  Transcripts are cut into turns as the desktop's are: at messages, not commands.
 - `answer`: `gone` unless `seq` is the open dialog's; held to the dialog by the
   secretary's `checkChoice` (`needs-confirm` for Always allow / auto-accept without
   `confirmed`, `failed` for a plan revised without feedback or a question unanswered,
@@ -98,6 +107,8 @@ C=http://127.0.0.1:51090
 curl -XPOST $C/scenario/questions        # start a scenario over (?live=0 freezes it)
 curl -XPOST $C/tick                       # one step of every working turn
 curl -XPOST $C/desk-answer/multi-code     # the builder answered at the desk
+curl -XPOST $C/new-session/multi-code     # /new at the desk: a new CLI session
+curl -XPOST "$C/local/multi-code?command=/token&output=Unknown%20command"  # a command run at the desk
 curl -XPOST "$C/resize/multi-code?cols=100&rows=30"
 curl -XPOST $C/drop                       # cut every socket (reconnect)
 curl -XPOST $C/half-open                  # open sockets go quiet, pings included
@@ -117,6 +128,10 @@ mobile, dark and light (`--scheme dark|light|both`). It pairs from the harness's
 then sets the route. `--scenario` starts that scenario over, paused, so the shot is the
 same every time (`curl -XPOST $C/resume` restarts its clock). `--tap <selector>` taps
 before the shot (repeatable), `--wait <ms>` (default 1000) waits for the frames.
+`--focus <selector> --keyboard 336 [--pan 336]` plays the iPhone keyboard coming up
+(visualViewport shrinks; with `--pan` iOS has panned the page, as it does for a field
+at the bottom), with a grey box for the keyboard: what stays above it is what the
+builder would see. It is a stand-in: the real keyboard is checked on the iPhone.
 Playwright is pinned to 1.64.1, whose WebKit (`webkit-2370`) is the one in
 `~/Library/Caches/ms-playwright`; on another machine run `npx playwright install webkit`.
 

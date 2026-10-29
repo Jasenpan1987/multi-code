@@ -1,11 +1,30 @@
 /* Session chat (mockups 2.1–2.3, 4.2). */
 
+/* Fixed, so the page never scrolls under it when the keyboard comes up; its height
+   is .screen's 100dvh, or the visual viewport's while a field has the focus
+   (keyboard.ts). */
+.session-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+/* A chat shorter than the screen sits at the bottom, right above the compose box,
+   as in a messaging app: the space left over goes above it. */
+.session-screen .screen-body {
+  display: flex;
+  flex-direction: column;
+}
+
 /* The name close to the back arrow, as mockup 2.1 draws it; the arrow's 44 pt
    target overlaps the title, which takes no taps. */
 .session-screen .topbar .back { margin-right: -20px; position: relative; z-index: 1; }
 .session-screen .topbar .pill { margin-left: -2px; }
 
 .session-screen .chat {
+  flex: none;
+  margin-top: auto;
   padding: 14px 16px 18px;
   display: flex;
   flex-direction: column;
@@ -29,6 +48,56 @@
   color: var(--faint);
   font: inherit;
   font-size: 11.5px;
+}
+
+/* Where a new CLI session (`/new`) began, when the phone saw it replace the one
+   before. */
+.session-screen .renewed {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--faint);
+  font-size: 11.5px;
+}
+.session-screen .renewed::before,
+.session-screen .renewed::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+
+/* A CLI command the builder ran and the CLI's output for it: a small grey line,
+   neither a bubble nor the agent's text. A long output shows three lines until
+   tapped. */
+.session-screen .cmdline {
+  align-self: center;
+  max-width: 92%;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--faint);
+  text-align: center;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.session-screen .cmdline .c {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.session-screen .cmdline[data-lines] { text-align: left; }
+.session-screen .cmdline[data-lines] .o {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.session-screen .cmdline[data-long] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.session-screen .cmdline[data-long][aria-expanded="true"] {
+  display: block;
+  -webkit-line-clamp: none;
 }
 
 /* The builder's message. */
@@ -251,4 +320,26 @@
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text);
+}
+
+/* While a field has the focus the keyboard covers the home indicator, so its inset
+   goes; and what the keyboard leaves is all there is: a dialog's card scrolls in
+   it, under the top bar, and a sheet fits under the top bar. */
+.session-screen.typing .compose-box { padding-bottom: 8px; }
+.session-screen.typing .dialog-slot.dock,
+.session-screen.typing .dialog-slot.sheet { padding-bottom: 14px; }
+.session-screen.typing .dialog-slot.sheet-bar { padding-bottom: 0; }
+.session-screen.typing .session-foot {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.session-screen.typing .dialog-slot.dock {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.session-screen.typing .dialog-slot.sheet {
+  max-height: calc(100% - 50px - env(safe-area-inset-top));
 }

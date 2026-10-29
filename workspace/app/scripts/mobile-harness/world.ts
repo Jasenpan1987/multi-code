@@ -10,7 +10,7 @@ import type {
   RemoteSessionState,
   TranscriptEntry,
 } from "../../src/shared/remote-protocol";
-import { buildScenario, TERMINAL_COLS, TERMINAL_ROWS, type ScenarioName } from "./scenarios.ts";
+import { buildScenario, COST, TERMINAL_COLS, TERMINAL_ROWS, type ScenarioName } from "./scenarios.ts";
 
 // One tool call: what the transcript shows while it runs, and how it ends.
 export interface Step {
@@ -42,6 +42,9 @@ export interface Session {
   // Starts every entry id: new with each reset, so a phone never carries state
   // kept for an entry of one scenario over to a different one with the same number.
   idPrefix: string;
+  // The CLI session the entries are from (TranscriptFrame.session): a new one with
+  // each `/new` or `/clear`, and with each reset.
+  cli: string;
   state: RemoteSessionState;
   since: number;
   // The list row's line as the mockup has it, until the state first changes.
@@ -62,6 +65,9 @@ export interface Session {
 }
 
 export const TICK_MS = 4000;
+// How long after a new session's first, empty transcript Claude's record of the
+// `/clear` that made it shows (as the desktop sees it, 2026-10-30).
+const CLEAR_LINE_MS = 100;
 
 export class World {
   scenario: ScenarioName = "home";
@@ -84,6 +90,7 @@ export class World {
     this.sessions = buildScenario(scenario, Date.now()).map(({ dialog, entries, ...rest }) => ({
       ...rest,
       idPrefix: `${run}-${rest.info.id}`,
+      cli: `${run}-${rest.info.id}-cli1`,
       entries: entries.map((e) => ({ ...e, id: `${run}-${e.id}` })),
       dialog: dialog && { ...dialog, seq: ++this.seq },
     }));
@@ -136,12 +143,16 @@ export class World {
     return d && { seq: d.seq, summary: d.summary, dialog: d.dialog };
   }
 
-  // The last `turns` turns (a turn starts at each "user" entry).
-  transcript(id: string, turns: number): { entries: TranscriptEntry[]; hasEarlier: boolean } {
-    const entries = this.find(id)?.entries ?? [];
-    const starts = entries.flatMap((e, i) => (e.kind === "user" ? [i] : []));
-    const from = starts.length > turns ? starts[starts.length - turns] : 0;
-    return { entries: entries.slice(from), hasEarlier: from > 0 };
+  // The last `turns` turns, and the CLI session they are from. As the desktop's
+  // (backends/recentTurns.ts): a turn starts at each message, not at a command, and
+  // the `/clear` a new session opens with comes with its first turn.
+  transcript(id: string, turns: number): { entries: TranscriptEntry[]; hasEarlier: boolean; session?: string } {
+    const s = this.find(id);
+    const entries = s?.entries ?? [];
+    const starts = entries.flatMap((e, i) => (e.kind === "user" && !e.local ? [i] : []));
+    let from = starts.length > turns ? starts[starts.length - turns] : 0;
+    if (entries.slice(0, from).every((e) => e.local)) from = 0;
+    return { entries: entries.slice(from), hasEarlier: from > 0, ...(s ? { session: s.cli } : {}) };
   }
 
   terminal(id: string): { data: string; cols: number; rows: number } {
@@ -171,8 +182,26 @@ export class World {
     const s = this.find(id);
     if (!s) return;
     if (s.state === "working") s.queued.push(text);
-    else this.startPromptTurn(s, text);
+    else this.take(s, text);
     this.onChange([id], false);
+  }
+
+  // The builder started a new CLI session at the desk (`/new`).
+  newSession(id: string): boolean {
+    const s = this.find(id);
+    if (!s) return false;
+    this.renew(s);
+    this.onChange([id], false);
+    return true;
+  }
+
+  // The builder ran a CLI command at the desk: its line, and the CLI's output.
+  command(id: string, command: string, output?: string): boolean {
+    const s = this.find(id);
+    if (!s) return false;
+    this.local(s, command, output);
+    this.onChange([id], false);
+    return true;
   }
 
   // An answer the desktop has accepted (bridge.ts holds it to the dialog first).
@@ -286,6 +315,50 @@ export class World {
     s.preview = undefined;
   }
 
+  // What the CLI does with a line the builder sent: a slash command runs at once,
+  // with no turn (as Claude's built-in ones do); anything else starts a turn.
+  private take(s: Session, text: string) {
+    const [name, ...args] = text.trim().split(/\s+/);
+    if (!name.startsWith("/") || name.length < 2) return this.startPromptTurn(s, text);
+    const command = name.slice(1);
+    if (command === "new" || command === "clear") return this.renew(s);
+    this.local(s, text.trim(), COMMANDS[command]?.(args.join(" ")) ?? `Unknown command: /${command}`);
+  }
+
+  // A new CLI session, as Claude makes one for `/new` or `/clear`: its transcript is
+  // empty at first, then shows the command that made it, recorded as `/clear`.
+  private renew(s: Session) {
+    this.startSession(s);
+    const cli = s.cli;
+    const line = setTimeout(() => {
+      if (s.cli !== cli || !this.sessions.includes(s)) return;
+      this.local(s, "/clear");
+      this.onChange([s.info.id], false);
+    }, CLEAR_LINE_MS);
+    line.unref?.();
+  }
+
+  private startSession(s: Session) {
+    const at = s.cli.lastIndexOf("-cli");
+    s.cli = `${s.cli.slice(0, at)}-cli${Number(s.cli.slice(at + 4)) + 1}`;
+    // The new session's entries are numbered from 1 again, under its own name.
+    s.idPrefix = s.cli;
+    s.entries = [];
+    // A dialog of the old session's closes with it (the bridge says so).
+    s.dialog = undefined;
+    s.running = undefined;
+    s.steps = [];
+    s.end = undefined;
+    s.queued = [];
+    if (s.state !== "idle") this.setState(s, "idle");
+    s.preview = undefined;
+  }
+
+  private local(s: Session, command: string, output?: string) {
+    s.entries.push(entry(s, { kind: "user", text: command, local: true }));
+    if (output) s.entries.push(entry(s, { kind: "assistant", text: output, local: true }));
+  }
+
   private startPromptTurn(s: Session, text: string) {
     s.entries.push(entry(s, { kind: "user", text }));
     const claude = s.info.backend === "claude";
@@ -338,12 +411,20 @@ export class World {
     this.takeQueued(s);
   }
 
-  // A turn ended, however it ended: the CLI takes the oldest prompt queued during it.
+  // A turn ended, however it ended: the CLI takes what was queued during it, oldest
+  // first. A slash command runs with no turn, so the next is taken at once, until a
+  // prompt starts a turn.
   private takeQueued(s: Session) {
-    const next = s.queued.shift();
-    if (next !== undefined) this.startPromptTurn(s, next);
+    while (s.state !== "working" && s.queued.length > 0) this.take(s, s.queued.shift()!);
   }
 }
+
+// What the harness's CLI says to a few of Claude's built-in commands.
+const COMMANDS: Record<string, (args: string) => string> = {
+  model: (args) => `Set model to ${args || "Opus 5.5 (default)"}`,
+  cost: () => COST,
+  compact: () => "Compacted. ctrl+o to see the summary",
+};
 
 // ---------------------------------------------------------------------------
 // Transcript helpers
@@ -374,7 +455,7 @@ function previewOf(s: Session): string | undefined {
     if (!running) return undefined;
     return running.text ? `${running.tool}: ${running.text}` : running.tool;
   }
-  const said = s.entries.findLast((e) => e.kind === "assistant");
+  const said = s.entries.findLast((e) => e.kind === "assistant" && !e.local);
   return said ? firstSentence(said.text) : undefined;
 }
 

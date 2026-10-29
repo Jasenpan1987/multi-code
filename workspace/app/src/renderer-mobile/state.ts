@@ -18,8 +18,10 @@ import {
   cancel,
   dismiss,
   enqueue,
+  instanceOf,
   markSent,
   newDevice,
+  renewSession,
   settleDelivered,
   socketLost,
   type OutboxFrame,
@@ -56,6 +58,12 @@ export interface Session {
   // Null until a transcript arrives (or comes from the cache).
   transcript: TranscriptEntry[] | null;
   hasEarlier: boolean;
+  // The CLI session the transcript is from (TranscriptFrame.session); null while the
+  // Mac hasn't said (an older desktop).
+  cli: string | null;
+  // The phone saw that CLI session replace the one before it (`/new`, `/clear`), so
+  // the chat starts at its start, under a "New session" mark.
+  renewed: boolean;
   // Turns asked for in `subscribe`: TURNS_PAGE, plus TURNS_PAGE per "Earlier turns".
   turns: number;
   dialog: OpenDialog | null;
@@ -104,6 +112,8 @@ export type Action =
 export const EMPTY_SESSION: Session = Object.freeze({
   transcript: null,
   hasEarlier: false,
+  cli: null,
+  renewed: false,
   turns: TURNS_PAGE,
   dialog: null,
   terminal: null,
@@ -245,16 +255,24 @@ function reduceFrame(state: AppState, frame: ServerFrame, at: number): AppState 
       }
       return { ...state, instances: frame.instances, instancesAt: at, sessions };
     }
-    case "transcript":
+    case "transcript": {
+      const id = frame.instanceId;
+      const was = sessionOf(state, id);
+      const change: Partial<Session> = { transcript: frame.entries, hasEarlier: frame.hasEarlier, refreshedAt: at };
+      if (frame.session !== undefined) change.cli = frame.session;
+      // A new CLI session (`/new`, `/clear`): the chat starts afresh, at its last
+      // page of turns, and nothing sent to the old one waits to show in it. A frame
+      // that doesn't say, or the first that does, is no change.
+      if (frame.session === undefined || was.cli === null || frame.session === was.cli) {
+        return { ...state, sessions: patch(state.sessions, id, change), ...settle(state, state.outbox, id, frame.entries) };
+      }
+      const fresh = { ...state, delivered: Object.fromEntries(Object.entries(state.delivered).filter(([key]) => key !== id)) };
       return {
-        ...state,
-        sessions: patch(state.sessions, frame.instanceId, {
-          transcript: frame.entries,
-          hasEarlier: frame.hasEarlier,
-          refreshedAt: at,
-        }),
-        ...settle(state, state.outbox, frame.instanceId, frame.entries),
+        ...fresh,
+        sessions: patch(state.sessions, id, { ...change, renewed: true, turns: TURNS_PAGE }),
+        ...settle(fresh, renewSession(state.outbox, id), id, frame.entries),
       };
+    }
     case "snapshot":
     case "resize": {
       const current = sessionOf(state, frame.instanceId).terminal;
@@ -286,7 +304,14 @@ function reduceFrame(state: AppState, frame: ServerFrame, at: number): AppState 
     }
     case "ack": {
       const item = state.outbox.find((i) => i.frame.clientMsgId === frame.clientMsgId);
-      const acked = applyAck(state.outbox, frame, at);
+      let acked = applyAck(state.outbox, frame, at);
+      // OpenCode's transcript shows no commands (its TUI runs `/new` or `/models`
+      // itself, and a command of the project's reaches the model as its template), so
+      // nothing would ever settle a slash command sent to it: its ack does.
+      if (item?.frame.type === "prompt" && frame.ok && item.frame.text.trimStart().startsWith("/")) {
+        const backend = state.instances?.find((i) => i.id === instanceOf(item))?.backend;
+        if (backend === "opencode") acked = acked.filter((i) => i.frame.clientMsgId !== frame.clientMsgId);
+      }
       let next = withOutbox(state, acked);
       // A resent prompt's ack can come after the transcript that already shows it
       // (the resubscribe goes first).

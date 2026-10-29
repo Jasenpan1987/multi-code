@@ -26,6 +26,12 @@ const HELP = `Multi-Code phone harness, control channel
   POST /tick                   one step of every working turn
   POST /desk-answer/<id>       the builder answers the dialog at the desk
                                (its first option)
+  POST /new-session/<id>       the builder starts a new CLI session at the desk
+                               (/new): the transcript's \`session\` changes, with no
+                               entries, then its "/clear" line a moment later
+  POST /local/<id>?command=&output=
+                               the builder ran a CLI command at the desk: a
+                               command line (local entries), output optional
   POST /resize/<id>?cols=&rows=  the desktop resized that terminal
   POST /drop                   cut every socket, as a lost network does
   POST /half-open              the open sockets go quiet, pings included
@@ -97,6 +103,14 @@ export function startControl(world: World, bridge: Bridge, port: number) {
         return done();
       case "desk-answer":
         return world.deskAnswer(arg) ? done() : reply(404, { ok: false, error: `${arg} has no dialog open` });
+      case "new-session":
+        return world.newSession(arg) ? done() : reply(404, { ok: false, error: `no session ${arg}` });
+      case "local": {
+        const command = url.searchParams.get("command") ?? "";
+        if (!command.trim()) return reply(400, { ok: false, error: "?command= is what the builder ran, e.g. /token" });
+        const output = url.searchParams.get("output") ?? undefined;
+        return world.command(arg, command, output) ? done() : reply(404, { ok: false, error: `no session ${arg}` });
+      }
       case "resize": {
         const cols = Number(url.searchParams.get("cols"));
         const rows = Number(url.searchParams.get("rows"));

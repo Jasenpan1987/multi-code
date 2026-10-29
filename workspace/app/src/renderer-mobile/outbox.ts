@@ -45,6 +45,13 @@ export interface OutboxItem {
   refusal?: { reason: AckRefusal; message: string };
   // When it was acked, refused or became unknown.
   settledAt?: number;
+  // A prompt or push-subscribe that went out on a socket that dropped before its
+  // ack (or was on one when the app closed): the Mac may have had it since then.
+  dropped?: boolean;
+  // A dropped prompt still unacked when its session's CLI session was replaced
+  // (`renewSession`): the new session's transcript may never show it, so its ack
+  // settles it.
+  oldSession?: boolean;
 }
 
 const STORAGE_KEY = "multicode.outbox";
@@ -96,11 +103,12 @@ export function markSent(outbox: OutboxItem[], ids: ReadonlySet<string>): Outbox
 }
 
 // The desktop's ack. An acked push-subscribe leaves the outbox (the store keeps
-// what it means); an ack for an id the phone no longer holds is ignored.
+// what it means), and so does a prompt from before a new CLI session (`oldSession`);
+// an ack for an id the phone no longer holds is ignored.
 export function applyAck(outbox: OutboxItem[], ack: AckFrame, now: number): OutboxItem[] {
   const item = outbox.find((i) => idOf(i) === ack.clientMsgId);
   if (!item) return outbox;
-  if (ack.ok && item.frame.type === "push-subscribe") return outbox.filter((i) => i !== item);
+  if (ack.ok && (item.frame.type === "push-subscribe" || item.oldSession)) return outbox.filter((i) => i !== item);
   const settled: OutboxItem = ack.ok
     ? { ...item, status: "acked", settledAt: now }
     : { ...item, status: "refused", refusal: { reason: ack.reason, message: ack.message }, settledAt: now };
@@ -112,7 +120,7 @@ export function socketLost(outbox: OutboxItem[], now: number): OutboxItem[] {
   if (!outbox.some((i) => i.status === "sent")) return outbox;
   return outbox.map((i) => {
     if (i.status !== "sent") return i;
-    return isQueued(i.frame) ? { ...i, status: "waiting" } : { ...i, status: "unknown", settledAt: now };
+    return isQueued(i.frame) ? { ...i, status: "waiting", dropped: true } : { ...i, status: "unknown", settledAt: now };
   });
 }
 
@@ -129,6 +137,24 @@ export function newDevice(outbox: OutboxItem[], now: number): OutboxItem[] {
       ? { ...i, status: "unknown", settledAt: now }
       : i
   );
+}
+
+// The instance's CLI session was replaced (`/new`, `/clear`; TranscriptFrame.session):
+// the new session's transcript won't show what the old one was sent, the `/new`
+// itself included. An acked prompt is settled now. One that went out on a socket
+// that dropped before its ack may have reached the old session then, so its ack
+// (to the resend) settles it. Anything else goes to the new session and waits to
+// show there: one that never left, and one first written on this socket, which went
+// out after the resubscribe that brought the new session's transcript (store.ts
+// writes the outbox right after it, before that transcript is back).
+export function renewSession(outbox: OutboxItem[], instanceId: string): OutboxItem[] {
+  const ours = (i: OutboxItem) => i.frame.type === "prompt" && i.frame.instanceId === instanceId;
+  const inFlight = (i: OutboxItem) =>
+    Boolean(i.dropped) && (i.status === "waiting" || i.status === "sent") && !i.oldSession;
+  if (!outbox.some((i) => ours(i) && (i.status === "acked" || inFlight(i)))) return outbox;
+  return outbox
+    .filter((i) => !(ours(i) && i.status === "acked"))
+    .map((i) => (ours(i) && inFlight(i) ? { ...i, oldSession: true } : i));
 }
 
 export function cancel(outbox: OutboxItem[], clientMsgId: string): OutboxItem[] {
@@ -148,10 +174,12 @@ export function dismiss(outbox: OutboxItem[], clientMsgId: string): OutboxItem[]
 // unknown) that now shows in it as the builder's message has been delivered all the
 // way, and the transcript's own bubble takes over from the outbox's. Matched on its
 // text, and only against entries written after it was sent, so an earlier identical
-// "yes" doesn't count. One transcript entry delivers one prompt, so two identical
-// messages need two, in this transcript and in every later one: `delivered` holds
-// the entries (`entryKey`) that have delivered one of the session's prompts, which
-// the caller keeps and passes in again (state.ts). Each stands for one occurrence.
+// "yes" doesn't count. A slash command arrives as a command line (`local`), which
+// may name the command alone: "/model" for "/model opus". One transcript entry
+// delivers one prompt, so two identical messages need two, in this transcript and
+// in every later one: `delivered` holds the entries (`entryKey`) that have
+// delivered one of the session's prompts, which the caller keeps and passes in
+// again (state.ts). Each stands for one occurrence.
 export function settleDelivered(
   outbox: OutboxItem[],
   instanceId: string,
@@ -175,9 +203,10 @@ export function settleDelivered(
   const used: string[] = [];
   for (const item of open) {
     const text = normalize((item.frame as PromptFrame).text);
-    const at = free.findIndex(
-      (e) => normalize(e.text) === text && (e.at === undefined || e.at >= item.createdAt - CLOCK_SKEW_MS)
-    );
+    const command = text.startsWith("/") ? text.split(" ")[0] : null;
+    const after = (e: TranscriptEntry) => e.at === undefined || e.at >= item.createdAt - CLOCK_SKEW_MS;
+    let at = free.findIndex((e) => normalize(e.text) === text && after(e));
+    if (at < 0 && command) at = free.findIndex((e) => e.local && normalize(e.text) === command && after(e));
     if (at < 0) continue;
     settled.add(item);
     used.push(entryKey(free[at]));
@@ -262,7 +291,7 @@ export function loadOutbox(storage: Storage, now: number): OutboxItem[] {
         (i) =>
           !((i.status === "acked" || i.status === "unknown") && now - (i.settledAt ?? i.createdAt) > ACKED_KEPT_MS)
       )
-      .map((i) => (i.status === "sent" ? { ...i, status: "waiting" } : i));
+      .map((i) => (i.status === "sent" ? { ...i, status: "waiting", dropped: true } : i));
   } catch {
     return [];
   }

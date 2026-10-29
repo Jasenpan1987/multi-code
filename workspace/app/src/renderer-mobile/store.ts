@@ -47,7 +47,7 @@ import {
   type OutboxItem,
 } from "./outbox";
 import { clearPairing, loadPairing, savePairing, storedPairing, type StoredPairing } from "./pairing";
-import { initialState, reduce, sessionOf, type Action, type AppState } from "./state";
+import { initialState, reduce, sessionOf, type Action, type AppState, type Session } from "./state";
 import type { LinkStatus } from "./transport";
 
 // What the terminal screen (T-809) gives `attachTerminal`. `snapshot` replaces the
@@ -189,7 +189,13 @@ export function createStore(deps: StoreDeps): Store {
     lastSeenAt = now();
     if (frame.type === "snapshot" || frame.type === "output" || frame.type === "resize") feedTerminal(frame);
     if (frame.type === "error") console.warn(`Multi-Code: ${frame.message}`);
+    const before: Session | null = frame.type === "transcript" ? sessionOf(state, frame.instanceId) : null;
     dispatch({ type: "frame", frame, at: lastSeenAt });
+    // A new CLI session went back to the first page of turns: the Mac sends the
+    // open one at that page from now on too.
+    if (before && frame.type === "transcript" && frame.instanceId === state.openId) {
+      if (sessionOf(state, frame.instanceId).turns < before.turns && connected()) subscribeOpen();
+    }
   }
 
   function feedTerminal(frame: Extract<ServerFrame, { type: "snapshot" | "output" | "resize" }>) {

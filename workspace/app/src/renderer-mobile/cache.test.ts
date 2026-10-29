@@ -73,6 +73,17 @@ describe("offline cache", () => {
     expect(Object.keys(loadCache(storage)!.sessions)).toEqual(["a"]);
   });
 
+  it("keeps the CLI session a transcript is from, and reads an older cache without one", () => {
+    const storage = new MemoryStorage();
+    saveCache(storage, stateWith({ a: { transcript: entries(2), cli: "s2", renewed: true, refreshedAt: 1 } }), 9);
+    expect(loadCache(storage)!.sessions.a).toMatchObject({ cli: "s2", renewed: true });
+    storage.setItem(
+      "multicode.cache",
+      JSON.stringify({ v: 1, instances: [], sessions: { a: { transcript: entries(1), hasEarlier: false, dialog: null } } })
+    );
+    expect(loadCache(storage)!.sessions.a).toMatchObject({ cli: null, renewed: false });
+  });
+
   it("ignores a cache it can't read", () => {
     const storage = new MemoryStorage();
     storage.setItem("multicode.cache", "{");

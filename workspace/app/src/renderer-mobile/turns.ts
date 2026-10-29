@@ -10,8 +10,21 @@
 // While the turn runs, everything after the lead is in the fold (more calls may
 // come), which is open and grows. While the session is stopped on a dialog, the
 // pending calls at the end are the dialog's, and the dialog's own card shows them.
+//
+// A CLI command the builder ran and the CLI's own output for it (`local` entries:
+// "/token", "Unknown command: /token") are no message to or from the model, and start
+// no turn (as the desktop counts turns, backends/recentTurns.ts). Each command, with
+// the output after it, is a line drawn after the turn it came in (`Turn.lines`),
+// never part of its fold, its counts or its conclusion; one that came in the middle
+// of a running turn leaves the turn whole.
 
 import type { TranscriptEntry } from "../shared/remote-protocol";
+
+// One command line: the command, then what the CLI said to it (either may be missing).
+export interface CommandLine {
+  key: string;
+  entries: TranscriptEntry[];
+}
 
 export interface Turn {
   // Stable across refreshes: the id of the turn's first entry.
@@ -24,11 +37,15 @@ export interface Turn {
   // The fold's open state is kept under this (its first entry's id).
   foldKey: string;
   conclusion: TranscriptEntry[];
+  // The commands run in the turn, in order, drawn after it.
+  lines: CommandLine[];
+  // The turn's last entry is a command line: nothing the agent said came after it.
+  endsInCommand: boolean;
   // The session is in this turn now.
   live: boolean;
   // The session is stopped on a dialog in this turn.
   waiting: boolean;
-  // `at` of the turn's first and last entries, for its duration.
+  // `at` of the turn's first and last entries (commands aside), for its duration.
   startAt?: number;
   endAt?: number;
 }
@@ -39,7 +56,7 @@ export function groupTurns(
 ): Turn[] {
   const groups: TranscriptEntry[][] = [];
   for (const entry of entries) {
-    if (entry.kind === "user" || groups.length === 0) groups.push([entry]);
+    if ((entry.kind === "user" && !entry.local) || groups.length === 0) groups.push([entry]);
     else groups[groups.length - 1].push(entry);
   }
   const keys = new Map<string, number>();
@@ -61,8 +78,19 @@ const keyOf = (entry: TranscriptEntry) => entry.id ?? `${entry.kind}@${entry.at 
 
 function turnOf(group: TranscriptEntry[], unique: (key: string) => string, live: boolean, waiting: boolean): Turn {
   const key = unique(keyOf(group[0]));
-  const user = group[0].kind === "user" ? group[0] : null;
-  let body = user ? group.slice(1) : group;
+  const user = group[0].kind === "user" && !group[0].local ? group[0] : null;
+  // Command lines: a command starts one, output joins the one just before it.
+  const lines: CommandLine[] = [];
+  group.forEach((entry, i) => {
+    if (!entry.local) return;
+    if (entry.kind === "user" || !group[i - 1]?.local || lines.length === 0) {
+      lines.push({ key: unique(keyOf(entry)), entries: [entry] });
+    } else {
+      lines[lines.length - 1].entries.push(entry);
+    }
+  });
+  const own = group.filter((e) => !e.local);
+  let body = user ? own.slice(1) : own;
   if (waiting) {
     let end = body.length;
     while (end > 0 && body[end - 1].kind === "tool" && body[end - 1].pending) end--;
@@ -74,10 +102,12 @@ function turnOf(group: TranscriptEntry[], unique: (key: string) => string, live:
     key,
     user,
     foldKey: `${key}-fold`,
+    lines,
+    endsInCommand: Boolean(group[group.length - 1].local),
     live,
     waiting,
-    startAt: group[0].at,
-    endAt: group[group.length - 1].at,
+    startAt: (own[0] ?? group[0]).at,
+    endAt: (own[own.length - 1] ?? group[group.length - 1]).at,
   };
   if (first < 0) {
     // No tool calls: all it said is the conclusion, or, while it runs, the lead.
@@ -92,6 +122,21 @@ function turnOf(group: TranscriptEntry[], unique: (key: string) => string, live:
     conclusion: live ? [] : body.slice(last + 1),
   };
 }
+
+// A command line's two halves: what the builder ran and what the CLI said, as one
+// line of text each (terminal colours dropped, should the record carry them).
+export function commandLine(line: CommandLine): { command: string | null; output: string } {
+  const [first, ...rest] = line.entries;
+  const command = first?.kind === "user" ? plain(first.text) : null;
+  const output = (command === null ? line.entries : rest)
+    .map((e) => plain(e.text))
+    .filter(Boolean)
+    .join("\n");
+  return { command, output };
+}
+
+// eslint-disable-next-line no-control-regex
+const plain = (text: string) => text.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, "").trim();
 
 // ---------------------------------------------------------------------------
 // The fold line
@@ -188,13 +233,15 @@ export function runningTool(turn: Turn | undefined): TranscriptEntry | undefined
 
 // Opening a session whose last turn finished lands on the start of that turn's
 // conclusion, as the desktop's terminal does when a turn ends; anything else (a
-// turn running, a dialog, a message of the builder's after it, no conclusion)
-// lands at the bottom. `trailing`: the builder's messages shown after the last turn
+// turn running, a dialog, a message or a command of the builder's after it, no
+// conclusion) lands at the bottom. `trailing`: the builder's messages shown after the last turn
 // that the transcript doesn't have yet.
 export type Landing = { kind: "conclusion"; turn: string } | { kind: "bottom" };
 
 export function landingOf(turns: readonly Turn[], trailing: number): Landing {
   const last = turns[turns.length - 1];
-  if (!last || trailing > 0 || last.live || last.waiting || last.conclusion.length === 0) return { kind: "bottom" };
+  if (!last || trailing > 0 || last.endsInCommand || last.live || last.waiting || last.conclusion.length === 0) {
+    return { kind: "bottom" };
+  }
   return { kind: "conclusion", turn: last.key };
 }

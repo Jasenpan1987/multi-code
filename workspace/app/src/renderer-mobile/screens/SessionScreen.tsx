@@ -1,10 +1,13 @@
 // A session as a chat (PRD Stories 3, 4 and 6; mockups 2.1–2.3 and 4.2): the
 // builder's messages as bubbles, the agent's text as Markdown, each turn's tool
-// calls folded into one line (turns.ts), the messages still on their way from the
-// outbox, and at the bottom the compose box, the working bar with Stop, or, while a
-// dialog is open, the dialog slot in place of both.
+// calls folded into one line (turns.ts), the CLI commands the builder ran as small
+// grey lines, the messages still on their way from the outbox, and at the bottom
+// the compose box, the working bar with Stop, or, while a dialog is open, the
+// dialog slot in place of both. As in a messaging app, a chat shorter than the
+// screen sits at the bottom, right above the compose box, and the screen keeps to
+// what the keyboard leaves of it (keyboard.ts).
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { RemoteSessionState, TranscriptEntry } from "../../shared/remote-protocol";
 import { Compose } from "../components/Compose";
 import { ConnectionBanner } from "../components/Connection";
@@ -13,17 +16,20 @@ import { AnswerOutcome, DialogSlot } from "../components/DialogSlot";
 import { Markdown } from "../components/Markdown";
 import { useDraft } from "../drafts";
 import { duration, useNow } from "../format";
+import { useKeyboardFrame, useTyping } from "../keyboard";
 import { canCancel, idOf, instanceOf, type OutboxItem } from "../outbox";
 import { navigate } from "../routes";
 import { sessionOf } from "../state";
 import { shallowEqual, useActions, useApp } from "../store";
 import {
+  commandLine,
   foldLabel,
   groupTurns,
   landingOf,
   runningTool,
   toolMark,
   toolVerb,
+  type CommandLine as Line,
   type Landing,
   type ToolMark,
   type Turn,
@@ -50,6 +56,23 @@ export function SessionScreen({ id }: { id: string }) {
   const [folds, setFolds] = useState<Record<string, boolean>>({});
   // The transcript on screen when "Earlier turns" was tapped: loading until it changes.
   const [earlierFrom, setEarlierFrom] = useState<TranscriptEntry[] | null | undefined>(undefined);
+  // A new CLI session (`/new`) starts the chat afresh: no fold kept open, no
+  // earlier turns on their way, and it lands again (`epoch`). The first session the
+  // Mac names is no new one.
+  const [chat, setChat] = useState({ cli: session.cli, epoch: 0 });
+  if (chat.cli !== session.cli) {
+    const renewed = chat.cli !== null;
+    setChat({ cli: session.cli, epoch: chat.epoch + (renewed ? 1 : 0) });
+    if (renewed) {
+      setFolds({});
+      setEarlierFrom(undefined);
+    }
+  }
+  // While a field has the focus the screen keeps to what the keyboard leaves of it,
+  // so iOS has nothing to pan out of sight.
+  const screenRef = useRef<HTMLDivElement>(null);
+  const typing = useTyping(screenRef);
+  useKeyboardFrame(screenRef, typing);
 
   const name = instance?.name ?? id;
   const working = instance?.state === "working";
@@ -70,7 +93,7 @@ export function SessionScreen({ id }: { id: string }) {
   // A fold is closed unless its turn is running, until tapped; kept by entry id, so
   // a refresh of the transcript leaves it as it was.
   const isOpen = (turn: Turn) => folds[turn.foldKey] ?? turn.live;
-  const scroll = useChatScroll(landing, [session.transcript, bubbles, folds, needsYou, working, stopped]);
+  const scroll = useChatScroll(landing, chat.epoch, [session.transcript, bubbles, folds, needsYou, working, stopped]);
 
   const send = () => {
     const text = draft.replace(/\s+$/, "");
@@ -93,7 +116,7 @@ export function SessionScreen({ id }: { id: string }) {
   const loadingEarlier = earlierFrom !== undefined && earlierFrom === session.transcript;
 
   return (
-    <div className="screen session-screen">
+    <div ref={screenRef} className={`screen session-screen${typing ? " typing" : ""}`}>
       <div className="topbar">
         <a className="tap back" href="#/" aria-label="Back">
           ‹
@@ -110,6 +133,12 @@ export function SessionScreen({ id }: { id: string }) {
       <ConnectionBanner since={session.refreshedAt} />
       <div className="screen-body" ref={scroll.ref} {...scroll.handlers}>
         <div className="chat">
+          {/* Where the session began, when the phone saw it replace the one before. */}
+          {session.renewed && !session.hasEarlier && (
+            <div className="renewed" role="separator">
+              <span>New session</span>
+            </div>
+          )}
           {session.hasEarlier && (
             <button
               className="earlier"
@@ -126,18 +155,29 @@ export function SessionScreen({ id }: { id: string }) {
           {session.transcript === null && bubbles.length === 0 && (
             <p className="empty">{listed ? "Loading the conversation…" : "Waiting for your Mac…"}</p>
           )}
+          {session.transcript?.length === 0 && bubbles.length === 0 && (
+            <p className="empty">No messages in this session yet.</p>
+          )}
           {turns.map((turn) => (
-            <TurnView
-              key={turn.key}
-              turn={turn}
-              open={isOpen(turn)}
-              onToggle={() => {
-                // The fold line stays under the finger; the tools open below it.
-                scroll.keep();
-                setFolds((f) => ({ ...f, [turn.foldKey]: !isOpen(turn) }));
-              }}
-              landing={landing.kind === "conclusion" && landing.turn === turn.key}
-            />
+            <Fragment key={turn.key}>
+              {/* A session that opens with a command (the `/clear` after one) has
+                  nothing but the line before its first message. */}
+              {(turn.user || turn.lead.length > 0 || turn.fold.length > 0 || turn.conclusion.length > 0) && (
+                <TurnView
+                  turn={turn}
+                  open={isOpen(turn)}
+                  onToggle={() => {
+                    // The fold line stays under the finger; the tools open below it.
+                    scroll.keep();
+                    setFolds((f) => ({ ...f, [turn.foldKey]: !isOpen(turn) }));
+                  }}
+                  landing={landing.kind === "conclusion" && landing.turn === turn.key}
+                />
+              )}
+              {turn.lines.map((line) => (
+                <CommandLine key={line.key} line={line} />
+              ))}
+            </Fragment>
           ))}
           {bubbles.map((item) => (
             <Sent key={idOf(item)} item={item} working={working} onEdit={composing ? edit : undefined} />
@@ -223,16 +263,21 @@ const BOTTOM_SLACK = 40;
 // (a turn ends: its conclusion; a turn starts: the bottom, following it as it
 // grows). Otherwise what they were reading stays put, whatever arrives above or
 // below it: the first turn on screen is kept at its place (Safari has no CSS scroll
-// anchoring).
-function useChatScroll(landing: Landing, content: unknown[]) {
+// anchoring). A new CLI session (a new `epoch`) is a new chat, which lands again.
+function useChatScroll(landing: Landing, epoch: number, content: unknown[]) {
   const ref = useRef<HTMLDivElement>(null);
-  const at = useRef({ touched: false, bottom: true, landed: "", anchor: null as Anchor | null });
+  const at = useRef({ touched: false, bottom: true, landed: "", anchor: null as Anchor | null, epoch });
   const target = landing.kind === "conclusion" ? `conclusion:${landing.turn}` : "bottom";
 
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const s = at.current;
+    if (s.epoch !== epoch) {
+      s.epoch = epoch;
+      s.touched = false;
+      s.anchor = null;
+    }
     if (!s.touched || (s.bottom && target !== s.landed)) {
       land(el, landing);
       s.landed = target;
@@ -244,10 +289,11 @@ function useChatScroll(landing: Landing, content: unknown[]) {
     // Now, not at the scroll event, which comes after the next resize may have.
     s.bottom = atBottom(el);
     // `landing` is read through `target`, which names it.
-  }, [target, ...content]);
+  }, [target, epoch, ...content]);
 
-  // The chat's own height changes under it (the compose box grows with its text,
-  // the working bar comes and goes): a view at the bottom stays at the bottom.
+  // The chat's own height changes under it (the keyboard comes up, the compose box
+  // grows with its text, the working bar comes and goes): a view at the bottom stays
+  // at the bottom.
   useEffect(() => {
     const el = ref.current;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -361,6 +407,35 @@ function TurnView({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// A CLI command the builder ran, and what the CLI said to it, on one small grey line
+// ("/token · Unknown command: /token"). Output of several lines (`/cost`) is
+// the CLI's own table, so it keeps its lines and columns; a long one shows its first
+// lines until tapped.
+const LONG_OUTPUT = { lines: 3, chars: 240 };
+
+function CommandLine({ line }: { line: Line }) {
+  const [open, setOpen] = useState(false);
+  const { command, output } = commandLine(line);
+  const lines = output.split("\n").length;
+  const long = lines > LONG_OUTPUT.lines || output.length > LONG_OUTPUT.chars;
+  return (
+    <div
+      className="cmdline"
+      data-anchor={line.key}
+      data-lines={lines > 1 || undefined}
+      data-long={long || undefined}
+      {...(long
+        ? { role: "button", tabIndex: 0, "aria-expanded": open, onClick: () => setOpen(!open) }
+        : {})}
+    >
+      {command && <span className="c">{command}</span>}
+      {/* A table starts on a line of its own, its columns lined up. */}
+      {command && output && (lines > 1 ? "\n" : " · ")}
+      {output && <span className="o">{output}</span>}
     </div>
   );
 }
