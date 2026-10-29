@@ -1,0 +1,284 @@
+/* What every screen shares: the colours (from docs/specs/mobile-v2/mockups/index.html,
+   dark first, light when the system says so), the page frame, the top bar, the
+   connection badge and banner, and the buttons, pills and dots. A screen's own
+   layout goes in its CSS file under screens/. */
+
+:root {
+  color-scheme: dark;
+  --bg: #141518;
+  --surface: #1d1f24;
+  --surface2: #262931;
+  --border: #2f333b;
+  --text: #e8eaed;
+  --muted: #9aa0aa;
+  --faint: #6b717b;
+  --accent: #4a8ac4;
+  --accent-text: #fff;
+  --bubble: #2d5a8a;
+  --bubble-text: #fff;
+  --red: #e5534b;
+  --green: #3fb950;
+  --amber: #d9822b;
+  --blue: #4a8ac4;
+  --code-bg: #262931;
+  --scrim: rgba(0, 0, 0, 0.55);
+  --sheet: #1f2126;
+  --banner-bg: #3a2a12;
+  --banner-text: #f3c68a;
+  --mono: Menlo, "SF Mono", monospace;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --bg: #f0f4fa;
+    --surface: #ffffff;
+    --surface2: #e6edf6;
+    --border: #d5dde8;
+    --text: #1a1a1a;
+    --muted: #5f6b7d;
+    --faint: #8b95a5;
+    --accent: #2d5a8a;
+    --bubble: #2d5a8a;
+    --red: #d93a32;
+    --green: #1f7a3d;
+    --amber: #b86a12;
+    --blue: #2d6fb0;
+    --code-bg: #e9eef5;
+    --scrim: rgba(20, 30, 50, 0.35);
+    --sheet: #ffffff;
+    --banner-bg: #fdf0dc;
+    --banner-text: #8a4d00;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  /* The page never bounces as a whole; each screen scrolls its own body. */
+  overscroll-behavior: none;
+}
+
+code,
+.mono {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+/* A screen fills the viewport: top bar, then a scrolling body, then whatever sits
+   at the bottom (compose box, key row), clear of the notch and the home indicator. */
+.screen {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+.screen-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.screen-foot {
+  flex: none;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Top bar */
+.topbar {
+  height: 50px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.topbar .title {
+  font-size: 17px;
+  font-weight: 700;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar .sub {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 400;
+  margin-left: 4px;
+}
+
+/* A tap target in the bar: 44 pt tall, drawn smaller. */
+.topbar .tap {
+  min-width: 44px;
+  height: 44px;
+  margin: 0 -6px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 17px;
+  text-decoration: none;
+}
+
+.topbar .back {
+  color: var(--accent);
+  font-size: 30px;
+  line-height: 1;
+  margin-left: -12px;
+}
+
+.topbar .mono-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--surface2);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Connection badge */
+.conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--surface2);
+  padding: 3px 9px;
+  border-radius: 11px;
+  white-space: nowrap;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+}
+.dot.green { background: var(--green); }
+.dot.red { background: var(--red); }
+.dot.blue { background: var(--blue); }
+.dot.grey { background: var(--faint); }
+.dot.amber { background: var(--amber); }
+.dot.pulse { animation: pulse 1.4s ease-in-out infinite; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Offline / refused banner (mockup 4.2) */
+.banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--banner-bg);
+  color: var(--banner-text);
+  font-size: 13px;
+}
+.banner b { font-weight: 700; }
+.banner .text { flex: 1; min-width: 0; }
+.banner .act {
+  flex: none;
+  min-height: 32px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+}
+.banner .act:disabled { opacity: 0.6; text-decoration: none; }
+
+/* Pills */
+.pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 9px;
+  white-space: nowrap;
+  flex: none;
+}
+.pill.need { background: var(--red); color: #fff; }
+.pill.work { color: var(--blue); border: 1px solid var(--blue); }
+.pill.done { color: var(--green); border: 1px solid var(--green); }
+.pill.idle { color: var(--muted); border: 1px solid var(--border); }
+
+/* Buttons */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 15px;
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid transparent;
+  text-decoration: none;
+}
+.btn.primary { background: var(--accent); color: var(--accent-text); }
+.btn.danger { background: transparent; border-color: var(--red); color: var(--red); }
+.btn.ghost { background: transparent; border-color: var(--border); }
+.btn.block { width: 100%; }
+.btn:disabled { opacity: 0.45; }
+
+/* Backend mark: Claude and OpenCode */
+.av {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 15px;
+  color: #fff;
+  flex: none;
+}
+.av.c { background: #c96f4e; }
+.av.o { background: #4b5563; }
+
+.empty {
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--muted);
+}

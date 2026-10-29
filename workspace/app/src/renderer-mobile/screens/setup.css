@@ -1,0 +1,113 @@
+/* Setup screen (mockup 5.1). */
+
+.setup {
+  padding: 26px 22px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.setup .logo {
+  width: 62px;
+  height: 62px;
+  border-radius: 15px;
+}
+
+.setup h1 {
+  margin: 4px 0 0;
+  font-size: 22px;
+}
+
+.setup .m {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0;
+}
+
+.setup .m.small {
+  font-size: 12.5px;
+}
+
+.step {
+  display: flex;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 13px;
+}
+
+.step .n {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--surface2);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 13px;
+  flex: none;
+  color: var(--muted);
+}
+
+.step .n.ok {
+  background: var(--green);
+  color: #fff;
+}
+
+.step .n.cur {
+  background: var(--accent);
+  color: #fff;
+}
+
+.step .st {
+  flex: 1;
+}
+
+.step .st b {
+  display: block;
+  font-size: 15px;
+}
+
+.step .st span {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.share {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--surface2);
+  font-size: 13px;
+  vertical-align: -5px;
+}
+
+.paste {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.paste input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  /* 16px or more, or iOS zooms the page in on focus. */
+  font: inherit;
+  font-size: 16px;
+}
+
+.paste .bad {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--red);
+  font-size: 13px;
+}

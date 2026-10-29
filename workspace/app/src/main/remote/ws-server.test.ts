@@ -2014,4 +2014,26 @@ describe("RemoteServer static file serving", () => {
     const res = await get(`${base}/definitely-not-here.js`);
     expect(res.status).toBe(404);
   });
+
+  // The phone's service worker fetches every file through the HTTP cache: each
+  // must be checked with the server every time, and cheaply (mobile-v2 T-806).
+  it("serves the app's files no-cache with a tag, and answers an unchanged one 304", async () => {
+    const fx = await startServer();
+    const base = fx.url.replace("ws://", "http://");
+    for (const [file, type] of [
+      ["/", "text/html; charset=utf-8"],
+      ["/manifest.webmanifest", "application/manifest+json; charset=utf-8"],
+      ["/icons/icon-180.png", "image/png"],
+    ]) {
+      const res = await fetch(`${base}${file}`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toBe(type);
+      expect(res.headers.get("cache-control")).toBe("no-cache");
+      const etag = res.headers.get("etag");
+      expect(etag).toMatch(/^W\/".+"$/);
+      const again = await fetch(`${base}${file}`, { headers: { "if-none-match": etag! } });
+      expect(again.status).toBe(304);
+      expect(again.headers.get("etag")).toBe(etag);
+    }
+  });
 });

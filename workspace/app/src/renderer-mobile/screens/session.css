@@ -1,0 +1,75 @@
+/* Session chat. mobile-v2 T-807: placeholder styles, replaced with mockups 2.1–2.3's. */
+
+.session-screen .topbar .state {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.session-screen .facts {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.session-screen .facts p {
+  margin: 0;
+}
+
+.session-screen .dialog {
+  color: var(--red);
+  font-weight: 600;
+}
+
+.session-screen .sent {
+  align-self: flex-end;
+  max-width: 82%;
+  background: var(--bubble);
+  color: var(--bubble-text);
+  padding: 8px 13px;
+  border-radius: 18px 18px 5px 18px;
+  display: flex;
+  flex-direction: column;
+}
+
+.session-screen .sent .status {
+  font-size: 11.5px;
+  opacity: 0.8;
+  margin-top: 3px;
+  text-align: right;
+}
+
+.session-screen .sent .link {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  margin-left: 6px;
+  padding: 0;
+}
+
+.session-screen .compose {
+  border-top: 1px solid var(--border);
+  padding: 8px 10px;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.session-screen .compose textarea {
+  flex: 1;
+  min-height: 44px;
+  max-height: 140px;
+  resize: none;
+  border-radius: 19px;
+  border: 0;
+  background: var(--surface2);
+  color: var(--text);
+  padding: 10px 14px;
+  font: inherit;
+  /* 16px or more, or iOS zooms the page in on focus. */
+  font-size: 16px;
+}
