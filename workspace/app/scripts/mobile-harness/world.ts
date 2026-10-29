@@ -370,7 +370,9 @@ function previewOf(s: Session): string | undefined {
   if (s.state === "needs-you") return s.dialog?.summary;
   if (s.state === "working") {
     const running = pendingEntry(s);
-    return running ? `${running.tool} ${running.text}`.trim() : undefined;
+    // As the desktop writes it (remote-host.ts `linesOf`).
+    if (!running) return undefined;
+    return running.text ? `${running.tool}: ${running.text}` : running.tool;
   }
   const said = s.entries.findLast((e) => e.kind === "assistant");
   return said ? firstSentence(said.text) : undefined;

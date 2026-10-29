@@ -1,75 +1,254 @@
-/* Session chat. mobile-v2 T-807: placeholder styles, replaced with mockups 2.1–2.3's. */
+/* Session chat (mockups 2.1–2.3, 4.2). */
 
-.session-screen .topbar .state {
-  font-size: 12px;
-  color: var(--muted);
-}
+/* The name close to the back arrow, as mockup 2.1 draws it; the arrow's 44 pt
+   target overlaps the title, which takes no taps. */
+.session-screen .topbar .back { margin-right: -20px; position: relative; z-index: 1; }
+.session-screen .topbar .pill { margin-left: -2px; }
 
-.session-screen .facts {
-  padding: 14px 16px;
+.session-screen .chat {
+  padding: 14px 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  align-items: flex-start;
+  gap: 12px;
 }
 
-.session-screen .facts p {
-  margin: 0;
+.session-screen .turn {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.session-screen .dialog {
-  color: var(--red);
-  font-weight: 600;
+/* "Earlier turns ↑": drawn as mockup 2.1's divider, 44 pt to tap. */
+.session-screen .earlier {
+  align-self: center;
+  min-height: 44px;
+  margin: -12px 0 -8px;
+  padding: 0 16px;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  font: inherit;
+  font-size: 11.5px;
 }
 
-.session-screen .sent {
+/* The builder's message. */
+.session-screen .u {
   align-self: flex-end;
   max-width: 82%;
   background: var(--bubble);
   color: var(--bubble-text);
   padding: 8px 13px;
   border-radius: 18px 18px 5px 18px;
-  display: flex;
-  flex-direction: column;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
-
-.session-screen .sent .status {
+.session-screen .u .st {
+  display: block;
   font-size: 11.5px;
   opacity: 0.8;
   margin-top: 3px;
   text-align: right;
+  white-space: normal;
 }
 
-.session-screen .sent .link {
+/* A message from the outbox: the bubble, then a refusal under it. */
+.session-screen .sent {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.session-screen .refusal {
+  max-width: 82%;
+  font-size: 12px;
+  color: var(--red);
+  text-align: right;
+}
+
+/* A small text button with a 44 pt target around it. */
+.session-screen .link {
+  position: relative;
   border: 0;
   background: none;
   color: inherit;
   font: inherit;
+  font-weight: 600;
   text-decoration: underline;
-  margin-left: 6px;
   padding: 0;
 }
-
-.session-screen .compose {
-  border-top: 1px solid var(--border);
-  padding: 8px 10px;
-  padding-bottom: max(8px, env(safe-area-inset-bottom));
-  display: flex;
-  gap: 8px;
-  align-items: flex-end;
+.session-screen .link::after {
+  content: "";
+  position: absolute;
+  inset: -14px -10px;
 }
 
-.session-screen .compose textarea {
-  flex: 1;
-  min-height: 44px;
-  max-height: 140px;
-  resize: none;
-  border-radius: 19px;
+/* The agent's text (markdown.css draws the Markdown). */
+.session-screen .a > .md + .md { margin-top: 8px; }
+
+/* The fold line and the tools it holds. */
+.fold {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.fold .fh {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
   border: 0;
-  background: var(--surface2);
-  color: var(--text);
-  padding: 10px 14px;
+  background: none;
+  color: inherit;
   font: inherit;
-  /* 16px or more, or iOS zooms the page in on focus. */
-  font-size: 16px;
+  text-align: left;
+}
+/* 44 pt to tap, drawn 36 px tall. */
+.fold .fh::after {
+  content: "";
+  position: absolute;
+  inset: -4px 0;
+}
+.fold .fh .chev { width: 12px; font-size: 11px; flex: none; }
+.fold .fh .t { flex: 1; min-width: 0; }
+.fold .fh .d { flex: none; }
+
+.fold .tools {
+  border-top: 1px solid var(--border);
+  padding: 5px 0;
+}
+
+.tool {
+  display: flex;
+  gap: 8px;
+  padding: 3px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  align-items: baseline;
+}
+.tool .v {
+  min-width: 38px;
+  max-width: 96px;
+  flex: none;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool .tg {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool > :last-child { flex: none; white-space: nowrap; }
+.tool .ok,
+.tool .add { color: var(--green); }
+.tool .run { color: var(--blue); }
+.tool .bad,
+.tool .del { color: var(--red); }
+.tool .faint { color: var(--faint); }
+.tool .lines { display: inline-flex; gap: 6px; }
+
+/* What the agent said between its calls, inside the open fold. */
+.fold .say {
+  padding: 3px 12px 4px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.fold .say code { font-size: 11.5px; }
+
+/* Where the conclusion starts, on the turn the screen lands on (mockup 2.1). */
+.jumpmark {
+  border-top: 1px dashed var(--accent);
+  position: relative;
+  margin: 2px 0;
+}
+.jumpmark span {
+  position: absolute;
+  right: 0;
+  top: -9px;
+  font-size: 11px;
+  color: var(--accent);
+  background: var(--bg);
+  padding-left: 6px;
+}
+
+/* The bottom: the compose box (compose.css), the working bar, the dialog slot. */
+.session-foot { flex: none; }
+
+.session-foot .foot-note {
+  margin: 0;
+  border-top: 1px solid var(--border);
+  padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.workbar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 13px;
+}
+.workbar .t {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.workbar .t b { color: var(--text); font-weight: 600; }
+.workbar .t.err { color: var(--red); white-space: normal; }
+
+.stopbtn,
+.workbar .wbtn {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: 9px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 13px;
+}
+/* 44 pt to tap. */
+.stopbtn::after,
+.workbar .wbtn::after {
+  content: "";
+  position: absolute;
+  inset: -6px -4px;
+}
+.stopbtn {
+  border: 1px solid var(--red);
+  background: transparent;
+  color: var(--red);
+}
+.stopbtn i {
+  width: 9px;
+  height: 9px;
+  background: currentColor;
+  border-radius: 2px;
+  display: inline-block;
+}
+.stopbtn.solid { background: var(--red); color: #fff; }
+.stopbtn:disabled { opacity: 0.45; }
+.workbar .wbtn {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
 }
