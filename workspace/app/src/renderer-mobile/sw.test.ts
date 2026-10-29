@@ -1,8 +1,24 @@
 // The service worker on a fake scope: network first with a 3 s timeout, the cache
-// when the Mac can't be reached, and only the app's own files.
+// when the Mac can't be reached, and only the app's own files; a push shown as the
+// system would show it, and a tapped notification opening its session.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NETWORK_TIMEOUT_MS, SHELL, attachServiceWorker, type ExtendableEvent, type FetchEvent, type WorkerScope } from "./sw";
+import {
+  NETWORK_TIMEOUT_MS,
+  SHELL,
+  attachServiceWorker,
+  type ExtendableEvent,
+  type FetchEvent,
+  type NotificationEvent,
+  type PushEvent,
+  type ShowOptions,
+  type WindowClientLike,
+  type WorkerScope,
+} from "./sw";
+
+// The Mac's own payload writer, so the handler is tested against what is sent.
+vi.mock("electron", () => ({ app: { getPath: () => "/nonexistent" } }));
+const { declarativePayload } = await import("../main/remote/push");
 
 const ORIGIN = "https://mac.tailnet.ts.net";
 
@@ -39,17 +55,67 @@ let network: (request: Request) => Promise<Response>;
 let listeners: Record<string, (event: never) => void>;
 let skipped: boolean;
 let claimed: boolean;
+// What the worker did for a push or a tap.
+let shown: { title: string; options: ShowOptions }[];
+let badges: (number | "cleared")[];
+let windows: FakeWindow[];
+let opened: string[];
+
+class FakeWindow implements WindowClientLike {
+  focused = false;
+  messages: unknown[] = [];
+  constructor(public url: string) {}
+  async focus() {
+    this.focused = true;
+  }
+  postMessage(message: unknown) {
+    this.messages.push(message);
+  }
+}
 
 function attach(version = "1") {
-  const scope = {
+  const scope: WorkerScope = {
     location: { origin: ORIGIN },
     caches: caches as unknown as CacheStorage,
     fetch: ((request: Request) => network(request)) as typeof fetch,
     skipWaiting: async () => void (skipped = true),
-    clients: { claim: async () => void (claimed = true) },
+    clients: {
+      claim: async () => void (claimed = true),
+      matchAll: async () => windows,
+      openWindow: async (url: string) => void opened.push(url),
+    },
+    registration: { showNotification: async (title, options) => void shown.push({ title, options }) },
+    navigator: {
+      setAppBadge: async (count: number) => void badges.push(count),
+      clearAppBadge: async () => void badges.push("cleared"),
+    },
     addEventListener: (type: string, listener: (event: never) => void) => (listeners[type] = listener),
-  } as WorkerScope;
+  };
   attachServiceWorker(scope, version);
+}
+
+// A push event carrying `body` (a string, as the push service delivers it), and what
+// it asked the worker to stay up for.
+function pushEvent(body: string | null, extra: Partial<PushEvent> = {}): Promise<unknown> {
+  let wait: Promise<unknown> = Promise.resolve();
+  const event = {
+    data: body === null ? null : { text: () => body },
+    waitUntil: (p: Promise<unknown>) => (wait = p),
+    ...extra,
+  } as unknown as PushEvent;
+  (listeners.push as (e: PushEvent) => void)(event);
+  return wait;
+}
+
+function clickEvent(data: unknown): { done: Promise<unknown>; closed: () => boolean } {
+  let wait: Promise<unknown> = Promise.resolve();
+  let closed = false;
+  const event = {
+    notification: { data, close: () => void (closed = true) },
+    waitUntil: (p: Promise<unknown>) => (wait = p),
+  } as unknown as NotificationEvent;
+  (listeners.notificationclick as (e: NotificationEvent) => void)(event);
+  return { done: wait, closed: () => closed };
 }
 
 function lifecycle(type: "install" | "activate"): Promise<unknown> {
@@ -85,6 +151,10 @@ beforeEach(() => {
   listeners = {};
   skipped = claimed = false;
   network = async (request) => new Response(`network ${request.url}`);
+  shown = [];
+  badges = [];
+  windows = [];
+  opened = [];
 });
 
 afterEach(() => {
@@ -191,5 +261,92 @@ describe("service worker", () => {
     expect(fetchEvent(`${ORIGIN}/manifest.webmanifest?reach=1`)).toBeNull();
     expect(fetchEvent("https://elsewhere.example/x.js")).toBeNull();
     expect(fetchEvent(`${ORIGIN}/bundle.js`, { method: "POST" })).toBeNull();
+  });
+});
+
+describe("service worker: notifications", () => {
+  const needsYou = declarativePayload({
+    title: "multi-code · Needs you",
+    body: "Bash: pnpm test:e2e",
+    navigate: `${ORIGIN}/#/s/${encodeURIComponent("multi code/1")}`,
+    tag: "multi code/1",
+    badge: 2,
+  });
+
+  it("shows the Mac's push as the system would, and sets the badge from the top-level app_badge", async () => {
+    attach();
+    await pushEvent(needsYou);
+    expect(shown).toEqual([
+      {
+        title: "multi-code · Needs you",
+        options: {
+          body: "Bash: pnpm test:e2e",
+          tag: "multi code/1",
+          renotify: true,
+          icon: `${ORIGIN}/icons/icon-192.png`,
+          data: { navigate: `${ORIGIN}/#/s/multi%20code%2F1` },
+        },
+      },
+    ]);
+    expect(badges).toEqual([2]);
+  });
+
+  it("clears the badge at 0 and leaves it alone when the push doesn't say", async () => {
+    attach();
+    await pushEvent(declarativePayload({ title: "a · Finished", navigate: `${ORIGIN}/#/s/a`, tag: "a", badge: 0 }));
+    // The desktop's test push carries no badge and no body.
+    await pushEvent(declarativePayload({ title: "Multi-Code · Test", navigate: `${ORIGIN}/#/`, tag: "multi-code-test" }));
+    expect(badges).toEqual(["cleared"]);
+    expect(shown[1]).toEqual({
+      title: "Multi-Code · Test",
+      options: { tag: "multi-code-test", renotify: true, icon: `${ORIGIN}/icons/icon-192.png`, data: { navigate: `${ORIGIN}/#/` } },
+    });
+  });
+
+  it("leaves a Declarative Web Push message's proposed notification to the browser", async () => {
+    attach();
+    await pushEvent(needsYou, { notification: { title: "multi-code · Needs you" } });
+    expect(shown).toEqual([]);
+    expect(badges).toEqual([]);
+  });
+
+  it("still shows something for a push it can't read, opening the list", async () => {
+    attach();
+    await pushEvent("not json");
+    await pushEvent(null);
+    await pushEvent(JSON.stringify({ web_push: 8030, notification: { title: "x", navigate: "https://evil.example/#/" } }));
+    expect(shown.map((s) => [s.title, s.options.data?.navigate])).toEqual([
+      ["Multi-Code", `${ORIGIN}/#/`],
+      ["Multi-Code", `${ORIGIN}/#/`],
+      ["x", `${ORIGIN}/#/`],
+    ]);
+  });
+
+  it("opens the session a tapped notification is about when the app isn't open", async () => {
+    attach();
+    await pushEvent(needsYou);
+    const click = clickEvent(shown[0].options.data);
+    await click.done;
+    expect(click.closed()).toBe(true);
+    expect(opened).toEqual([`${ORIGIN}/#/s/multi%20code%2F1`]);
+  });
+
+  it("brings an open app forward and tells it where to go", async () => {
+    attach();
+    const other = new FakeWindow("https://elsewhere.example/");
+    const app = new FakeWindow(`${ORIGIN}/#/`);
+    windows = [other, app];
+    await clickEvent({ navigate: `${ORIGIN}/#/s/a` }).done;
+    expect(opened).toEqual([]);
+    expect(app.focused).toBe(true);
+    expect(app.messages).toEqual([{ type: "navigate", url: `${ORIGIN}/#/s/a` }]);
+    expect(other.focused).toBe(false);
+  });
+
+  it("opens the list for a notification without a URL of this app", async () => {
+    attach();
+    await clickEvent(null).done;
+    await clickEvent({ navigate: "https://evil.example/#/s/a" }).done;
+    expect(opened).toEqual([`${ORIGIN}/#/`, `${ORIGIN}/#/`]);
   });
 });

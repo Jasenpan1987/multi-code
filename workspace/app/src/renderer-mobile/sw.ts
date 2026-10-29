@@ -9,8 +9,11 @@
 // the timeout still refreshes the cache. The cache is named after the build, so a
 // new build starts a new one and the old one is deleted.
 //
+// It also shows a push that reaches it (PRD Story 7), and opens the session a
+// tapped notification is about.
+//
 // Built by rspack as its own entry (rspack.mobile.config.ts), which defines
-// __SW_VERSION__. T-811 adds the `push` and `notificationclick` handlers here.
+// __SW_VERSION__.
 
 declare const __SW_VERSION__: string;
 
@@ -25,14 +28,49 @@ export interface FetchEvent extends ExtendableEvent {
   respondWith(response: Response | Promise<Response>): void;
 }
 
+export interface PushEvent extends ExtendableEvent {
+  data: { text(): string } | null;
+  // WebKit's "proposed notification": set when the push is a Declarative Web Push
+  // message the browser shows by itself unless the handler shows another.
+  notification?: unknown;
+}
+
+export interface NotificationEvent extends ExtendableEvent {
+  notification: { data: unknown; close(): void };
+}
+
+export interface WindowClientLike {
+  url: string;
+  focus(): Promise<unknown>;
+  postMessage(message: unknown): void;
+}
+
+export interface ShowOptions {
+  body?: string;
+  tag?: string;
+  // Alert again when it replaces an older one with the same tag (Story 7: every
+  // Finished and every Needs you is told).
+  renotify?: boolean;
+  icon?: string;
+  data?: { navigate: string };
+}
+
 export interface WorkerScope {
   location: { origin: string };
   caches: CacheStorage;
   fetch: typeof fetch;
   skipWaiting(): Promise<void>;
-  clients: { claim(): Promise<void> };
+  clients: {
+    claim(): Promise<void>;
+    matchAll(options: { type: "window"; includeUncontrolled: boolean }): Promise<readonly WindowClientLike[]>;
+    openWindow(url: string): Promise<unknown>;
+  };
+  registration: { showNotification(title: string, options: ShowOptions): Promise<void> };
+  navigator: { setAppBadge?(count: number): Promise<void>; clearAppBadge?(): Promise<void> };
   addEventListener(type: "install" | "activate", listener: (event: ExtendableEvent) => void): void;
   addEventListener(type: "fetch", listener: (event: FetchEvent) => void): void;
+  addEventListener(type: "push", listener: (event: PushEvent) => void): void;
+  addEventListener(type: "notificationclick", listener: (event: NotificationEvent) => void): void;
 }
 
 export const NETWORK_TIMEOUT_MS = 3000;
@@ -87,6 +125,103 @@ export function attachServiceWorker(scope: WorkerScope, version: string) {
     // answered, finish after the response: the worker must stay up for them.
     event.waitUntil(done);
   });
+
+  // The Mac sends a Declarative Web Push message (main/remote/push.ts
+  // `declarativePayload`). iOS 18.4+ shows it and sets the badge itself, without
+  // waking this worker: there is no `mutable` in it. A browser that wakes the worker
+  // with a proposed notification shows that one when the handler shows none, so it
+  // is left alone. Any other browser hands the JSON over, and it is shown here as the
+  // system would: every push must show something, or the browser stops them.
+  scope.addEventListener("push", (event) => {
+    if (event.notification) return;
+    const { title, options, badge } = readPush(event.data, scope.location.origin);
+    const shown = scope.registration.showNotification(title, options);
+    event.waitUntil(badge === undefined ? shown : Promise.all([shown, setBadge(scope, badge)]));
+  });
+
+  scope.addEventListener("notificationclick", (event) => {
+    event.notification.close();
+    event.waitUntil(openApp(scope, targetOf(event.notification.data, scope.location.origin)));
+  });
+}
+
+export interface ReadPush {
+  title: string;
+  options: ShowOptions;
+  // The Home Screen icon's number; undefined leaves it as it is.
+  badge?: number;
+}
+
+// A push's JSON as the notification to show. Whatever doesn't read right still
+// shows one, opening the list.
+export function readPush(data: { text(): string } | null, origin: string): ReadPush {
+  let payload: { notification?: Record<string, unknown>; app_badge?: unknown } = {};
+  try {
+    const parsed = JSON.parse(data?.text() ?? "") as unknown;
+    if (parsed && typeof parsed === "object") payload = parsed as typeof payload;
+  } catch {
+    // Not JSON: the fallback below.
+  }
+  const n = payload.notification && typeof payload.notification === "object" ? payload.notification : {};
+  const title = typeof n.title === "string" && n.title ? n.title : "Multi-Code";
+  const tag = typeof n.tag === "string" && n.tag ? n.tag : undefined;
+  const options: ShowOptions = {
+    ...(typeof n.body === "string" && n.body ? { body: n.body } : {}),
+    ...(tag ? { tag, renotify: true } : {}),
+    icon: `${origin}/icons/icon-192.png`,
+    data: { navigate: targetOf({ navigate: n.navigate }, origin) },
+  };
+  // A number at the top level (WebKit 295319@main); the standard allows a numeric
+  // string too.
+  const raw = typeof payload.app_badge === "string" ? Number(payload.app_badge) : payload.app_badge;
+  const badge = typeof raw === "number" && Number.isInteger(raw) && raw >= 0 ? raw : undefined;
+  return { title, options, ...(badge !== undefined ? { badge } : {}) };
+}
+
+// The URL a notification opens: its `navigate` when that is this app's, else the list.
+export function targetOf(data: unknown, origin: string): string {
+  const navigate = (data as { navigate?: unknown } | null)?.navigate;
+  if (typeof navigate === "string") {
+    try {
+      const url = new URL(navigate, `${origin}/`);
+      if (url.origin === origin) return url.href;
+    } catch {
+      // Not a URL: the list.
+    }
+  }
+  return `${origin}/#/`;
+}
+
+function setBadge(scope: WorkerScope, count: number): Promise<void> {
+  const { navigator } = scope;
+  const set = count > 0 ? navigator.setAppBadge?.(count) : navigator.clearAppBadge?.();
+  return (set ?? Promise.resolve()).catch(() => {});
+}
+
+// The app's window brought forward and told where to go (push.ts follows it to the
+// route), or a new one opened at the URL. A message rather than
+// `WindowClient.navigate`, which may reload the page to change only its hash.
+async function openApp(scope: WorkerScope, url: string): Promise<void> {
+  const windows = await scope.clients.matchAll({ type: "window", includeUncontrolled: true });
+  const app = windows.find((w) => sameOrigin(w.url, scope.location.origin));
+  if (!app) {
+    await scope.clients.openWindow(url);
+    return;
+  }
+  try {
+    await app.focus();
+  } catch {
+    // Focus can be refused; the app still goes to the session when next seen.
+  }
+  app.postMessage({ type: "navigate", url });
+}
+
+function sameOrigin(url: string, origin: string): boolean {
+  try {
+    return new URL(url).origin === origin;
+  } catch {
+    return false;
+  }
 }
 
 // `response`: the network's if it comes within NETWORK_TIMEOUT_MS and isn't a

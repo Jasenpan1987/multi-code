@@ -105,9 +105,42 @@
   font-size: 16px;
 }
 
-.paste .bad {
+.setup .bad {
   flex-basis: 100%;
   margin: 0;
   color: var(--red);
   font-size: 13px;
+}
+
+/* The Home Screen hand-off (G-306): a button and its one line. */
+.handoff {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.setup .unpair {
+  color: var(--red);
+}
+
+.confirm {
+  background: var(--surface);
+  border: 1px solid var(--red);
+  border-radius: 14px;
+  padding: 12px 13px;
+}
+
+.confirm p {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.confirm .row {
+  display: flex;
+  gap: 8px;
+}
+
+.confirm .row .btn {
+  flex: 1;
 }

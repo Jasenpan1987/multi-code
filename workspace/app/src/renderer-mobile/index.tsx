@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { deviceName } from "./pairing";
+import { startPush } from "./push";
 import { takePairing } from "./routes";
 import { StoreContext, createStore } from "./store";
 import { Link, socketUrl } from "./transport";
@@ -26,6 +27,8 @@ if (container) {
 }
 // After the first render, so the cached content is on screen before anything dials.
 requestAnimationFrame(() => store.start());
+// Notifications: the subscription checked on every connect, the badge (push.ts).
+startPush(store);
 
 // The page may never run again once hidden (iOS kills background web apps), so
 // the cache is written now rather than after its usual delay.
