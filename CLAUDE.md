@@ -9,6 +9,7 @@ Multi-Code is an Electron desktop app that manages multiple Claude Code CLI inst
 - **No abstraction layers** — The app spawns the `claude` CLI directly. No SDK, no bridge, no hooks middleware.
 - **Report-only hooks and plugins are allowed** — Passed from `userData` to the processes Multi-Code spawns (Claude: `--settings`; OpenCode: a TUI plugin named in `OPENCODE_CLI_CONFIG_CONTENT`), never written to the user's own config. They report state and never block or change a call, so plain `claude` or `opencode` outside Multi-Code is unaffected. One exception (decisions.md, 2026-10-16): OpenCode dialogs answered from the phone or the secretary go through OpenCode's own API, by request id, as the builder would answer by keypress.
 - **OpenCode 2 only** — OpenCode runs every session in one shared background service per user; Multi-Code's terminals attach to it as VS Code's do (`opencode --session <id>`; tabs as the user's own settings say). Multi-Code puts nothing into that service, starts it only when none is running (with the builder's login-shell environment), and never restarts or stops it. 1.x is refused with the upgrade command. Epic `opencode-v2` (`docs/specs/opencode-v2/prd.md`).
+- **Phone link over the tailnet only** — The phone app and its socket are served to the tailnet only through `tailscale serve` (HTTPS at the Mac's tailnet name); the port binds to 127.0.0.1. Multi-Code runs `tailscale serve` only when the builder presses "Set up HTTPS", never over another 443 config, and never removes it. Push goes from the Mac straight to Apple's Web Push service, no relay. Epic `mobile-v2` (`docs/specs/mobile-v2/prd.md`).
 - **Monorepo** — pnpm workspace with `workspace/app/` as the main package.
 - **Electron** — Main process manages PTY lifecycle; renderer shows terminals in React.
 - **Session monitoring** — Claude instances report finished / needs-you through report-only hooks (`--settings <userData>/alert-settings.json`) posting to the local `/alert` endpoint; `backends/claudeHooks.ts` turns them into activity. OpenCode instances' state comes from the shared service's event stream (`backends/opencodeService.ts`), and the session each terminal shows from Multi-Code's TUI plugin (`backends/opencodePlugin.ts`, posting to `/alert`); `backends/opencodeAttention.ts` turns both into activity. Epics `attention-alerts` and `opencode-v2`. The session JSONL and OpenCode 2's database (`session_v2`, `session_message`, read-only) are still read for transcripts and context usage, never for state.
@@ -76,7 +77,12 @@ once, they read the same contacts and overwrite each other's spawn files. Never 
   two contacts on one project stay apart)
 - `settings.json` — theme, phone-link enabled, Secretary Mode, speech server address,
   each project's default drop folder
-- `remote-identity.json`, `remote-devices.json` — phone-link keys and paired devices
+- `remote-identity.json`, `remote-devices.json` — phone-link keys and paired devices (each
+  with its token, its Web Push subscription and its last push error); 0600
+- `remote-push.json` — the VAPID keypair; its public half goes to each phone in `auth-ok`;
+  0600; generated once and kept (a missing or corrupt file gets a new pair); never logged,
+  never sent to the renderer. Losing it drops every phone's subscription; each re-subscribes
+  on its next launch
 - `manager-mcp.json` — the manager's `--mcp-config`, written 0600 because it carries
   a bearer token; removed on shutdown
 - `manager-settings.json`, `manager-hook.curl` — the manager's `--settings` (its

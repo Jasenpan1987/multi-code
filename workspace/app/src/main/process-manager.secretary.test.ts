@@ -610,6 +610,47 @@ describe("answering a dialog for the secretary (T-509)", () => {
     expect(manager.secretaryEventOf(id)).toBeUndefined();
   });
 
+  it("waits until a dialog that has just come up is old enough for its first key", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raised(manager);
+    await vi.advanceTimersByTimeAsync(100);
+    const done = manager.answerDialog(id, seq, { keys: ["2"] }, undefined, { ...timing, dialogSettleMs: 500 });
+    await vi.advanceTimersByTimeAsync(399);
+    expect(spawn.written).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(done).resolves.toEqual({ ok: true });
+    expect(spawn.written).toEqual(["2"]);
+  });
+
+  it("writes at once to a dialog that has been up long enough", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raised(manager);
+    await vi.advanceTimersByTimeAsync(500);
+    const done = manager.answerDialog(id, seq, { keys: ["2"] }, undefined, { ...timing, dialogSettleMs: 500 });
+    expect(spawn.written).toEqual(["2"]);
+    await expect(done).resolves.toEqual({ ok: true });
+  });
+
+  it("writes nothing when the dialog is answered at the desk while it waits", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raised(manager);
+    const done = manager.answerDialog(id, seq, { keys: ["2"] }, undefined, { ...timing, dialogSettleMs: 500 });
+    manager.writeToInstance(id, "1");
+    await vi.advanceTimersByTimeAsync(500);
+    await expect(done).resolves.toEqual({ ok: false, reason: "answered" });
+    expect(spawn.written).toEqual(["1"]);
+  });
+
+  it("writes nothing when the process exits while it waits", async () => {
+    const manager = new ProcessManager();
+    const { id, seq, spawn } = raised(manager);
+    const done = manager.answerDialog(id, seq, { keys: ["2"] }, undefined, { ...timing, dialogSettleMs: 500 });
+    spawn.exit({ exitCode: 0 });
+    await vi.advanceTimersByTimeAsync(500);
+    await expect(done).resolves.toEqual({ ok: false, reason: "stopped" });
+    expect(spawn.written).toEqual([]);
+  });
+
   it("writes nothing when the dialog was answered first, or another one is up", async () => {
     const manager = new ProcessManager();
     const { id, seq, spawn } = raised(manager);
@@ -962,7 +1003,11 @@ describe("isAnswering (mobile-v2 T-803)", () => {
     const id = create(manager);
     latestSpawn(id).report("prompt", { tool: "AskUserQuestion", options: [] }, { toolName: "AskUserQuestion", toolInput: {} });
     const seq = manager.secretaryEventOf(id)!.seq;
-    const done = manager.answerDialog(id, seq, { keys: ["1", "2"] });
+    const done = manager.answerDialog(id, seq, { keys: ["1", "2"] }, undefined, {
+      keyGapMs: 150,
+      followUpDelayMs: 600,
+      clearWaitMs: 5000,
+    });
     manager.writeToInstance(id, "x");
     await vi.advanceTimersByTimeAsync(200);
     await expect(done).resolves.toEqual({ ok: false, reason: "interrupted" });

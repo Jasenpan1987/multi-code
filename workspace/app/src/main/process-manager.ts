@@ -222,9 +222,20 @@ export interface AnswerTiming {
   // How long to wait for a question box's PostToolUse, which carries its answers,
   // counted from the last key.
   clearWaitMs: number;
+  // How old the dialog must be before its first key. Claude's plan box drops keys
+  // for a moment after its PermissionRequest hook: on 2.1.312 an approve written 40
+  // and 100 ms after the hook was lost (the box stayed up, while our key had cleared
+  // the event, so the desk and the phone called the session idle), one at 250 ms was
+  // taken; a permission box took one at 40 ms (T-813). A phone can answer that fast.
+  dialogSettleMs?: number;
 }
 
-const ANSWER_TIMING: AnswerTiming = { keyGapMs: KEY_GAP_MS, followUpDelayMs: 600, clearWaitMs: 5000 };
+const ANSWER_TIMING: AnswerTiming = {
+  keyGapMs: KEY_GAP_MS,
+  followUpDelayMs: 600,
+  clearWaitMs: 5000,
+  dialogSettleMs: 500,
+};
 
 // Reading context usage parses a transcript that reaches 8MB+, and
 // listInstances() runs on every phone broadcast, so the read is throttled
@@ -479,6 +490,13 @@ export class ProcessManager {
     }
 
     const same = () => this.instances.get(id) === instance && instance.ptyProcess === ptyProcess;
+    const settle = (timing.dialogSettleMs ?? 0) - (Date.now() - event.at);
+    if (settle > 0) {
+      await delay(settle);
+      if (!same() || signal?.aborted) return { ok: false, reason: "stopped" };
+      // Answered at the desk, typed into, or replaced while we waited.
+      if (instance.secretaryEvent !== event) return { ok: false, reason: "answered" };
+    }
     // Registered before the first key, so a box that clears at once isn't missed.
     const record = plan.expect ? this.waitForAnswerRecord(instance) : undefined;
     let mine = 0;

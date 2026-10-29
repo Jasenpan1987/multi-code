@@ -94,7 +94,9 @@ export type SecretaryEventKind = "finished" | "needs-you";
 
 // Result of minting a pairing offer: the QR image the user scans, and the URL it
 // encodes (`<origin>/#pair=<offer>`), shown instead when the image couldn't be made.
+// `deviceId` is the paired-phones row the code made ("New device" until a phone uses it).
 export interface RemotePairing {
+  deviceId: string;
   webUrl: string;
   qrDataUrl: string | null;
 }
@@ -408,7 +410,8 @@ export interface ElectronAPI {
   // Phone link
   getRemoteStatus: () => Promise<RemoteStatus>;
   setRemoteEnabled: (enabled: boolean) => Promise<RemoteStatus>;
-  createRemotePairing: () => Promise<RemotePairing | null>;
+  // `replacing`: the code "New code" replaces, revoked unless a phone has used it.
+  createRemotePairing: (replacing?: string) => Promise<RemotePairing | null>;
   revokeRemoteDevice: (deviceId: string) => Promise<RemoteStatus>;
   // Runs `checks.https.command` when the checks say `serve-missing`; never anything
   // else. The admin console link (`certs-off`) opens through openExternal.

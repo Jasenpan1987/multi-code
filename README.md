@@ -48,19 +48,21 @@ When working with multiple coding-agent sessions across different projects simul
   - **Rename Session** — Give the current session a name, using each backend's own `/rename`
 - **Terminal section** — Embedded real shell (your default `$SHELL`) running in the project's directory. Persists in background across collapses and instance switches
 - **View section** — Render a Markdown file inline: paste a `.md` path (or click a `.md` path in the terminal output, or the "View" affordance on a changed `.md` in the Git section). Supports GitHub-flavored Markdown, math (KaTeX), Mermaid diagrams, and local/remote images
-- **Phone section** — Pair a phone and watch/steer your agents from it (see [Phone Link](#phone-link) below)
+- **Phone section** — Turn the phone link on, see what it still needs (Tailscale, HTTPS, Push) and how to fix it, pair a phone, and send a test notification to or revoke each paired phone (see [Phone Link](#phone-link) below)
 - **Secretary section** — The Secretary Mode switch and the speech server settings (see [Voice Secretary](#voice-secretary-1) below)
 - **Manager section** — Live feed of every call the manager agent makes, newest first, with the full arguments and result one click away
 
 ### Phone Link
-- **No intermediary server** — Your phone talks straight to your desktop. Nothing transits a third party, ours or anyone else's
-- **Works away from home** — Over [Tailscale](https://tailscale.com), your phone reaches the desktop from anywhere as a direct connection. On the same WiFi it just works with no setup
-- **No app install** — The desktop serves a mobile web client; scan the QR and add it to your home screen
-- **Live mirroring** — Terminal output streams in real time, and a phone joining mid-session gets a snapshot of the current screen rather than a blank one
-- **Tap to answer** — When an agent asks a question, its options render as buttons. Tap one and the agent unblocks. A tap answers the dialog it was shown for: if that one was answered elsewhere and another took its place, the phone says the choice is no longer available rather than answering the new one. After updating Multi-Code, reload a phone page that was already open, or its taps are refused
-- **Type to answer** — A compose box for open questions, sending the same way the desktop's `Cmd+L` box does
-- **End-to-end encrypted** — NaCl box (Curve25519 + XSalsa20-Poly1305). Your phone pins the desktop's public key at pairing, so nothing at that address can impersonate it
-- **Revocable** — Each paired phone has its own token; revoking one disconnects it immediately
+- **A phone app on your Home Screen** — The desktop serves a web app to your iPhone over HTTPS. Add it to the Home Screen and it opens like an app, with its own icon. Nothing to install from the App Store
+- **Every session at a glance** — One list grouped by state: Needs you, Working, Finished, Idle. Each row says what the dialog asks, the tool the agent is on, the first sentence of its conclusion, or the last thing it said
+- **Read a session like a chat** — Your messages as bubbles, the agent's text as Markdown. A finished turn's tool calls fold into one line ("12 tools · 6 read · 3 edited · 2 commands"); tap it for one line per tool. The conclusion is always shown, and opening a finished session lands on it
+- **Reply, answer, stop** — Type a reply; only Send sends, so a Chinese IME's Return never does. Answer every dialog in full: a permission with the CLI's own options and a reason for No, every question of a question box (multi-select included), a plan with "tell Claude what to change". Stop a running turn, as Esc does at the desk
+- **Opens with no connection** — It shows what it had last, with its age, and says what is out of reach: the phone's network, your Mac, or Multi-Code on it. A reply typed offline waits on the phone and is sent once when the Mac is back
+- **Notifications** — A push every time a session finishes or needs you, with the app closed and the phone locked. A newer one replaces the older one for the same session, the icon's badge counts the sessions that need you, and tapping one opens that session. A phone with the app open gets none: it shows the change itself
+- **Terminal fallback** — The real terminal at the Mac's width, with a key row (Esc, Tab, Shift+Tab, arrows, Space, Return, Ctrl+C), for anything the chat can't show
+- **Tailnet only, no relay** — Reachable only inside your [Tailscale](https://tailscale.com) tailnet, through `tailscale serve`; Multi-Code's port listens on this Mac only. Notifications go from your Mac straight to Apple's push service, encrypted to the phone
+- **End-to-end encrypted** — NaCl box (Curve25519 + XSalsa20-Poly1305) inside the HTTPS connection. Your phone pins the desktop's public key at pairing, so nothing at that address can impersonate it
+- **Revocable** — Each paired phone has its own token; revoking one disconnects it at once and stops its notifications
 
 ### Voice Secretary
 - **A brief, not a readout** — When a session finishes or needs you, a secretary retells what happened in its own words: what was asked, what was done, whether it worked. For a dialog, it says what the operation does and why, then asks the question
@@ -111,7 +113,7 @@ multi-code/
 │       │   │   ├── run-state.ts       # Write-safety gate (idle / busy / blocked per instance)
 │       │   │   ├── manager-mcp/       # Local MCP server + tools for the manager agent
 │       │   │   ├── manager-workspace.ts # Seeds the manager's own folder and guidance
-│       │   │   ├── remote/            # Phone Link: WebSocket server, crypto, paired devices
+│       │   │   ├── remote/            # Phone Link: WebSocket server, crypto, paired devices, Tailscale checks, Web Push
 │       │   │   ├── secretary/         # Voice secretary: brief writer, speech client, reply interpreter
 │       │   │   ├── shell-manager.ts  # Spawns & manages shell PTYs (toolbox Terminal)
 │       │   │   ├── file-drop.ts      # Copies files dropped from Finder, Finder-style names, never overwrites
@@ -374,45 +376,97 @@ When a session enters deep "edit code while watching the AI" territory:
 
 ### Phone Link
 
-Watch your agents and answer their questions from your phone, so an agent
-doesn't sit blocked just because you stepped away.
+Watch your agents, read what they did and answer them from your iPhone, so an
+agent doesn't sit blocked just because you stepped away. The phone reaches your
+Mac from anywhere through [Tailscale](https://tailscale.com), over HTTPS.
 
-**Setup (once):**
+**What you need:** Tailscale on the Mac and on the iPhone, in the same tailnet,
+with MagicDNS on (Tailscale's default). Notifications need the app on the Home
+Screen (iOS 16.4 or later).
 
-1. Toolbox → **Phone** → click **Phone link: OFF** to turn it on. It binds port
-   6768 and is off by default, since it opens a port on your network
-2. Click **Pair a phone** — a QR code appears
-3. Scan it with your phone's camera, then use your browser's "Add to Home
-   Screen" so it opens like an app
+**Setup on the Mac (once):**
 
-That's it on the same WiFi. To reach your desktop **from anywhere**, install
-[Tailscale](https://tailscale.com) on both the desktop and the phone and sign
-into the same account. The Phone section tells you whether a Tailscale address
-was found — without one, pairing only works on your local network.
+1. Toolbox → **Phone** → click **Phone link: OFF** to turn it on. Three checks
+   appear: Tailscale, HTTPS and Push, each saying what is missing. If Tailscale
+   isn't running, **Open Tailscale** starts it
+2. HTTPS needs your tailnet's HTTPS Certificates: **Open admin console** opens the
+   DNS page of Tailscale's admin console, where you enable them (once per
+   tailnet). Then click **Set up HTTPS**. It shows the command it will run,
+   `tailscale serve --bg --https=443 http://127.0.0.1:6768`, and runs it when you
+   click **Run it**
+3. When all three checks pass, click **Pair a phone**. A QR code appears
+
+**Setup on the iPhone (once):**
+
+1. Scan the QR with the Camera. It opens in Safari, which pairs with your Mac
+2. Tap **Copy pairing link**, then Safari's Share button → **Add to Home Screen**,
+   and open Multi-Code from the new icon. The Home Screen app may not share
+   Safari's storage: if it opens unpaired, tap **Paste pairing link**. (The Mac's
+   Phone panel has a **Copy pairing link** too, which Universal Clipboard carries
+   to the iPhone)
+3. In the Home Screen app, tap **Turn on notifications** and allow them. It works
+   only from the Home Screen icon; opened in Safari, the app says so
+
+The app's first screen shows which of the three steps is done and which is next.
 
 **Using it:**
 
-- The instance list mirrors your contact list; tap one to open it
-- When an agent needs you, the phone vibrates and the instance shows a badge
-- A question with options renders as buttons — tap one to answer
-- For open questions, type in the box and hit Send
-- Expand **Terminal** to see the raw screen exactly as the desktop shows it
+- The list groups your sessions: Needs you, Working, Finished, Idle, each with how
+  long it has been in that state. The Manager isn't on the phone
+- Open a session to read it as a chat. Tap a turn's fold line for each tool, with
+  the lines added and removed by an edit and whether a command worked.
+  **Earlier turns** loads ten more
+- Type at the bottom and tap **Send**. Return makes a new line. While a turn runs,
+  the message still goes and the CLI queues it ("Queued until this turn ends").
+  With no connection it waits ("Waiting to send"), can be cancelled, and is sent
+  once when the Mac is back
+- When a session needs you, the dialog takes the compose box's place: the CLI's
+  own options as buttons, a field for a reason on No (OpenCode: Reject), every
+  question of a question box with **Submit answers**, the whole plan. "Always
+  allow", "don't ask again" and auto-accept edits ask "Are you sure?" first. If
+  the dialog was answered at the desk meanwhile, the phone says so and presses
+  nothing. Dialogs can't be answered offline
+- While a turn runs, a bar shows the running tool, how long the turn has run and
+  **Stop**, which ends the turn as Esc does at the desk. It isn't offered while a
+  dialog is open, since Esc would answer the dialog
+- The terminal button in a session's header opens its real terminal, for what the
+  chat can't show (an MCP form, say)
+- Notifications read "<session> · Finished" with the first sentence of the
+  conclusion, or "<session> · Needs you" with what the dialog asks. Each phone's
+  **Send test** in the Mac's Phone panel sends one to check
+
+Answers reach the CLI the way the secretary's do: Claude Code's as the keys of its
+own dialogs, through the secretary's tested key flows, and only while that same
+dialog is still open; OpenCode's through its API, by request id. A dialog the phone
+can't show says so and offers the terminal.
 
 **Security notes:**
 
-- The QR contains a device secret. Treat it like a password; generate a new one
-  if it leaks
-- Traffic is end-to-end encrypted and never passes through any server
-- Your phone pins the desktop's public key at pairing time, so nothing else at
-  that address can impersonate your desktop
-- Revoke a lost phone from the same panel — it disconnects immediately and its
-  token stops working
+- The phone reaches your Mac only inside your tailnet, through `tailscale serve`.
+  Multi-Code's port (6768) listens on `127.0.0.1`, so nothing else on your network
+  reaches it
+- Enabling HTTPS Certificates puts your machine's name
+  (`<machine>.<tailnet>.ts.net`) in public Certificate Transparency logs, for good.
+  Only devices in your tailnet can reach it
+- Multi-Code runs `tailscale serve` only when you click **Set up HTTPS**. If port
+  443 already serves something else, the panel says so and changes nothing. It
+  never removes the serve, even with Phone link off; `tailscale serve --https=443
+  off` undoes it
+- Every frame is sealed with NaCl box inside the HTTPS connection, and your phone
+  pins the desktop's public key at pairing, so nothing else at that address can
+  impersonate your desktop
+- Notifications go from your Mac straight to Apple's push service, encrypted to the
+  phone (Web Push encryption), so Apple sees only ciphertext. No server of ours is
+  involved
+- The QR and the pairing link hold a secret for one phone. Treat them like a
+  password: if one leaks, revoke its row. **New code** cancels the code it replaces
+  when no phone has used it yet
+- Revoke a lost phone in the same panel: it disconnects at once, its token stops
+  working and it gets no more notifications
 
-**Limitation worth knowing:** reading prompts is reliable (parsed from the CLI's
-own session files), but *answering by button* assumes the CLI's option boxes
-accept number keys. If a CLI update changes that, the buttons may stop working
-while everything else keeps going — the terminal view is always there as a
-fallback.
+**After upgrading from an earlier Multi-Code:** a phone paired with the old phone
+link (an `http://<ip>:6768` address) isn't carried over. Remove its old Home Screen
+icon and pair it again; the Phone panel says so too.
 
 ### Voice Secretary
 
@@ -493,9 +547,10 @@ not the Compose Box: nothing you type there goes into the terminal as text.
   never shown after you save it, never logged, and never sent to the window
 - With Secretary Mode off, nothing is called and nothing costs anything
 
-**Same limitation as the phone:** answering presses the CLI's option keys, which is a
-UI convention, not an API. When the secretary can't map your answer to a key it
-trusts, it says so and points you to the terminal.
+**Same limitation as the phone:** for Claude Code, answering presses the CLI's option
+keys, which is a UI convention, not an API (OpenCode's dialogs are answered through
+its API). When the secretary can't map your answer to a key it trusts, it says so and
+points you to the terminal.
 
 ### Data persistence
 
@@ -504,7 +559,8 @@ Everything Multi-Code keeps lives in Electron's user-data folder. On macOS that 
 - `contacts.json` — instance list (directory + alias + backend), in sidebar order
 - `settings.json` — theme, whether Phone Link is on, Secretary Mode, the speech server address, and each project's default drop folder
 - `speech-key` — the secretary's speech server key, alone in a `0600` file. Never in `settings.json`, never logged; kept across runs
-- `remote-identity.json`, `remote-devices.json` — Phone Link keys and paired phones
+- `remote-identity.json`, `remote-devices.json` — Phone Link keys, and the paired phones with each one's notification subscription and last push error; `0600`
+- `remote-push.json` — the Web Push keys your Mac signs notifications with; `0600`, made once and kept. If it is lost, a new pair is made and each phone subscribes again the next time its app opens
 - `manager/` — the manager agent's working folder and its `CLAUDE.md`
 - `manager-mcp.json` — the manager's MCP config, written `0600` because it holds a bearer token; removed on shutdown
 - `manager-settings.json`, `manager-hook.curl` — the manager's `--settings` (its activity hooks plus the alert hooks) and the curl config holding its hook token; `0600`, removed on shutdown
@@ -525,7 +581,7 @@ Everything Multi-Code keeps lives in Electron's user-data folder. On macOS that 
    - Terminal: lazy-spawns a shell PTY on first expand, persists across collapses
 7. Instances persist to `contacts.json` in Electron's user-data folder
 8. The main process runs a small HTTP server on `127.0.0.1` for as long as the app is open (OS-assigned port, bearer-token auth). It serves the manager's MCP tools: a manager's `claude` is spawned with `--mcp-config` pointing at it, plus hooks that report its own tool calls back to the activity feed. It also has an `/alert` path, behind a separate token, for agents to report their own state
-9. When Phone Link is on, the main process also runs a WebSocket server on port 6768 that serves the mobile client and streams the same PTY bytes plus decoded prompts to paired phones. Frames are sealed with NaCl box; the phone reaches the desktop directly over LAN or Tailscale, with no relay involved
+9. When Phone Link is on, the main process also runs a server on `127.0.0.1:6768` that serves the phone app and a WebSocket carrying the session list, transcripts, dialogs and the same PTY bytes to paired phones. The phone reaches it only through `tailscale serve`, which gives it HTTPS at the Mac's tailnet name; frames are sealed with NaCl box inside that connection. Notifications are Web Push messages the Mac sends straight to Apple's push service, encrypted to each phone, with no relay involved
 10. When Secretary Mode is on, each finished or needs-you event goes to a one-shot `claude -p --bare --no-session-persistence` call that writes the brief, then to the speech server for audio. A reply on the card goes through a second such call, which decides what to press; the keys go in only while that same dialog is still showing
 
 ## License

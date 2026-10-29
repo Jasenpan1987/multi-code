@@ -1,3 +1,5 @@
+> **Replaced** by `docs/specs/mobile-v2/prd.md` (2026-10-29). Kept for history; the phone link no longer works as described here.
+
 # PRD: Phone Link
 
 **Version:** 1.1

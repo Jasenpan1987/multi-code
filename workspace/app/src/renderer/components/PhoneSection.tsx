@@ -99,12 +99,14 @@ export function PhoneSection({ active }: PhoneSectionProps) {
     }
   };
 
-  const pairNew = async () => {
+  // "Pair a phone", and "New code" with the code it replaces: main revokes that one
+  // once the new one is made, unless a phone has used it (its row is that phone's).
+  const pairNew = async (replacing?: RemotePairing) => {
     const request = ++pairRequest.current;
     setBusy(true);
     setActionError(null);
     try {
-      const next = await window.electronAPI.createRemotePairing();
+      const next = await window.electronAPI.createRemotePairing(replacing?.deviceId);
       if (request !== pairRequest.current) return;
       setPairing(next);
       setCopied(false);
@@ -289,14 +291,15 @@ export function PhoneSection({ active }: PhoneSectionProps) {
               )}
               <div className="phone-caption">
                 Scan with the iPhone camera to pair a new phone, or copy the link and
-                paste it in the phone app. Both hold a secret for that one phone: if it
-                leaks, revoke its row below (a new code doesn't cancel this one).
+                paste it in the phone app. Both hold a secret for that one phone. New code
+                cancels this one unless a phone has used it; Done keeps it. If it leaks,
+                revoke its row below.
               </div>
               <div className="phone-row">
                 <button className="phone-btn" onClick={() => void copyLink(pairing.webUrl)}>
                   {copied ? "Copied" : "Copy pairing link"}
                 </button>
-                <button className="phone-btn" onClick={pairNew} disabled={busy}>
+                <button className="phone-btn" onClick={() => void pairNew(pairing)} disabled={busy}>
                   New code
                 </button>
                 <button
@@ -312,7 +315,7 @@ export function PhoneSection({ active }: PhoneSectionProps) {
             </div>
           ) : (
             <div className="phone-row">
-              <button className="phone-btn" onClick={pairNew} disabled={busy}>
+              <button className="phone-btn" onClick={() => void pairNew()} disabled={busy}>
                 Pair a phone
               </button>
               <span className="phone-muted">Shows a code to scan with the iPhone camera.</span>

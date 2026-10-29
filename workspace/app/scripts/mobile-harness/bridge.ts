@@ -267,7 +267,7 @@ export function attach(
       const status = await server.start(wanted);
       if (!status.port) throw new Error(status.error ?? "the server didn't start");
       port = status.port;
-      const offer = server.createPairingOffer();
+      const offer = server.createPairingOffer()?.offer;
       if (!offer) throw new Error("the server made no pairing offer (its HTTPS check isn't ready)");
       // Encoded as ipc-handlers.ts encodes the QR's.
       offerUrl = `${offer.origin}/#pair=${Buffer.from(JSON.stringify(offer), "utf8").toString("base64url")}`;

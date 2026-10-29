@@ -57,7 +57,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getRemoteStatus: () => ipcRenderer.invoke("remote-get-status"),
   setRemoteEnabled: (enabled: boolean) =>
     ipcRenderer.invoke("remote-set-enabled", enabled),
-  createRemotePairing: () => ipcRenderer.invoke("remote-create-pairing"),
+  createRemotePairing: (replacing?: string) => ipcRenderer.invoke("remote-create-pairing", replacing),
   revokeRemoteDevice: (deviceId: string) =>
     ipcRenderer.invoke("remote-revoke-device", deviceId),
   setUpRemoteHttps: () => ipcRenderer.invoke("remote-setup-https"),

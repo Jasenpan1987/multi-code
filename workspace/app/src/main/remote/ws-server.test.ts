@@ -443,7 +443,7 @@ async function startServer(options: { heartbeatTimeoutMs?: number } = {}): Promi
   const status = await server.start(0);
   if (!status.port) throw new Error(status.error ?? "server did not start");
 
-  const offer = server.createPairingOffer();
+  const offer = server.createPairingOffer()?.offer;
   if (!offer) throw new Error("no pairing offer");
 
   const fixture: Fixture = {
@@ -1603,7 +1603,7 @@ describe("acks are kept per device", () => {
 
   it("are not shared between devices", async () => {
     const fx = await startServer();
-    const other = fx.server.createPairingOffer()!;
+    const other = fx.server.createPairingOffer()!.offer;
     const a = await connected(fx);
     const b = await connected(fx, other.deviceToken);
     a.send({ type: "prompt", instanceId: "inst-1", text: "from a", clientMsgId: "m1" });
@@ -1817,7 +1817,7 @@ describe("Web Push (T-810)", () => {
 
   it("skips a phone with the app open, until it has gone quiet", async () => {
     const fx = await startServer();
-    const second = fx.server.createPairingOffer()!;
+    const second = fx.server.createPairingOffer()!.offer;
     await subscribedAway(fx, second.deviceToken, subscription(2));
     const looking = await connected(fx);
     looking.send({ type: "push-subscribe", subscription: subscription(1), clientMsgId: "on" });
@@ -2098,7 +2098,7 @@ describe("RemoteServer device revocation", () => {
 
   it("leaves other devices connected when one is revoked", async () => {
     const fx = await startServer();
-    const secondOffer = fx.server.createPairingOffer();
+    const secondOffer = fx.server.createPairingOffer()?.offer;
     if (!secondOffer) throw new Error("no second offer");
 
     const a = await connected(fx);
@@ -2113,6 +2113,45 @@ describe("RemoteServer device revocation", () => {
     await b.instance("inst-1", (r) => r.state === "finished");
 
     b.close();
+  });
+
+  // The Phone section's "New code" revokes the code it replaces by this id (T-813).
+  it("names the row each code made, and revoking it cancels that code only", async () => {
+    const fx = await startServer();
+    const made = fx.server.createPairingOffer();
+    if (!made) throw new Error("no offer");
+    // The id is for the desktop: the QR's offer is the contract's fields only.
+    expect(Object.keys(made.offer).sort()).toEqual(["deviceToken", "hostName", "hostPublicKey", "origin", "v"]);
+    const row = fx.server.getStatus().devices.find((d) => d.id === made.deviceId);
+    expect(row).toMatchObject({ name: "New device", lastSeenAt: 0, connected: false });
+
+    fx.server.revokeDevice(made.deviceId);
+    expect(fx.server.getStatus().devices.map((d) => d.id)).not.toContain(made.deviceId);
+    const replaced = new TestClient(fx.url);
+    await replaced.handshake(fx.hostPublicKey);
+    replaced.send({ type: "auth", deviceToken: made.offer.deviceToken });
+    expect((await replaced.waitFor("auth-failed")).reason).toBe("unknown-token");
+
+    // The fixture's own code still pairs.
+    (await connected(fx)).close();
+  });
+
+  // "New code" with the code it replaces (T-813): main checks and revokes in one step.
+  it("revokes a replaced code only while no phone has used it", async () => {
+    const fx = await startServer();
+    const unused = fx.server.createPairingOffer()!;
+    expect(fx.server.revokeUnusedDevice(unused.deviceId)).toBe(true);
+    expect(fx.server.getStatus().devices.map((d) => d.id)).not.toContain(unused.deviceId);
+    expect(fx.server.revokeUnusedDevice(unused.deviceId)).toBe(false);
+
+    // A phone that paired with the code a moment before keeps it, connected or gone.
+    const used = fx.server.createPairingOffer()!;
+    const phone = await connected(fx, used.offer.deviceToken);
+    expect(fx.server.revokeUnusedDevice(used.deviceId)).toBe(false);
+    phone.close();
+    await vi.waitFor(() => expect(fx.server.getStatus().devices.find((d) => d.id === used.deviceId)?.connected).toBe(false));
+    expect(fx.server.revokeUnusedDevice(used.deviceId)).toBe(false);
+    expect(fx.server.getStatus().devices.map((d) => d.id)).toContain(used.deviceId);
   });
 });
 
