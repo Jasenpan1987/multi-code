@@ -11,6 +11,8 @@
 //   - Dialogs are answered with the secretary's measured key flows, or OpenCode's
 //     API (secretary/dialog.ts). The phone names an effect or option numbers and
 //     never sends a key of its own.
+//   - A push (Story 7) goes out for each of those Finished and Needs you events, with
+//     the same line the list shows, once that line has been read.
 //
 // Kept apart from remote/index.ts, which wires it to the real process manager, so
 // tests drive it with a fake one.
@@ -53,7 +55,7 @@ export type HostProcessManager = Pick<
   | "ptySizeOf"
 >;
 
-// The server's broadcasts this drives.
+// The server's broadcasts and pushes this drives.
 export type HostPush = Pick<
   RemoteServer,
   | "isRunning"
@@ -61,6 +63,7 @@ export type HostPush = Pick<
   | "broadcastPromptState"
   | "broadcastPromptCleared"
   | "broadcastTranscript"
+  | "pushSession"
 >;
 
 // A preview line's length when no sentence ends sooner.
@@ -119,39 +122,82 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
   const stopping = new Map<string, { turn: number; at: number }>();
   // The state each instance was last listed in, to catch a turn starting.
   const listed = new Map<string, RemoteSessionState>();
+  // The seq of each instance's latest event that wasn't a restatement: the latest
+  // one that gets a push.
+  const fresh = new Map<string, number>();
   const reading = new Set<string>();
-  const readAgain = new Set<string>();
+  // Per instance being read, who asked for a read meanwhile: they get the next one.
+  const readAgain = new Map<string, (() => void)[]>();
 
   // Read the latest turn, from the end of the session (the phone's own reader), and
   // update the instance's lines. Never inside the call that asked for it, which may
   // be a listing: the change it finds is broadcast as a list of its own. One read at
-  // a time per instance, with one more after it when asked meanwhile.
-  function refreshLines(id: string) {
-    if (reading.has(id)) {
-      readAgain.add(id);
-      return;
-    }
-    reading.add(id);
-    void Promise.resolve()
-      .then(() => pm.readRecentTurns(id, 1).entries)
-      .catch(() => null)
-      .then((turn) => {
-        if (!turn) return;
-        const next = linesOf(turn);
-        const before = lines.get(id);
-        lines.set(id, next);
-        if (
-          before?.conclusion !== next.conclusion ||
-          before?.said !== next.said ||
-          before?.tool !== next.tool
-        ) {
-          push.broadcastInstances();
-        }
-      })
-      .finally(() => {
-        reading.delete(id);
-        if (readAgain.delete(id)) refreshLines(id);
-      });
+  // a time per instance, with one more after it when asked meanwhile. Resolves once
+  // the lines are from a read that began after the call (a push waits for that), and
+  // never rejects.
+  function refreshLines(id: string): Promise<void> {
+    return new Promise((resolve) => {
+      const waiting = readAgain.get(id);
+      if (waiting) {
+        waiting.push(resolve);
+        return;
+      }
+      if (reading.has(id)) {
+        readAgain.set(id, [resolve]);
+        return;
+      }
+      reading.add(id);
+      void Promise.resolve()
+        .then(() => pm.readRecentTurns(id, 1).entries)
+        .catch(() => null)
+        .then((turn) => {
+          if (!turn) return;
+          const next = linesOf(turn);
+          const before = lines.get(id);
+          lines.set(id, next);
+          if (
+            before?.conclusion !== next.conclusion ||
+            before?.said !== next.said ||
+            before?.tool !== next.tool
+          ) {
+            push.broadcastInstances();
+          }
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          reading.delete(id);
+          resolve();
+          const next = readAgain.get(id);
+          readAgain.delete(id);
+          if (next) void refreshLines(id).then(() => next.forEach((done) => done()));
+        });
+    });
+  }
+
+  // The push for an event, with the line the list shows for it: what the dialog asks,
+  // or the conclusion's first sentence, read (refreshLines) before this runs. An event
+  // a newer fresh one has followed meanwhile gets none: the newer one's push replaces
+  // it on the phone anyway, and it must not arrive after that one. A restatement
+  // doesn't count, since it gets no push of its own (an OpenCode turn that ends
+  // beside an open dialog reports Finished, then restates the dialog at once). One
+  // the builder has already dealt with at the desk still gets its push (Story 7:
+  // whether or not the builder is at the desk).
+  function pushEvent(id: string, event: SecretaryEvent) {
+    const info = pm.infoOf(id);
+    if (!info || info.isManager) return;
+    if ((fresh.get(id) ?? 0) > event.seq) return;
+    const state: RemoteSessionState = event.kind === "needs-you" ? "needs-you" : "finished";
+    const body = previewOf(state, event, info, lines.get(id) ?? {});
+    // The phone's Needs you count, as its list would show it now.
+    const badge = pm
+      .listInstances()
+      .filter((i) => !i.isManager && pm.secretaryEventOf(i.id)?.kind === "needs-you").length;
+    push.pushSession({
+      instanceId: id,
+      title: `${info.name} · ${state === "needs-you" ? "Needs you" : "Finished"}`,
+      ...(body ? { body } : {}),
+      badge,
+    });
   }
 
   const unsubscribe = pm.onSecretaryEvent((id, event) => {
@@ -167,11 +213,19 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
       // The agent just stopped: whoever reads it wants what it did, not the
       // transcript from when they opened it.
       push.broadcastTranscript(id);
-      // A push (T-810) may need the line while no phone is connected, so this
-      // doesn't wait for one; it only waits for the phone link to be on. With the
-      // link off, the line is read when the instance is next listed.
-      if (push.isRunning()) refreshLines(id);
-      else lines.delete(id);
+      // The push needs the line while no phone is connected, so this doesn't wait for
+      // one; it only waits for the phone link to be on. With the link off there is no
+      // push, and the line is read when the instance is next listed. A restated
+      // dialog was pushed when it was first reported.
+      if (push.isRunning()) {
+        const read = refreshLines(id);
+        if (!event.restated) {
+          fresh.set(id, event.seq);
+          void read.then(() => pushEvent(id, event)).catch(() => undefined);
+        }
+      } else {
+        lines.delete(id);
+      }
     }
     push.broadcastInstances();
   });
@@ -189,7 +243,7 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
     listInstances(): RemoteInstance[] {
       const infos = pm.listInstances().filter((i) => !i.isManager);
       const ids = new Set(infos.map((i) => i.id));
-      for (const map of [lines, seen, stopping, listed]) {
+      for (const map of [lines, seen, stopping, listed, fresh]) {
         for (const id of map.keys()) if (!ids.has(id)) map.delete(id);
       }
       return infos.map((info) => {
@@ -199,9 +253,9 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
         // again, so Working doesn't show the last turn's line.
         if (!lines.has(info.id)) {
           lines.set(info.id, {});
-          refreshLines(info.id);
+          void refreshLines(info.id);
         } else if (state === "working" && listed.get(info.id) !== "working") {
-          refreshLines(info.id);
+          void refreshLines(info.id);
         }
         listed.set(info.id, state);
         const preview = previewOf(state, event, info, lines.get(info.id) ?? {});
@@ -242,7 +296,7 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
     ptySize: (id) => pm.ptySizeOf(id),
 
     refreshPreview(id) {
-      if (pm.infoOf(id)?.working) refreshLines(id);
+      if (pm.infoOf(id)?.working) void refreshLines(id);
     },
 
     writeToInstance: (id, data) => pm.writeToInstance(id, data),

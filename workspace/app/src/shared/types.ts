@@ -108,6 +108,11 @@ export interface RemoteHttpsSetup {
   error?: string;
 }
 
+// What the Phone section's "Send test" did: the push went to the phone's push service,
+// or why it didn't. The phone's `pushEnabled` and `lastPushError` follow in the next
+// "remote-status" push, as for any push.
+export type RemoteTestPush = { ok: true } | { ok: false; error: string };
+
 // How full a session's context window is, read from the newest assistant turn in
 // its transcript.
 //
@@ -409,6 +414,8 @@ export interface ElectronAPI {
   setUpRemoteHttps: () => Promise<RemoteHttpsSetup>;
   // Opens the Tailscale app, for the builder to turn it on.
   openTailscale: () => Promise<{ ok: boolean; error?: string }>;
+  // Sends "Multi-Code · Test" to that phone, whether or not its app is open.
+  sendRemoteTestPush: (deviceId: string) => Promise<RemoteTestPush>;
 
   // Secretary. setSpeechServer saves the address ("" for text only) and applies
   // the key change; testSpeechServer tests what is saved.

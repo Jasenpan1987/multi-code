@@ -900,11 +900,14 @@ describe("a restated dialog (opencode-v2 T-607)", () => {
     } as never);
     const { id, spawn } = raisedOpencode(manager);
     const before = manager.secretaryEventOf(id)!.seq;
+    expect(manager.secretaryEventOf(id)!.restated).toBeUndefined();
     // Another dialog was shown and closed; the first is the one blocking again.
     spawn.report("prompt", { ...OC_PERMISSION.detail }, OC_PERMISSION.toolCall, true);
     expect(sent.filter(([channel]) => channel === "instance-activity")).toHaveLength(1);
     const again = manager.secretaryEventOf(id)!.seq;
     expect(again).toBeGreaterThan(before);
+    // Marked, so a paired phone isn't pushed about it a second time (mobile-v2 T-810).
+    expect(manager.secretaryEventOf(id)!.restated).toBe(true);
     // An answer naming the dialog as it was first reported is too old.
     const once: DialogAnswer = { kind: "permission", decision: "once" };
     await expect(manager.answerDialog(id, before, { keys: [], answer: once })).resolves.toEqual({

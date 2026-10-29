@@ -61,6 +61,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("remote-revoke-device", deviceId),
   setUpRemoteHttps: () => ipcRenderer.invoke("remote-setup-https"),
   openTailscale: () => ipcRenderer.invoke("remote-open-tailscale"),
+  sendRemoteTestPush: (deviceId: string) =>
+    ipcRenderer.invoke("remote-test-push", deviceId),
 
   // Secretary. `key` is a SpeechKeyChange; typed loose here like `backend`
   // above, and validated in main.
