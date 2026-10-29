@@ -22,7 +22,7 @@ Raised in the 2026-10-29 ideation (`docs/timeline/2026-10-29_mobile-v2-ideation.
 
 | ID | Question | Impacts | Ask | Status |
 |----|----------|---------|-----|--------|
-| G-301 | Does a WebSocket through `tailscale serve` stay up from iOS Safari? Open Tailscale issues #20882 (upgrade lost over HTTP/2) and #18827 (drops every 10–40 s on 1.94.2). Desktop runs 1.98.9. | Story 1; fallback is `tailscale cert` and TLS served by Multi-Code itself | Measure from the builder's iPhone at QA; from desktop Safari/WebKit before | open |
+| G-301 | Does a WebSocket through `tailscale serve` stay up from iOS Safari? Open Tailscale issues #20882 (upgrade lost over HTTP/2) and #18827 (drops every 10–40 s on 1.94.2). Desktop runs 1.98.9. | Story 1; fallback is `tailscale cert` and TLS served by Multi-Code itself | Plan (T-805): 1) `curl -sI` the origin, `serve status --json` matches `serve-ready.json`; 2) Node ws + seal client to `wss://<origin>/`, ping every 15 s for 10 min, log pongs and closes (#18827 shows as closes every 10–40 s, #20882 as no 101); 3) Playwright WebKit and desktop Safari hold the app's socket 10 min; 4) iPhone, Safari then Home Screen, 10 min streaming, then lock/unlock reconnect within 3 s. Fallback: `tailscale cert` + TLS in Multi-Code | open |
 | G-302 | Does Web Push sent from the Mac (VAPID, `web-push`) reach the builder's iPhone, closed and locked? | Story 7 | Measure on the iPhone at QA (no simulator) | open |
 | G-303 | Which keys stop a running OpenCode 2 turn in its TUI (Esc once, or twice)? | Story 6 | Measure on a live OpenCode 2 session | open |
 | G-304 | Does a session the builder reads at the desk stop being Finished on the phone? | Story 2 | Check what the desktop already tracks (unread count, Dock badge) | open |

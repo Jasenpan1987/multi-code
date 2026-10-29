@@ -104,7 +104,7 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
 ### T-802: Phone dev harness
 
 - **Type:** setup
-- **Status:** backlog
+- **Status:** in-progress
 - **Story:** all phone stories (verification)
 - **Description:** A way to run the phone app against the real `RemoteServer`
   (`main/remote/ws-server.ts`) with scripted sessions, so phone tickets can be built and
@@ -141,7 +141,7 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
 ### T-803: Desktop live state, answers, acks and Stop
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** in-progress
 - **Story:** 2, 4, 5, 6
 - **Description:** Make the desktop side of protocol v3 real, in
   `main/remote/ws-server.ts`, `main/remote/index.ts`, `main/process-manager.ts` and the
@@ -208,7 +208,7 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
 ### T-804: Turn-ready transcript
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** in-progress
 - **Story:** 3
 - **Description:** The phone groups a transcript into turns and folds each turn's tools
   into one line with counts and results. Extend the readers so entries carry what that
@@ -237,7 +237,7 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
 ### T-805: HTTPS through `tailscale serve`
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** done (a7101cb, merged 33a143a)
 - **Story:** 1, 9
 - **Description:** The phone app is served at `https://<machine>.<tailnet>.ts.net` by
   `tailscale serve`, which proxies to Multi-Code's port.
@@ -312,6 +312,7 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
     notifications (button disabled outside standalone; wired in T-811).
   - Placeholder list and session screens that T-807 replaces. Dark and light follow
     `prefers-color-scheme`; colours from the mockups.
+- **Note:** From T-805: the `cache-control` comment in `handleHttp` still says the app is served over plain HTTP; fix it with the header change.
 - **Acceptance:** with the harness: pairing from the URL, auth, the list arrives; killing
   the harness's sockets reconnects within 3 s; the half-open scenario reconnects after the
   ping timeout; a prompt sent while disconnected is delivered once after reconnect (the
@@ -437,6 +438,7 @@ shows each check state, gates the QR, sends a test push and revokes.
     (cleared by the next success); never throws into the activity path; sent within 5 s.
   - IPC `remote-test-push(deviceId)` → sends "Multi-Code · Test" and returns the outcome.
   - `RemoteChecks.push`: ready when keys load; error with the reason otherwise.
+- **Note:** From T-805: replace the push placeholder in `getStatus()`; the VAPID subject is `checks.https.origin` when ready.
 - **Acceptance:** unit tests with `web-push` mocked: payload shape per trigger, badge
   count, skip-connected, restated skipped, Manager skipped, 404/410 cleanup, error
   recorded and cleared, key file mode 0600, subscribe/unsubscribe/revoke.
@@ -480,6 +482,7 @@ shows each check state, gates the QR, sends a test push and revokes.
   on/off, last push error, "Send test", "Revoke" (confirm first); a note that phones
   paired before mobile-v2 must be paired again. Compact, in the desktop's style and both
   themes.
+- **Note:** From T-805: setup errors come back in `RemoteHttpsSetup.error` (show them); explain how to undo the serve (`tailscale serve --https=443 off`; Multi-Code never removes it); drop `RemotePairing.endpoints` and the `multicode://` `pairingUrl`; for CDP state checks add a dev-only hook that calls `remoteServer.setChecker(fake)`.
 - **Acceptance:** CDP checks on an isolated dev build (`--user-data-dir`) with the checks
   forced into each state (inject a fake checker): rows, buttons, QR gating, test push and
   revoke call the right IPC.
@@ -508,6 +511,7 @@ shows each check state, gates the QR, sends a test push and revokes.
     (`remote-push.json`, push fields in `remote-devices.json`) and the phone line under
     "Architecture"; `docs/knowledge/decisions.md`; `docs/specs/phone-link/prd.md` marked
     replaced by mobile-v2; gaps closed with what was measured.
+- **Note:** From T-805: the G-301 plan is in the T-805 report, copied to gaps.md G-301.
 - **Acceptance:** `qa-report-m1.md` with every criterion and its evidence; the builder's
   iPhone test passed or its failures filed as new tickets.
 - **Blocked by:** T-804, T-808, T-809, T-811, T-812
@@ -523,3 +527,5 @@ shows each check state, gates the QR, sends a test push and revokes.
 ## Changelog
 
 - 2026-10-29: Generated from PRD v1.0.
+- 2026-10-29: T-801 done (6f4155d). T-802..T-805 started in parallel worktrees.
+- 2026-10-29: T-805 done and merged (33a143a); endpoints.ts removed, port bound to 127.0.0.1.
