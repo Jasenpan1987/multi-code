@@ -558,7 +558,7 @@ shows each check state, gates the QR, sends a test push and revokes.
 ### T-812: Desktop Phone panel
 
 - **Type:** feature
-- **Status:** in-progress
+- **Status:** done (e5b2b50, merged c3e88c6)
 - **Story:** 9
 - **Description:** Rewrite `renderer/components/PhoneSection.tsx` to mockup 5.2: the
   on/off switch; three check rows from `RemoteStatus.checks`, each with what it means and
@@ -610,6 +610,13 @@ shows each check state, gates the QR, sends a test push and revokes.
     "Architecture"; `docs/knowledge/decisions.md`; `docs/specs/phone-link/prd.md` marked
     replaced by mobile-v2; gaps closed with what was measured.
 - **Note:** From T-805: the G-301 plan is in the T-805 report, copied to gaps.md G-301.
+- **Note:** From T-812: the Phone section opens only with a running contact (existing
+  toolbox behaviour); dev overrides `MULTICODE_DEV_REMOTE_PORT` and
+  `MULTICODE_DEV_REMOTE_CHECKS=<json file>` (ignored when packaged) drive the panel; every
+  Pair / New code press leaves a "New device · never connected" row until revoked; Open
+  Tailscale, the admin link, Get Tailscale, the real "Set up HTTPS", its undo, and Copy
+  pairing link with the real clipboard / Universal Clipboard are untested and need the
+  builder.
 - **Acceptance:** `qa-report-m1.md` with every criterion and its evidence; the builder's
   iPhone test passed or its failures filed as new tickets.
 - **Blocked by:** T-804, T-808, T-809, T-811, T-812
@@ -633,3 +640,4 @@ shows each check state, gates the QR, sends a test push and revokes.
 - 2026-10-29: T-810 done and merged (56adbbd): `remote/push.ts`, `web-push`, `remote-test-push` IPC. T-812 started.
 - 2026-10-29: G-301 measured: stable through `tailscale serve` (Node and WebKit 10 min, iPhone 4 min visible, 0 drops).
 - 2026-10-29: T-806 done and merged (4af00c1). Home Screen pairing hand-off added to T-811 and T-812 (G-306). T-807, T-809, T-811 started in parallel.
+- 2026-10-29: T-812 done and merged (c3e88c6), with G-304 wired (`instance-acknowledged`) and Copy pairing link.
