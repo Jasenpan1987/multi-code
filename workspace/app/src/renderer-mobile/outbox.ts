@@ -31,7 +31,8 @@ export type OutboxFrame = PromptFrame | AnswerFrame | InterruptFrame | PushSubsc
 // sent    — written to the open socket, its ack not back yet
 // acked   — the desktop took it (`ack` ok)
 // refused — the desktop said no (`refusal` says why)
-// unknown — an answer or interrupt whose socket dropped before its ack
+// unknown — an answer or interrupt whose socket dropped before its ack, or a prompt
+//           that went out before the phone paired again (see `newDevice`)
 export type OutboxStatus = "waiting" | "sent" | "acked" | "refused" | "unknown";
 
 export interface OutboxItem {
@@ -47,14 +48,18 @@ export interface OutboxItem {
 }
 
 const STORAGE_KEY = "multicode.outbox";
+const DELIVERED_KEY = "multicode.delivered";
 // Plenty for a phone's backlog; the oldest settled items go first beyond it.
 const MAX_ITEMS = 100;
-// An acked prompt is kept until the transcript shows it (see `settleDelivered`);
-// one the transcript never showed is dropped at the next launch after this long.
+// An acked prompt (or one whose arrival is unknown) is kept until the transcript
+// shows it (see `settleDelivered`); one the transcript never showed is dropped at
+// the next launch after this long.
 const ACKED_KEPT_MS = 60 * 60_000;
 // How far a transcript entry may predate the prompt it matches: the phone's clock
 // and the Mac's are not the same clock.
 const CLOCK_SKEW_MS = 2 * 60_000;
+// How many of the entries that delivered a session's prompts are remembered.
+const DELIVERED_KEPT = 50;
 
 export const isQueued = (frame: OutboxFrame) => frame.type === "prompt" || frame.type === "push-subscribe";
 
@@ -111,6 +116,21 @@ export function socketLost(outbox: OutboxItem[], now: number): OutboxItem[] {
   });
 }
 
+// The phone paired again with the same Mac: a new token, which the Mac counts as a
+// new device, with no record of the clientMsgIds the old one sent. A prompt that
+// went out on a socket may have arrived, so resending it could send it twice: it
+// becomes `unknown`, and the builder looks. One that never left still waits.
+export function newDevice(outbox: OutboxItem[], now: number): OutboxItem[] {
+  if (!outbox.some((i) => i.frame.type === "prompt" && i.sentOnce && (i.status === "waiting" || i.status === "sent"))) {
+    return outbox;
+  }
+  return outbox.map((i) =>
+    i.frame.type === "prompt" && i.sentOnce && (i.status === "waiting" || i.status === "sent")
+      ? { ...i, status: "unknown", settledAt: now }
+      : i
+  );
+}
+
 export function cancel(outbox: OutboxItem[], clientMsgId: string): OutboxItem[] {
   const item = outbox.find((i) => idOf(i) === clientMsgId);
   return item && canCancel(item) ? outbox.filter((i) => i !== item) : outbox;
@@ -124,31 +144,57 @@ export function dismiss(outbox: OutboxItem[], clientMsgId: string): OutboxItem[]
   return outbox.filter((i) => i !== item);
 }
 
-// A transcript for the instance arrived: an acked prompt that now shows in it as
-// the builder's message has been delivered all the way, and the transcript's own
-// bubble takes over from the outbox's. Matched on its text, and only against
-// entries written after it was sent, so an earlier identical "yes" doesn't count.
-export function settleDelivered(outbox: OutboxItem[], instanceId: string, entries: TranscriptEntry[]): OutboxItem[] {
-  const acked = outbox.filter(
-    (i) => i.status === "acked" && i.frame.type === "prompt" && i.frame.instanceId === instanceId
+// A transcript for the instance arrived: an acked prompt (or one whose arrival is
+// unknown) that now shows in it as the builder's message has been delivered all the
+// way, and the transcript's own bubble takes over from the outbox's. Matched on its
+// text, and only against entries written after it was sent, so an earlier identical
+// "yes" doesn't count. One transcript entry delivers one prompt, so two identical
+// messages need two, in this transcript and in every later one: `delivered` holds
+// the entries (`entryKey`) that have delivered one of the session's prompts, which
+// the caller keeps and passes in again (state.ts). Each stands for one occurrence.
+export function settleDelivered(
+  outbox: OutboxItem[],
+  instanceId: string,
+  entries: TranscriptEntry[],
+  delivered: readonly string[] = []
+): { outbox: OutboxItem[]; delivered: readonly string[] } {
+  const open = outbox.filter(
+    (i) =>
+      (i.status === "acked" || i.status === "unknown") && i.frame.type === "prompt" && i.frame.instanceId === instanceId
   );
-  if (acked.length === 0) return outbox;
-  const shown = entries.filter((e) => e.kind === "user");
-  const delivered = new Set<OutboxItem>();
-  for (const item of acked) {
+  if (open.length === 0) return { outbox, delivered };
+  const left = new Map<string, number>();
+  for (const key of delivered) left.set(key, (left.get(key) ?? 0) + 1);
+  const free = entries.filter((e) => {
+    if (e.kind !== "user") return false;
+    const n = left.get(entryKey(e)) ?? 0;
+    if (n > 0) left.set(entryKey(e), n - 1);
+    return n === 0;
+  });
+  const settled = new Set<OutboxItem>();
+  const used: string[] = [];
+  for (const item of open) {
     const text = normalize((item.frame as PromptFrame).text);
-    const at = shown.findIndex(
+    const at = free.findIndex(
       (e) => normalize(e.text) === text && (e.at === undefined || e.at >= item.createdAt - CLOCK_SKEW_MS)
     );
     if (at < 0) continue;
-    delivered.add(item);
-    // One transcript entry delivers one prompt, so two identical messages need two.
-    shown.splice(at, 1);
+    settled.add(item);
+    used.push(entryKey(free[at]));
+    free.splice(at, 1);
   }
-  return delivered.size ? outbox.filter((i) => !delivered.has(i)) : outbox;
+  if (settled.size === 0) return { outbox, delivered };
+  return {
+    outbox: outbox.filter((i) => !settled.has(i)),
+    delivered: [...delivered, ...used].slice(-DELIVERED_KEPT),
+  };
 }
 
 const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
+
+// A transcript entry's identity across refreshes: its id, else when it was written
+// and what it says.
+const entryKey = (e: TranscriptEntry) => e.id ?? `${e.at ?? ""}:${normalize(e.text)}`;
 
 function trim(outbox: OutboxItem[]): OutboxItem[] {
   if (outbox.length <= MAX_ITEMS) return outbox;
@@ -174,6 +220,35 @@ export function saveOutbox(storage: Storage, outbox: OutboxItem[]): boolean {
   }
 }
 
+// The entries that delivered each session's prompts (state.ts `delivered`), kept
+// beside the outbox: an acked prompt that waits to show across a relaunch mustn't
+// be settled by one of them. Full storage loses them, which can only drop such a
+// bubble early.
+export function saveDelivered(storage: Storage, delivered: Record<string, readonly string[]>) {
+  const kept = Object.entries(delivered).filter(([, keys]) => keys.length > 0);
+  try {
+    if (kept.length === 0) storage.removeItem(DELIVERED_KEY);
+    else storage.setItem(DELIVERED_KEY, JSON.stringify(Object.fromEntries(kept)));
+  } catch {
+    // Full storage.
+  }
+}
+
+export function loadDelivered(storage: Storage): Record<string, readonly string[]> {
+  try {
+    const parsed = JSON.parse(storage.getItem(DELIVERED_KEY) ?? "{}") as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed as Record<string, unknown>).filter(
+        (entry): entry is [string, string[]] =>
+          Array.isArray(entry[1]) && entry[1].every((key) => typeof key === "string")
+      )
+    );
+  } catch {
+    return {};
+  }
+}
+
 // At launch nothing is on a socket yet, so whatever was `sent` waits again.
 export function loadOutbox(storage: Storage, now: number): OutboxItem[] {
   try {
@@ -183,7 +258,10 @@ export function loadOutbox(storage: Storage, now: number): OutboxItem[] {
     if (!Array.isArray(parsed)) return [];
     return parsed
       .filter((i) => i?.frame && typeof i.frame.clientMsgId === "string" && isQueued(i.frame))
-      .filter((i) => !(i.status === "acked" && now - (i.settledAt ?? i.createdAt) > ACKED_KEPT_MS))
+      .filter(
+        (i) =>
+          !((i.status === "acked" || i.status === "unknown") && now - (i.settledAt ?? i.createdAt) > ACKED_KEPT_MS)
+      )
       .map((i) => (i.status === "sent" ? { ...i, status: "waiting" } : i));
   } catch {
     return [];

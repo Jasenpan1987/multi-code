@@ -35,7 +35,17 @@ import type {
   ServerFrame,
 } from "../shared/remote-protocol";
 import { clearCache, loadCache, saveCache } from "./cache";
-import { idOf, loadOutbox, newClientMsgId, saveOutbox, toSend, type OutboxFrame, type OutboxItem } from "./outbox";
+import {
+  idOf,
+  loadDelivered,
+  loadOutbox,
+  newClientMsgId,
+  saveDelivered,
+  saveOutbox,
+  toSend,
+  type OutboxFrame,
+  type OutboxItem,
+} from "./outbox";
 import { clearPairing, loadPairing, savePairing, storedPairing, type StoredPairing } from "./pairing";
 import { initialState, reduce, sessionOf, type Action, type AppState } from "./state";
 import type { LinkStatus } from "./transport";
@@ -101,7 +111,11 @@ export function createStore(deps: StoreDeps): Store {
   const { storage } = deps;
   const now = deps.now ?? Date.now;
   const cached = loadCache(storage);
-  let state = initialState(loadPairing(storage), { ...cached, outbox: loadOutbox(storage, now()) });
+  let state = initialState(loadPairing(storage), {
+    ...cached,
+    outbox: loadOutbox(storage, now()),
+    delivered: loadDelivered(storage),
+  });
   let link: LinkLike | null = null;
   let lastSeenAt: number | null = cached?.lastSeenAt ?? null;
   let cacheTimer: ReturnType<typeof setTimeout> | null = null;
@@ -114,6 +128,7 @@ export function createStore(deps: StoreDeps): Store {
     state = reduce(state, action);
     if (state === prev) return;
     if (state.outbox !== prev.outbox) persistOutbox();
+    if (state.delivered !== prev.delivered) saveDelivered(storage, state.delivered);
     if (state.instances !== prev.instances || state.sessions !== prev.sessions) scheduleCache();
     for (const listener of listeners) listener();
   }
@@ -234,6 +249,9 @@ export function createStore(deps: StoreDeps): Store {
       if (state.pairing && state.pairing.hostPublicKey !== offer.hostPublicKey) {
         clearCache(storage);
         dispatch({ type: "unpaired" });
+      } else if (state.pairing && state.pairing.deviceToken !== offer.deviceToken) {
+        // The same Mac, as a new device: it can't tell a resend from a new message.
+        dispatch({ type: "outbox-new-device", at: now() });
       }
       // The cache gives way to the pairing too. Failing that the pairing still
       // works until the app closes: the address bar no longer holds the offer, so

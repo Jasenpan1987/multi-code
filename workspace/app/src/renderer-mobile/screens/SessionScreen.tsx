@@ -8,6 +8,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 import type { RemoteSessionState, TranscriptEntry } from "../../shared/remote-protocol";
 import { Compose } from "../components/Compose";
 import { ConnectionBanner } from "../components/Connection";
+import { lastAnswer } from "../answers";
 import { AnswerOutcome, DialogSlot } from "../components/DialogSlot";
 import { Markdown } from "../components/Markdown";
 import { useDraft } from "../drafts";
@@ -53,8 +54,12 @@ export function SessionScreen({ id }: { id: string }) {
   const name = instance?.name ?? id;
   const working = instance?.state === "working";
   const needsYou = session.dialog !== null || instance?.state === "needs-you";
+  // An answer's keys are still going in: its ack comes once the last is written, and
+  // the dialog may have closed on the first. Text or Stop would still land in it.
+  const answering = useApp((s) => lastAnswer(s.outbox, id)?.status === "sent");
   const stopped = instance?.status === "stopped";
   const gone = listed && !instance;
+  const foot = footOf({ dialog: session.dialog !== null, needsYou, answering, stopped, gone });
   const shown = useShownState(instance?.state);
 
   const turns = useMemo(
@@ -83,7 +88,7 @@ export function SessionScreen({ id }: { id: string }) {
   };
 
   // Whether the compose box is on screen (else the dialog slot, or a note).
-  const composing = !needsYou && !stopped && !gone;
+  const composing = foot === "compose";
   const pill = stopped ? { className: "idle", label: "Stopped" } : shown ? PILLS[shown] : null;
   const loadingEarlier = earlierFrom !== undefined && earlierFrom === session.transcript;
 
@@ -140,16 +145,26 @@ export function SessionScreen({ id }: { id: string }) {
         </div>
       </div>
       <div className="session-foot">
-        {needsYou ? (
+        {foot === "dialog" ? (
           <DialogSlot id={id} dialog={session.dialog} summary={session.dialog?.summary ?? instance?.preview ?? ""} />
-        ) : !composing ? (
+        ) : foot === "answering" ? (
+          <p className="foot-note">Sending your answer…</p>
+        ) : foot === "ended" ? (
           <p className="foot-note">
             {gone ? "This session is no longer on your Mac." : "This session is stopped. Start it on your Mac to reply."}
           </p>
         ) : (
           <>
             <AnswerOutcome id={id} />
-            {working && <WorkingBar id={id} turn={turns[turns.length - 1]} since={instance?.since} />}
+            {/* Keyed by the turn: a "Stop this turn?" asked in one turn doesn't stop the next. */}
+            {working && (
+              <WorkingBar
+                key={turns[turns.length - 1]?.key}
+                id={id}
+                turn={turns[turns.length - 1]}
+                since={instance?.since}
+              />
+            )}
             <Compose
               text={draft}
               onText={setDraft}
@@ -162,6 +177,25 @@ export function SessionScreen({ id }: { id: string }) {
       </div>
     </div>
   );
+}
+
+// What the bottom of the chat holds: the dialog slot (a dialog is open, or the
+// list says one is and its prompt-state is on its way), a note while an answer's
+// keys go in or once the session has ended, else the compose box (with the working
+// bar while a turn runs). A dialog the Mac has described always shows.
+export type Foot = "dialog" | "answering" | "ended" | "compose";
+
+export function footOf(s: {
+  dialog: boolean;
+  needsYou: boolean;
+  answering: boolean;
+  stopped: boolean;
+  gone: boolean;
+}): Foot {
+  if (s.dialog) return "dialog";
+  if (s.answering) return "answering";
+  if (s.needsYou) return "dialog";
+  return s.stopped || s.gone ? "ended" : "compose";
 }
 
 // The header's state pill (T-802's call): opening a Finished session makes it Idle
@@ -402,7 +436,8 @@ function Elapsed({ since }: { since?: number }) {
 // The builder's messages on their way (outbox.ts)
 // ---------------------------------------------------------------------------
 
-// `onEdit` (put a refused message back in the compose box) only while there is one.
+// `onEdit` (put a refused or doubtful message back in the compose box) only while
+// there is one.
 function Sent({ item, working, onEdit }: { item: OutboxItem; working: boolean; onEdit?: (item: OutboxItem) => void }) {
   const actions = useActions();
   if (item.frame.type !== "prompt") return null;
@@ -424,6 +459,10 @@ function Sent({ item, working, onEdit }: { item: OutboxItem; working: boolean; o
   } else if (item.status === "acked" && working) {
     // The CLI holds it until the turn ends; the transcript shows it then.
     status = "Queued until this turn ends";
+  } else if (item.status === "unknown") {
+    // It went out before the phone paired again (outbox.ts `newDevice`), so it isn't
+    // sent again; the transcript shows it if it arrived.
+    status = "May not have arrived. Check the session.";
   }
   return (
     <div className="sent" data-anchor={id} data-status={item.status}>
@@ -431,6 +470,21 @@ function Sent({ item, working, onEdit }: { item: OutboxItem; working: boolean; o
         {item.frame.text}
         {status && <span className="st">{status}</span>}
       </div>
+      {item.status === "unknown" && (
+        <div className="refusal">
+          {onEdit && (
+            <>
+              <button className="link" onClick={() => onEdit(item)}>
+                Edit
+              </button>{" "}
+              ·{" "}
+            </>
+          )}
+          <button className="link" onClick={() => actions.dismiss(id)}>
+            Dismiss
+          </button>
+        </div>
+      )}
       {item.status === "refused" && (
         <div className="refusal">
           ✗ {item.refusal?.message || "Your Mac didn't take this message."}{" "}

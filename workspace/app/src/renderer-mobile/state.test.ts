@@ -160,6 +160,43 @@ describe("state reducer", () => {
     expect(state.outbox).toEqual([]);
   });
 
+  it("settles one of two identical resent prompts when the transcript before their acks shows one", () => {
+    const go = (id: string, at: number): Action => ({
+      type: "outbox-add",
+      frame: { type: "prompt", instanceId: "a", text: "go", clientMsgId: id },
+      at,
+      sent: true,
+    });
+    let state = run(
+      connected(),
+      go("p1", 500),
+      go("p2", 510),
+      frame({ type: "transcript", instanceId: "a", entries: [{ kind: "user", id: "u1", text: "go", at: 520 }], hasEarlier: false }, 570),
+      frame({ type: "ack", clientMsgId: "p1", ok: true }, 580),
+      frame({ type: "ack", clientMsgId: "p2", ok: true }, 590)
+    );
+    // u1 delivered p1; p2 is still on its way through the CLI.
+    expect(state.outbox.map((i) => [i.frame.clientMsgId, i.status])).toEqual([["p2", "acked"]]);
+    state = reduce(state, frame({ type: "transcript", instanceId: "a", entries: [{ kind: "user", id: "u1", text: "go", at: 520 }], hasEarlier: false }, 600));
+    expect(state.outbox).toHaveLength(1);
+    state = reduce(
+      state,
+      frame(
+        {
+          type: "transcript",
+          instanceId: "a",
+          entries: [
+            { kind: "user", id: "u1", text: "go", at: 520 },
+            { kind: "user", id: "u2", text: "go", at: 610 },
+          ],
+          hasEarlier: false,
+        },
+        620
+      )
+    );
+    expect(state.outbox).toEqual([]);
+  });
+
   it("clears a dialog only for its own seq", () => {
     const dialog = { kind: "plan" as const, plan: "# Plan", options: [] };
     let state = reduce(connected(), frame({ type: "prompt-state", instanceId: "a", seq: 9, summary: "Plan", dialog }));

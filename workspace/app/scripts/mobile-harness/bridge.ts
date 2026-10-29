@@ -108,6 +108,7 @@ export function attach(
       if (session.state === "needs-you") {
         return refuse("dialog-open", "A dialog is open: answer it first, so the text doesn't land in it.");
       }
+      if (!text.trim()) return refuse("failed", "Nothing to send");
       return after(() => world.prompt(id, text));
     },
 
@@ -128,8 +129,12 @@ export function attach(
         return refuse("gone", "That dialog was already answered, or replaced by a newer one.");
       }
       if (!d.dialog) return refuse("unsupported", "The phone can't answer this dialog. Use the terminal.");
-      const checked = checkChoice(secretaryDialog(d.dialog, session.backend), explicit(choice), confirmed);
-      if (checked.ok) return after(() => world.answer(id, choice));
+      // As the desktop's choiceOf (remote-host.ts): read as one of the two shapes, and
+      // what can't be is refused before the world changes.
+      const parsed = choiceOf(choice);
+      if (!parsed) return refuse("unsupported", "That isn't one of this dialog's options.");
+      const checked = checkChoice(secretaryDialog(d.dialog, session.backend), explicit(parsed), confirmed);
+      if (checked.ok) return after(() => world.answer(id, parsed));
       if ("refuse" in checked) return refuse("unsupported", "That answer doesn't fit this dialog. Use the terminal.");
       switch (checked.ask) {
         case "confirm-always":
@@ -333,6 +338,32 @@ function secretaryDialog(d: RemoteDialog, backend: string): Dialog {
 
 // A button the builder pressed is an explicit choice, so a widening one comes back
 // as needs-confirm rather than as a question about which one was meant.
+const EFFECTS: ReadonlySet<string> = new Set(["allow-once", "allow-always", "deny", "approve", "approve-auto", "revise"]);
+
+// The phone's choice as the desktop reads it (remote-host.ts choiceOf): an effect
+// wins over answers, and anything else in the frame is dropped; null for a shape it
+// can't be.
+function choiceOf(value: RemoteChoice): RemoteChoice | null {
+  const c = value as unknown as Record<string, unknown> | null;
+  if (!c || typeof c !== "object") return null;
+  if (typeof c.effect === "string") {
+    if (!EFFECTS.has(c.effect)) return null;
+    if (c.feedback !== undefined && typeof c.feedback !== "string") return null;
+    const effect = c.effect as Extract<RemoteChoice, { effect: unknown }>["effect"];
+    return c.feedback === undefined ? { effect } : { effect, feedback: c.feedback };
+  }
+  if (!Array.isArray(c.answers)) return null;
+  const answers: Extract<RemoteChoice, { answers: unknown }>["answers"] = [];
+  for (const raw of c.answers as unknown[]) {
+    const a = raw as Record<string, unknown> | null;
+    if (!a || typeof a !== "object" || typeof a.question !== "number" || !Array.isArray(a.picks)) return null;
+    if (!a.picks.every((p: unknown) => typeof p === "number")) return null;
+    if (a.text !== undefined && typeof a.text !== "string") return null;
+    answers.push({ question: a.question, picks: a.picks as number[], ...(a.text !== undefined ? { text: a.text } : {}) });
+  }
+  return { answers };
+}
+
 function explicit(choice: RemoteChoice) {
   return "effect" in choice ? { ...choice, explicit: true } : choice;
 }

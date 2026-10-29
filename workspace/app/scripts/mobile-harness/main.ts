@@ -8,7 +8,6 @@
 import { app } from "electron";
 import fs from "node:fs";
 import { createRequire } from "node:module";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { attach } from "./bridge.ts";
@@ -40,10 +39,10 @@ function fail(message: string) {
 // Never the builder's real userData: the server writes its keys and paired devices
 // there. Resolved through symlinks, so a /tmp link to it doesn't pass; checked
 // before the app is ready, so a refused run stops before Chromium uses the folder.
+// /tmp only, not os.tmpdir(): that is whatever TMPDIR says, which could be anywhere.
 const userData = real(app.getPath("userData"));
-const temp = [real("/tmp"), real(os.tmpdir())].map((t) => path.join(t, "/"));
-const isolated =
-  process.argv.some((a) => a.startsWith("--user-data-dir=")) && temp.some((t) => userData.startsWith(t));
+const temp = path.join(real("/tmp"), "/");
+const isolated = process.argv.some((a) => a.startsWith("--user-data-dir=")) && userData.startsWith(temp);
 
 async function main() {
   for (const file of ["main/remote/ws-server.js", "main/secretary/dialog.js", "renderer-mobile/index.html"]) {
