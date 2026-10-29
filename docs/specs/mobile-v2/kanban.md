@@ -378,7 +378,7 @@ chat, sends replies, answers every dialog, stops a turn, and falls back to the t
 ### T-808: Dialogs
 
 - **Type:** feature
-- **Status:** in-progress
+- **Status:** done (189128e, merged 20cbd62)
 - **Story:** 5
 - **Description:** Mockups 3.1, 3.2, 3.3, from `prompt-state.dialog`:
   - **Permission:** a card in place of the compose box: NEEDS YOU, tool, subject as code,
@@ -648,3 +648,4 @@ shows each check state, gates the QR, sends a test push and revokes.
 - 2026-10-29: T-811 done and merged (8d2d812): `renderer-mobile/push.ts`, service worker push handlers, settings on the setup screen, copy/paste hand-off. iPhone steps in `test-plan-iphone.md`.
 - 2026-10-29: T-807 done and merged (a1f2118); phone bundle 502 KB (+183 KB, react-markdown). T-808 started.
 - 2026-10-29: T-809 done and merged (1466711); phone bundle 602 KiB with xterm. 4 timing tests (opencodeService, loudness) failed once under load average ~300 from other projects and passed alone (69/69).
+- 2026-10-29: T-808 done and merged (20cbd62), checked live on Claude 2.1.312 (permission yes/no+reason, two questions with multi-select and typed text, plan revise then approve). M1 and M2 complete: 1933 tests pass. Epic-wide review-loop next, then T-813.
