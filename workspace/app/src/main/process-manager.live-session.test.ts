@@ -52,8 +52,12 @@ const cb: { sessionFound: ((sessionId: string) => void) | null } = {
   sessionFound: null,
 };
 
+// Each spawn's MULTICODE_SPAWN_ID, which its hook deliveries carry back.
+const spawnIds: string[] = [];
+
 vi.mock("node-pty", () => ({
-  spawn: () => {
+  spawn: (_command: string, _args: string[], options: { env: Record<string, string> }) => {
+    spawnIds.push(options.env.MULTICODE_SPAWN_ID);
     // The exit callback has to be held and fired on kill, or the manager never
     // learns the process is gone and `stopped` can't be tested at all.
     let onExitCb: ((e: { exitCode: number }) => void) | null = null;
@@ -116,6 +120,11 @@ vi.mock("./backends", () => ({
     },
     findLatestSessionId: () => null,
     readTranscript: () => [],
+    // Only the first session has a file: one `/new` just started has none yet.
+    readRecentTurns: (sessionId: string) =>
+      sessionId === "ses-1"
+        ? { entries: [{ kind: "user", text: "the old session's message" }], hasEarlier: false }
+        : { entries: [], hasEarlier: false },
     readContextUsage: (sessionId: string) =>
       backendState.usage?.(sessionId) ?? {
         inputTokens: sessionId === "ses-1" ? 300_000 : 12_000,
@@ -146,6 +155,7 @@ const fakeWindow = {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  spawnIds.length = 0;
   userData = fs.mkdtempSync(path.join(os.tmpdir(), "multicode-live-"));
   backendState.liveSessionId = null;
   backendState.liveCalls = [];
@@ -235,6 +245,39 @@ describe("following a session change", () => {
       .listInstances()
       .find((i) => i.id === instanceId)?.contextUsage;
     expect(after?.inputTokens).toBe(12_000);
+  });
+});
+
+describe("what a paired phone reads after /new", () => {
+  it("is the new session from the moment it is known, empty while it has no file", () => {
+    expect(manager.readRecentTurns(instanceId, 10)).toEqual({
+      entries: [{ kind: "user", text: "the old session's message" }],
+      hasEarlier: false,
+      session: "ses-1",
+    });
+    backendState.liveSessionId = "ses-2";
+    poll();
+    expect(manager.readRecentTurns(instanceId, 10)).toEqual({ entries: [], hasEarlier: false, session: "ses-2" });
+  });
+
+  it("follows the new session when its SessionStart hook arrives, without waiting for the poll", () => {
+    backendState.liveSessionId = "ses-2";
+    manager.handleAlertDelivery({
+      instanceId,
+      spawnId: spawnIds.at(-1),
+      event: "SessionStart",
+      sessionId: "ses-2",
+      payload: { source: "clear" },
+    });
+    expect(sessionIdOf()).toBe("ses-2");
+    expect(sendsFor(instanceId)).toEqual(["ses-1", "ses-2"]);
+  });
+
+  it("leaves the session alone on any other hook, and on one from an earlier spawn", () => {
+    backendState.liveSessionId = "ses-2";
+    manager.handleAlertDelivery({ instanceId, spawnId: spawnIds.at(-1), event: "Stop", payload: {} });
+    manager.handleAlertDelivery({ instanceId, spawnId: "an-earlier-spawn", event: "SessionStart", payload: {} });
+    expect(sessionIdOf()).toBe("ses-1");
   });
 });
 

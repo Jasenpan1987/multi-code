@@ -337,9 +337,12 @@ export interface Backend {
   /**
    * The session's last `turns` turns (at least one) for the phone's chat view, and
    * whether earlier ones exist. A turn starts at each message the builder typed, and
-   * those are the only "user" entries here: rows the CLI adds to the conversation
-   * (reminders, notifications, a local command's output) are left out, where
-   * `readTranscript` keeps some of them for the manager. Entries carry `id` and `at`
+   * those are the only "user" entries here besides `local` ones: a command the CLI ran
+   * itself (`/model`, an unknown `/token`), which starts no turn, with its output as a
+   * `local` "assistant" entry. Rows the CLI adds to the conversation (reminders,
+   * notifications) are left out, where `readTranscript` keeps some of them for the
+   * manager. A backend that records no local commands (OpenCode) has no `local`
+   * entries. Entries carry `id` and `at`
    * from the record; tool entries their `outcome`, and edits and writes the lines they
    * added and removed, wherever the CLI recorded them. At most
    * RECENT_TURNS_ENTRY_CAP entries (recentTurns.ts), the oldest turns dropped first.

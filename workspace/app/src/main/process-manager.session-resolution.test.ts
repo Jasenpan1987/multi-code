@@ -150,12 +150,13 @@ describe("reading a stopped instance", () => {
     expect(manager.readTranscript(id, 10)).toEqual([]);
   });
 
-  it("reads the last turns of the same session, for the phone", () => {
+  it("reads the last turns of the same session, for the phone, and says which session", () => {
     disk.latestByCwd.set(CWD, "ses-disk");
     const id = stoppedInstance();
     expect(manager.readRecentTurns(id, 10)).toEqual({
       entries: [{ kind: "user", text: "turns of ses-disk" }],
       hasEarlier: true,
+      session: "ses-disk",
     });
     expect(disk.turnReads).toEqual([{ sessionId: "ses-disk", turns: 10 }]);
   });
@@ -177,6 +178,7 @@ describe("reading a stopped instance", () => {
     expect(manager.readRecentTurns(stoppedInstance("/Users/x/code/broken"), 10)).toEqual({
       entries: [],
       hasEarlier: false,
+      session: "ses-broken",
     });
   });
 

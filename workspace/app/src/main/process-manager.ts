@@ -15,6 +15,7 @@ import type {
   DialogRef,
   HookAttention,
   PromptToolCall,
+  RecentTurns,
   SessionDiscovery,
   SessionStart,
   SpawnOptions,
@@ -1273,6 +1274,12 @@ export class ProcessManager {
       return;
     }
     instance.hookAttention.handle(delivery);
+    // `/new` and `/clear` start a session, and the CLI had already put its id in the
+    // registry when this hook ran (measured 2026-10-30, Claude 2.1.312: the registry at
+    // +1.1 s after Enter, the hook at +1.7 s). Followed now rather than at the next
+    // poll, up to LIVE_SESSION_POLL_MS later, so a phone that has the contact open
+    // shows the new session at once. Should the registry lag, the poll still follows.
+    if (delivery.event === "SessionStart") this.syncLiveSessionId(instance);
   }
 
   private teardownObservers(instance: ManagedInstance) {
@@ -1477,17 +1484,22 @@ export class ProcessManager {
   }
 
   // The last `turns` turns of the session the phone has open (Backend.readRecentTurns),
-  // from the same session `readTranscript` reads. `turns` comes from the phone, so it
-  // is taken as a whole number of at least one.
-  readRecentTurns(id: string, turns: number): { entries: TranscriptEntry[]; hasEarlier: boolean } {
+  // from the same session `readTranscript` reads, and which session that is. `turns`
+  // comes from the phone, so it is taken as a whole number of at least one.
+  //
+  // A session the process has moved to (`/new`) is read from the moment it is known,
+  // file or no file yet, never the one before it: readableSessionId falls back only
+  // while no live id is known.
+  readRecentTurns(id: string, turns: number): RecentTurns & { session?: string } {
     const instance = this.instances.get(id);
     if (!instance) return { entries: [], hasEarlier: false };
     const sessionId = this.readableSessionId(instance);
     if (!sessionId) return { entries: [], hasEarlier: false };
     try {
-      return getBackend(instance.backend).readRecentTurns(sessionId, Math.max(1, Math.floor(turns) || 1));
+      const read = getBackend(instance.backend).readRecentTurns(sessionId, Math.max(1, Math.floor(turns) || 1));
+      return { ...read, session: sessionId };
     } catch {
-      return { entries: [], hasEarlier: false };
+      return { entries: [], hasEarlier: false, session: sessionId };
     }
   }
 
