@@ -430,7 +430,7 @@ shows each check state, gates the QR, sends a test push and revokes.
 ### T-810: Desktop Web Push
 
 - **Type:** feature
-- **Status:** in-progress
+- **Status:** done (a11ce58, merged 56adbbd)
 - **Story:** 7
 - **Description:**
   - Add `web-push` (and its types). VAPID keys generated once, kept at
@@ -481,6 +481,17 @@ shows each check state, gates the QR, sends a test push and revokes.
   `notificationclick` opening or focusing `navigate`. While the app is open,
   `navigator.setAppBadge(<needs-you count>)`. Opening the app from a notification lands on
   that session.
+- **Note:** From T-810: the payload is `{"web_push":8030,"notification":{title, body?,
+  navigate, tag},"app_badge":n}`; `app_badge` is top level (WebKit 295319@main), and there is
+  no `mutable`, so iOS 18.4+ never wakes the service worker; other browsers get a `push`
+  event with this JSON: show `notification.{title, body, tag}`, open `navigate` on click,
+  read `app_badge` from the top level. Routes `#/s/<encodeURIComponent(id)>` and `#/`.
+  `vapidPublicKey === ""` means push is unavailable. On launch, subscribe again and send
+  `push-subscribe` when the existing subscription's `applicationServerKey` differs from
+  `auth-ok.vapidPublicKey` (keys can be regenerated) or `pushEnabled` is false while
+  permission is granted; resend when the ack says `failed`. The server counts a phone
+  silent for 20 s as not looking, so it gets the push. Nothing is pushed when a Needs you
+  clears, so keep calling `setAppBadge` while the app is open.
 - **Acceptance:** in Playwright WebKit or Chromium with a stubbed `pushManager`, the
   subscribe and re-subscribe paths send the right frames; the service worker's `push` and
   `notificationclick` handlers are unit-tested with a fake `self`. Real delivery is
@@ -491,7 +502,7 @@ shows each check state, gates the QR, sends a test push and revokes.
 ### T-812: Desktop Phone panel
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** in-progress
 - **Story:** 9
 - **Description:** Rewrite `renderer/components/PhoneSection.tsx` to mockup 5.2: the
   on/off switch; three check rows from `RemoteStatus.checks`, each with what it means and
@@ -508,6 +519,10 @@ shows each check state, gates the QR, sends a test push and revokes.
   sent from `markRead` only when it changed something (useNotifications.ts, preload.ts,
   shared/types.ts, ipc-handlers.ts), and have main call the remote host's `markSeen(id)`, so a
   session read at the desk stops being Finished on the phone. About 10 lines.
+- **Note:** From T-810: `devices[].pushEnabled/lastPushError`, `checks.push` (`ready` or
+  `error` + detail); "Send test" calls `window.electronAPI.sendRemoteTestPush(deviceId)` →
+  `{ ok: true } | { ok: false; error }`; show the error. It needs the phone link on, HTTPS
+  ready and a subscription.
 - **Acceptance:** CDP checks on an isolated dev build (`--user-data-dir`) with the checks
   forced into each state (inject a fake checker): rows, buttons, QR gating, test push and
   revoke call the right IPC.
@@ -557,3 +572,4 @@ shows each check state, gates the QR, sends a test push and revokes.
 - 2026-10-29: T-804 done and merged (e154a82); `readRecentTurns(id, turns)` in process-manager.
 - 2026-10-29: T-802 done and merged (e85b622): `pnpm harness`, `pnpm harness:shot`, README in `workspace/app/scripts/mobile-harness/`. T-806 started.
 - 2026-10-29: T-803 done and merged (dd85e29). G-303 resolved (OpenCode Stop = two Escs 250 ms apart, only for the running session the terminal shows). G-304 wiring added to T-812. T-810 started.
+- 2026-10-29: T-810 done and merged (56adbbd): `remote/push.ts`, `web-push`, `remote-test-push` IPC. T-812 started.
