@@ -649,3 +649,4 @@ shows each check state, gates the QR, sends a test push and revokes.
 - 2026-10-29: T-807 done and merged (a1f2118); phone bundle 502 KB (+183 KB, react-markdown). T-808 started.
 - 2026-10-29: T-809 done and merged (1466711); phone bundle 602 KiB with xterm. 4 timing tests (opencodeService, loudness) failed once under load average ~300 from other projects and passed alone (69/69).
 - 2026-10-29: T-808 done and merged (20cbd62), checked live on Claude 2.1.312 (permission yes/no+reason, two questions with multi-select and typed text, plan revise then approve). M1 and M2 complete: 1933 tests pass. Epic-wide review-loop next, then T-813.
+- 2026-10-29: Epic review-loop done (gpt-6.1-sol): desktop 13 rounds over 5 areas, $3.81 (2c4d4f7, merged b605887); phone 12 rounds over 5 areas, $4.24 (0365a94, merged ef7ad55). Every area ended clean or at its limit. 1968 tests pass.
