@@ -297,6 +297,10 @@ export interface TranscriptEntry {
   // "tool" only, for edits and writes: lines added and removed.
   added?: number;
   removed?: number;
+  // Not a message to or from the model: a CLI command the builder ran ("user",
+  // e.g. "/compact", "/token") or the CLI's own output for it ("assistant", e.g.
+  // "Unknown slash command: token"). The phone shows these as small grey lines.
+  local?: boolean;
 }
 
 export interface TranscriptFrame {
@@ -305,6 +309,10 @@ export interface TranscriptFrame {
   entries: TranscriptEntry[];
   // More turns exist before the first one sent.
   hasEarlier: boolean;
+  // The CLI session these entries come from. It changes when the builder starts a
+  // new one (`/new`, `/clear`): the phone then drops what it showed for the old one
+  // and starts the chat afresh, even before the new session has any entries.
+  session?: string;
 }
 
 // A dialog option as the CLI labels it. Kept for the secretary and the prompt
