@@ -27,8 +27,16 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="icons/icon-180.png" />
     <title>Multi-Code</title>
+    <!-- Until bundle.js runs (base.css is inside it): its background, and a line
+         that says the page is still starting, so a slow start isn't a white page. -->
+    <style>
+      html, body { margin: 0; background: #141518; color: #9aa0aa; }
+      @media (prefers-color-scheme: light) { html, body { background: #f0f4fa; color: #5f6b7d; } }
+      .boot { margin: 0; padding-top: 40vh; text-align: center; font: 15px -apple-system, sans-serif; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- React replaces this on its first render. -->
+    <div id="root"><p class="boot">Opening Multi-Code…</p></div>
   </body>
 </html>

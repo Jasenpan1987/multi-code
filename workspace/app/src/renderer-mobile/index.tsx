@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import { App } from "./App";
+import { App, ErrorScreen } from "./App";
 import { deviceName } from "./pairing";
 import { startPush } from "./push";
 import { takePairing } from "./routes";
@@ -21,7 +21,9 @@ const container = document.getElementById("root");
 if (container) {
   createRoot(container).render(
     <StoreContext.Provider value={store}>
-      <App />
+      <ErrorScreen>
+        <App />
+      </ErrorScreen>
     </StoreContext.Provider>
   );
 }

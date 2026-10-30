@@ -1,7 +1,7 @@
 // The phone app's screens, chosen by the route (routes.ts). Each screen is its own
 // file under screens/ with its own CSS file; adding one means a case here.
 
-import { useEffect, useState } from "react";
+import { Component, useEffect, useState, type ReactNode } from "react";
 import { openIdOf, useRoute, type Route } from "./routes";
 import { ListScreen } from "./screens/ListScreen";
 import { SessionScreen } from "./screens/SessionScreen";
@@ -33,6 +33,35 @@ export function App() {
       {kept && <TerminalScreen key={`terminal:${kept}`} id={kept} hidden={route.screen !== "terminal"} />}
     </>
   );
+}
+
+// An error a screen throws while it renders takes the whole tree down, and React
+// leaves an empty page. This shows the error instead, and a way back: a reload
+// opens the same route from the offline cache and dials the Mac again.
+export class ErrorScreen extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: unknown) {
+    return { error: error instanceof Error ? error : new Error(String(error)) };
+  }
+
+  render() {
+    const { error } = this.state;
+    if (!error) return this.props.children;
+    return (
+      <div className="screen crashed">
+        <div className="screen-body">
+          <p className="empty">Multi-Code stopped on an error.</p>
+          <pre className="mono">{error.stack ? `${error.message}\n\n${error.stack}` : error.message}</pre>
+        </div>
+        <div className="screen-foot">
+          <button className="btn primary block" onClick={() => location.reload()}>
+            Reload
+          </button>
+        </div>
+      </div>
+    );
+  }
 }
 
 function screenOf(route: Route) {
