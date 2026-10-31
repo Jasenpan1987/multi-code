@@ -9,14 +9,9 @@ import {
 } from "./contactHotkeys";
 
 describe("hotkeyTargets", () => {
-  const project = (id: string) => ({ id, isManager: false });
+  const project = (id: string) => ({ id });
 
-  it("leaves out the manager, wherever it is stored", () => {
-    const mgr = { id: "m", isManager: true };
-    expect(hotkeyTargets([project("a"), mgr, project("b")])).toEqual(["a", "b"]);
-  });
-
-  it("keeps only the first nine projects", () => {
+  it("keeps only the first nine contacts, in stored order", () => {
     const many = Array.from({ length: 12 }, (_, i) => project(`p${i + 1}`));
     expect(hotkeyTargets(many)).toEqual(
       ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9"]

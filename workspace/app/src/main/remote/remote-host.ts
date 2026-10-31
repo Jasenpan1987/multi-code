@@ -189,14 +189,14 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
   // whether or not the builder is at the desk).
   function pushEvent(id: string, event: SecretaryEvent) {
     const info = pm.infoOf(id);
-    if (!info || info.isManager) return;
+    if (!info) return;
     if ((fresh.get(id) ?? 0) > event.seq) return;
     const state: RemoteSessionState = event.kind === "needs-you" ? "needs-you" : "finished";
     const body = previewOf(state, event, info, lines.get(id) ?? {});
     // The phone's Needs you count, as its list would show it now.
     const badge = pm
       .listInstances()
-      .filter((i) => !i.isManager && pm.secretaryEventOf(i.id)?.kind === "needs-you").length;
+      .filter((i) => pm.secretaryEventOf(i.id)?.kind === "needs-you").length;
     push.pushSession({
       instanceId: id,
       title: `${info.name} · ${state === "needs-you" ? "Needs you" : "Finished"}`,
@@ -237,7 +237,7 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
 
   const phoneable = (id: string): InstanceInfo | null => {
     const info = pm.infoOf(id);
-    return info && !info.isManager && info.status === "running" ? info : null;
+    return info && info.status === "running" ? info : null;
   };
   // A dialog is on screen: reported and unanswered, or its answer's keys are still
   // going in (the first key clears the event, the dialog closes on the last), or the
@@ -247,7 +247,7 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
 
   return {
     listInstances(): RemoteInstance[] {
-      const infos = pm.listInstances().filter((i) => !i.isManager);
+      const infos = pm.listInstances();
       const ids = new Set(infos.map((i) => i.id));
       for (const map of [lines, linesSession, seen, stopping, listed, fresh]) {
         for (const id of map.keys()) if (!ids.has(id)) map.delete(id);
@@ -290,7 +290,7 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
     liveDialog(id): LiveDialog | null {
       const event = pm.secretaryEventOf(id);
       const info = pm.infoOf(id);
-      if (event?.kind !== "needs-you" || !info || info.isManager) return null;
+      if (event?.kind !== "needs-you" || !info) return null;
       const dialog = dialogOf(event, info.backend);
       return {
         seq: event.seq,

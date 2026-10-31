@@ -489,7 +489,7 @@ describe("local commands in the phone's turns", () => {
     }
   });
 
-  it("leaves the manager's and the secretary's readers as they were", () => {
+  it("leaves the entries and the secretary's reader as they were", () => {
     const s = cliSession();
     s.command("clear", "clear");
     s.system("clear-out", "local_command", "<local-command-stdout></local-command-stdout>");

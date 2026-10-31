@@ -276,36 +276,6 @@ function rowEntries(items: Database.Statement, row: MessageRow): TranscriptEntry
   return entries;
 }
 
-// Rows fetched per transcript entry wanted. Few rows come back empty (an image sent on
-// its own, a step that only reasoned or failed before writing anything), and the
-// fetch is cheap: an assistant row's content is only parsed once it's needed.
-const TRANSCRIPT_ROWS_PER_ENTRY = 3;
-
-// The tail of a session as reflowable lines, chronological. Rows are read newest
-// first (what the `(session_id, seq)` index serves) and the result reversed.
-export function readOpencodeTranscript(
-  sessionId: string,
-  limit: number,
-  dbPath?: string
-): TranscriptEntry[] {
-  if (limit <= 0) return [];
-  return withDb(dbPath, [], (db) => {
-    const rows = db
-      .prepare(MESSAGE_ROWS_SQL)
-      .all(sessionId, limit * TRANSCRIPT_ROWS_PER_ENTRY) as MessageRow[];
-    const items = db.prepare(ASSISTANT_ITEMS_SQL);
-    const newestFirst: TranscriptEntry[] = [];
-    for (const row of rows) {
-      const entries = rowEntries(items, row);
-      for (let i = entries.length - 1; i >= 0 && newestFirst.length < limit; i--) {
-        newestFirst.push(entries[i]);
-      }
-      if (newestFirst.length >= limit) break;
-    }
-    return newestFirst.reverse();
-  });
-}
-
 // For the language rule only, as on the Claude side: a bare "B" as the latest
 // message falls back to these, newest first.
 const EARLIER_MESSAGES = 3;

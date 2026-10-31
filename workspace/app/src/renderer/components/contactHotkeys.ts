@@ -1,6 +1,5 @@
-// Cmd+1…9 shows one of the first nine projects in the contact list. The manager
-// is left out, so Cmd+1 is the first project whether or not a manager exists.
-// Holding Cmd alone puts each project's digit after its name (ContactList).
+// Cmd+1…9 shows one of the first nine contacts in the contact list. Holding Cmd
+// alone puts each contact's digit after its name (ContactList).
 //
 // Option+Shift+Down and Up show the next and the previous contact with unread
 // alerts, Slack's and Discord's keys for the next unread channel. Back from
@@ -11,18 +10,11 @@
 export const HINT_DELAY_MS = 250;
 
 /**
- * The ids Cmd+1…9 select, first to ninth, in the order the list draws them.
- *
- * Filtering the stored order is enough: pinManagerFirst moves only the manager,
- * so the projects keep the same relative order on screen.
+ * The ids Cmd+1…9 select, first to ninth, in the order the list draws them: the
+ * stored order.
  */
-export function hotkeyTargets<T extends { id: string; isManager?: boolean }>(
-  instances: T[]
-): string[] {
-  return instances
-    .filter((i) => !i.isManager)
-    .slice(0, 9)
-    .map((i) => i.id);
+export function hotkeyTargets<T extends { id: string }>(instances: T[]): string[] {
+  return instances.slice(0, 9).map((i) => i.id);
 }
 
 // The part of a KeyboardEvent this reads, so tests need no DOM.

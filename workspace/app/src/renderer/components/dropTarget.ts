@@ -4,11 +4,11 @@
 //
 // Files go into the selected contact's project and nowhere else: to drop into
 // another project, switch to it first. A stopped contact takes drops, since the copy
-// needs only its directory. The Manager doesn't: its folder belongs to Multi-Code.
+// needs only its directory.
 
 import type { Instance } from "../../shared/types";
 
-export type DropRefusal = "manager" | "no-selection";
+export type DropRefusal = "no-selection";
 
 export type DropState =
   // No overlay, and a drop is ignored: a dialog is open, or no files are dragged.
@@ -26,6 +26,5 @@ export function dropState(
 ): DropState {
   if (dialogOpen) return NO_DROP;
   if (!selected) return { kind: "refused", reason: "no-selection" };
-  if (selected.isManager) return { kind: "refused", reason: "manager" };
   return { kind: "target", instance: selected };
 }

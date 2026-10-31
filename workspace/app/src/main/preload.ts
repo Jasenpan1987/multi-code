@@ -5,8 +5,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Instance management
   createInstance: (cwd: string, alias?: string, backend?: string) =>
     ipcRenderer.invoke("create-instance", cwd, alias, backend),
-  createManager: () => ipcRenderer.invoke("create-manager"),
-  hasManager: () => ipcRenderer.invoke("has-manager"),
   backendAvailability: (backend: string) =>
     ipcRenderer.invoke("backend-availability", backend),
   startInstance: (id: string) => ipcRenderer.invoke("start-instance", id),
@@ -78,9 +76,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("secretary:get-audio", instanceId, seq),
   replyToSecretary: (instanceId: string, seq: number, text: string) =>
     ipcRenderer.invoke("secretary:reply", instanceId, seq, text),
-
-  // Manager activity feed
-  getManagerActivity: () => ipcRenderer.invoke("manager-activity-list"),
 
   // File drop
   getDropFolder: (instanceId: string) =>
@@ -169,13 +164,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.removeListener("instance-read-on-phone", listener);
     };
   },
-  onInstanceStarted: (callback: (instance: unknown) => void) => {
-    const listener = (_event: unknown, instance: unknown) => callback(instance);
-    ipcRenderer.on("instance-started", listener);
-    return () => {
-      ipcRenderer.removeListener("instance-started", listener);
-    };
-  },
   onInstanceSessionId: (callback: (id: string, sessionId: string) => void) => {
     const listener = (_event: unknown, id: string, sessionId: string) =>
       callback(id, sessionId);
@@ -214,13 +202,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("remote-status", listener);
     return () => {
       ipcRenderer.removeListener("remote-status", listener);
-    };
-  },
-  onManagerActivity: (callback: (entry: unknown) => void) => {
-    const listener = (_event: unknown, entry: unknown) => callback(entry);
-    ipcRenderer.on("manager-activity", listener);
-    return () => {
-      ipcRenderer.removeListener("manager-activity", listener);
     };
   },
   onSecretaryBrief: (

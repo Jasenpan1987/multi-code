@@ -13,10 +13,6 @@ export interface SavedContact {
   // Absent on contacts saved before it was kept, and on one whose session isn't
   // known yet; those open the directory's most recent session.
   sessionId?: string;
-  // The coordinator instance. At most one exists, and it is spawned differently:
-  // it gets the manager MCP tools and its cwd is a directory Multi-Code owns
-  // rather than one of the user's projects.
-  isManager?: boolean;
 }
 
 const STORE_PATH = path.join(app.getPath("userData"), "contacts.json");
@@ -25,12 +21,19 @@ export function loadContacts(): SavedContact[] {
   try {
     if (fs.existsSync(STORE_PATH)) {
       const data = fs.readFileSync(STORE_PATH, "utf8");
-      return JSON.parse(data);
+      return withoutManager(JSON.parse(data));
     }
   } catch {
     // Ignore parse errors, return empty
   }
   return [];
+}
+
+// The manager agent was retired on 2026-11-01. Its contact, marked `isManager`, is
+// left out, and the next save drops it from the file. Its directory under userData
+// is never touched: the builder kept their own files in it.
+function withoutManager(contacts: (SavedContact & { isManager?: boolean })[]): SavedContact[] {
+  return contacts.filter((c) => !c.isManager);
 }
 
 export function saveContacts(contacts: SavedContact[]) {

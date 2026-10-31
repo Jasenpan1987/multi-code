@@ -157,9 +157,6 @@ export interface Instance {
   // Last time this instance reported activity — a turn ending, or blocking on a
   // prompt. Not every PTY repaint. Absent until the first one.
   lastActivityAt?: number;
-  // The coordinator. At most one, sorted first in the contact list, and the only
-  // instance that gets the fleet-driving MCP tools.
-  isManager?: boolean;
   // Finer-grained than `status`, and only present while running: whether it is idle,
   // working, blocked on a decision, or still starting up.
   runState?: "starting" | "idle" | "busy" | "blocked";
@@ -190,46 +187,6 @@ export type BackendAvailability =
 // The one command that upgrades an OpenCode 1.x install to 2.x (it replaces
 // `~/.opencode/bin/opencode`). Named by the New Instance dialog and by a refused start.
 export const OPENCODE_UPGRADE_COMMAND = "curl -fsSL https://opencode.ai/v2/install | bash";
-
-// One tool call made by the manager agent, as shown in the toolbox's Manager
-// section. Refusals are entries too — `status: "error"` with the reason in
-// `result` — because a dispatch that was blocked is the thing the user most needs
-// to see.
-export interface ManagerActivityEntry {
-  id: number;
-  // When the call started, not when it finished.
-  at: number;
-  tool: string;
-  // Session the call was aimed at, for the tools that take one.
-  target?: string;
-  // The arguments as JSON, truncated. Verbatim rather than prettified: for a write
-  // the user needs to read exactly what was sent.
-  payload: string;
-  // `running` while the handler is still working, which matters for the tools that
-  // wait on another session rather than answering immediately.
-  status: "running" | "ok" | "error";
-  // What the tool returned, or the refusal reason when `status` is `error`.
-  result?: string;
-  durationMs?: number;
-  // Which hand the manager used.
-  //
-  // `mcp` — one of our tools, so the work happened in another session and that
-  // session's own terminal shows it too.
-  // `self` — the manager's own Bash/Edit/Write, reported by a hook in its CLI.
-  // Nothing else in the app records these, so without them the most privileged
-  // thing the manager does is also the only invisible thing it does.
-  origin: "mcp" | "self";
-}
-
-// Result of creating the manager.
-//
-// `seededWorkspace` is true only on the run that created its guidance file, which is
-// exactly the run whose CLI will stop on the workspace-trust dialog. The renderer
-// uses it to show that warning once and never again.
-export interface CreateManagerResult {
-  instance: Instance;
-  seededWorkspace: boolean;
-}
 
 export interface GitFileEntry {
   path: string;
@@ -347,15 +304,11 @@ export interface ElectronAPI {
     alias?: string,
     backend?: BackendName
   ) => Promise<Instance>;
-  // Rejects when one already exists. Takes no arguments: the manager's directory
-  // is Multi-Code's own, and it only runs on claude.
-  createManager: () => Promise<CreateManagerResult>;
-  hasManager: () => Promise<boolean>;
   startInstance: (id: string) => Promise<Instance | null>;
   killInstance: (id: string) => Promise<void>;
   removeInstance: (id: string) => Promise<void>;
   restartInstance: (id: string) => Promise<Instance | null>;
-  // A new contact on the same project, in a fresh session. Rejects for the manager.
+  // A new contact on the same project, in a fresh session.
   duplicateInstance: (id: string) => Promise<Instance | null>;
   listInstances: () => Promise<Instance[]>;
   loadContacts: () => Promise<Instance[]>;
@@ -440,12 +393,9 @@ export interface ElectronAPI {
   // it arrives on "secretary-brief", in the brief's `exchanges`.
   replyToSecretary: (instanceId: string, seq: number, text: string) => Promise<void>;
 
-  // Manager activity feed
-  getManagerActivity: () => Promise<ManagerActivityEntry[]>;
-
   // File drop. The ones taking an instance id act on that contact's project
   // directory, as stored, which keys its default folder: contacts on one project
-  // share it. They reject for the manager or an unknown contact.
+  // share it. They reject for an unknown contact.
   getDropFolder: (instanceId: string) => Promise<DropFolder>;
   // Resolves to the folder as getDropFolder now reports it.
   setDropFolder: (instanceId: string, folder: string) => Promise<DropFolder>;
@@ -495,9 +445,6 @@ export interface ElectronAPI {
   onInstanceContextUsage: (
     callback: (id: string, usage: ContextUsage | null) => void
   ) => () => void;
-  // Fires whenever an instance starts, including when the manager started it
-  // through a tool rather than the user clicking play.
-  onInstanceStarted: (callback: (instance: Instance) => void) => () => void;
   onInstanceActivity: (callback: (id: string, type: string) => void) => () => void;
   // A paired phone read the instance: opened it, or had it open when it reported.
   // Its unread alerts clear here too.
@@ -509,11 +456,6 @@ export interface ElectronAPI {
   onShellOutput: (callback: (id: string, data: string) => void) => () => void;
   onShellExit: (callback: (id: string) => void) => () => void;
   onRemoteStatus: (callback: (status: RemoteStatus) => void) => () => void;
-  // One entry per push, inserted or updated. The renderer merges on `id` rather
-  // than re-fetching, so a long-running call flips from running to done in place.
-  onManagerActivity: (
-    callback: (entry: ManagerActivityEntry) => void
-  ) => () => void;
   // Every change to an instance's brief; null when it is dropped (the event
   // cleared, or Secretary Mode went off).
   onSecretaryBrief: (

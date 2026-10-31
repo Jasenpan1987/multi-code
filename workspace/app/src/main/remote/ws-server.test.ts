@@ -1021,9 +1021,8 @@ describe("instance states and previews", () => {
     b.close();
   });
 
-  it("leaves the Manager out, and lists stopped instances as Idle", async () => {
+  it("lists stopped instances as Idle", async () => {
     const fx = await startServer();
-    fx.pm.add({ id: "manager", isManager: true, working: true });
     fx.pm.add({ id: "stopped", status: "stopped" });
     const client = new TestClient(fx.url);
     await client.handshake();
@@ -1978,12 +1977,10 @@ describe("Web Push (T-810)", () => {
     looking.close();
   });
 
-  it("sends nothing for a restated dialog, or for the Manager", async () => {
+  it("sends nothing for a restated dialog", async () => {
     const fx = await startServer();
-    fx.pm.add({ id: "manager", name: "Manager", isManager: true });
     await subscribedAway(fx);
     fx.pm.raise("inst-1", { ...bash(60), restated: true });
-    fx.pm.raise("manager", bash(61));
     await settle();
     expect(sendNotification).not.toHaveBeenCalled();
     // The restated dialog is still the live one; only its second push is skipped.

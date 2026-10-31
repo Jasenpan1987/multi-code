@@ -4,8 +4,8 @@ import type { Instance } from "../../shared/types";
 import { RenameSessionDialog } from "./RenameSessionDialog";
 
 // How long OpenCode's slash menu is given to draw before the Enter that runs the
-// command. The manager's run_command waits 120 ms; a quick action has nobody waiting
-// on it, so a little more.
+// command. Both CLIs draw a TUI frame in well under this, and a quick action has
+// nobody waiting on it.
 const SLASH_MENU_SETTLE_MS = 250;
 
 interface QuickActionsSectionProps {
@@ -65,7 +65,7 @@ export function QuickActionsSection({
 
   // Claude runs a slash command typed with its Enter in one write. OpenCode 2's slash
   // menu takes that Enter and leaves the command in the box (T-611, B-1), so the Enter
-  // follows once the menu has drawn, as the manager's run_command does.
+  // follows once the menu has drawn.
   const sendSlash = useCallback(
     (cmd: string) => {
       if (instance.backend !== "opencode") {

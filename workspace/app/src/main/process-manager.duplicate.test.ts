@@ -142,12 +142,6 @@ describe("duplicateInstance", () => {
     expect(manager.duplicateInstance(first.id)!.name).toBe("hrr 2");
   });
 
-  it("refuses the manager, which is a singleton", () => {
-    const manager = new ProcessManager();
-    const boss = manager.createInstance("/tmp/manager", "Manager", "claude", true);
-    expect(() => manager.duplicateInstance(boss.id)).toThrow(/manager/i);
-  });
-
   it("returns null for an unknown contact", () => {
     expect(new ProcessManager().duplicateInstance("nope")).toBeNull();
   });

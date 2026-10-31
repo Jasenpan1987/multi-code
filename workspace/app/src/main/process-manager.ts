@@ -22,13 +22,12 @@ import type {
 } from "./backends";
 import type { PromptDetail } from "./remote/promptExtract";
 import { remoteServer } from "./remote/ws-server";
-import type { TranscriptEntry } from "../shared/remote-protocol";
 import type { ContextUsage } from "../shared/types";
 import { moveInOrder } from "../shared/reorder";
 import { OPENCODE_VIEW_KEYS } from "../shared/replyStart";
 import type { OpencodeViewCommand } from "../shared/replyStart";
 import { debugTrace } from "./debug-trace";
-import { RunStateTracker, type RunState, type WriteVerdict } from "./run-state";
+import { RunStateTracker, type RunState } from "./run-state";
 import { INSTANCE_ENV, SPAWN_ENV } from "./backends/instance-env";
 import { KEY_GAP_MS } from "./secretary/dialog";
 import type { AnswerPlan } from "./secretary/dialog";
@@ -44,7 +43,6 @@ export interface InstanceInfo {
   backend: BackendName;
   contextUsage?: ContextUsage;
   lastActivityAt?: number;
-  isManager?: boolean;
   // Only meaningful while running; `status` already says stopped.
   runState?: RunState;
   // A turn is running and nothing waits on the builder, from the agent's own
@@ -140,24 +138,16 @@ interface ManagedInstance {
   // shows no context figure: the one it had is the session it left. Cleared when
   // it shows a session again, and when the process exits.
   homeShown?: boolean;
-  // Timestamp (Date.now()) of the last PTY byte received from this instance. Feeds
-  // the write-safety gate's "did that write land" check and `start_session`'s
-  // readiness wait, never activity detection.
-  lastPtyByteAt: number;
   // Cached context usage plus when it was read. Optional so the two places that
   // build a ManagedInstance don't need to seed them; absent means "never read".
   contextUsage?: ContextUsage;
   contextUsageAt?: number;
   // When this instance last reported activity (a turn ending, or blocking on a
-  // prompt). Distinct from lastPtyByteAt, which moves on every repaint of the
-  // spinner. Absent until the first activity.
+  // prompt), not every repaint of the spinner. Absent until the first activity.
   lastActivityAt?: number;
   // The session whose turn last ended, when the backend says (OpenCode). Its terminal
   // can be showing another of the contact's sessions by then.
   endedSession?: string;
-  // The coordinator instance. Spawned with the manager MCP tools attached; at most
-  // one exists.
-  isManager?: boolean;
   // A session id found on disk for this cwd, for instances that don't have a live
   // one. Read paths only.
   //
@@ -176,8 +166,7 @@ interface ManagedInstance {
   // nobody else's, so it counts as a claim (isSessionClaimedBy) even while the
   // contact is stopped: no other contact in the directory may adopt it.
   ownSessionId?: string;
-  // Whether it is safe to write to this instance right now. See run-state.ts for
-  // the hazard this exists to prevent.
+  // What it is doing right now; see run-state.ts.
   runState: RunStateTracker;
   // Its hooks don't run, so nothing will alert for it. Per process: a restart
   // builds a fresh instance and starts out trusting its hooks again.
@@ -189,8 +178,8 @@ interface ManagedInstance {
   // delivery from the process a restart replaced can be told apart. Absent on a
   // contact that has never been spawned in this run.
   spawnId?: string;
-  // See SecretaryEvent. Never set on the manager or on a backend that doesn't keep
-  // them; cleared when the builder deals with it, and on exit.
+  // See SecretaryEvent. Never set on a backend that doesn't keep them; cleared when
+  // the builder deals with it, and on exit.
   secretaryEvent?: SecretaryEvent;
   // Waiting for the agent's own report that its dialog cleared, with the call that
   // report carried: answerDialog checks a question box's recorded answers with it.
@@ -263,12 +252,6 @@ const DEFAULT_BACKEND: BackendName = "claude";
 const SPAWN_COLS = 120;
 const SPAWN_ROWS = 30;
 
-// How long to let the slash-command autocomplete menu draw before submitting, and
-// again between the two submissions. Both CLIs render a TUI frame in well under
-// this; the cost of being generous is a fifth of a second on a command the manager
-// then waits seconds for anyway.
-const MENU_SETTLE_MS = 120;
-
 // How long a disk-resolved session id is trusted before looking again. Long,
 // because it only changes when a session is created or resumed in that directory,
 // and the lookup reads a directory listing or queries sqlite.
@@ -286,7 +269,6 @@ const LIVE_SESSION_POLL_MS = 4000;
 export class ProcessManager {
   private instances = new Map<string, ManagedInstance>();
   private mainWindow: BrowserWindow | null = null;
-  private activityListeners = new Set<(id: string, type: string) => void>();
   private secretaryListeners = new Set<SecretaryEventListener>();
   // One counter for every instance's secretary events. A per-record one would
   // restart at zero when start or restart builds a fresh record, and an old
@@ -294,15 +276,10 @@ export class ProcessManager {
   // in ms, so a relaunch, which takes far longer than a millisecond, starts above
   // every seq the previous launch handed out; nothing keeps them across launches.
   private secretarySeq = 0;
-  // Set from outside rather than resolved here: the options carry the manager MCP
-  // server's port and bearer token, and importing that module would close a cycle
-  // (it imports this one to reach the instance list). main/index.ts and the
-  // create-manager IPC handler own the ordering — start the server, then set this,
-  // then spawn.
-  private managerSpawnOptions: SpawnOptions | null = null;
-  // What every other Claude instance spawns with: the alert hooks' settings file.
-  // Set once at startup, after the server that the hooks report to is listening.
-  // Null when it isn't, and sessions then spawn without alert hooks.
+  // What every instance spawns with: the alert hooks' settings file or the TUI
+  // plugin. Set from outside, once at startup, after the server the hooks report
+  // to is listening (alert-server/index.ts; importing it would close a cycle). Null
+  // when it isn't, and sessions then spawn without alert hooks.
   private sessionSpawnOptions: SpawnOptions | null = null;
 
   private liveSessionTimer: ReturnType<typeof setInterval> | null = null;
@@ -330,7 +307,7 @@ export class ProcessManager {
   //
   // The visible symptom of not doing this is a context percentage frozen at the
   // previous session's figure, which is how it was reported. The transcript a
-  // paired phone and the manager read would be the old one too.
+  // paired phone reads would be the old one too.
   private syncLiveSessionId(instance: ManagedInstance) {
     const ptyProcess = instance.ptyProcess;
     // A stopped instance has no live session to follow; its read paths already
@@ -394,39 +371,8 @@ export class ProcessManager {
     return { kind: "latest", isClaimed };
   }
 
-  setManagerSpawnOptions(opts: SpawnOptions | null) {
-    this.managerSpawnOptions = opts;
-  }
-
   setSessionSpawnOptions(opts: SpawnOptions | null) {
     this.sessionSpawnOptions = opts;
-  }
-
-  // Subscribe to activity from any instance, returning an unsubscribe function.
-  //
-  // Exists for the manager's `wait_for_idle`, which has to know the moment a turn
-  // ends. The alternative was polling a transcript, and polling is what made the
-  // manager slow: each poll costs it a whole model turn to decide to poll again, so
-  // waiting on one session ran into minutes. A listener costs nothing while idle.
-  //
-  // `type` is the instance's activity event, plus `exit` when the pty dies — a waiter
-  // has to give up on a session that is no longer there.
-  onActivity(listener: (id: string, type: string) => void): () => void {
-    this.activityListeners.add(listener);
-    return () => {
-      this.activityListeners.delete(listener);
-    };
-  }
-
-  private emitActivity(id: string, type: string) {
-    for (const listener of this.activityListeners) {
-      try {
-        listener(id, type);
-      } catch {
-        // A broken waiter must not take down the activity callback that feeds
-        // every other consumer of this event.
-      }
-    }
   }
 
   // Subscribe to secretary events, returning an unsubscribe function. Fires with
@@ -646,9 +592,8 @@ export class ProcessManager {
       return;
     }
     if (type !== "waiting" && type !== "prompt") return;
-    // The manager has no secretary in v1 (PRD Story 2); the backend says whether
-    // its instances do.
-    if (instance.isManager || !getBackend(instance.backend).keepsSecretaryEvents) {
+    // The backend says whether its instances keep secretary events.
+    if (!getBackend(instance.backend).keepsSecretaryEvents) {
       return;
     }
     // A record a restart has replaced reports nothing any more.
@@ -701,19 +646,11 @@ export class ProcessManager {
   }
 
   // Every write to an instance's pty goes through here first, whoever sent it:
-  // keys at the desk, the compose box, a paired phone, the manager. Any of them
-  // means the session's pending event has been dealt with, a needs-you included:
-  // the CLI reports nothing at all when a dialog is denied (fixtures
-  // permission-denied-no, permission-denied-esc), so the keystroke is the only
-  // sign. Focus reports alone don't count; see carriesInput.
-  // A delayed return of run_command's: input for the secretary (its event goes, and
-  // an answer it is typing stops), but not again for run state, which heard about
-  // the whole call when it was made.
-  private noteDelayedReturn(instance: ManagedInstance) {
-    this.clearSecretaryEvent(instance);
-    instance.inputWrites = (instance.inputWrites ?? 0) + 1;
-  }
-
+  // keys at the desk, the compose box, a paired phone. Any of them means the
+  // session's pending event has been dealt with, a needs-you included: the CLI
+  // reports nothing at all when a dialog is denied (fixtures permission-denied-no,
+  // permission-denied-esc), so the keystroke is the only sign. Focus reports alone
+  // don't count; see carriesInput.
   private noteWrite(instance: ManagedInstance, data: string) {
     instance.runState.onWrite();
     if (carriesInput(data)) {
@@ -722,35 +659,8 @@ export class ProcessManager {
     }
   }
 
-  // The manager is a singleton. Callers check before offering to create one, and
-  // createInstance refuses a second regardless.
-  hasManager(): boolean {
-    for (const instance of this.instances.values()) {
-      if (instance.isManager) return true;
-    }
-    return false;
-  }
-
-  // Put the manager first in storage, once.
-  //
-  // The contact list used to pin it to the top at render time, so its stored position
-  // was wherever it happened to be created — last, for anyone who added it after their
-  // projects. Now that the list is drag-reorderable, the stored order *is* the display
-  // order, and leaving that render-time sort in place would mean the one row the user
-  // can't move. Without this migration the manager would appear to jump to the bottom
-  // the first time they open the new build.
-  //
-  // Runs at most once: after it writes, the manager is already first.
-  private migrateManagerToTop(saved: SavedContact[]): SavedContact[] {
-    const at = saved.findIndex((c) => c.isManager);
-    if (at <= 0) return saved;
-    const reordered = [saved[at], ...saved.filter((_, i) => i !== at)];
-    saveContacts(reordered);
-    return reordered;
-  }
-
   loadSavedContacts(): InstanceInfo[] {
-    const saved = this.migrateManagerToTop(loadContacts());
+    const saved = loadContacts();
     // Whatever a backend's first spawn needs, prepared before anyone presses start.
     for (const name of new Set(saved.map((c) => c.backend ?? DEFAULT_BACKEND))) {
       try {
@@ -774,8 +684,6 @@ export class ProcessManager {
           backend: contact.backend ?? DEFAULT_BACKEND,
           discovery: null,
           hookAttention: null,
-          lastPtyByteAt: 0,
-          isManager: contact.isManager,
           runState: new RunStateTracker(),
         });
       }
@@ -824,7 +732,6 @@ export class ProcessManager {
         alias: i.alias,
         backend: i.backend,
         sessionId: i.ownSessionId,
-        isManager: i.isManager,
       })
     );
     saveContacts(contacts);
@@ -833,28 +740,14 @@ export class ProcessManager {
   createInstance(
     cwd: string,
     alias?: string,
-    backend: BackendName = DEFAULT_BACKEND,
-    isManager = false
+    backend: BackendName = DEFAULT_BACKEND
   ): InstanceInfo {
-    if (isManager) {
-      if (this.hasManager()) {
-        throw new Error("A manager already exists; only one is supported.");
-      }
-      // The manager's tools depend on `--allowedTools`, which OpenCode has no
-      // equivalent for — it would stop for a permission prompt on every call.
-      // Refuse rather than create one that can't coordinate.
-      if (backend !== "claude") {
-        throw new Error(`The manager must run on claude, not ${backend}.`);
-      }
-    }
-
     const id = crypto.randomUUID();
     const instance = this.spawnProcess(
       id,
       cwd,
       alias,
       backend,
-      isManager,
       this.sessionStartFor(id, cwd, backend)
     );
     this.instances.set(id, instance);
@@ -865,13 +758,10 @@ export class ProcessManager {
 
   // A second contact on the same project and backend, running a fresh session of
   // its own, placed right below the one it came from. Nothing of the original's
-  // conversation comes along. Not for the manager, which is a singleton.
+  // conversation comes along.
   duplicateInstance(sourceId: string): InstanceInfo | null {
     const source = this.instances.get(sourceId);
     if (!source) return null;
-    if (source.isManager) {
-      throw new Error("The manager can't be duplicated; only one is supported.");
-    }
 
     const id = crypto.randomUUID();
     const instance = this.spawnProcess(
@@ -879,7 +769,6 @@ export class ProcessManager {
       source.cwd,
       this.duplicateAlias(source),
       source.backend,
-      false,
       { kind: "fresh" }
     );
     const rebuilt = new Map<string, ManagedInstance>();
@@ -916,22 +805,12 @@ export class ProcessManager {
       instance.cwd,
       instance.alias,
       instance.backend,
-      instance.isManager,
       this.sessionStartFor(id, instance.cwd, instance.backend, instance.ownSessionId)
     );
     this.instances.set(id, started);
     if (started.ownSessionId !== instance.ownSessionId) this.persist();
     remoteServer.broadcastInstances();
-    const info = this.toInfo(started);
-    // Push to the renderer as well as returning, because this is no longer only
-    // reached from an IPC call the renderer made. The manager's `start_session`
-    // tool calls it directly, and without this the desktop went on showing the
-    // session as OFFLINE while its process was up and working — observed
-    // 2026-09-15, with a live `claude --continue` behind an OFFLINE panel.
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send("instance-started", info);
-    }
-    return info;
+    return this.toInfo(started);
   }
 
   private spawnProcess(
@@ -939,17 +818,13 @@ export class ProcessManager {
     cwd: string,
     alias: string | undefined,
     backendName: BackendName,
-    isManager: boolean | undefined,
     session: SessionStart
   ): ManagedInstance {
     const cols = SPAWN_COLS;
     const rows = SPAWN_ROWS;
 
     const backend: Backend = getBackend(backendName);
-    // Manager options only for the manager. A project session must never get the
-    // fleet-driving tools, which is why this is keyed off the instance rather than
-    // applied globally. Sessions get the alert hooks or plugin alone.
-    const opts = isManager ? this.managerSpawnOptions : this.sessionSpawnOptions;
+    const opts = this.sessionSpawnOptions;
     const spawnedWithoutAlertHooks =
       backendName === "claude" ? !opts?.settingsPath : !opts?.opencodePlugin;
     if (spawnedWithoutAlertHooks) {
@@ -980,8 +855,6 @@ export class ProcessManager {
         backend: backendName,
         discovery: null,
         hookAttention: null,
-        lastPtyByteAt: 0,
-        isManager,
         runState: new RunStateTracker(),
         ownSessionId: session.kind === "own" ? session.sessionId : undefined,
         startError: refusal,
@@ -1012,8 +885,6 @@ export class ProcessManager {
       backend: backendName,
       discovery: null,
       hookAttention: null,
-      lastPtyByteAt: Date.now(),
-      isManager,
       runState: new RunStateTracker(),
       cols,
       rows,
@@ -1095,7 +966,6 @@ export class ProcessManager {
     );
 
     ptyProcess.onData((data: string) => {
-      instance.lastPtyByteAt = Date.now();
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send("pty-output", id, data);
       }
@@ -1123,9 +993,6 @@ export class ProcessManager {
         this.mainWindow.webContents.send("instance-exit", id, exitCode);
       }
       remoteServer.broadcastExit(id, exitCode);
-      // Wakes anything waiting on this instance to finish a turn. Without it a
-      // waiter would sit out its whole timeout on a session that has gone.
-      this.emitActivity(id, "exit");
     });
 
     return instance;
@@ -1162,9 +1029,9 @@ export class ProcessManager {
     remoteServer.broadcastInstances();
   }
 
-  // One activity event, from the agent's own reports, to everything that
-  // listens: run state, the renderer's chime and red dot, the manager's waiters,
-  // and the secretary's event, which a paired phone follows (remote/remote-host.ts).
+  // One activity event, from the agent's own reports, to everything that listens:
+  // run state, the renderer's chime and red dot, and the secretary's event, which a
+  // paired phone follows (remote/remote-host.ts).
   private reportActivity(
     instance: ManagedInstance,
     type: string,
@@ -1179,8 +1046,8 @@ export class ProcessManager {
       `[activity] ${id.slice(0, 8)} ${type}${restated ? " (restated)" : ""} at ${new Date().toISOString()}`
     );
     instance.runState.onActivity(type);
-    // Recorded for every activity except the bookkeeping ones, so the manager can
-    // tell a session that just finished from one that has been idle for hours.
+    // Recorded for every activity except the bookkeeping ones, so a paired phone can
+    // say how long a session has been idle (remote-host.ts).
     if (type !== "prompt-cleared" && !restated) instance.lastActivityAt = Date.now();
     // A finished turn is exactly when context usage moved, so refresh now instead
     // of waiting for the TTL. Cheap: once per turn, not per list call.
@@ -1216,7 +1083,6 @@ export class ProcessManager {
       const elsewhere = type === "waiting" && !!endedSession && endedSession !== instance.sessionId;
       if (!elsewhere && remoteServer.isReading(id)) this.readOnPhone(id);
     }
-    this.emitActivity(id, type);
   }
 
   // The instance was read on a paired phone: opened or shown again there
@@ -1254,7 +1120,7 @@ export class ProcessManager {
   }
 
   // A hook delivery from the `/alert` endpoint, routed to the instance that sent
-  // it. Wired in manager-mcp/index.ts, which owns the server; this module must not
+  // it. Wired in alert-server/index.ts, which owns the server; this module must not
   // import it. An id no running instance has (a contact removed meanwhile, or a
   // late delivery from a process that has exited) is dropped.
   handleAlertDelivery(delivery: AlertDelivery) {
@@ -1291,35 +1157,6 @@ export class ProcessManager {
       instance.hookAttention.stop();
       instance.hookAttention = null;
     }
-  }
-
-  // Whether it is safe for something automated to write to this instance right now.
-  // Deliberately not consulted by writeToInstance or sendPrompt: those carry the
-  // user's own keystrokes from the desktop or their phone, and the user is allowed to
-  // answer a dialog. This gate is for writes nobody is watching — see run-state.ts.
-  canAcceptWrite(id: string): WriteVerdict {
-    const instance = this.instances.get(id);
-    if (!instance) return { ok: false, reason: "no such instance" };
-    if (!instance.ptyProcess) {
-      return { ok: false, reason: "not running — start it in Multi-Code first" };
-    }
-    return instance.runState.canAcceptWrite(Date.now() - instance.lastPtyByteAt);
-  }
-
-  runStateOf(id: string): RunState | undefined {
-    const instance = this.instances.get(id);
-    if (!instance?.ptyProcess) return undefined;
-    return instance.runState.state();
-  }
-
-  // How long this instance's terminal has been quiet. Undefined when it isn't
-  // running. Used by `start_session` to tell a CLI that has finished painting from
-  // one still booting — a session resumed with `--continue` never reports a finished
-  // turn, so silence is the only signal available there.
-  msSincePtyByte(id: string): number | undefined {
-    const instance = this.instances.get(id);
-    if (!instance?.ptyProcess) return undefined;
-    return Date.now() - instance.lastPtyByteAt;
   }
 
   writeToInstance(id: string, data: string) {
@@ -1404,87 +1241,8 @@ export class ProcessManager {
     return true;
   }
 
-  // Dispatch a task to an instance on behalf of something automated, refusing when
-  // the target isn't safe to write to. Separate from sendPrompt, which carries the
-  // user's own keystrokes and is theirs to aim wherever they like.
-  //
-  // Writing to a *busy* target is fine and deliberate: the CLI queues it, verified
-  // 2026-09-02 — the screen showed `queued` and the task ran once the current turn
-  // finished. Don't add a queue of our own on top of that one.
-  trySendTask(id: string, text: string): WriteVerdict {
-    const verdict = this.canAcceptWrite(id);
-    if (!verdict.ok) return verdict;
-    this.sendPrompt(id, text);
-    return { ok: true };
-  }
-
-  // Run a slash command in an instance, on behalf of something automated.
-  //
-  // Separate from trySendTask because a slash command is not text: **a leading `/`
-  // opens the CLI's autocomplete menu, and that menu swallows the first carriage
-  // return.** A command delivered the way a task is delivered arrives on screen and
-  // never runs, which is exactly the failure the user hit — the manager reported
-  // "sent but not executed" and was telling the truth.
-  //
-  // So: type the command, let the menu render, submit it, then submit again. The
-  // delay matters as much as the second return; both returns fired back-to-back land
-  // before the menu has drawn and the second one is swallowed too.
-  //
-  // No bracketed paste here, unlike sendPrompt. Pasted text is what the TUI folds
-  // into a `[Pasted text]` placeholder, and a placeholder is not a command.
-  tryRunCommand(id: string, command: string): WriteVerdict {
-    const verdict = this.canAcceptWrite(id);
-    if (!verdict.ok) return verdict;
-
-    const instance = this.instances.get(id);
-    if (!instance?.ptyProcess) {
-      return { ok: false, reason: "not running — start it in Multi-Code first" };
-    }
-
-    const ptyProcess = instance.ptyProcess;
-    // Everything this call writes, the two returns below included.
-    this.noteWrite(instance, `${command}\r\r`);
-    ptyProcess.write(command);
-    // Fire-and-forget: the caller gets its verdict now rather than holding the tool
-    // call open for a quarter of a second. A write to a pty that exits in between is
-    // swallowed by node-pty, so the re-check is about correctness of state, not
-    // about avoiding a throw.
-    // Each return is a write in its own right for the secretary: a dialog raised in
-    // the gap would be answered by it, so its event goes too. Run state already
-    // heard about the whole call above.
-    setTimeout(() => {
-      const still = this.instances.get(id);
-      if (!still || still.ptyProcess !== ptyProcess) return;
-      this.noteDelayedReturn(still);
-      ptyProcess.write("\r");
-      setTimeout(() => {
-        const alive = this.instances.get(id);
-        if (!alive || alive.ptyProcess !== ptyProcess) return;
-        this.noteDelayedReturn(alive);
-        ptyProcess.write("\r");
-      }, MENU_SETTLE_MS);
-    }, MENU_SETTLE_MS);
-
-    return { ok: true };
-  }
-
-  // Reflowable conversation tail for the phone and for the manager's read tools.
-  // Empty when neither a live nor a disk-resolved session exists, or when the
-  // backend can't read it.
-  readTranscript(id: string, limit: number): TranscriptEntry[] {
-    const instance = this.instances.get(id);
-    if (!instance) return [];
-    const sessionId = this.readableSessionId(instance);
-    if (!sessionId) return [];
-    try {
-      return getBackend(instance.backend).readTranscript(sessionId, limit);
-    } catch {
-      return [];
-    }
-  }
-
   // The last `turns` turns of the session the phone has open (Backend.readRecentTurns),
-  // from the same session `readTranscript` reads, and which session that is. `turns`
+  // and which session that is (readableSessionId). `turns`
   // comes from the phone, so it is taken as a whole number of at least one.
   //
   // A session the process has moved to (`/new`) is read from the moment it is known,
@@ -1501,13 +1259,6 @@ export class ProcessManager {
     } catch {
       return { entries: [], hasEarlier: false, session: sessionId };
     }
-  }
-
-  // Whether this instance has any transcript to read, live or from disk. Lets a
-  // caller give a specific reason rather than an empty list.
-  hasReadableTranscript(id: string): boolean {
-    const instance = this.instances.get(id);
-    return !!instance && this.readableSessionId(instance) !== undefined;
   }
 
   // The session id read paths should use: the live one when there is one, then the
@@ -1596,9 +1347,6 @@ export class ProcessManager {
       instance.cwd,
       instance.alias,
       instance.backend,
-      // Must be carried through, or restarting the manager silently produces one
-      // with no tools — it would look alive and be unable to do anything.
-      instance.isManager,
       this.sessionStartFor(id, instance.cwd, instance.backend, instance.ownSessionId)
     );
     this.instances.set(id, restarted);
@@ -1752,7 +1500,6 @@ export class ProcessManager {
       // here, since this runs once per instance per broadcast.
       contextUsage: instance.contextUsage,
       lastActivityAt: instance.lastActivityAt,
-      isManager: instance.isManager,
       runState: instance.ptyProcess ? instance.runState.state() : undefined,
       working: instance.ptyProcess ? instance.working : undefined,
       workingSince: instance.ptyProcess ? instance.workingSince : undefined,

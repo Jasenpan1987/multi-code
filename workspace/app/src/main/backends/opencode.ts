@@ -22,7 +22,6 @@ import {
   readOpencodeBuilderTurn,
   readOpencodeContextUsage,
   readOpencodeRecentTurns,
-  readOpencodeTranscript,
 } from "./opencodeDb";
 import { registrationPath } from "./opencodeService";
 import { cachedOpencodeShellEnv, opencodeShellEnv, warmOpencodeShellEnv } from "./opencodeShellEnv";
@@ -337,12 +336,8 @@ export const opencodeBackend: Backend = {
   // After the env, from the database the TUI will open (sessionIdFor).
   picksLatestSession: true,
 
-  // Of SpawnOptions only `opencodePlugin` applies. The settings file is a Claude
-  // `--settings` file, and the rest exists for the manager, which is claude-only
-  // for now. OpenCode does support MCP, but through a different config shape, and
-  // `--allowedTools` has no equivalent — so a manager running here would stop for
-  // a permission prompt on every tool call. The create path refuses to make an
-  // OpenCode manager rather than silently producing one that can't work.
+  // Of SpawnOptions only `opencodePlugin` applies: the settings file is a Claude
+  // `--settings` file.
   spawn(cwd: string, opts?: SpawnOptions, session?: SessionStart): SpawnConfig {
     return buildOpencodeSpawn(cwd, opts, session);
   },
@@ -368,10 +363,6 @@ export const opencodeBackend: Backend = {
   },
 
   // OpenCode 2's own tables, read-only (opencodeDb.ts).
-  readTranscript(sessionId, limit) {
-    return readOpencodeTranscript(sessionId, limit);
-  },
-
   readRecentTurns(sessionId, turns) {
     return readOpencodeRecentTurns(sessionId, turns);
   },

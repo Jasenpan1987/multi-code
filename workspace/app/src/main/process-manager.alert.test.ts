@@ -121,23 +121,17 @@ describe("alert delivery routing", () => {
     expect(attentions[0].handled).toHaveLength(0);
   });
 
-  it("feeds run state and the manager's waiters from hook activity", () => {
+  it("feeds run state from hook activity", () => {
     const manager = new ProcessManager();
     const { id } = manager.createInstance("/Users/x/code/repo", "repo");
-    const heard: string[] = [];
-    manager.onActivity((instanceId, type) => {
-      if (instanceId === id) heard.push(type);
-    });
+    const runState = () => manager.listInstances().find((i) => i.id === id)?.runState;
 
     attentions[0].onActivity("prompt");
-    expect(manager.runStateOf(id)).toBe("blocked");
-    // The write-safety gate refuses to type into a dialog.
-    expect(manager.canAcceptWrite(id).ok).toBe(false);
+    expect(runState()).toBe("blocked");
 
     attentions[0].onActivity("prompt-cleared");
     attentions[0].onActivity("waiting");
-    expect(manager.runStateOf(id)).toBe("idle");
-    expect(heard).toEqual(["prompt", "prompt-cleared", "waiting"]);
+    expect(runState()).toBe("idle");
   });
 
   it("stops the attention when the process exits, and drops later deliveries", () => {

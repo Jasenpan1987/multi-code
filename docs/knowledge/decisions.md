@@ -4,6 +4,19 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-11-01 — The manager agent is retired
+
+**Decision:** The manager agent is removed: its MCP tools, the `/hook` activity feed, the toolbox's Manager section, "+ Manager", the seeded workspace, and the write-safety gate that only its automated writes went through. What every session needs stays: the local `/alert` endpoint and its spawn files, now in `main/alert-server/`. A saved contact marked `isManager` is dropped on load; its folder under userData is left as it is, since the builder kept their own files there.
+
+**Why:** The builder had not used it since 2026-09-29, and its last session asked only general questions. Research into how others build one (`.omt/probes/manager-research/comparison.md`) found that what users want most is plain software Multi-Code already ships (one view of every session, the phone, push) or behaviour inside the working session (`/goal`, subagents, rules files). The one job only an LLM manager does, deciding for the builder, is the one users push back on hardest (anthropics/claude-code#73125). At the desk the manager was an extra hop.
+
+**Consequences:** Nothing drives one session from another any more. If a manager comes back, the research names the only shape that fits: woken by events, answering only sessions that wait, under a written policy, one fresh `claude -p` per decision.
+
+**Source:** builder's decision, 2026-11-01, after the research of 2026-10-31 and 2026-11-01
+**Affects:** `main/alert-server/` (was `main/manager-mcp/`), `main/process-manager.ts`, `main/run-state.ts`, `main/store.ts`, `main/ipc-handlers.ts`, `main/preload.ts`, `main/backends/` (`SpawnOptions`, `readTranscript` removed), `main/remote/remote-host.ts`, `shared/types.ts`, `renderer/App.tsx`, `renderer/components/ContactList.tsx`, `renderer/components/Toolbox.tsx`
+
+---
+
 ## 2026-10-30 — A session read on one side is read on the other
 
 **Decision:** Reading is shared between the desk and the phone. Opening a session on the phone, a Finished or Needs-you reported while a phone that is looking (an authenticated socket heard from in the last 20 s) has that session open, and a quiet phone resuming with it open, all clear the desk's unread for it: main sends `instance-read-on-phone(id)` and the renderer drops the count and any pending increment, without acknowledging back. Reading it at the desk (the renderer's `markRead`) makes it Idle on the phone (`instance-acknowledged(id)`, G-304). The desk chime is unchanged.

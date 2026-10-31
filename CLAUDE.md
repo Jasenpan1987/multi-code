@@ -92,12 +92,11 @@ once, they read the same contacts and overwrite each other's spawn files. Never 
   0600; generated once and kept (a missing or corrupt file gets a new pair); never logged,
   never sent to the renderer. Losing it drops every phone's subscription; each re-subscribes
   on its next launch
-- `manager-mcp.json` — the manager's `--mcp-config`, written 0600 because it carries
-  a bearer token; removed on shutdown
-- `manager-settings.json`, `manager-hook.curl` — the manager's `--settings` (its
-  activity hooks plus the alert hooks, one file because the CLI honours only the last
-  `--settings`) and the curl config holding the `/hook` token; 0600, removed on shutdown
-- `alert-settings.json`, `alert-hook.curl` — every other Claude instance's
+- `manager/` — the working folder of the manager agent, retired 2026-11-01. Never
+  touched: the builder kept their own files in it. Its contact is dropped on load, and
+  the old `manager-mcp.json`, `manager-settings.json`, `manager-hook.curl` are removed
+  on shutdown with the other spawn files
+- `alert-settings.json`, `alert-hook.curl` — every Claude instance's
   `--settings` (alert hooks only) and the curl config holding the `/alert` token; 0600,
   removed on shutdown
 - `opencode/tui/tui.js`, `opencode/alert.json` — the report-only TUI plugin every

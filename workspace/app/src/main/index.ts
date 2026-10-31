@@ -14,11 +14,7 @@ import {
   registerMdimgProtocol,
 } from "./mdimg-protocol";
 import { initRemote, shutdownRemote } from "./remote";
-import {
-  initManagerActivityFeed,
-  shutdownManagerMcp,
-  startManagerMcpServer,
-} from "./manager-mcp";
+import { shutdownAlertServer, startAlertServer } from "./alert-server";
 import { secretary } from "./secretary";
 import { loadSettings } from "./settings-store";
 import { paintDevSash } from "./dev-icon";
@@ -86,13 +82,12 @@ app.whenReady().then(async () => {
   registerMdimgProtocol();
   registerIpcHandlers();
   initRemote();
-  initManagerActivityFeed();
   // Subscribed before anything can spawn an instance. With the mode saved on, it
   // prepares whatever is live: at startup, normally nothing.
   secretary.start(loadSettings().secretaryMode);
   // Before the window, because the window is what spawns instances, and each
   // Claude instance needs the server's port and alert token in its launch files.
-  await startManagerMcpServer();
+  await startAlertServer();
   createWindow();
 });
 
@@ -157,7 +152,6 @@ app.on("before-quit", (event) => {
   processManager.cleanup();
   shellManager.cleanup();
   void shutdownRemote();
-  // Stops the listener and deletes the mcp-config file, which holds a bearer
-  // token that grants tool access to every managed session.
-  void shutdownManagerMcp();
+  // Stops the listener and deletes the spawn files, which hold the alert token.
+  void shutdownAlertServer();
 });

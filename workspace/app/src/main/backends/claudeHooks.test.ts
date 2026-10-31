@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import fs from "fs";
 import path from "path";
 import { ClaudeHookAttention, ClaudeWorkingWatch, type HookTimers } from "./claudeHooks";
-import { parseAlertDelivery } from "../manager-mcp/server";
+import { parseAlertDelivery } from "../alert-server/server";
 import type { AlertDelivery, PromptToolCall } from "./types";
 import type { PromptDetail } from "../remote/promptExtract";
 

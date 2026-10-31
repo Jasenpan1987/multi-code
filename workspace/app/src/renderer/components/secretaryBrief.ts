@@ -37,9 +37,8 @@ export interface SecretaryView {
 
 // The card a click on `instanceId` opens, or null. `unreadIds` must be read before
 // the click clears the contact's red dot. A red dot with no brief, or only a handled
-// one, opens nothing: the event was already dealt with (a manager dispatch writes to
-// the session, which clears it in main but leaves the dot), or the contact gets no
-// secretary at all (the manager).
+// one, opens nothing: the event was already dealt with, or the contact's backend
+// keeps no secretary events.
 export function cardOnSelect(
   instanceId: string,
   modeOn: boolean,

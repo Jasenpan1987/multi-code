@@ -8,7 +8,7 @@
 
 ## 为什么做这个
 
-当你同时跑多个编码 agent 会话(不同项目),会遇到 context 串扰和漏看回复的问题。Multi-Code 给每个会话独立的终端视图,并提供统一的通知管理,不管这个会话是 Claude Code 还是 OpenCode。终端多到看不过来的时候,还可以让一个 **Manager** agent 替你盯着、替你派活(见[Manager Agent](#manager-agent-1))。人离开屏幕的时候,还有一个**秘书**把每个会话做了什么、在问什么念给你听,你用大白话回答它就行(见[语音秘书](#语音秘书-1))。
+当你同时跑多个编码 agent 会话(不同项目),会遇到 context 串扰和漏看回复的问题。Multi-Code 给每个会话独立的终端视图,并提供统一的通知管理,不管这个会话是 Claude Code 还是 OpenCode。人离开屏幕的时候,还有一个**秘书**把每个会话做了什么、在问什么念给你听,你用大白话回答它就行(见[语音秘书](#语音秘书-1))。
 
 ## 功能
 
@@ -18,26 +18,18 @@
 - **完整终端能力** — 用 node-pty 接真 PTY,xterm.js 渲染。不做 chat 抽象,不解析消息
 - **会话通知** — 知道 agent 什么时候做完、什么时候在等你(Claude 通过 Multi-Code 启动时传给它的 hooks 自己上报;OpenCode 2 通过它自己后台服务的事件流上报),播放声音、让联系人头像抖动,并记到联系人的红色未读数和 macOS Dock 图标上
 - **Context 用量一眼可见** — 每一行联系人都显示这个会话的 context 窗口用了百分之多少(不到 10% 时保留一位小数,跟 Claude Code 自己的状态栏一样),用量一半以内是绿色,再往上渐变成黄色、红色。鼠标悬停能看到精确 token 数、模型和统计时间。窗口大小确定不了的时候只显示 token 数,不瞎猜百分比。已停止的会话也显示最后一次的用量
-- **跟得上 `/clear`、`/new` 和 `/compact`** — 运行中的 CLI 切到另一个 session 时(`/clear`、`/new`,OpenCode 还包括 `/sessions` 和它的标签页),Multi-Code 会跟过去,context 用量、通知和 Manager 看到的都是当前那个 session。OpenCode 在 `/new` 之后停在首页时,这一行不显示数字。压缩之后,Claude Code 显示它自己记录的压缩后的数字,OpenCode 等下一次回复再显示,不会继续显示压缩前的数字
+- **跟得上 `/clear`、`/new` 和 `/compact`** — 运行中的 CLI 切到另一个 session 时(`/clear`、`/new`,OpenCode 还包括 `/sessions` 和它的标签页),Multi-Code 会跟过去,context 用量、通知和手机上看到的都是当前那个 session。OpenCode 在 `/new` 之后停在首页时,这一行不显示数字。压缩之后,Claude Code 显示它自己记录的压缩后的数字,OpenCode 等下一次回复再显示,不会继续显示压缩前的数字
 - **OpenCode 自己的标签页** — OpenCode 2 的标签栏在 Multi-Code 里照常显示,跟在终端里一样,按你自己的 `cli.json` 设置。用鼠标点标签切换:在 Multi-Code 的终端里 `Ctrl+Tab` 传不到 OpenCode。OpenCode 按项目目录保存标签,所以同一个项目上的两个 OpenCode 联系人会看到彼此的 session;在一个联系人里点开另一个的标签,两个终端就显示同一个 session,两边都会为它提醒
 - **持久化** — 实例列表(含每个实例的后端)存盘,重启后恢复
 - **拖拽排序** — 在侧边栏上下拖动联系人,顺序会保存,重启后还在
 - **改名和复制** — 右键联系人,可以改它在列表里显示的名字(留空就回到文件夹名),也可以复制它:在同一个项目上新建一个联系人,用新的会话,排在原来那个下面。每个联系人记住并恢复自己的会话
-- **`Cmd+1`…`Cmd+9` 切换** — 按住 `Cmd`,列表里前九个项目的名字后面会显示数字;按 `Cmd` 加数字就切到那个项目,光标直接进它的终端。Manager 没有数字,所以 `Cmd+1` 永远是第一个项目
+- **`Cmd+1`…`Cmd+9` 切换** — 按住 `Cmd`,列表里前九个联系人的名字后面会显示数字;按 `Cmd` 加数字就切到那个联系人,光标直接进它的终端
 - **`Option+Shift+↓` 跳到下一个未读** — `Option+Shift+↓` 切到下一个有未读提醒的联系人,从当前这个往下找,到底再从最上面找;`Option+Shift+↑` 往上找。和 Slack、Discord 用的键一样。跟 `Cmd+1`…`Cmd+9` 一样,光标直接进它的终端,离开的那个会话红点不变。在消息编辑框里,这两个键还是原来的选中文字功能
 - **停在结论上** — 一轮结束时,终端从结论的第一行开始显示(结论就是 agent 最后一次调用工具之后说的话)。你从那里开始读,想看过程就自己往上滑。结束时没显示的会话,等你下次切过去时再跳;你正往上翻着看的不动;结论已经整个在屏幕上的也不动。Claude Code 需要用经典模式(`~/.claude/settings.json` 里 `"tui": "default"`);全屏模式自己管滚动,Multi-Code 不动它。OpenCode 用它自己的"上一条消息"命令来跳,按的是 Multi-Code 只在自己启动的 OpenCode 终端里绑的两个键(Cmd+Ctrl+Option+Shift+F11/F12,键盘在那里按不出来)。终端保留 5000 行滚动记录
 - **消息编辑框** — `Cmd+L` 在终端上唤起一个编辑框:多行输入、鼠标编辑、`Enter` 发送 / `Shift+Enter` 换行,还能粘贴图片(带缩略图预览)一起发出去。适合折叠 TUI 输入框里写不方便的长消息。两种后端都能用
-- **从 Finder 拖文件进来** — 从 Finder 把文件拖到窗口任意位置,就会复制进当前选中联系人的项目,不用再打开 VS Code。项目第一次拖文件时,会让你选它的默认文件夹(可以在项目外面);以后每次都会弹框问 "Put 2 files in multi-code?",并显示目标文件夹:**Put here**(`Enter`)放进去,**Somewhere else…** 只这一次放到别处,**Change default path…** 改默认文件夹。文件是复制,不会移动,也不会覆盖(重名就像 Finder 一样叫 `report 2.docx`),复制完有一条短消息列出每个文件放到了哪里。不会往会话里输入任何东西。一次只收文件,最多 10 个、总共 1 GB;超过限制或者里面有文件夹,就一个都不复制,消息会让你改用 Finder。每个项目记住自己的默认文件夹。选中 Manager 时不能拖
+- **从 Finder 拖文件进来** — 从 Finder 把文件拖到窗口任意位置,就会复制进当前选中联系人的项目,不用再打开 VS Code。项目第一次拖文件时,会让你选它的默认文件夹(可以在项目外面);以后每次都会弹框问 "Put 2 files in multi-code?",并显示目标文件夹:**Put here**(`Enter`)放进去,**Somewhere else…** 只这一次放到别处,**Change default path…** 改默认文件夹。文件是复制,不会移动,也不会覆盖(重名就像 Finder 一样叫 `report 2.docx`),复制完有一条短消息列出每个文件放到了哪里。不会往会话里输入任何东西。一次只收文件,最多 10 个、总共 1 GB;超过限制或者里面有文件夹,就一个都不复制,消息会让你改用 Finder。每个项目记住自己的默认文件夹
 - **左右对照 diff** — 在 Git section 里打开任意变更文件的 diff 窗口,可以拖动、可以缩放。选中几行点 **Ask agent**,就会把 `@path:start-end` 引用塞进编辑框
 - **三栏布局** — 联系人列表 | 终端 | 工具箱,终端和工具箱之间有可拖拽分栏
-
-### Manager Agent
-- **只跟一个 agent 说话** — 点 **+ Manager** 创建一个 Claude Code 实例,它的活就是管你其他的会话。想知道哪个项目进展如何,或者想派活出去,跟它说就行,不用自己挨个切终端
-- **读进度不打扰** — 它直接读别的会话的 transcript,对方不花 token,也不占一轮对话。已停止的会话也能读
-- **能派活,而且安全** — 它可以启动已停止的会话、发任务、执行白名单里的 slash 命令(`/clear`、`/new`、`/compact`、`/context`、`/handoff`),还能等某个会话空闲下来。有一道写入安全闸:会话正卡在权限确认框上时,拒绝往里打字,Manager 不会替你误批准什么
-- **跨后端** — OpenCode 会话和 Claude Code 会话它都能派活
-- **一举一动都看得见** — 它的每次调用,包括被拒绝的、以及它自己的 Bash/Edit/Write,都实时显示在工具箱的 **Manager** section 里
-- **只在本机** — 它的工具由一个绑在 `127.0.0.1` 上的 MCP server 提供,bearer token 放在权限 `0600` 的文件里,从不出现在命令行上
 
 ### 工具箱(每实例独立的工具面板)
 - **Git section** — 当前 branch、文件计数(new / modified / staged)、远端 ahead/behind,以及文件列表。每一行有 **View**(左右对照 diff)、**Go To**(在 VS Code 里打开),Markdown 文件还有 **MD**(预览)。改名的文件按改名显示。展开时每 5 秒轮询
@@ -50,7 +42,6 @@
 - **View section** — 内联渲染 Markdown 文件:粘贴一个 `.md` 路径(或点终端输出里的 `.md` 路径,或点 Git section 里某个变更 `.md` 旁边的 MD 标签)。支持 GitHub 风格 Markdown、数学公式(KaTeX)、Mermaid 图、本地和远程图片
 - **Phone section** — 打开手机互联,看还缺什么(Tailscale、HTTPS、Push)以及怎么补,配对手机,给每台已配对的手机发测试通知或吊销它(见下面的[手机互联](#手机互联))
 - **Secretary section** — 秘书模式开关和语音服务器设置(见下面的[语音秘书](#语音秘书-1))
-- **Manager section** — Manager agent 每一次调用的实时记录,最新的在上面,点一下能看完整参数和结果
 
 ### 手机互联
 - **主屏幕上的手机 App** — 电脑端通过 HTTPS 把一个网页 App 发给你的 iPhone,加到主屏幕后打开起来跟 App 一样,有自己的图标。不用去 App Store 装
@@ -79,7 +70,6 @@
 - **头像能看出 agent 在干什么** — 每个联系人的头像是它后端的吉祥物:Claude Code 是 Clawd,OpenCode 是它的 O 图标。停止时是灰色,运行时亮着,正在跑一轮时会动(Clawd 走路,OpenCode 的方块上下跳),有未读提醒时一阵一阵地抖
 - **主题** — 亮色、暗色、护眼(sepia)三种,右上角切换
 - **一眼区分后端** — Claude Code 实例的头像是 Clawd、蓝色窗口外框;OpenCode 实例的头像是它的 O 图标、绿色外框。标题栏也会写明是哪个后端
-- **Manager 置顶** — Manager 那一行永远在列表最上面,样式跟项目区分开
 - **长名字气泡** — 名字太长显示不下时,鼠标悬停会在那一行旁边弹出气泡,显示完整名字
 - **面板可收起** — 面板边上的小箭头可以把会话列表、终端或工具箱收成一条细边,点那条细边就展开回来。收起终端后工具箱会占满窗口,适合整屏读 Markdown
 - **版本号** — 窗口右上角(主题切换按钮旁)显示当前构建版本号,随时能看到跑的是哪一版。开发版会多一个 **DEV** 标签,标题栏有琥珀色条纹,Dock 图标上还有一条写着 **DEV** 的橙色斜条,不会跟安装版搞混
@@ -112,9 +102,8 @@ multi-code/
 │       │   │   ├── dev-icon.ts       # 给开发版的 Dock 图标画 DEV 斜条
 │       │   │   ├── process-manager.ts # spawn 和管理 agent CLI 进程(后端无关)
 │       │   │   ├── backends/          # 后端抽象:claude.ts、opencode.ts、注册表
-│       │   │   ├── run-state.ts       # 写入安全闸(每个实例的 idle / busy / blocked)
-│       │   │   ├── manager-mcp/       # 给 Manager agent 用的本地 MCP server 和工具
-│       │   │   ├── manager-workspace.ts # 初始化 Manager 自己的目录和 guidance
+│       │   │   ├── run-state.ts       # 每个实例的运行状态(starting / idle / busy / blocked)
+│       │   │   ├── alert-server/      # agent 上报自己状态的本地 /alert 接口,以及启动时用的文件
 │       │   │   ├── remote/            # 手机互联:WebSocket server、加密、已配对设备、Tailscale 检查、Web Push
 │       │   │   ├── secretary/         # 语音秘书:写汇报、语音客户端、理解回复
 │       │   │   ├── shell-manager.ts  # spawn 和管理 shell PTY(工具箱 Terminal)
@@ -250,15 +239,14 @@ Multi-Code 的核心定位是**轻量级 agent 调度中心**:你可以并行管
 │ Contact List │ Terminal (agent)    │ Toolbox             │
 │              │                     │  ▾ Git              │
 │  + New       │                     │  ▸ Quick Actions    │
-│  + Manager   │                     │  ▸ Terminal         │
+│              │                     │  ▸ Terminal         │
 │              │                     │  ▸ View             │
 │              │                     │  ▸ Phone            │
 │              │                     │  ▸ Secretary        │
-│              │                     │  ▸ Manager          │
 └──────────────┴─────────────────────┴─────────────────────┘
 ```
 
-- **左**:实例列表。头像亮着 = running,灰色 = stopped;agent 干活时头像会动,有未读提醒时会抖。每一行显示 context 用量。可以拖动排序(Manager 固定在最上面)。右键菜单可 Rename… / Duplicate / Restart / Remove。按住 `Cmd` 能看到每个项目对应 `Cmd+1`…`Cmd+9` 的数字。停止的实例右侧有 ▶ 按钮启动
+- **左**:实例列表。头像亮着 = running,灰色 = stopped;agent 干活时头像会动,有未读提醒时会抖。每一行显示 context 用量。可以拖动排序。右键菜单可 Rename… / Duplicate / Restart / Remove。按住 `Cmd` 能看到每个联系人对应 `Cmd+1`…`Cmd+9` 的数字。停止的实例右侧有 ▶ 按钮启动
 - **中**:agent 主聊天框(真终端,Claude Code 或 OpenCode 的 TUI)。底色白底 Aqua 风,适配深背景下的 ANSI diff 块
 - **右**:工具箱,手风琴式 —— 同时只能展开一个 section,展开的撑满纵向。Git 默认展开
 - **中右之间**:有一条**可拖动分栏**,左右调整聊天框 / 工具箱宽度。两侧最小 280px
@@ -306,12 +294,6 @@ TUI 自带的输入框是折叠的,写长消息、多行内容或要贴图时不
 - 第一次展开时才创建,之后**后台保活** —— 你切到别的实例 / 折叠 section,这里跑的进程不会停
 - 可以放心跑 `vim`、`pnpm test`、`git commit` 等任何命令
 
-#### Manager
-- Manager agent 每一次调用的实时记录,最新的在上面
-- 每条显示目标会话和一行预览,点开能看完整参数和结果
-- 调用一开始就会出现,所以一个很久的 `wait_for_idle` 在跑的时候也看得见
-- 被拒绝的调用也会列出来,带着原因。Manager 自己的 Bash / Edit / Write 调用带一个 **own** 标记
-
 ### Diff 窗口
 
 在 Git section 某一行点 **View**,打开这个文件的 diff。
@@ -322,34 +304,6 @@ TUI 自带的输入框是折叠的,写长消息、多行内容或要贴图时不
 - **Ask agent**:把这个引用追加到编辑框里并打开编辑框,光标停在引用后面,接着打你的问题就行。问两处就会攒下两个引用
 - 从 diff 里复制文字只复制代码,不带行号
 - diff 显示不了的时候会告诉你原因:二进制文件、太大、找不到、没有改动、或者 git 出错。特别长的文件截到 5000 行,并给出提示
-
-### Manager Agent
-
-Manager 是一个 Claude Code agent,你只跟它说话,不用自己挨个跟每个会话说。
-
-**设置:**
-
-1. 点侧边栏底部的 **+ Manager**。它会在 Multi-Code 数据目录里建一个自己的文件夹来跑,建好之后这个按钮就消失了
-2. 第一次启动时,Claude Code 会问你是否信任这个文件夹。**默认高亮的是 "No, exit",直接按回车会把 Manager 关掉。** 按一下方向键下,选 "Yes, I trust this folder",再回车。第一次 Multi-Code 会弹提示提醒你
-
-**它能做什么:**
-
-| 工具 | 作用 |
-|------|------|
-| `list_sessions` | 列出所有会话,带状态(idle / busy / blocked / stopped)和 context 用量 |
-| `read_session` | 读某个会话最近的 transcript,不打扰它。已停止的会话也能读 |
-| `send_task` | 给某个会话发消息。会话卡在确认框上时拒绝 |
-| `run_command` | 在某个会话里执行 `/clear`、`/new`、`/compact`、`/context`、`/handoff` 之一,其他一律拒绝 |
-| `start_session` | 启动一个已停止的会话 |
-| `wait_for_idle` | 等某个会话跑完这一轮,不用轮询 |
-
-它也有 Claude Code 本身的工具(Bash、Edit、Write),可以自己去核实某个会话说的话,或者顺手修点小问题。它的 guidance 里写了:别去改正在忙的会话所在的项目。
-
-会话按侧边栏里显示的名字来叫。两个会话重名的话,给其中一个设个 alias。
-
-**安全:** Manager 往某个会话里写东西之前,有一道闸先检查那个会话是不是卡在权限确认框上。往确认框里打字可能会批准你根本没看到的操作,所以这种写入会被拒绝,原因会显示在 Manager section 里。你自己打的字,不管是电脑上还是手机上,都不受这道闸限制。
-
-Manager 的角色 guidance 放在它文件夹里的 `CLAUDE.md`。你可以改;只有这个文件还跟 Multi-Code 写过的某个版本一模一样时,Multi-Code 才会升级它。
 
 ### 通知行为
 
@@ -400,7 +354,7 @@ App 的第一屏会显示三步里哪步做完了、下一步是什么。
 
 **用法:**
 
-- 列表按状态给会话分组:Needs you、Working、Finished、Idle,每一项都写着处在这个状态多久了。Manager 不在手机上
+- 列表按状态给会话分组:Needs you、Working、Finished、Idle,每一项都写着处在这个状态多久了
 - 点进一个会话,像聊天一样看。点某一轮的折叠行能看到每个工具:改文件加了几行、删了几行,命令成功还是失败。**Earlier turns** 再往前加载十轮
 - 在底部打字,点 **Send**。回车是换行。正在跑的时候消息照样发出,由 CLI 排队("Queued until this turn ends")。没网时消息先等着("Waiting to send"),可以取消,Mac 恢复后只发一次
 - 斜杠命令跟普通消息一样发。命令和 CLI 的回复显示成一行灰字,回复太长(比如 `/cost`)超过三行会先折起来,点开看全。发 `/new` 或 `/clear` 后对话清空,顶部写着 "New session"。(OpenCode 要等你发下一句话才真正建新会话,所以在那之前旧对话还在)
@@ -459,7 +413,7 @@ App 的第一屏会显示三步里哪步做完了、下一步是什么。
 - 按完之后,卡片上会有一行字说它做了什么
 - 你回复的时候确认框已经没了或者变了,或者它按键的时候有人在终端里打字,它会停下来并告诉你
 - OpenCode 的话,秘书通过 OpenCode 自己的 API 按请求 id 作答,不会答到别的框上:权限确认(Reject 也可以带理由,agent 会收到),以及各种提问框,包括你自己打的答案
-- 做完一轮的卡片没有回复框,照常在终端里回复。Manager 没有秘书
+- 做完一轮的卡片没有回复框,照常在终端里回复
 
 **隐私:**
 
@@ -479,10 +433,7 @@ Multi-Code 自己存的东西都在 Electron 的 userData 目录里。macOS 上�
 - `speech-key`:秘书的语音服务器密钥,单独一个 `0600` 文件。不放进 `settings.json`,不写日志,重启后保留
 - `remote-identity.json`、`remote-devices.json`:手机互联的密钥,以及已配对的手机(含每台手机的通知订阅和上次推送失败的原因);`0600`
 - `remote-push.json`:Mac 给通知签名用的 Web Push 密钥;`0600`,生成一次后一直保留。丢了会重新生成一对,每台手机下次打开 App 时重新订阅
-- `manager/`:Manager agent 的工作目录和它的 `CLAUDE.md`
-- `manager-mcp.json`:Manager 的 MCP 配置,因为里面有 bearer token 所以权限是 `0600`,退出时删除
-- `manager-settings.json`、`manager-hook.curl`:Manager 的 `--settings`(它自己的活动 hooks 加上提醒 hooks)和存 hook token 的 curl 配置;`0600`,退出时删除
-- `alert-settings.json`、`alert-hook.curl`:其他每个 Claude 实例的 `--settings`(只有提醒 hooks)和存 `/alert` token 的 curl 配置;`0600`,退出时删除
+- `alert-settings.json`、`alert-hook.curl`:每个 Claude 实例的 `--settings`(只有提醒 hooks)和存 `/alert` token 的 curl 配置;`0600`,退出时删除
 - `opencode/tui/tui.js`、`opencode/alert.json`:Multi-Code 启动的每个 OpenCode 终端加载的只上报插件,以及它读取的 `/alert` 地址和 token;`0600`,退出时删除
 - App 重启后自动恢复联系人列表(状态都是 stopped,需手动启动)
 - Session 内容由后端 CLI 自己管(Claude Code 在 `~/.claude/`,OpenCode 在 `~/.local/share/opencode/`),Multi-Code 不存任何对话内容,也从不往这些目录里写。对话记录和 context 用量是只读地从 OpenCode 2 的数据库里读的
@@ -498,7 +449,7 @@ Multi-Code 自己存的东西都在 Electron 的 userData 目录里。macOS 上�
    - Git:展开期间每 5s 调用 `git`
    - Terminal:第一次展开时 lazy-spawn 一个 shell PTY,之后保活
 7. 实例信息持久化到 userData 目录里的 `contacts.json`
-8. 主进程在 app 打开期间一直在 `127.0.0.1` 上跑一个小 HTTP server(端口由系统分配,bearer token 鉴权)。它给 Manager 提供 MCP 工具:Manager 的 `claude` 启动时带 `--mcp-config` 指向它,另外挂了 hooks,把它自己的工具调用报回活动记录。它还有一个 `/alert` 路径,用单独的 token,给 agent 上报自己的状态
+8. 主进程在 app 打开期间一直在 `127.0.0.1` 上跑一个小 HTTP server(端口由系统分配,bearer token 鉴权)。它只有一个 `/alert` 路径,agent 的 hooks 和插件通过它上报自己的状态
 9. 手机互联打开时,主进程还会在 `127.0.0.1:6768` 上起一个 server,既托管手机 App,又通过 WebSocket 把会话列表、对话记录、确认框和同一份 PTY 字节流推给已配对的手机。手机只能通过 `tailscale serve` 连到它,由 `tailscale serve` 在 Mac 的 tailnet 域名上提供 HTTPS;每一帧在这条连接里再用 NaCl box 封装。通知是 Mac 直接发给 Apple 推送服务的 Web Push 消息,按每台手机单独加密,中间没有任何 relay
 10. 秘书模式打开时,每次做完或等你的事件都交给一次性的 `claude -p --bare --no-session-persistence` 调用来写汇报,再交给语音服务器出音频。卡片上的回复走第二次这样的调用,由它决定按什么;只有同一个确认框还显示着的时候才会按键
 

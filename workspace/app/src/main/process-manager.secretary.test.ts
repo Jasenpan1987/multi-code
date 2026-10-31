@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
 import path from "path";
-import { parseAlertDelivery } from "./manager-mcp/server";
+import { parseAlertDelivery } from "./alert-server/server";
 import type {
   ActivityCallback,
   AnswerResult,
@@ -301,8 +301,6 @@ describe("clearing once the builder has dealt with it", () => {
     ["a key at the desk or from the phone", (m: Manager, id: string) => m.writeToInstance(id, "h")],
     ["the compose box or the phone's answer box", (m: Manager, id: string) => m.sendPrompt(id, "more")],
     ["an empty answer, which still submits", (m: Manager, id: string) => m.sendPrompt(id, "")],
-    ["the manager's send_task", (m: Manager, id: string) => m.trySendTask(id, "next")],
-    ["the manager's run_command", (m: Manager, id: string) => m.tryRunCommand(id, "/compact")],
   ])("a write clears a finished event: %s", (_name, write) => {
     const manager = new ProcessManager();
     const id = create(manager);
@@ -312,29 +310,6 @@ describe("clearing once the builder has dealt with it", () => {
     write(manager, id);
     expect(kinds()).toEqual([null]);
     expect(manager.secretaryEventOf(id)).toBeUndefined();
-  });
-
-  it("run_command's delayed returns clear a dialog raised while they were pending", () => {
-    const manager = new ProcessManager();
-    const id = create(manager);
-    replay(manager, id, "plain-finish");
-    manager.tryRunCommand(id, "/compact");
-    expect(manager.secretaryEventOf(id)).toBeUndefined();
-
-    // A subagent's permission dialog lands in the gap before the first return.
-    const request = fixture("permission-denied-no").deliveries.find(
-      (d) => d.payload.hook_event_name === "PermissionRequest"
-    );
-    if (!request) throw new Error("fixture has no PermissionRequest");
-    const delivery = parseAlertDelivery(id, JSON.stringify(request.payload), latestSpawn(id).spawnId);
-    if (!delivery) throw new Error("unparseable PermissionRequest");
-    manager.handleAlertDelivery(delivery);
-    expect(manager.secretaryEventOf(id)?.kind).toBe("needs-you");
-
-    // The return that follows answers it, so its brief must not outlive it.
-    vi.advanceTimersByTime(1_000);
-    expect(manager.secretaryEventOf(id)).toBeUndefined();
-    expect(latestSpawn(id).written).toEqual(["/compact", "\r", "\r"]);
   });
 
   it("the keystroke that denies a dialog clears its needs-you, since the CLI reports nothing", () => {
@@ -480,29 +455,6 @@ describe("exit, restart and removal", () => {
   });
 });
 
-describe("instances that never get one", () => {
-  it("the manager", () => {
-    const manager = new ProcessManager();
-    const { id } = manager.createInstance("/Users/x/ud/manager", "Manager", "claude", true);
-    const { seen } = listen(manager);
-    replay(manager, id, "permission-approved");
-    latestSpawn(id).report("waiting");
-
-    expect(seen).toEqual([]);
-    expect(manager.secretaryEventOf(id)).toBeUndefined();
-  });
-
-  it("the manager doesn't disturb the activity everything else hears", () => {
-    const manager = new ProcessManager();
-    const { id } = manager.createInstance("/Users/x/ud/manager", "Manager", "claude", true);
-    const heard: string[] = [];
-    manager.onActivity((_id, type) => heard.push(type));
-    latestSpawn(id).report("waiting");
-    expect(heard).toEqual(["waiting"]);
-    expect(manager.runStateOf(id)).toBe("idle");
-  });
-});
-
 describe("an OpenCode instance (PRD v1.6, OpenCode 2 shapes)", () => {
   it("keeps its dialog's request and its finish, like a Claude one", () => {
     const manager = new ProcessManager();
@@ -545,29 +497,16 @@ describe("the subscription", () => {
     expect(seen).toHaveLength(1);
   });
 
-  it("a throwing listener doesn't stop the others, or the activity", () => {
+  it("a throwing listener doesn't stop the others", () => {
     const manager = new ProcessManager();
     const id = create(manager);
     manager.onSecretaryEvent(() => {
       throw new Error("broken consumer");
     });
     const { kinds } = listen(manager);
-    const heard: string[] = [];
-    manager.onActivity((_id, type) => heard.push(type));
 
     expect(() => latestSpawn(id).report("waiting")).not.toThrow();
     expect(kinds()).toEqual(["finished"]);
-    expect(heard).toEqual(["waiting"]);
-  });
-
-  it("a write made in reaction to the activity clears the event that activity raised", () => {
-    const manager = new ProcessManager();
-    const id = create(manager);
-    manager.onActivity((instanceId, type) => {
-      if (type === "waiting") manager.writeToInstance(instanceId, "next task\r");
-    });
-    latestSpawn(id).report("waiting");
-    expect(manager.secretaryEventOf(id)).toBeUndefined();
   });
 
   it("lists every live event, for a consumer starting with red dots already showing", () => {
@@ -727,21 +666,6 @@ describe("answering a dialog for the secretary (T-509)", () => {
     await vi.advanceTimersByTimeAsync(500);
     await expect(done).resolves.toEqual({ ok: false, reason: "interrupted" });
     expect(spawn.written).toEqual(["3", "\x1b"]);
-  });
-
-  it("stops when run_command's delayed returns land between its keys", async () => {
-    const manager = new ProcessManager();
-    const { id, seq, spawn } = raised(manager);
-    // Not waiting for the gate: the returns are what's under test.
-    vi.spyOn(manager, "canAcceptWrite").mockReturnValue({ ok: true });
-    manager.tryRunCommand(id, "/compact");
-    latestSpawn(id).report("prompt", ASK.detail, ASK.toolCall);
-    const live = manager.secretaryEventOf(id)!.seq;
-    const done = manager.answerDialog(id, live, { keys: ["3", "Green", "\r"] }, undefined, timing);
-    await vi.advanceTimersByTimeAsync(500);
-    await expect(done).resolves.toEqual({ ok: false, reason: "interrupted" });
-    expect(spawn.written.filter((w) => w === "Green")).toEqual([]);
-    expect(seq).toBeLessThan(live);
   });
 
   it("carries on through mouse motion and focus reports, which aren't input", async () => {

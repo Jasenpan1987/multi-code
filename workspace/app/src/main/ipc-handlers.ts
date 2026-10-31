@@ -34,7 +34,6 @@ import { secretary } from "./secretary";
 import { copyIntoFolder, describePath, displayPath, dropStillWaiting } from "./file-drop";
 import { debugTrace } from "./debug-trace";
 import type {
-  CreateManagerResult,
   DiffSide,
   DropCopyOutcome,
   DropFolder,
@@ -49,32 +48,7 @@ import type { OpencodeViewCommand } from "../shared/replyStart";
 import { remoteServer } from "./remote/ws-server";
 import { acknowledgeInstance, setRemoteEnabled } from "./remote";
 import { openTailscaleApp } from "./remote/tailscale";
-import { ensureManagerMcpStarted, getManagerActivity } from "./manager-mcp";
-import { ensureManagerWorkspace } from "./manager-workspace";
 import QRCode from "qrcode";
-
-// The manager's tools live behind a server that has to be listening before the
-// manager spawns, because the spawn needs its port to write the --mcp-config it is
-// launched with. Called on every path that can start the manager — create, start,
-// restart — since the port is OS-assigned and changes across app runs.
-//
-// Lives here rather than in process-manager so the dependency stays
-// one-directional: manager-mcp imports process-manager to reach the instance list,
-// and the reverse would close a cycle.
-async function prepareManagerSpawn(): Promise<void> {
-  // Also the only place the guidance file gets a chance to be upgraded. Seeding it
-  // in create-manager alone was not enough: a user who already had a manager never
-  // ran that path again, so their role file kept describing the read-only manager of
-  // T-209 while the write tools shipped underneath it — which is why the manager
-  // handed work back instead of doing it. Runs on create, start and restart; an
-  // edited file is left alone. See manager-workspace.ts.
-  ensureManagerWorkspace();
-  processManager.setManagerSpawnOptions(await ensureManagerMcpStarted());
-}
-
-function isManagerInstance(id: string): boolean {
-  return processManager.listInstances().some((i) => i.id === id && i.isManager);
-}
 
 // Per-process counter to disambiguate temp image filenames within the same ms.
 let tempImageCounter = 0;
@@ -103,11 +77,10 @@ async function readClipboardPng(): Promise<Buffer | null> {
 }
 
 // The project a drop on this contact goes into: its directory as stored, which
-// also keys its default folder, so contacts on one project share it. The manager's
-// directory is Multi-Code's own and takes no drops; the renderer refuses it first.
+// also keys its default folder, so contacts on one project share it.
 function dropProjectDir(instanceId: unknown): string {
   const instance = processManager.listInstances().find((i) => i.id === instanceId);
-  if (!instance || instance.isManager) {
+  if (!instance) {
     throw new Error("this contact has no project to drop files into");
   }
   return instance.cwd;
@@ -155,14 +128,12 @@ export function registerIpcHandlers() {
     secretary.forget(id);
   });
 
-  // The manager is refused in processManager; the renderer doesn't offer it.
   ipcMain.handle("duplicate-instance", (_event, id: string) => {
     if (typeof id !== "string") return null;
     return processManager.duplicateInstance(id);
   });
 
-  ipcMain.handle("restart-instance", async (_event, id: string) => {
-    if (isManagerInstance(id)) await prepareManagerSpawn();
+  ipcMain.handle("restart-instance", (_event, id: string) => {
     return processManager.restartInstance(id);
   });
 
@@ -186,32 +157,8 @@ export function registerIpcHandlers() {
     }
   );
 
-  ipcMain.handle("start-instance", async (_event, id: string) => {
-    if (isManagerInstance(id)) await prepareManagerSpawn();
+  ipcMain.handle("start-instance", (_event, id: string) => {
     return processManager.startInstance(id);
-  });
-
-  // Separate from create-instance: the manager picks no directory (Multi-Code owns
-  // its cwd), no backend (claude only), and there can be just one. Bundling it into
-  // the same call would mean a dialog whose fields are all inapplicable.
-  ipcMain.handle("has-manager", () => processManager.hasManager());
-
-  ipcMain.handle("create-manager", async (): Promise<CreateManagerResult> => {
-    if (processManager.hasManager()) {
-      throw new Error("A manager already exists; only one is supported.");
-    }
-    // Seed the guidance file before spawning, so the CLI picks up the role on its
-    // very first turn rather than the turn after. `seeded` is true only on the run
-    // that created the directory, which is also the run whose CLI will stop on the
-    // workspace-trust dialog — so it is exactly the right signal for showing that
-    // warning once. Must be read here rather than from prepareManagerSpawn's own
-    // call, which runs second and by then sees an existing file.
-    const { dir, seeded } = ensureManagerWorkspace();
-    await prepareManagerSpawn();
-    return {
-      instance: processManager.createInstance(dir, "Manager", "claude", true),
-      seededWorkspace: seeded,
-    };
   });
 
   ipcMain.handle(
@@ -233,10 +180,7 @@ export function registerIpcHandlers() {
   ipcMain.handle("select-directory", async () => {
     const win = BrowserWindow.getFocusedWindow();
     if (!win) return null;
-    const newest = processManager
-      .listInstances()
-      .filter((i) => !i.isManager)
-      .at(-1);
+    const newest = processManager.listInstances().at(-1);
     const result = await dialog.showOpenDialog(win, {
       properties: ["openDirectory"],
       title: "Select project directory",
@@ -680,11 +624,6 @@ export function registerIpcHandlers() {
 
   // The Phone section's "Send test" for one paired phone.
   ipcMain.handle("remote-test-push", (_event, deviceId: string) => remoteServer.sendTestPush(deviceId));
-
-  // Everything the manager has done, newest first. Live updates arrive on the
-  // "manager-activity" event; this is for a renderer that just mounted or
-  // reloaded.
-  ipcMain.handle("manager-activity-list", () => getManagerActivity());
 
   // ---------------------------------------------------------------------
   // Secretary. The settings replies are SecretarySettings or a test result:
