@@ -4,6 +4,7 @@
 **PRD Version:** 1.0
 **Total Tasks:** 20 (T-215, T-216 and T-217 added 2026-09-15 to 09-17, all from real use; T-218..T-220 added 2026-10-08 from the post-epic code review)
 **Milestones:** M1 (See who's full), M2 (Manager can look), M3 (Manager can dispatch), M4 (Handoff + safety regression)
+**Status:** retired 2026-11-01 with the manager agent; the context-usage work of M1 stays in the app. Kept as a record.
 
 ## Task Overview
 

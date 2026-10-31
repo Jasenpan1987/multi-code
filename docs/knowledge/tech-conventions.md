@@ -124,35 +124,14 @@ So: when a reader gains a config-path parameter, give every existing test an exp
 unreachable path in the same commit, and mock `./store` in any test that imports
 process-manager.
 
-## Manager guidance is versioned by content hash (added 2026-09-15)
+## Seeded files are versioned by content hash (added 2026-09-15, code retired 2026-11-01)
 
-`manager-workspace.ts` keeps the sha256 of every version of the manager's `CLAUDE.md` it
-has ever seeded, in `SEEDED_HASHES`. A file matching one of them is ours and gets
-rewritten; anything else is the user's edit and is never touched.
-
-**Changing `GUIDANCE` means adding the outgoing hash to that array in the same commit.**
-Otherwise existing installs stop being recognised and stop being upgraded — which is the
-bug this replaced: the file was seeded once at T-209 listing only the two read tools, and
-weeks later, with the write tools shipped, the manager was still reading it and telling
-the user to go and run things themselves. The v1 bytes are checked in at
-`main/__fixtures__/manager-guidance-v1.md`, v2's at `manager-guidance-v2.md`, so the
-upgrade path is tested against real previous versions rather than against a hash that only
-equals itself.
-
-To get the outgoing hash out of a template literal, extract it and hash the bytes:
-
-```bash
-python3 - <<'PY'
-import hashlib, pathlib
-src = pathlib.Path("workspace/app/src/main/manager-workspace.ts").read_text()
-start = src.index("export const GUIDANCE = `") + len("export const GUIDANCE = `")
-body = src[start:src.index("\n`;\n", start)] + "\n"
-print(hashlib.sha256(body.replace("\\`", "`").encode()).hexdigest())
-PY
-```
-
-Then check that text in as the next `manager-guidance-vN.md` and assert its hash in
-`manager-workspace.test.ts`, which is what catches an extraction that went wrong.
+The manager agent's `CLAUDE.md` was seeded by `manager-workspace.ts`, which kept the sha256
+of every version it had written: a match was ours to upgrade, anything else was the user's
+edit and never touched. Changing the template meant adding the outgoing hash in the same
+commit, or existing installs stopped upgrading (the manager went on reading a version that
+listed only its read tools). The code went with the manager; the rule stands for any file
+Multi-Code seeds into a place the user can edit.
 
 ## A session id is not stable for the life of a process (added 2026-09-17)
 

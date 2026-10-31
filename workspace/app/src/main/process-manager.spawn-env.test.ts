@@ -95,18 +95,13 @@ describe("spawn env", () => {
     expect(spawned[0].env.PATH).toBe("/bin");
   });
 
-  it("gives sessions the alert settings and the manager its own options", () => {
+  it("gives every session the alert settings", () => {
     const manager = new ProcessManager();
     manager.setSessionSpawnOptions({ settingsPath: "/ud/alert-settings.json" });
-    manager.setManagerSpawnOptions({
-      mcpConfigPath: "/ud/manager-mcp.json",
-      settingsPath: "/ud/manager-settings.json",
-      allowedTools: ["mcp__multi-code__list_sessions"],
-    });
     manager.createInstance("/Users/x/code/repo", "repo");
-    manager.createInstance("/Users/x/code/mgr", "mgr", "claude", true);
+    manager.createInstance("/Users/x/code/other", "other");
     expect(spawned[0].opts).toEqual({ settingsPath: "/ud/alert-settings.json" });
-    expect(spawned[1].opts).toMatchObject({ settingsPath: "/ud/manager-settings.json" });
+    expect(spawned[1].opts).toEqual({ settingsPath: "/ud/alert-settings.json" });
   });
 
   it("spawns without options when the alert endpoint isn't up", () => {
@@ -127,7 +122,7 @@ describe("a refused spawn (OpenCode 1.x)", () => {
     const info = manager.createInstance("/Users/x/code/oc", "oc", "opencode");
     expect(spawned).toHaveLength(0);
     expect(info).toMatchObject({ status: "stopped", startError: REASON });
-    expect(manager.runStateOf(info.id)).toBeUndefined();
+    expect(info.runState).toBeUndefined();
   });
 
   it("keeps the contact's own session through a refused start, and clears the reason once one runs", () => {

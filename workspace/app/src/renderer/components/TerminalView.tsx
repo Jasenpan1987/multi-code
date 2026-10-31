@@ -51,8 +51,8 @@ const VIEW_KEY_WAIT_MS = 1500;
 const SCREEN_POLL_MS = 50;
 
 // The row each terminal's last jump put at the top, so the next turn's end can tell
-// the builder hasn't scrolled since. A message sent from the compose box, the phone
-// or the manager leaves the screen there, and that isn't reading higher up.
+// the builder hasn't scrolled since. A message sent from the compose box or the
+// phone leaves the screen there, and that isn't reading higher up.
 const parkedAt = new Map<string, IMarker>();
 
 // Number of lines of slack allowed when deciding "at the bottom". xterm's
@@ -184,9 +184,9 @@ function startReplyJump(instanceId: string): () => boolean {
 /**
  * Stops a jump still waiting for the screen and drops one waiting for the terminal to
  * show: the builder is at work in the terminal (a key, a click, the wheel), or the
- * next turn started (a message typed, or from the compose box, the phone, the
- * manager). Not on what xterm sends the CLI by itself: focus and mouse-motion
- * reports, and its replies to the CLI's queries, which OpenCode makes on a resize.
+ * next turn started (a message typed, or from the compose box or the phone). Not
+ * on what xterm sends the CLI by itself: focus and mouse-motion reports, and its
+ * replies to the CLI's queries, which OpenCode makes on a resize.
  */
 export function cancelReplyJump(instanceId: string): void {
   replyJumps.set(instanceId, ++replyJumpSeq);

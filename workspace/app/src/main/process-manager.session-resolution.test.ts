@@ -22,13 +22,11 @@ const disk: {
   latestByCwd: Map<string, string>;
   lookups: number;
   discoverCalls: Array<{ cwd: string; onFound: (id: string) => void; isClaimed?: (id: string) => boolean }>;
-  transcriptReads: string[];
   turnReads: Array<{ sessionId: string; turns: number }>;
 } = {
   latestByCwd: new Map(),
   lookups: 0,
   discoverCalls: [],
-  transcriptReads: [],
   turnReads: [],
 };
 
@@ -78,10 +76,6 @@ vi.mock("./backends", () => ({
       return { cancel: () => {} };
     },
     createHookAttention: () => ({ handle: () => {}, stop: () => {} }),
-    readTranscript: (sessionId: string) => {
-      disk.transcriptReads.push(sessionId);
-      return [{ kind: "assistant", text: `transcript of ${sessionId}` }];
-    },
     readRecentTurns: (sessionId: string, turns: number) => {
       if (sessionId === "ses-broken") throw new Error("unreadable");
       disk.turnReads.push({ sessionId, turns });
@@ -108,7 +102,6 @@ beforeEach(() => {
   disk.latestByCwd = new Map();
   disk.lookups = 0;
   disk.discoverCalls = [];
-  disk.transcriptReads = [];
   disk.turnReads = [];
   manager = new ProcessManager();
 });
@@ -129,28 +122,7 @@ function stoppedInstance(cwd = CWD) {
 }
 
 describe("reading a stopped instance", () => {
-  it("reads the transcript the directory last worked on", () => {
-    disk.latestByCwd.set(CWD, "ses-disk");
-    const id = stoppedInstance();
-
-    expect(manager.readTranscript(id, 10)).toEqual([
-      { kind: "assistant", text: "transcript of ses-disk" },
-    ]);
-    expect(disk.transcriptReads).toEqual(["ses-disk"]);
-  });
-
-  it("reports having a readable transcript", () => {
-    disk.latestByCwd.set(CWD, "ses-disk");
-    expect(manager.hasReadableTranscript(stoppedInstance())).toBe(true);
-  });
-
-  it("reports none for a directory with no history", () => {
-    const id = stoppedInstance("/Users/x/code/fresh");
-    expect(manager.hasReadableTranscript(id)).toBe(false);
-    expect(manager.readTranscript(id, 10)).toEqual([]);
-  });
-
-  it("reads the last turns of the same session, for the phone, and says which session", () => {
+  it("reads the last turns of the session the directory last worked on, and says which", () => {
     disk.latestByCwd.set(CWD, "ses-disk");
     const id = stoppedInstance();
     expect(manager.readRecentTurns(id, 10)).toEqual({
@@ -198,7 +170,7 @@ describe("the disk-resolved id stays out of discovery", () => {
     disk.latestByCwd.set(CWD, "shared-session");
     const stopped = stoppedInstance();
     // Force the resolution to happen, the way a list call or a read would.
-    expect(manager.readTranscript(stopped, 5)).toHaveLength(1);
+    expect(manager.readRecentTurns(stopped, 5).session).toBe("shared-session");
 
     // Now a second contact in the same directory starts up and discovers that very
     // session. Its claim check must not see the stopped contact's resolved id.
@@ -214,7 +186,7 @@ describe("the disk-resolved id stays out of discovery", () => {
   it("never surfaces the resolved id as the instance's sessionId", () => {
     disk.latestByCwd.set(CWD, "ses-disk");
     const id = stoppedInstance();
-    manager.readTranscript(id, 5);
+    manager.readRecentTurns(id, 5);
     expect(manager.listInstances().find((i) => i.id === id)?.sessionId).toBe(
       undefined
     );
@@ -234,9 +206,9 @@ describe("the lookup is cached", () => {
   it("does not hit the disk on every read", () => {
     disk.latestByCwd.set(CWD, "ses-disk");
     const id = stoppedInstance();
-    manager.readTranscript(id, 5);
-    manager.readTranscript(id, 5);
-    manager.readTranscript(id, 5);
+    manager.readRecentTurns(id, 5);
+    manager.readRecentTurns(id, 5);
+    manager.readRecentTurns(id, 5);
     expect(disk.lookups).toBe(1);
   });
 
@@ -244,8 +216,8 @@ describe("the lookup is cached", () => {
   // on every list call, and listInstances runs on every phone broadcast.
   it("caches a directory with no history too", () => {
     const id = stoppedInstance("/Users/x/code/fresh");
-    manager.hasReadableTranscript(id);
-    manager.hasReadableTranscript(id);
+    manager.readRecentTurns(id, 5);
+    manager.readRecentTurns(id, 5);
     expect(disk.lookups).toBe(1);
   });
 
@@ -256,8 +228,8 @@ describe("the lookup is cached", () => {
     const id = manager.listInstances().find((i) => i.name === "live")!.id;
 
     disk.lookups = 0;
-    manager.readTranscript(id, 5);
-    expect(disk.transcriptReads.at(-1)).toBe("ses-live");
+    manager.readRecentTurns(id, 5);
+    expect(disk.turnReads.at(-1)?.sessionId).toBe("ses-live");
     expect(disk.lookups).toBe(0);
   });
 });

@@ -9,8 +9,7 @@ import type {
   SpawnOptions,
 } from "./types";
 import { ClaudeHookAttention, ClaudeWorkingWatch } from "./claudeHooks";
-import type { TranscriptEntry } from "../../shared/remote-protocol";
-import { claudeTranscriptEntries, readBuilderTurn, readClaudeRecentTurns } from "./claudeTranscript";
+import { readBuilderTurn, readClaudeRecentTurns } from "./claudeTranscript";
 import { noTurns } from "./recentTurns";
 import type { ContextUsage } from "../../shared/types";
 import { resolvePath } from "./resolvePath";
@@ -393,18 +392,10 @@ export const claudeBackend: Backend = {
   spawn(cwd: string, opts?: SpawnOptions, session?: SessionStart): SpawnConfig {
     const { args, sessionId } = sessionArgs(cwd, session ?? { kind: "latest" });
 
-    // No --strict-mcp-config: it would hide the user's own MCP servers from the
-    // manager, and those are theirs to make use of. Ours is additive.
-    if (opts?.mcpConfigPath) {
-      args.push("--mcp-config", opts.mcpConfigPath);
-    }
-    if (opts?.allowedTools?.length) {
-      args.push("--allowedTools", opts.allowedTools.join(","));
-    }
-    // Additive, like --mcp-config above: the CLI merges this on top of the user's
-    // own settings files rather than replacing them, so their hooks and rules for
-    // this directory still apply. Only one --settings ever: a second would replace
-    // this one outright (measured 2026-10-07).
+    // Additive: the CLI merges this on top of the user's own settings files rather
+    // than replacing them, so their hooks and rules for this directory still apply.
+    // Only one --settings ever: a second would replace this one outright (measured
+    // 2026-10-07).
     if (opts?.settingsPath) {
       args.push("--settings", opts.settingsPath);
     }
@@ -448,12 +439,6 @@ export const claudeBackend: Backend = {
   // (docs/timeline/2026-10-06_attention-alerts-investigation.md, "Esc interrupt").
   interrupt: { keys: ["\x1b"], gapMs: 0 },
 
-  readTranscript(sessionId, limit): TranscriptEntry[] {
-    const jsonlPath = findJsonlBySessionId(sessionId);
-    if (!jsonlPath) return [];
-    return readClaudeTranscript(jsonlPath, limit);
-  },
-
   readRecentTurns(sessionId, turns) {
     const jsonlPath = findJsonlBySessionId(sessionId);
     return jsonlPath ? readClaudeRecentTurns(jsonlPath, turns) : noTurns();
@@ -482,25 +467,6 @@ export const claudeBackend: Backend = {
     return `claude --resume ${sessionId}`;
   },
 };
-
-// Turn the tail of a session JSONL into reflowable lines for the phone.
-//
-// Only the entry kinds a human skims for are kept: what the agent said, what the
-// user asked, and which tools ran. Thinking blocks, tool results, and the CLI's
-// own bookkeeping rows (file-history-delta, attachment, mode, …) are dropped —
-// on a phone they'd bury the two lines that matter.
-export function readClaudeTranscript(
-  jsonlPath: string,
-  limit: number
-): TranscriptEntry[] {
-  let raw: string;
-  try {
-    raw = fs.readFileSync(jsonlPath, "utf8");
-  } catch {
-    return [];
-  }
-  return claudeTranscriptEntries(raw.split("\n")).slice(-limit);
-}
 
 // How full the window is, from the newest assistant turn that reported usage.
 //

@@ -13,7 +13,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { pathToFileURL } from "url";
-import { ManagerMcpServer } from "../manager-mcp/server";
+import { AlertServer } from "../alert-server/server";
 import {
   OPENCODE_INIT_EVENT,
   OPENCODE_PLUGIN_ENTRY,
@@ -401,7 +401,7 @@ describe("the TUI plugin", () => {
   });
 
   it("is read by the real /alert endpoint as the delivery T-604 consumes", async () => {
-    const server = new ManagerMcpServer();
+    const server = new AlertServer();
     const received: AlertDelivery[] = [];
     server.onAlertDelivery((delivery) => received.push(delivery));
     await server.start();

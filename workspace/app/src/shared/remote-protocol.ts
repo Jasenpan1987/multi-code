@@ -220,8 +220,7 @@ export interface AuthFailedFrame {
 //   idle      — anything else, stopped instances included
 export type RemoteSessionState = "needs-you" | "working" | "finished" | "idle";
 
-// One entry per instance, mirroring what the desktop contact list shows. The
-// Manager is not listed (phase 2).
+// One entry per instance, mirroring what the desktop contact list shows.
 export interface RemoteInstance {
   id: string;
   name: string;
@@ -277,7 +276,7 @@ export interface ExitFrame {
 // One entry of the readable transcript, from the CLI's own record (Claude's session
 // JSONL, OpenCode's database), which reflows like text where the 120-column terminal
 // can't. The phone groups entries into turns: a turn starts at each "user" entry.
-// Also read by the manager's tools and the secretary.
+// Also read by the secretary.
 export interface TranscriptEntry {
   kind: "assistant" | "user" | "tool";
   // Stable for the life of the session (the record's own id where it has one), so the

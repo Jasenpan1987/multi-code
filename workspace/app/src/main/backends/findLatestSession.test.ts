@@ -2,9 +2,8 @@
 //
 // This is the lookup that makes a *stopped* instance readable. A stopped contact has
 // no session id in memory at all after an app restart — contacts.json doesn't store
-// one — so before this existed the manager could not read the history of any session
-// it hadn't personally watched run, and every stopped contact showed
-// `context=unknown`.
+// one — so before this existed every stopped contact showed `context=unknown`, and
+// a paired phone could not read its history.
 //
 // Claude's lookup; OpenCode 2's (`latestRootSession`) is tested in opencodeDb.test.ts.
 

@@ -5,7 +5,6 @@ import { TerminalSection } from "./TerminalSection";
 import { MarkdownSection } from "./MarkdownSection";
 import { PhoneSection } from "./PhoneSection";
 import { SecretarySection } from "./SecretarySection";
-import { ManagerSection } from "./ManagerSection";
 import type { DiffSide, Instance } from "../../shared/types";
 
 interface ToolboxProps {
@@ -110,15 +109,6 @@ export function Toolbox({
         onToggle={onExpandSection}
       >
         <SecretarySection active={isExpanded("secretary")} />
-      </ToolboxSection>
-
-      <ToolboxSection
-        id="manager"
-        title="Manager"
-        expanded={isExpanded("manager")}
-        onToggle={onExpandSection}
-      >
-        <ManagerSection active={isExpanded("manager")} />
       </ToolboxSection>
     </aside>
   );

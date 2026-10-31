@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { ContactList } from "./components/ContactList";
 import { NewInstanceDialog } from "./components/NewInstanceDialog";
-import { ManagerTrustHint } from "./components/ManagerTrustHint";
 import {
   TerminalView,
   cleanupTerminal,
@@ -67,7 +66,6 @@ export function App() {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [trustHintOpen, setTrustHintOpen] = useState(false);
   // Unread alerts per contact; a contact with none is absent. See useNotifications.
   const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(
     new Map()
@@ -357,19 +355,6 @@ export function App() {
     return cleanup;
   }, []);
 
-  // Listen for instances starting. The user clicking play already updates this
-  // list from the IPC return value; this is for the starts the user didn't make —
-  // the manager's `start_session` tool goes straight to the main process, and
-  // without this the row kept saying OFFLINE while the session was running.
-  useEffect(() => {
-    const cleanup = window.electronAPI.onInstanceStarted((started) => {
-      setInstances((prev) =>
-        prev.map((inst) => (inst.id === started.id ? { ...inst, ...started } : inst))
-      );
-    });
-    return cleanup;
-  }, []);
-
   useEffect(() => {
     window.electronAPI.isDevBuild().then(setIsDev);
   }, []);
@@ -517,30 +502,6 @@ export function App() {
       playCoughSound();
     },
     []
-  );
-
-  // No dialog: the manager has nothing to configure. Its directory belongs to
-  // Multi-Code and it only runs on claude, so the button does the whole job.
-  const handleNewManager = useCallback(async () => {
-    try {
-      const { instance, seededWorkspace } =
-        await window.electronAPI.createManager();
-      setInstances((prev) => [...prev, instance]);
-      setSelectedId(instance.id);
-      playCoughSound();
-      // Only on the run that created the folder, which is the only run whose CLI
-      // stops on the trust dialog. Its default answer shuts the manager down, so
-      // this warning is the difference between a working manager and one that dies
-      // the moment the user presses Enter.
-      if (seededWorkspace) setTrustHintOpen(true);
-    } catch (err) {
-      // Main rejects when one already exists, which shouldn't be reachable since
-      // the button hides then — but a silent no-op would be worse than a message.
-      window.alert(
-        err instanceof Error ? err.message : "Could not create the manager."
-      );
-    }
-  }, []
   );
 
   // Drag-to-reorder. Only the intent is sent; the main process owns the order (it is
@@ -921,7 +882,6 @@ export function App() {
         unreadCounts={unreadCounts}
         onSelect={handleSelect}
         onNew={() => setDialogOpen(true)}
-        onNewManager={handleNewManager}
         onMove={handleMove}
         onStart={handleStart}
         onRestart={handleRestart}
@@ -1215,11 +1175,6 @@ export function App() {
           </>
         );
       })()}
-
-      <ManagerTrustHint
-        open={trustHintOpen}
-        onClose={() => setTrustHintOpen(false)}
-      />
 
       <NewInstanceDialog
         open={dialogOpen}

@@ -1,7 +1,6 @@
-// The session list (PRD Story 2, mockup 1A): every session the Mac lists (the
-// Manager is not among them), grouped Needs you / Working / Finished / Idle with a
-// count, empty groups left out. Live while connected; from the cache, with its age
-// in the banner, while not.
+// The session list (PRD Story 2, mockup 1A): every session the Mac lists, grouped
+// Needs you / Working / Finished / Idle with a count, empty groups left out. Live
+// while connected; from the cache, with its age in the banner, while not.
 
 import type { RemoteInstance, RemoteSessionState } from "../../shared/remote-protocol";
 import { ConnectionBadge, ConnectionBanner } from "../components/Connection";

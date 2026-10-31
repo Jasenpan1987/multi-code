@@ -1,64 +1,37 @@
-// Writes the --mcp-config payload that points the manager instance at our
-// server.
+// Writes the files every spawned session reports its state with: the alert hooks'
+// `--settings` file and curl config for Claude, and the TUI plugin and its target
+// for OpenCode. All of them point at the `/alert` endpoint in server.ts.
 //
-// A file, not the JSON-string form of --mcp-config. The string form would put
-// the bearer token into the process's argv, where `ps` shows it to every process
-// running as any user on the machine. Anything that read it could then drive
-// every session Multi-Code manages — dispatch tasks, run slash commands — which
-// is precisely the authority this token exists to fence off.
-//
-// The file lives in the app's userData dir at 0600 and is removed on shutdown.
-// It is regenerated on every start because the port is OS-assigned and the token
-// is minted fresh, so a stale file is never useful.
+// They live in the app's userData dir at 0600 and are removed on shutdown. They
+// are regenerated on every start because the port is OS-assigned and the token is
+// minted fresh, so a stale file is never useful.
 
 import fs from "fs";
 import path from "path";
 import { app } from "electron";
-import { hookEndpointFor, SELF_TOOL_MATCHER } from "./hook-activity";
 import {
   OPENCODE_PLUGIN_DIR,
   OPENCODE_PLUGIN_ENTRY,
   opencodePluginSource,
 } from "../backends/opencodePlugin";
 
-// The name the CLI prefixes onto every tool, so the manager sees these as
-// `mcp__multi-code__list_sessions`. Short because it shows up in every tool call.
-export const MCP_SERVER_NAME = "multi-code";
-
+// The `--settings` file every Claude session spawns with, carrying only the alert
+// hooks.
+//
 // Resolved lazily rather than as a module constant: app.getPath is undefined
 // under vitest, and a top-level call would break importing this file at all.
 // Same reason remote/crypto.ts resolves its path in a function.
-function configPath(): string {
-  return path.join(app.getPath("userData"), "manager-mcp.json");
-}
-
-// The CLI settings the manager spawns with, carrying only the activity hooks.
-function settingsPath(): string {
-  return path.join(app.getPath("userData"), "manager-settings.json");
-}
-
-// curl's own -K config, holding the bearer token and the endpoint for the hook.
-//
-// A separate file rather than flags in the hook command for the same reason
-// --mcp-config is a file: the hook runs as a child process, so anything in its
-// command line is visible to `ps` for every process on the machine. A shell
-// would expand an environment variable into that argv too, which is why the
-// token is not passed that way either. With -K the argv is one path, and the
-// token stays behind 0600.
-function hookCurlConfigPath(): string {
-  return path.join(app.getPath("userData"), "manager-hook.curl");
-}
-
-// The `--settings` file every Claude project session spawns with, carrying only the
-// alert hooks. The manager gets the same hooks inside manager-settings.json
-// instead: the CLI applies only the last `--settings` flag it is given (measured
-// 2026-10-07, CLI 2.1.291), so one process can't take both files.
 function alertSettingsPath(): string {
   return path.join(app.getPath("userData"), "alert-settings.json");
 }
 
-// The alert hooks' curl config: the `/alert` endpoint and its token, behind 0600
-// for the same reason as manager-hook.curl.
+// curl's own -K config for the alert hooks: the `/alert` endpoint and its token.
+//
+// A separate file rather than flags in the hook command: the hook runs as a child
+// process, so anything in its command line is visible to `ps` for every process on
+// the machine. A shell would expand an environment variable into that argv too,
+// which is why the token is not passed that way either. With -K the argv is one
+// path, and the token stays behind 0600.
 function alertCurlConfigPath(): string {
   return path.join(app.getPath("userData"), "alert-hook.curl");
 }
@@ -90,6 +63,16 @@ function legacyOpencodePluginPath(): string {
   return path.join(opencodeDir(), "multicode-plugin.js");
 }
 
+// What the retired manager agent spawned with (removed 2026-11-01): its
+// `--mcp-config`, its `--settings` and its hook's curl config. Two of them carry a
+// bearer token. Removed with the rest for the same reason as the legacy plugin.
+function legacyManagerFiles(): string[] {
+  const userData = app.getPath("userData");
+  return ["manager-mcp.json", "manager-settings.json", "manager-hook.curl"].map((name) =>
+    path.join(userData, name)
+  );
+}
+
 // The hook events a Claude instance reports for attention alerts: exactly the ones
 // backends/claudeHooks.ts acts on, plus SessionStart, which tells a session whose
 // hooks work from one whose hooks never run. Nothing on every tool call, so the
@@ -106,104 +89,18 @@ export const ALERT_HOOK_EVENTS = [
   "PostCompact",
 ] as const;
 
-export interface McpConfigTarget {
+export interface AlertTarget {
   endpoint: string;
   token: string;
 }
 
-// Returns the path to hand to `claude --mcp-config`, or null when the server
-// isn't up. Null is a normal outcome (server failed to bind), and the caller
-// spawns the manager without the flag rather than not spawning it — a manager
-// with no tools can still be talked to, and the UI reports why it's toolless.
-export function writeMcpConfig(target: McpConfigTarget | null): string | null {
-  if (!target) return null;
-
-  const payload = {
-    mcpServers: {
-      [MCP_SERVER_NAME]: {
-        type: "http",
-        url: target.endpoint,
-        headers: { Authorization: `Bearer ${target.token}` },
-      },
-    },
-  };
-
-  const file = configPath();
-  try {
-    // Unlink first so the mode below applies to a genuinely new file: an
-    // existing file keeps its old permissions through writeFileSync, so a file
-    // that was once world-readable would stay that way.
-    try {
-      fs.unlinkSync(file);
-    } catch {
-      // Not there, which is the normal case.
-    }
-    fs.writeFileSync(file, JSON.stringify(payload, null, 2), { mode: 0o600 });
-    // Belt and braces: writeFileSync's mode is subject to the process umask, so
-    // assert the permissions rather than assume them.
-    fs.chmodSync(file, 0o600);
-    return file;
-  } catch {
-    return null;
-  }
-}
-
-// The settings file the manager spawns with, whose hooks report the tools the
-// manager runs itself into the activity feed. Returns the path for `--settings`,
-// or null when either file couldn't be written — in which case the manager still
-// spawns, just without self-reporting, and the feed is missing those rows.
-//
-// Only hooks go in here. No `permissions` block, deliberately: the manager is
-// meant to be able to verify a session's claim itself and to fix something small
-// without handing the job back, and a deny list is how it became the meek
-// assistant that told the user to go and run things by hand (T-215). Its bound is
-// visibility plus the user's own permission rules, not a narrower sandbox.
-//
-// `alert` adds the attention-alert hooks every Claude instance carries (see
-// writeAlertSettings). They go in this same file because the CLI honours only the
-// last `--settings` flag. Without it, the manager spawns with activity hooks only.
-export function writeManagerSettings(
-  target: McpConfigTarget | null,
-  alert: McpConfigTarget | null = null
-): string | null {
-  if (!target) return null;
-
-  const endpoint = hookEndpointFor(target.endpoint);
-  if (!endpoint) return null;
-  const curlConfig = writeCurlConfig(hookCurlConfigPath(), endpoint, target.token);
-  if (!curlConfig) return null;
-
-  // `|| true` so the hook can never fail the tool it is reporting on. Measured
-  // 2026-09-16 against CLI 2.1.273: curl exiting 7 (connection refused) did not
-  // block the call, so this is belt and braces rather than the only guard — but
-  // exit code 2 *is* a documented block signal, and a reporting path must never
-  // be able to disarm the manager. Also why the curl config sets max-time: a
-  // hook that hangs is a manager that hangs.
-  const command = `curl -K ${shellQuote(curlConfig)} || true`;
-  const hook = {
-    matcher: SELF_TOOL_MATCHER,
-    hooks: [{ type: "command", command, timeout: 5 }],
-  };
-
-  const alertCurl = alert
-    ? writeCurlConfig(alertCurlConfigPath(), alert.endpoint, alert.token)
-    : null;
-  const hooks = {
-    PreToolUse: [hook],
-    PostToolUse: [hook],
-    ...(alertCurl ? alertHooks(alertCurl) : {}),
-  };
-
-  return writePrivateFile(settingsPath(), JSON.stringify({ hooks }, null, 2));
-}
-
-// The settings file every Claude project session spawns with. Returns the path for
+// The settings file every Claude session spawns with. Returns the path for
 // `--settings`, or null when the server isn't up or a file couldn't be written; the
 // caller then spawns without alert hooks.
 //
 // Only hooks, never a `permissions` block: these must not change what an agent may
 // do, only report what it is doing.
-export function writeAlertSettings(alert: McpConfigTarget | null): string | null {
+export function writeAlertSettings(alert: AlertTarget | null): string | null {
   if (!alert) return null;
   const curlConfig = writeCurlConfig(alertCurlConfigPath(), alert.endpoint, alert.token);
   if (!curlConfig) return null;
@@ -223,7 +120,7 @@ export function writeAlertSettings(alert: McpConfigTarget | null): string | null
 // directories are 0700, the files 0600: only the user's own processes (their TUIs)
 // read them.
 export function writeOpencodePlugin(
-  alert: McpConfigTarget | null
+  alert: AlertTarget | null
 ): { pluginPath: string; targetPath: string } | null {
   if (!alert) return null;
   try {
@@ -254,7 +151,8 @@ export function writeOpencodePlugin(
 // `async: true`: measured on 2.1.291, the CLI waits for a synchronous hook (a sync
 // Stop hook delays the turn's end by its whole runtime), accepts `async`, and still
 // delivers async hooks complete and in order. A report must never make the agent
-// wait on Multi-Code. `|| true` and `timeout` as for the activity hook above.
+// wait on Multi-Code. `|| true` so the hook can never fail the turn it reports on,
+// and `timeout` so a hook that hangs can't hang the agent.
 function alertHooks(curlConfig: string): Record<string, unknown[]> {
   const command =
     `curl -K ${shellQuote(curlConfig)} ` +
@@ -279,10 +177,10 @@ function writeCurlConfig(file: string, url: string, token: string): string | nul
     // The hook delivery arrives on the hook command's stdin.
     `data-binary = "@-"`,
     `silent`,
-    // A hook runs on every tool call, so it must never be the slow part.
+    // A report must never be the slow part of a turn.
     `max-time = 2`,
-    // Nothing on stdout: a PostToolUse hook's output can be fed back to the model
-    // as context, and an HTTP status line would be noise it has to read.
+    // Nothing on stdout: a hook's output can be fed back to the model as context,
+    // and an HTTP status line would be noise it has to read.
     `output = "/dev/null"`,
     ``,
   ].join("\n");
@@ -314,19 +212,17 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-// Everything written for a spawn, the manager's, every Claude session's alert hooks
-// and OpenCode's TUI plugin, all of it stale the moment the server stops: the port is
-// OS-assigned and the tokens are minted per run.
+// Everything written for a spawn, every Claude session's alert hooks and OpenCode's
+// TUI plugin, all of it stale the moment the server stops: the port is OS-assigned
+// and the token is minted per run.
 export function removeSpawnFiles(): void {
   for (const file of [
-    configPath(),
-    settingsPath(),
-    hookCurlConfigPath(),
     alertSettingsPath(),
     alertCurlConfigPath(),
     opencodePluginPath(),
     opencodeAlertPath(),
     legacyOpencodePluginPath(),
+    ...legacyManagerFiles(),
   ]) {
     try {
       fs.unlinkSync(file);

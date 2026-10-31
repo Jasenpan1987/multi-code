@@ -1,8 +1,8 @@
 # PRD: Manager Agent
 
 **Version:** 1.0
-**Last Updated:** 2026-09-02
-**Status:** draft
+**Last Updated:** 2026-11-01
+**Status:** retired 2026-11-01 (see `docs/knowledge/decisions.md`, "The manager agent is retired"). Kept as a record.
 **Owner:** Jasen
 
 ## Overview

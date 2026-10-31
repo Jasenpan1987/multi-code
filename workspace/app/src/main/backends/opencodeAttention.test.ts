@@ -22,7 +22,7 @@ import {
   type ServiceSession,
   type ServiceStatus,
 } from "./opencodeService";
-import { parseAlertDelivery } from "../manager-mcp/server";
+import { parseAlertDelivery } from "../alert-server/server";
 import type { HookTimers } from "./claudeHooks";
 import type { AlertDelivery, AlertsDegradedReason, AnswerResult, PromptToolCall } from "./types";
 import type { PromptDetail } from "../remote/promptExtract";

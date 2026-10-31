@@ -1,10 +1,10 @@
-// Reading a Claude session's JSONL: the entries the manager sees
+// Reading a Claude session's JSONL: its reflowable entries
 // (`claudeTranscriptEntries`), what the builder last said and what happened since
 // (`readBuilderTurn`), the secretary's material behind `Backend.readBuilderTurn`, and
 // the phone's last turns (`readClaudeRecentTurns`, at the end), which alone also show
 // the builder's local commands and their output.
 //
-// The builder's messages come from the raw rows, not from `readClaudeTranscript`,
+// The builder's messages come from the raw rows, not from `claudeTranscriptEntries`,
 // which keeps every `isMeta` row with string content as a "user" entry and drops
 // every typed message whose content is an array. In a survey of the builder's own
 // transcripts that meant 25 `[Image: original 2400x1600, …]` lines the CLI added,
@@ -13,7 +13,7 @@
 // (docs/timeline/2026-10-08_brief-writer-spike.md, "Input format").
 //
 // The turn itself is `claudeTranscriptEntries` over the rows after that message, so
-// it reads the way the phone and the manager see a session.
+// it reads the way the rest of the app sees a session.
 
 import fs from "fs";
 import type { TranscriptEntry } from "../../shared/remote-protocol";

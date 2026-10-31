@@ -30,7 +30,6 @@ import {
   readOpencodeContextUsage,
   readOpencodeContextWindow,
   readOpencodeRecentTurns,
-  readOpencodeTranscript,
   stripJsonc,
   summarizeOpencodeTool,
 } from "./opencodeDb";
@@ -722,9 +721,14 @@ describe("latestRootSession", () => {
 
 // ---------------------------------------------------------------- transcript
 
-describe("readOpencodeTranscript", () => {
+// The entries every reader builds from the rows (rowEntries), read here through the
+// phone's reader. toMatchObject, because that reader adds each entry's id and time.
+describe("transcript entries", () => {
+  const entriesOf = (sessionId: string) =>
+    readOpencodeRecentTurns(sessionId, 100, dbFile).entries;
+
   it("reads a native session in seq order, dropping what OpenCode injected", () => {
-    expect(readOpencodeTranscript("ses_native", 40, dbFile)).toEqual([
+    expect(entriesOf("ses_native")).toMatchObject([
       { kind: "user", text: "fix the build" },
       { kind: "assistant", text: "Looking." },
       { kind: "tool", tool: "shell", text: "pnpm build" },
@@ -747,7 +751,7 @@ describe("readOpencodeTranscript", () => {
   });
 
   it("reads a migrated session's 1.x tool names and keys", () => {
-    expect(readOpencodeTranscript("ses_legacy", 40, dbFile)).toEqual([
+    expect(entriesOf("ses_legacy")).toMatchObject([
       { kind: "user", text: "migrate this" },
       { kind: "tool", tool: "bash", text: "ls -la" },
       { kind: "tool", tool: "bash", text: "Only a description" },
@@ -765,21 +769,8 @@ describe("readOpencodeTranscript", () => {
     ]);
   });
 
-  it("keeps the newest entries when cut, splitting a step if it must", () => {
-    expect(readOpencodeTranscript("ses_native", 4, dbFile)).toEqual([
-      { kind: "user", text: "now run the tests" },
-      { kind: "assistant", text: "Running them." },
-      { kind: "tool", tool: "shell", text: "pnpm test", pending: true },
-      { kind: "tool", tool: "grep", text: "", pending: true },
-    ]);
-    expect(readOpencodeTranscript("ses_native", 2, dbFile)).toEqual([
-      { kind: "tool", tool: "shell", text: "pnpm test", pending: true },
-      { kind: "tool", tool: "grep", text: "", pending: true },
-    ]);
-  });
-
   it("skips rows that aren't valid JSON", () => {
-    expect(readOpencodeTranscript("ses_garbled", 40, dbFile)).toEqual([
+    expect(entriesOf("ses_garbled")).toMatchObject([
       { kind: "user", text: "first" },
       { kind: "assistant", text: "still here" },
     ]);
@@ -816,7 +807,6 @@ describe("readOpencodeTranscript", () => {
       return statement;
     });
     try {
-      readOpencodeTranscript("ses_native", 40, dbFile);
       readOpencodeBuilderTurn("ses_native", dbFile);
       readOpencodeBuilderTurn("ses_untyped", dbFile);
       readOpencodeContextUsage("ses_native", dbFile, NO_CONFIG());
@@ -830,12 +820,6 @@ describe("readOpencodeTranscript", () => {
     // And no tool's output, which the transcript never shows either, nor a diff's text.
     expect(returned.filter((rows) => rows.includes("tool output that is never shown"))).toEqual([]);
     expect(returned.filter((rows) => rows.includes("diff text that is never shown"))).toEqual([]);
-  });
-
-  it("is empty for an unknown session, a zero limit or an unreadable database", () => {
-    expect(readOpencodeTranscript("ses_gone", 40, dbFile)).toEqual([]);
-    expect(readOpencodeTranscript("ses_native", 0, dbFile)).toEqual([]);
-    expect(readOpencodeTranscript("ses_native", 40, MISSING())).toEqual([]);
   });
 });
 
@@ -1379,7 +1363,7 @@ describe.runIf(process.env.OPENCODE_DB_SMOKE === "1")("smoke: the builder's real
     const report: Record<string, unknown>[] = [];
     for (const [index, root] of roots.entries()) {
       const started = performance.now();
-      const transcript = readOpencodeTranscript(root.id, 200);
+      const transcript = readOpencodeRecentTurns(root.id, 20).entries;
       const turn = readOpencodeBuilderTurn(root.id);
       const usage = readOpencodeContextUsage(root.id);
       const kinds: Record<string, number> = {};

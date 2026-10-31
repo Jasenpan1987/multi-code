@@ -66,30 +66,13 @@ export type SessionStart =
   | { kind: "latest"; isClaimed?: (sessionId: string) => boolean };
 
 /**
- * Extra spawn wiring. The manager gets the three Claude fields; every other
- * instance gets its backend's alert wiring alone: `settingsPath` for Claude,
+ * Extra spawn wiring: each backend's alert wiring, `settingsPath` for Claude and
  * `opencodePlugin` for OpenCode.
- *
- * The MCP fields are needed together or not at all: an MCP server the instance can
- * reach but whose tools it must ask permission for on every call is useless to an
- * agent that is supposed to coordinate unattended. Measured 2026-09-02 — without
- * the allowlist the CLI answers "Claude requested permissions to use
- * mcp__multi-code__manager_health, but you haven't granted it yet" and the tool
- * never runs.
  */
 export interface SpawnOptions {
-  // Path to a JSON file in `--mcp-config` form. A file rather than the inline JSON
-  // form because it carries a bearer token, and argv is world-readable via `ps`.
-  mcpConfigPath?: string;
-  // Fully-qualified tool names to pre-approve, e.g. `mcp__multi-code__list_sessions`.
-  // Enumerated rather than wildcarded: the write tools should each need a
-  // deliberate line of code before the manager can use them unattended.
-  allowedTools?: string[];
-  // Path to a JSON settings file in `--settings` form, carrying hooks only: the
-  // attention-alert hooks for every Claude instance, plus, for the manager, the
-  // ones that report its own Bash/Edit/Write into the activity feed. Additive to
-  // the user's own settings, and holds no permission rules — see config.ts. One
-  // file, because the CLI applies only the last `--settings` it is given.
+  // Path to a JSON settings file in `--settings` form, carrying the attention-alert
+  // hooks only. Additive to the user's own settings, and holds no permission rules;
+  // see alert-server/config.ts.
   settingsPath?: string;
   // OpenCode's alert wiring: the directory of Multi-Code's TUI plugin, named in the
   // TUI's OPENCODE_CLI_CONFIG_CONTENT, and the 0600 file it reads `/alert`'s
@@ -251,10 +234,8 @@ export interface Backend {
   readonly picksLatestSession?: boolean;
 
   /**
-   * Build the command line for a new instance. `opts` carries the manager's MCP
-   * wiring for the manager, and the alert hooks' settings for every instance; a
-   * backend that can't honour it should ignore it rather than fail, and say so in
-   * its implementation. `session` picks the conversation; "latest" when absent.
+   * Build the command line for a new instance. `opts` carries the alert wiring; a
+   * backend ignores the fields that aren't its own. `session` picks the conversation; "latest" when absent.
    */
   spawn(cwd: string, opts?: SpawnOptions, session?: SessionStart): SpawnConfig;
 
@@ -320,32 +301,16 @@ export interface Backend {
   readonly interrupt: { keys: readonly string[]; gapMs: number };
 
   /**
-   * Read the tail of the session as reflowable text, newest last.
-   *
-   * This exists because the terminal mirror can't be made readable on a phone:
-   * the PTY is a fixed 120 columns and the CLIs paint absolutely-positioned
-   * cells, so there is nothing to reflow. Both CLIs already keep a structured
-   * record of the conversation for their own use (Claude a session JSONL,
-   * OpenCode 2 its `session_message` table), and reading that gives text a phone
-   * can wrap.
-   *
-   * Returns an empty array when the session can't be read, which the phone
-   * shows as "no transcript" while leaving the terminal view available.
-   */
-  readTranscript(sessionId: string, limit: number): TranscriptEntry[];
-
-  /**
    * The session's last `turns` turns (at least one) for the phone's chat view, and
    * whether earlier ones exist. A turn starts at each message the builder typed, and
    * those are the only "user" entries here besides `local` ones: a command the CLI ran
    * itself (`/model`, an unknown `/token`), which starts no turn, with its output as a
    * `local` "assistant" entry. Rows the CLI adds to the conversation (reminders,
-   * notifications) are left out, where `readTranscript` keeps some of them for the
-   * manager. A backend that records no local commands (OpenCode) has no `local`
-   * entries. Entries carry `id` and `at`
-   * from the record; tool entries their `outcome`, and edits and writes the lines they
-   * added and removed, wherever the CLI recorded them. At most
-   * RECENT_TURNS_ENTRY_CAP entries (recentTurns.ts), the oldest turns dropped first.
+   * notifications) are left out. A backend that records no local commands
+   * (OpenCode) has no `local` entries. Entries carry `id` and `at` from the record;
+   * tool entries their `outcome`, and edits and writes the lines they added and
+   * removed, wherever the CLI recorded them. At most RECENT_TURNS_ENTRY_CAP entries
+   * (recentTurns.ts), the oldest turns dropped first.
    *
    * Called about once a second for every session a phone has open, so a read stops
    * as soon as it has the turns it needs. `{ entries: [], hasEarlier: false }` when the
@@ -390,8 +355,7 @@ export interface Backend {
    * process and is the only thing allowed to decide what an instance owns. This
    * one answers a different question — "what did this directory last work on" —
    * and is for read paths only: a stopped instance has no sessionId at all after
-   * an app restart, because contacts.json doesn't store one, which left the
-   * manager unable to read the history of any session it hadn't watched run.
+   * an app restart when contacts.json has no session for it.
    *
    * **Callers must not write the result into an instance's `sessionId`.**
    * `spawnProcess` treats an instance holding a session id as that session's

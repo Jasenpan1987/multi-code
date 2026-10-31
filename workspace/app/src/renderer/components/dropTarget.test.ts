@@ -25,13 +25,6 @@ describe("dropState", () => {
     expect(dropState(selected, false)).toEqual({ kind: "target", instance: selected });
   });
 
-  it("refuses the Manager", () => {
-    expect(dropState(instance({ isManager: true }), false)).toEqual({
-      kind: "refused",
-      reason: "manager",
-    });
-  });
-
   it("refuses when no contact is selected", () => {
     expect(dropState(null, false)).toEqual({ kind: "refused", reason: "no-selection" });
     expect(dropState(undefined, false)).toEqual({ kind: "refused", reason: "no-selection" });
@@ -39,7 +32,6 @@ describe("dropState", () => {
 
   it("does nothing while a dialog is open, whatever is selected", () => {
     expect(dropState(instance(), true)).toEqual({ kind: "none" });
-    expect(dropState(instance({ isManager: true }), true)).toEqual({ kind: "none" });
     expect(dropState(null, true)).toEqual({ kind: "none" });
   });
 });

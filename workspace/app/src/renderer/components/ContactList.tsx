@@ -4,7 +4,7 @@ import { Avatar } from "./Avatar";
 import { RenameSessionDialog } from "./RenameSessionDialog";
 import { getTerminal } from "./TerminalView";
 import { contextFillHue, formatContextPercent, formatTokens } from "./formatTokens";
-import { dropsBefore, pinManagerFirst } from "./contactOrder";
+import { dropsBefore } from "./contactOrder";
 import { hotkeyTargets, listenForContactHotkeys, nextUnread } from "./contactHotkeys";
 import type { ContextUsage, Instance } from "../../shared/types";
 
@@ -58,7 +58,6 @@ interface ContactListProps {
   unreadCounts: ReadonlyMap<string, number>;
   onSelect: (id: string) => void;
   onNew: () => void;
-  onNewManager: () => void;
   onStart: (id: string) => void;
   onRestart: (id: string) => void;
   onRemove: (id: string) => void;
@@ -79,7 +78,6 @@ export function ContactList({
   unreadCounts,
   onSelect,
   onNew,
-  onNewManager,
   onStart,
   onRestart,
   onRemove,
@@ -123,8 +121,8 @@ export function ContactList({
         unreadTarget: (step) => {
           const { instances: all, unreadCounts: unread, selectedId: shown } =
             hotkeyRef.current;
-          // The order the list draws, manager on top.
-          const order = pinManagerFirst(all).map((i) => i.id);
+          // The order the list draws.
+          const order = all.map((i) => i.id);
           return nextUnread(order, unread, shown, step);
         },
         select: (id) => {
@@ -167,13 +165,6 @@ export function ContactList({
     );
   }
 
-  const hasManager = instances.some((i) => i.isManager);
-
-  // Stored order, except the manager is pinned to the top — see pinManagerFirst.
-  // Status changes still never reorder anything: online vs offline is the avatar's
-  // job, not position's.
-  const ordered = pinManagerFirst(instances);
-
   const handleContextMenu = (e: React.MouseEvent, instanceId: string) => {
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, instanceId });
@@ -200,13 +191,15 @@ export function ContactList({
       </button>
       {/* A scrolled row leaves its bubble behind, so scrolling drops it. */}
       <div className="contact-list" onScroll={() => setNameTip(null)}>
-        {ordered.length === 0 ? (
+        {/* Stored order. Status changes never reorder anything: online vs offline
+            is the avatar's job, not position's. */}
+        {instances.length === 0 ? (
           <div className="sidebar-placeholder">No instances</div>
         ) : (
-          ordered.map((inst) => (
+          instances.map((inst) => (
             <div
               key={inst.id}
-              className={`contact-item ${selectedId === inst.id ? "selected" : ""} ${inst.status === "stopped" ? "stopped" : ""} ${unreadCounts.has(inst.id) ? "unread" : ""} ${inst.isManager ? "manager" : ""}`}
+              className={`contact-item ${selectedId === inst.id ? "selected" : ""} ${inst.status === "stopped" ? "stopped" : ""} ${unreadCounts.has(inst.id) ? "unread" : ""}`}
               onClick={() => onSelect(inst.id)}
               onContextMenu={(e) => handleContextMenu(e, inst.id)}
               onMouseEnter={(e) => {
@@ -223,8 +216,7 @@ export function ContactList({
                 });
               }}
               onMouseLeave={() => setNameTip(null)}
-              // The manager is pinned, so it can't be dragged out of first place.
-              draggable={!inst.isManager}
+              draggable
               data-dragging={dragId === inst.id ? "true" : undefined}
               data-drop={
                 drop?.id === inst.id ? (drop.before ? "before" : "after") : undefined
@@ -242,14 +234,10 @@ export function ContactList({
                 // Without preventDefault the drop event never fires at all.
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
-                // Nothing lands above the manager: dropping on its top half means
-                // "first among the projects", i.e. straight after it.
-                const before = inst.isManager
-                  ? false
-                  : dropsBefore(
-                      e.clientY,
-                      e.currentTarget.getBoundingClientRect()
-                    );
+                const before = dropsBefore(
+                  e.clientY,
+                  e.currentTarget.getBoundingClientRect()
+                );
                 setDrop((prev) =>
                   prev?.id === inst.id && prev.before === before
                     ? prev
@@ -322,17 +310,6 @@ export function ContactList({
         <button className="new-instance-btn-bottom" onClick={onNew}>
           + New
         </button>
-        {/* Only offered while there isn't one: the manager is a singleton, and a
-            button that always fails is worse than one that goes away. */}
-        {!hasManager && (
-          <button
-            className="new-manager-btn"
-            onClick={onNewManager}
-            title="Create the manager — one agent you talk to that can see and drive all the others"
-          >
-            + Manager
-          </button>
-        )}
       </div>
 
       {nameTip && (
@@ -355,15 +332,10 @@ export function ContactList({
               label: "Rename…",
               onClick: () => setRenameId(contextMenu.instanceId),
             },
-            // The manager is a singleton, so it has no Duplicate.
-            ...(contextInstance.isManager
-              ? []
-              : [
-                  {
-                    label: "Duplicate",
-                    onClick: () => onDuplicate(contextMenu.instanceId),
-                  },
-                ]),
+            {
+              label: "Duplicate",
+              onClick: () => onDuplicate(contextMenu.instanceId),
+            },
             {
               label: "Restart",
               onClick: () => onRestart(contextMenu.instanceId),

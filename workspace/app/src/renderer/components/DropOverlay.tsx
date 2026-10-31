@@ -5,10 +5,6 @@
 import type { DropRefusal, DropState } from "./dropTarget";
 
 const REFUSALS: Record<DropRefusal, { title: string; why: string }> = {
-  manager: {
-    title: "Files can't be dropped on the Manager",
-    why: "Its folder belongs to Multi-Code, not to a project. Select a project's session in the list first.",
-  },
   "no-selection": {
     title: "Files can't be dropped here",
     why: "No session is selected, and files go into the selected session's project. Select one in the list first.",

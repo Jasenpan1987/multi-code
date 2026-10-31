@@ -132,7 +132,7 @@ export interface LiveDialog {
 // Injected rather than imported so this module stays testable and doesn't reach
 // into process-manager directly; remote/remote-host.ts is the desktop's.
 export interface RemoteHost {
-  // The phone's list: every instance but the Manager, with its state and one line.
+  // The phone's list: every instance, with its state and one line.
   // Runs on every broadcast, so it reads nothing from disk.
   listInstances: () => RemoteInstance[];
   // The dialog the instance is stopped on, or null.
