@@ -1,0 +1,647 @@
+import crypto from "crypto";
+import fs from "fs";
+import path from "path";
+import type {
+  Backend,
+  SessionDiscovery,
+  SessionStart,
+  SpawnConfig,
+  SpawnOptions,
+} from "./types";
+import { ClaudeHookAttention, ClaudeWorkingWatch } from "./claudeHooks";
+import { readBuilderTurn, readClaudeRecentTurns } from "./claudeTranscript";
+import { noTurns } from "./recentTurns";
+import type { ContextUsage } from "../../shared/types";
+import { resolvePath } from "./resolvePath";
+import { INSTANCE_ENV, SPAWN_ENV, withUtf8Locale } from "./instance-env";
+
+const HOME = process.env.HOME || "";
+const SESSIONS_DIR = path.join(HOME, ".claude/sessions");
+// Where the CLI keeps the model overrides that reveal the context window size. Read
+// rather than written — it is the user's file.
+const CLAUDE_SETTINGS_PATH = path.join(HOME, ".claude/settings.json");
+const PROJECTS_DIR = path.join(HOME, ".claude/projects");
+
+function findClaudeBinary(): string {
+  const candidates = [
+    path.join(HOME, ".local/bin/claude"),
+    "/usr/local/bin/claude",
+    "/opt/homebrew/bin/claude",
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return "claude";
+}
+
+const claudePath = findClaudeBinary();
+
+// Claude names its per-project directory after the cwd with slashes replaced.
+// It uses the path it resolved, so the encoding has to start from the resolved
+// form too: on macOS `/tmp` is a symlink to `/private/tmp`, and encoding the
+// unresolved path yields a directory that doesn't exist.
+export function encodeProjectDir(cwd: string): string {
+  return resolvePath(cwd).replace(/\//g, "-");
+}
+
+// Whether `--continue` has a conversation to open here. Asked the way the lookup
+// below answers it, so a directory whose only history is a `claude -p` run starts a
+// fresh session instead of a `--continue` the CLI refuses ("No conversation found
+// to continue", then exit).
+function hasExistingSession(cwd: string): boolean {
+  return findLatestJsonlSessionId(cwd) !== null;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// The session flags for one spawn, and the session they open when that is known.
+//
+// A session the CLI has no transcript for can't be resumed (`--resume` fails), but
+// `--session-id` starts a fresh one under that id. A fresh session is always given
+// an id of our own for the same reason: the contact has it on record from the first
+// moment, before anyone types, so a restart before then opens it again rather than
+// falling back to the directory's latest, which may be another contact's.
+function sessionArgs(
+  cwd: string,
+  session: SessionStart
+): { args: string[]; sessionId?: string } {
+  if (session.kind === "own") {
+    const transcript = path.join(
+      PROJECTS_DIR,
+      encodeProjectDir(cwd),
+      `${session.sessionId}.jsonl`
+    );
+    if (fs.existsSync(transcript)) {
+      return { args: ["--resume", session.sessionId], sessionId: session.sessionId };
+    }
+    if (UUID.test(session.sessionId)) {
+      return { args: ["--session-id", session.sessionId], sessionId: session.sessionId };
+    }
+  }
+  if (session.kind === "latest" && hasExistingSession(cwd)) {
+    return { args: ["--continue"] };
+  }
+  const sessionId = crypto.randomUUID();
+  return { args: ["--session-id", sessionId], sessionId };
+}
+
+// The session a running claude is working in *now*, from the CLI's own registry.
+//
+// `~/.claude/sessions/<pid>.json` is maintained by the CLI and carries a
+// `sessionId` that it rewrites when the session changes. Measured 2026-09-17
+// against 2.1.274: after `/new`, the same pid's entry moved from
+// `89f7d163…` to `75e23772…` while the old transcript stopped growing entirely.
+// That makes this authoritative, where picking the newest file by mtime is a
+// guess that can land on another instance's transcript.
+//
+// Keyed on the pty child's pid, verified to be the pid the registry uses. The
+// cwd is checked as well, because pids are recycled and a stale entry from a
+// dead process would otherwise point every read at an unrelated session.
+export function findClaudeLiveSessionId(
+  cwd: string,
+  pid: number
+): string | null {
+  const target = resolvePath(cwd);
+
+  try {
+    const data = JSON.parse(
+      fs.readFileSync(path.join(SESSIONS_DIR, `${pid}.json`), "utf8")
+    );
+    if (
+      typeof data.sessionId === "string" &&
+      typeof data.cwd === "string" &&
+      resolvePath(data.cwd) === target
+    ) {
+      return data.sessionId;
+    }
+  } catch {
+    // No entry for this pid. Falls through to the cwd scan below, which covers a
+    // CLI that ever keys the registry on something other than the process we
+    // spawned.
+  }
+
+  // Fallback: a single entry for this directory is unambiguous. Two or more and
+  // there is no way to tell which process is ours, so nothing is returned —
+  // guessing here would silently point one instance at another's transcript.
+  try {
+    const matches: string[] = [];
+    for (const file of fs.readdirSync(SESSIONS_DIR)) {
+      if (!file.endsWith(".json")) continue;
+      try {
+        const data = JSON.parse(
+          fs.readFileSync(path.join(SESSIONS_DIR, file), "utf8")
+        );
+        if (typeof data.cwd !== "string") continue;
+        if (typeof data.sessionId !== "string") continue;
+        if (resolvePath(data.cwd) !== target) continue;
+        matches.push(data.sessionId);
+      } catch {
+        continue;
+      }
+    }
+    return matches.length === 1 ? matches[0] : null;
+  } catch {
+    return null;
+  }
+}
+
+function findJsonlByCwd(
+  cwd: string,
+  isClaimed?: (sessionId: string) => boolean
+): string | null {
+  try {
+    const files = fs.readdirSync(SESSIONS_DIR);
+    let bestMatch: { sessionId: string; startedAt: number } | null = null;
+    const target = resolvePath(cwd);
+
+    for (const file of files) {
+      try {
+        const data = JSON.parse(
+          fs.readFileSync(path.join(SESSIONS_DIR, file), "utf8")
+        );
+        // Compare resolved paths: the session file records the path Claude
+        // resolved, which can differ from the one the instance was configured
+        // with. A literal compare silently finds nothing, and the instance then
+        // gets no completion or prompt detection at all.
+        if (typeof data.cwd !== "string") continue;
+        if (resolvePath(data.cwd) !== target) continue;
+        if (isClaimed && isClaimed(data.sessionId)) continue;
+        if (data.startedAt > (bestMatch?.startedAt || 0)) {
+          bestMatch = { sessionId: data.sessionId, startedAt: data.startedAt };
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    if (!bestMatch) return null;
+
+    const jsonlPath = path.join(
+      PROJECTS_DIR,
+      encodeProjectDir(cwd),
+      `${bestMatch.sessionId}.jsonl`
+    );
+    if (fs.existsSync(jsonlPath)) return jsonlPath;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// The newest session this directory has on disk, by transcript mtime, leaving out
+// the ones `--continue` and `/resume` leave out: runs of `claude -p` and the SDK,
+// and background jobs (isHeadlessRun).
+//
+// Deliberately *not* the `~/.claude/sessions/` registry that `findJsonlByCwd`
+// above reads: that only lists live processes, so it answers nothing for a stopped
+// instance — which is the whole case this exists for. The project directory keeps
+// one JSONL per session and outlives the process.
+//
+// mtime rather than the id or the name: a session's file is touched on every turn,
+// so the most recently written one is the most recently worked in, which is the
+// history a user asking "what was this repo doing" means.
+// `projectsRoot` is overridable so tests can point at a scratch tree; production
+// always uses the real one.
+export function findLatestJsonlSessionId(
+  cwd: string,
+  projectsRoot: string = PROJECTS_DIR
+): string | null {
+  const projectDir = path.join(projectsRoot, encodeProjectDir(cwd));
+  const sessions: { file: string; mtimeMs: number }[] = [];
+  try {
+    for (const file of fs.readdirSync(projectDir)) {
+      if (!file.endsWith(".jsonl")) continue;
+      try {
+        sessions.push({ file, mtimeMs: fs.statSync(path.join(projectDir, file)).mtimeMs });
+      } catch {
+        // A file that vanished between readdir and stat. Skip it.
+        continue;
+      }
+    }
+  } catch {
+    // No project directory: this cwd has never been used with claude.
+    return null;
+  }
+  // Newest first, and only as far as the first conversation: usually one read.
+  sessions.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  for (const { file } of sessions) {
+    if (!isHeadlessRun(path.join(projectDir, file))) return file.slice(0, -".jsonl".length);
+  }
+  return null;
+}
+
+// How much of a transcript's head and tail is read to learn how it was started, as
+// the CLI reads them for the same question (`readHeadAndTail`, 64 KB each).
+const ENTRYPOINT_SCAN_BYTES = 64 * 1024;
+
+// What the CLI hides from `--continue` and `/resume`, as Claude Code 2.1.308 decides
+// it (`isHiddenFromSessionPicker`): a session started by `claude -p` or the SDK, its
+// rows stamped `entrypoint` "sdk-cli", "sdk-ts" or "sdk-py" where a terminal's say
+// "cli"; and a background job's, whose first message row says `sessionKind` "daemon"
+// or "daemon-worker". Measured 2026-10-22: a directory whose only session was an
+// "sdk-cli" one got "No conversation found to continue", and the contact exited.
+const HIDDEN_ENTRYPOINTS = new Set(["sdk-cli", "sdk-ts", "sdk-py"]);
+const HIDDEN_SESSION_KINDS = new Set(["daemon", "daemon-worker"]);
+
+// The entrypoint is the head's first, else the tail's last: a `claude -p` run opens
+// with a queue row carrying the whole prompt, which can push every stamped row past
+// the head. A transcript that can't be read is taken for a conversation, as every
+// transcript was before.
+function isHeadlessRun(file: string): boolean {
+  let fd: number | null = null;
+  try {
+    fd = fs.openSync(file, "r");
+    const buf = Buffer.alloc(ENTRYPOINT_SCAN_BYTES);
+    const headBytes = fs.readSync(fd, buf, 0, buf.length, 0);
+    const head = buf.toString("utf8", 0, headBytes);
+    const size = fs.fstatSync(fd).size;
+    let tail = head;
+    if (size > ENTRYPOINT_SCAN_BYTES) {
+      const tailBytes = fs.readSync(fd, buf, 0, buf.length, size - ENTRYPOINT_SCAN_BYTES);
+      tail = buf.toString("utf8", 0, tailBytes);
+    }
+    const entrypoint = jsonStringField(head, "entrypoint") ?? lastJsonStringField(tail, "entrypoint");
+    if (entrypoint && HIDDEN_ENTRYPOINTS.has(entrypoint)) return true;
+    const firstMessage = head.split("\n").find((line) => line.includes('"parentUuid":')) ?? head;
+    return HIDDEN_SESSION_KINDS.has(jsonStringField(firstMessage, "sessionKind") ?? "");
+  } catch {
+    return false;
+  } finally {
+    if (fd !== null) fs.closeSync(fd);
+  }
+}
+
+// A string field read straight out of JSONL text, first or last occurrence, the way
+// the CLI reads it: no parse, since a head or tail cut mid-row isn't JSON. The values
+// asked for here are plain words, so escapes don't arise.
+function jsonStringField(text: string, field: string): string | undefined {
+  return new RegExp(`"${field}": ?"([^"\\\\]*)"`).exec(text)?.[1];
+}
+
+function lastJsonStringField(text: string, field: string): string | undefined {
+  return [...text.matchAll(new RegExp(`"${field}": ?"([^"\\\\]*)"`, "g"))].at(-1)?.[1];
+}
+
+// Markers the CLI sets on its own child processes. Multi-Code may itself have been
+// launched from inside a Claude Code session — `pnpm start` typed at an agent's
+// prompt is enough — and then every agent it spawns inherits them, with real
+// consequences:
+//
+//   CLAUDE_CODE_CHILD_SESSION  turns transcript saving OFF, which silently breaks
+//                              session discovery, completion detection and context
+//                              usage, since all three read that transcript
+//   CLAUDE_CODE_EXECPATH       pins the child to the parent's CLI version instead
+//                              of whatever the launcher resolves to
+//   CLAUDE_CODE_SESSION_ID     hands the child an id that isn't its own
+//   CLAUDE_EFFORT              forces the parent's effort level, and its cost
+//
+// Observed 2026-09-15: an app started this way produced agents with "Transcript
+// saving is off" and no session file at all. Each instance we spawn is its own
+// top-level session, so these are cleared rather than passed through.
+const INHERITED_CLI_MARKERS = [
+  "CLAUDE_CODE_CHILD_SESSION",
+  "CLAUDE_CODE_SESSION_ID",
+  "CLAUDE_CODE_EXECPATH",
+  "CLAUDE_CODE_ENTRYPOINT",
+  "CLAUDECODE",
+  "CLAUDE_PID",
+  "CLAUDE_EFFORT",
+];
+
+function buildEnv(): Record<string, string> {
+  const env = { ...process.env } as Record<string, string>;
+  for (const key of INHERITED_CLI_MARKERS) delete env[key];
+  delete env[INSTANCE_ENV];
+  delete env[SPAWN_ENV];
+  return withUtf8Locale({
+    ...env,
+    PATH: [
+      path.join(HOME, ".local/bin"),
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+      process.env.PATH || "",
+    ].join(":"),
+  });
+}
+
+// The binary and env an instance is spawned with, for the one-shot `claude -p`
+// calls the voice secretary makes (secretary/cli.ts). Same resolution, so a brief
+// writer reaches the builder's model exactly when an instance would, from a Dock
+// launch too (docs/timeline/2026-10-08_brief-writer-spike.md).
+export function claudeCliCommand(): { command: string; env: Record<string, string> } {
+  return { command: claudePath, env: buildEnv() };
+}
+
+function isExecutableFile(file: string): boolean {
+  try {
+    if (!fs.statSync(file).isFile()) return false;
+    fs.accessSync(file, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// The `claude` that spawning claudeCliCommand() would run, or null when there is
+// none, in which case an instance comes up OFFLINE and the secretary is off. An
+// install location found at launch is run as is. A bare `claude` is looked up on
+// buildEnv()'s PATH, as node-pty's spawn-helper (execvp) and child_process.spawn
+// both do with that env, so a claude installed into one of those directories while
+// the app runs is found on the next call. Cheap: a few stat calls.
+export function findClaudeCli(
+  command: string = claudePath,
+  pathEnv: string = buildEnv().PATH,
+  isExecutable: (file: string) => boolean = isExecutableFile
+): string | null {
+  if (path.isAbsolute(command)) return isExecutable(command) ? command : null;
+  for (const dir of pathEnv.split(":")) {
+    if (!dir || !path.isAbsolute(dir)) continue;
+    const candidate = path.join(dir, command);
+    if (isExecutable(candidate)) return candidate;
+  }
+  return null;
+}
+
+// The registry status of a running claude: `idle`, `busy`, `waiting`, `shell`, or
+// null when the entry can't be read. Read only to confirm a `Stop` the CLI
+// reported through a hook (see claudeHooks.ts), never as an event source.
+export function readClaudeRegistryStatus(pid: number): string | null {
+  try {
+    const data = JSON.parse(
+      fs.readFileSync(path.join(SESSIONS_DIR, `${pid}.json`), "utf8")
+    );
+    return typeof data.status === "string" ? data.status : null;
+  } catch {
+    return null;
+  }
+}
+
+class ClaudeSessionDiscovery implements SessionDiscovery {
+  private interval: ReturnType<typeof setInterval> | null = null;
+
+  constructor(
+    cwd: string,
+    onFound: (sessionId: string) => void,
+    isClaimed?: (sessionId: string) => boolean
+  ) {
+    // Poll until the session appears, for as long as the instance lives.
+    //
+    // There is deliberately NO attempt cap. The session jsonl is only created
+    // once the first user message lands, and that can come minutes after the
+    // CLI spawns (a fresh project sitting at the input prompt). Giving up
+    // after a fixed window — as an earlier version did — silently killed
+    // completion AND prompt notifications for the instance's whole lifetime:
+    // the user types their first message, the agent finishes the turn, and
+    // nothing ever beeps. Cleanup is safe without a cap because the process
+    // manager cancels this handle on instance exit/restart/removal.
+    this.interval = setInterval(() => {
+      const jsonlPath = findJsonlByCwd(cwd, isClaimed);
+      if (!jsonlPath) return;
+
+      const sessionId = path.basename(jsonlPath, ".jsonl");
+      // Final claim check — another instance's discovery may have committed
+      // to this sessionId on the same tick. If so, keep polling.
+      if (isClaimed && isClaimed(sessionId)) return;
+      this.cancel();
+      onFound(sessionId);
+    }, 1000);
+  }
+
+  cancel() {
+    if (this.interval) {
+      clearInterval(this.interval);
+      this.interval = null;
+    }
+  }
+}
+
+export const claudeBackend: Backend = {
+  name: "claude",
+  keepsSecretaryEvents: true,
+
+  spawn(cwd: string, opts?: SpawnOptions, session?: SessionStart): SpawnConfig {
+    const { args, sessionId } = sessionArgs(cwd, session ?? { kind: "latest" });
+
+    // Additive: the CLI merges this on top of the user's own settings files rather
+    // than replacing them, so their hooks and rules for this directory still apply.
+    // Only one --settings ever: a second would replace this one outright (measured
+    // 2026-10-07).
+    if (opts?.settingsPath) {
+      args.push("--settings", opts.settingsPath);
+    }
+
+    return {
+      command: claudePath,
+      args,
+      env: buildEnv(),
+      sessionId,
+    };
+  },
+
+  discoverSessionId(cwd, onFound, isClaimed) {
+    return new ClaudeSessionDiscovery(cwd, onFound, isClaimed);
+  },
+
+  // The CLI reports its own state through the alert hooks every instance is
+  // spawned with, and whether a turn runs through its registry (ClaudeWorkingWatch).
+  // Nothing here reads the transcript or the terminal for it.
+  createHookAttention(pid, onActivity, onHooksHealth, context) {
+    const readStatus = () => readClaudeRegistryStatus(pid);
+    const attention = new ClaudeHookAttention(
+      onActivity,
+      readStatus,
+      undefined,
+      onHooksHealth
+    );
+    const working = new ClaudeWorkingWatch(readStatus, context.onWorking);
+    return {
+      handle: (delivery) => attention.handle(delivery),
+      stop: () => {
+        attention.stop();
+        working.stop();
+      },
+      // A dialog, or a panel the builder opened (`/cost`): text would land in it either way.
+      dialogOnScreen: () => readStatus() === "waiting",
+    };
+  },
+
+  // Esc ends the turn at once and fires no hook; the registry leaves `busy`
+  // (docs/timeline/2026-10-06_attention-alerts-investigation.md, "Esc interrupt").
+  interrupt: { keys: ["\x1b"], gapMs: 0 },
+
+  readRecentTurns(sessionId, turns) {
+    const jsonlPath = findJsonlBySessionId(sessionId);
+    return jsonlPath ? readClaudeRecentTurns(jsonlPath, turns) : noTurns();
+  },
+
+  async readBuilderTurn(sessionId) {
+    const jsonlPath = findJsonlBySessionId(sessionId);
+    return jsonlPath ? readBuilderTurn(jsonlPath) : null;
+  },
+
+  readContextUsage(sessionId): ContextUsage | "compacted" | null {
+    const jsonlPath = findJsonlBySessionId(sessionId);
+    if (!jsonlPath) return null;
+    return readClaudeContextUsage(jsonlPath);
+  },
+
+  findLatestSessionId(cwd: string): string | null {
+    return findLatestJsonlSessionId(cwd);
+  },
+
+  findLiveSessionId(cwd: string, pid: number): string | null {
+    return findClaudeLiveSessionId(cwd, pid);
+  },
+
+  buildResumeCommand(sessionId: string): string {
+    return `claude --resume ${sessionId}`;
+  },
+};
+
+// How full the window is, from the newest assistant turn that reported usage.
+//
+// The three input fields are summed because they are disjoint parts of the same
+// prompt: `input_tokens` is what wasn't cached, `cache_read_input_tokens` what was
+// served from cache, `cache_creation_input_tokens` what was written into it this
+// turn. Their sum is what the model actually read. `output_tokens` is excluded —
+// it isn't occupying the window on the next turn.
+//
+// A compaction writes no assistant turn, so walking back from one would find the
+// last turn before it, at the old size: a 405k session showed 40% for minutes after
+// `/compact` took it to 11k (manager transcript, 2026-09-24). Its `compact_boundary`
+// row carries the CLI's own figure for the new window, `compactMetadata.postTokens`,
+// which stands until the next turn reports; the turn before it still names the model.
+export function readClaudeContextUsage(
+  jsonlPath: string,
+  settingsPath: string = CLAUDE_SETTINGS_PATH
+): ContextUsage | "compacted" | null {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(jsonlPath, "utf8");
+  } catch {
+    return null;
+  }
+
+  const lines = raw.split("\n");
+  // Set once the walk passes a compaction: the figure is its, the model the turn's.
+  let compacted: { inputTokens: number; updatedAt: number } | null = null;
+  // Backwards, stopping at the first usable record. These files reach 8MB+, and
+  // only the newest turn answers the question, so parsing forward to the end
+  // would be most of the cost for none of the benefit.
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    let record: Record<string, unknown>;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!compacted && record.type === "system" && record.subtype === "compact_boundary") {
+      const metadata = record.compactMetadata as Record<string, unknown> | undefined;
+      const postTokens = finiteNumber(metadata?.postTokens);
+      if (postTokens <= 0) return "compacted";
+      compacted = { inputTokens: postTokens, updatedAt: parseIsoMs(record.timestamp) };
+      continue;
+    }
+    if (record.type !== "assistant") continue;
+
+    const message = record.message as Record<string, unknown> | undefined;
+    const usage = message?.usage as Record<string, unknown> | undefined;
+    if (!usage) continue;
+
+    const inputTokens =
+      finiteNumber(usage.input_tokens) +
+      finiteNumber(usage.cache_creation_input_tokens) +
+      finiteNumber(usage.cache_read_input_tokens);
+    // A turn that reported all zeros (an errored request, for instance) tells us
+    // nothing, so keep walking back to one that does.
+    if (inputTokens <= 0) continue;
+
+    const model = typeof message?.model === "string" ? message.model : undefined;
+    return {
+      inputTokens,
+      updatedAt: parseIsoMs(record.timestamp),
+      ...compacted,
+      model,
+      contextWindow: readClaudeContextWindow(model, settingsPath) ?? undefined,
+    };
+  }
+
+  return compacted ?? null;
+}
+
+// How large this model's context window is, inferred from the user's own settings.
+//
+// **Inferred, and fragile — which is why it returns null so readily.** The transcript
+// records only a family name (`claude-opus-5`), and the CLI keeps the real model id
+// in `env.ANTHROPIC_DEFAULT_<FAMILY>_MODEL` in `~/.claude/settings.json`, where a
+// `[1m]` suffix is what asks for the million-token window. Observed on this machine:
+// `ANTHROPIC_DEFAULT_OPUS_MODEL = au.anthropic.claude-opus-5[1m]`.
+//
+// Two ways this goes stale, both of which must produce null rather than a guess:
+// the user switching model mid-session with `/model`, and a family with no entry in
+// settings at all. Showing 45% for a session actually at 226% is worse than showing
+// no percentage.
+export function readClaudeContextWindow(
+  model: string | undefined,
+  settingsPath: string = CLAUDE_SETTINGS_PATH
+): number | null {
+  const family = claudeFamily(model);
+  if (!family) return null;
+
+  let env: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+    env = (parsed?.env ?? {}) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+
+  const configured = env[`ANTHROPIC_DEFAULT_${family}_MODEL`];
+  if (typeof configured !== "string" || configured === "") return null;
+
+  // The suffix is the only thing in reach that distinguishes the two windows.
+  if (/\[1m\]/i.test(configured)) return 1_000_000;
+
+  // No suffix on a model this family recognises means the standard window. Guarded
+  // on the id actually naming the family, so an unrelated override doesn't get a
+  // number attached to it.
+  if (configured.toLowerCase().includes(family.toLowerCase())) return 200_000;
+
+  return null;
+}
+
+// `claude-opus-5` → `OPUS`. The family is the segment after `claude-`, which is how
+// the settings keys are named.
+function claudeFamily(model: string | undefined): string | null {
+  if (!model) return null;
+  const match = /claude-([a-z]+)/i.exec(model);
+  return match ? match[1].toUpperCase() : null;
+}
+
+function finiteNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+// Claude writes an ISO 8601 timestamp on every record. 0 means "unknown", which
+// the UI shows as a usage figure with no age rather than pretending it's now.
+function parseIsoMs(value: unknown): number {
+  if (typeof value !== "string") return 0;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+export function findJsonlBySessionId(sessionId: string): string | null {
+  try {
+    const projectDirs = fs.readdirSync(PROJECTS_DIR);
+    for (const dir of projectDirs) {
+      const candidate = path.join(PROJECTS_DIR, dir, `${sessionId}.jsonl`);
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}

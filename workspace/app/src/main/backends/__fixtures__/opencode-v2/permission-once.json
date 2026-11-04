@@ -1,0 +1,806 @@
+{
+  "scenario": "permission-once",
+  "opencodeVersion": "2.0.32",
+  "notes": "Scratch config has a shell->ask rule (2.0.32's default ruleset is allow-all, see README). Prompt 'touch once.txt'; dialog 'Permission required / $ touch once.txt / Allow once  Always allow  Reject', focus starts on Allow once; Enter. permission.replied{once}, the tool runs, the turn continues to execution.succeeded.",
+  "frames": [
+    {
+      "t": 1009,
+      "event": {
+        "id": "evt_1553c23ca001XRN9DUXlKgIdrw",
+        "created": 1792431367114,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "slug": "tidy-eagle",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1009,
+      "event": {
+        "id": "evt_1553c23cd0014KJBU4lfLmbaqG",
+        "created": 1792431367117,
+        "type": "project.updated",
+        "data": {
+          "id": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "canonical": "/private/tmp/oc2-spike/projects/scen",
+          "time": {
+            "created": 1792431240537,
+            "updated": 1792431240537,
+            "active": 1792431367117
+          },
+          "sandboxes": []
+        }
+      }
+    },
+    {
+      "t": 1039,
+      "event": {
+        "id": "evt_1553c23d8001hNwjCtJUK4xYt1",
+        "created": 1792431367128,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_1553c23c7001IPmHbE9lBvTQZE",
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "Use your shell tool to run exactly this command: touch once.txt",
+              "files": [],
+              "agents": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1039,
+      "event": {
+        "id": "evt_1553c23d9001eAqNeYAiwIALQw",
+        "created": 1792431367129,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1039,
+      "event": {
+        "id": "evt_1553c23e0001wQHKsyIm0FIgCu",
+        "created": 1792431367136,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 1039,
+      "event": {
+        "id": "evt_1553c23e2001148a0DhRozMM1g",
+        "created": 1792431367138,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "inboxID": "msg_1553c23c7001IPmHbE9lBvTQZE"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2835,
+      "event": {
+        "id": "evt_1553c2aeb001YF52K151f6GMQi",
+        "created": 1792431368939,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_1553c23e7001j8BMKEQahFnRRg",
+          "started": 1792431367146
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 5,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2836,
+      "event": {
+        "id": "evt_1553c2aee001PiLAOHQPgmoW1c",
+        "created": 1792431368942,
+        "type": "session.text.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "assistantMessageID": "msg_1553c23e7001j8BMKEQahFnRRg",
+          "ordinal": 0
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 6,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2867,
+      "event": {
+        "id": "evt_1553c2b0d001Y4eDHzeiuft94C",
+        "created": 1792431368973,
+        "type": "session.text.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "assistantMessageID": "msg_1553c23e7001j8BMKEQahFnRRg",
+          "ordinal": 0,
+          "delta": "I'll run that exact command."
+        }
+      }
+    },
+    {
+      "t": 2867,
+      "event": {
+        "id": "evt_1553c2b0d002eZafrFge707te4",
+        "created": 1792431368973,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "assistantMessageID": "msg_1553c23e7001j8BMKEQahFnRRg",
+          "id": "call_00_iumyr4i3bacn8ydgaizjexc2",
+          "name": "shell"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 7,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2879,
+      "event": {
+        "id": "evt_1553c2b12001HZ6ZusumDLk79m",
+        "created": 1792431368978,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "assistantMessageID": "msg_1553c23e7001j8BMKEQahFnRRg",
+          "id": "call_00_iumyr4i3bacn8ydgaizjexc2",
+          "text": "{\"command\": \"touch once.txt\"}"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 8,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2879,
+      "event": {
+        "id": "evt_1553c2b130011F1yKmWlrd5fev",
+        "created": 1792431368979,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "assistantMessageID": "msg_1553c23e7001j8BMKEQahFnRRg",
+          "id": "call_00_iumyr4i3bacn8ydgaizjexc2",
+          "input": {
+            "command": "touch once.txt"
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 9,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2879,
+      "event": {
+        "id": "evt_1553c2b15001XSKH4gkD7DgM5f",
+        "created": 1792431368981,
+        "type": "session.text.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "assistantMessageID": "msg_1553c23e7001j8BMKEQahFnRRg",
+          "ordinal": 0,
+          "text": "I'll run that exact command."
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 10,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2879,
+      "event": {
+        "id": "evt_1553c2b16001gTvBjssUO8A1NX",
+        "created": 1792431368982,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "assistantMessageID": "msg_1553c23e7001j8BMKEQahFnRRg"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 11,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2879,
+      "event": {
+        "id": "evt_1553c2b1b002QcUAd5jqdy2woO",
+        "created": 1792431368987,
+        "type": "permission.asked",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "per_1553c2b1b00146WmeNZnMDL29h",
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "action": "shell",
+          "resources": [
+            "touch once.txt"
+          ],
+          "save": [
+            "touch *"
+          ],
+          "source": {
+            "type": "tool",
+            "messageID": "msg_1553c23e7001j8BMKEQahFnRRg",
+            "id": "call_00_iumyr4i3bacn8ydgaizjexc2"
+          }
+        }
+      }
+    },
+    {
+      "t": 3804,
+      "event": {
+        "id": "evt_1553c2eb5001S0CKCU5hhuKjxL",
+        "created": 1792431369909,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "cost": 0,
+          "tokens": {
+            "input": 45,
+            "output": 7,
+            "reasoning": 81,
+            "cache": {
+              "read": 512,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 3804,
+      "event": {
+        "id": "evt_1553c2eb7001NSAHRGl4KOn0D2",
+        "created": 1792431369911,
+        "type": "session.renamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "title": "Creating once.txt with touch command"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 13,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 22959,
+      "event": {
+        "id": "evt_1553c798a001xktojjSj6TmpLc",
+        "created": 1792431389066,
+        "type": "permission.replied",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "requestID": "per_1553c2b1b00146WmeNZnMDL29h",
+          "reply": "once"
+        }
+      }
+    },
+    {
+      "t": 22962,
+      "event": {
+        "id": "evt_1553c798d001JdKjbN0v6z4RXj",
+        "created": 1792431389069,
+        "type": "shell.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "info": {
+            "id": "sh_1553c798b001kHW5ZfP40guNMK",
+            "status": "running",
+            "command": "touch once.txt",
+            "cwd": "/private/tmp/oc2-spike/projects/scen",
+            "shell": "/bin/zsh",
+            "file": "/tmp/oc2-spike/data/opencode/shell/846d1ad0ea32e1386513fcca3d9fb653b775476d/sh_1553c798b001kHW5ZfP40guNMK.out",
+            "metadata": {
+              "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm"
+            },
+            "time": {
+              "started": 1792431389067
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 22962,
+      "event": {
+        "id": "evt_1553c798e001rKdH11vPvKd9Na",
+        "created": 1792431389070,
+        "type": "session.tool.progress",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "assistantMessageID": "msg_1553c23e7001j8BMKEQahFnRRg",
+          "id": "call_00_iumyr4i3bacn8ydgaizjexc2",
+          "metadata": {
+            "shellID": "sh_1553c798b001kHW5ZfP40guNMK"
+          }
+        }
+      }
+    },
+    {
+      "t": 22980,
+      "event": {
+        "id": "evt_1553c79930015BJKHvKQ8KTE92",
+        "created": 1792431389075,
+        "type": "session.tool.success",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "assistantMessageID": "msg_1553c23e7001j8BMKEQahFnRRg",
+          "id": "call_00_iumyr4i3bacn8ydgaizjexc2",
+          "content": [
+            {
+              "type": "text",
+              "text": "(no output)"
+            }
+          ],
+          "metadata": {
+            "status": "completed",
+            "truncated": false,
+            "exit": 0
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 14,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 22980,
+      "event": {
+        "id": "evt_1553c7995001fjU8xsqL00DnPq",
+        "created": 1792431389077,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "assistantMessageID": "msg_1553c23e7001j8BMKEQahFnRRg",
+          "finish": "tool-calls",
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 21,
+            "output": 45,
+            "reasoning": 0,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 15,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 22980,
+      "event": {
+        "id": "evt_1553c7996001PY5Df2cPpVywXF",
+        "created": 1792431389078,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "cost": 0,
+          "tokens": {
+            "input": 66,
+            "output": 52,
+            "reasoning": 81,
+            "cache": {
+              "read": 5760,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 22980,
+      "event": {
+        "id": "evt_1553c799b001gKaDtPmHwxQ1oq",
+        "created": 1792431389083,
+        "type": "shell.exited",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "sh_1553c798b001kHW5ZfP40guNMK",
+          "exit": 0,
+          "status": "exited"
+        }
+      }
+    },
+    {
+      "t": 33092,
+      "event": {
+        "id": "evt_1553ca11b001axLe1nBEuzGPtv",
+        "created": 1792431399196,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_1553c799c001QkSdF1AjQYBfq2",
+          "started": 1792431389088
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 16,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 33092,
+      "event": {
+        "id": "evt_1553ca11f001CZXDMpUf3mVweU",
+        "created": 1792431399199,
+        "type": "session.text.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "assistantMessageID": "msg_1553c799c001QkSdF1AjQYBfq2",
+          "ordinal": 0
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 17,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 33178,
+      "event": {
+        "id": "evt_1553ca16f001PP3Q2JQw0Kb8dT",
+        "created": 1792431399279,
+        "type": "session.text.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "assistantMessageID": "msg_1553c799c001QkSdF1AjQYBfq2",
+          "ordinal": 0,
+          "text": "Done — `touch once.txt` ran successfully in `/private/tmp/oc2-spike/projects/scen`."
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 18,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 33178,
+      "event": {
+        "id": "evt_1553ca17200108dnmYM6N50VpW",
+        "created": 1792431399282,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "assistantMessageID": "msg_1553c799c001QkSdF1AjQYBfq2"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 19,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 33178,
+      "event": {
+        "id": "evt_1553ca173001J3e3ZXEzr6ScEV",
+        "created": 1792431399283,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "assistantMessageID": "msg_1553c799c001QkSdF1AjQYBfq2",
+          "finish": "stop",
+          "rawFinish": "stop",
+          "cost": 0,
+          "tokens": {
+            "input": 80,
+            "output": 25,
+            "reasoning": 0,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 20,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 33178,
+      "event": {
+        "id": "evt_1553ca174001M01clZ4QW01yAC",
+        "created": 1792431399284,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "cost": 0,
+          "tokens": {
+            "input": 146,
+            "output": 77,
+            "reasoning": 81,
+            "cache": {
+              "read": 11008,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 33178,
+      "event": {
+        "id": "evt_1553ca175001l4f6dlV5Jj2jan",
+        "created": 1792431399285,
+        "type": "session.execution.succeeded",
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 21,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 33199,
+      "event": {
+        "id": "evt_1553ca18b001zPwOWWowWey4Nr",
+        "created": 1792431399307,
+        "type": "session.viewed",
+        "data": {
+          "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "idle": 1792431399285
+        },
+        "durable": {
+          "aggregateID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+          "seq": 22,
+          "version": 1
+        }
+      }
+    }
+  ],
+  "omitted": {
+    "repeatedDeltaFrames": {
+      "session.text.delta": 1
+    }
+  },
+  "inputs": [
+    {
+      "t": 70,
+      "key": {
+        "text": "Use your shell tool to run exactly this command: touch once.txt"
+      }
+    },
+    {
+      "t": 994,
+      "key": "Enter"
+    },
+    {
+      "t": 22955,
+      "key": "Enter"
+    }
+  ],
+  "http": [
+    {
+      "t": 16925,
+      "method": "GET",
+      "path": "/api/session/ses_eaac3dc3affe8buPSYB6Xffjwm/permission",
+      "status": 200,
+      "response": {
+        "data": [
+          {
+            "id": "per_1553c2b1b00146WmeNZnMDL29h",
+            "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm",
+            "action": "shell",
+            "resources": [
+              "touch once.txt"
+            ],
+            "save": [
+              "touch *"
+            ],
+            "source": {
+              "type": "tool",
+              "messageID": "msg_1553c23e7001j8BMKEQahFnRRg",
+              "id": "call_00_iumyr4i3bacn8ydgaizjexc2"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "t": 16979,
+      "method": "GET",
+      "path": "/api/session/active",
+      "status": 200,
+      "response": {
+        "data": {
+          "ses_eaac3dc3affe8buPSYB6Xffjwm": {
+            "type": "running"
+          }
+        }
+      }
+    }
+  ],
+  "pluginRoutes": [
+    {
+      "t": 1014,
+      "route": {
+        "type": "session",
+        "sessionID": "ses_eaac3dc3affe8buPSYB6Xffjwm"
+      }
+    }
+  ]
+}

@@ -1,0 +1,123 @@
+{
+  "cli": "2.1.291",
+  "scenario": "slash-clear",
+  "description": "/clear moves the instance to a new session id.",
+  "deliveries": [
+    {
+      "ms": 0,
+      "payload": {
+        "session_id": "14ffb47e-d5ca-4117-a1b8-62017ef56403",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-slash/14ffb47e-d5ca-4117-a1b8-62017ef56403.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-slash",
+        "prompt_id": "b30bad43-5cc0-4547-bec6-fdf1be9212e9",
+        "hook_event_name": "SessionEnd",
+        "reason": "clear"
+      }
+    },
+    {
+      "ms": 404,
+      "payload": {
+        "session_id": "6d0724b4-2a6d-4f28-8d48-1bb62114effc",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-slash/6d0724b4-2a6d-4f28-8d48-1bb62114effc.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-slash",
+        "hook_event_name": "SessionStart",
+        "source": "clear"
+      }
+    },
+    {
+      "ms": 4241,
+      "payload": {
+        "session_id": "6d0724b4-2a6d-4f28-8d48-1bb62114effc",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-slash/6d0724b4-2a6d-4f28-8d48-1bb62114effc.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-slash",
+        "prompt_id": "cbed2549-8330-4289-b490-37ee65d85e6b",
+        "permission_mode": "default",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Reply with just the word hi. Do not use any tools."
+      }
+    },
+    {
+      "ms": 4278,
+      "payload": {
+        "session_id": "6d0724b4-2a6d-4f28-8d48-1bb62114effc",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-slash/6d0724b4-2a6d-4f28-8d48-1bb62114effc.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-slash",
+        "prompt_id": "cbed2549-8330-4289-b490-37ee65d85e6b",
+        "hook_event_name": "InstructionsLoaded",
+        "file_path": "~/.claude/CLAUDE.md",
+        "memory_type": "User",
+        "load_reason": "session_start"
+      }
+    },
+    {
+      "ms": 4922,
+      "payload": {
+        "session_id": "6d0724b4-2a6d-4f28-8d48-1bb62114effc",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-slash/6d0724b4-2a6d-4f28-8d48-1bb62114effc.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-slash",
+        "prompt_id": "cbed2549-8330-4289-b490-37ee65d85e6b",
+        "permission_mode": "default",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "last_assistant_message": "hi",
+        "background_tasks": [],
+        "session_crons": []
+      }
+    },
+    {
+      "ms": 4923,
+      "payload": {
+        "session_id": "6d0724b4-2a6d-4f28-8d48-1bb62114effc",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-slash/6d0724b4-2a6d-4f28-8d48-1bb62114effc.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-slash",
+        "prompt_id": "cbed2549-8330-4289-b490-37ee65d85e6b",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "998b9461-8427-44b8-a7e2-2417e46e3ad0",
+        "message_id": "ab985cfc-d56d-4f99-bf7a-38c695b78a3e",
+        "index": 0,
+        "final": true,
+        "delta": "hi"
+      }
+    }
+  ],
+  "registry": [
+    {
+      "ms": -2442,
+      "status": "idle"
+    },
+    {
+      "ms": 3,
+      "status": "busy"
+    },
+    {
+      "ms": 133,
+      "status": "busy"
+    },
+    {
+      "ms": 196,
+      "status": "idle"
+    },
+    {
+      "ms": 4234,
+      "status": "busy"
+    },
+    {
+      "ms": 4988,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": -1090,
+      "key": "enter /clear"
+    },
+    {
+      "ms": 162,
+      "key": "enter /clear (second)"
+    },
+    {
+      "ms": 4176,
+      "key": "enter"
+    }
+  ]
+}

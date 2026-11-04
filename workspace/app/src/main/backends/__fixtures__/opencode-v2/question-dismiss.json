@@ -1,0 +1,479 @@
+{
+  "scenario": "question-dismiss",
+  "opencodeVersion": "2.0.32",
+  "notes": "Single-select form; one Esc. Order, same ms: form.cancelled, tool.failed{aborted 'The user dismissed…'}, step.failed, execution.interrupted{reason:shutdown}. Screen: '→ Asked 1 question' then '· interrupted'. The session was never titled (title stays 'New session - …'). Like a Reject, this turn is resumed at the next service start.",
+  "frames": [
+    {
+      "t": 1067,
+      "event": {
+        "id": "evt_155425bc50019wr13XO7lFPmS8",
+        "created": 1792431774661,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "slug": "stellar-falcon",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1094,
+      "event": {
+        "id": "evt_155425bd5001nNvVpPRyhOpqVm",
+        "created": 1792431774677,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_155425bc20010DTISryzEOLxgb",
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "Use your question tool to ask me one single-select question: which animal, with options Cat, Dog and Fox. Then reply with the animal I picked.",
+              "files": [],
+              "agents": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1094,
+      "event": {
+        "id": "evt_155425bd6001l2zVe2O1cqeIYX",
+        "created": 1792431774678,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1095,
+      "event": {
+        "id": "evt_155425bd9001kQPCUlj70LebMA",
+        "created": 1792431774681,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 1095,
+      "event": {
+        "id": "evt_155425bda001tdJuTIvWUmjrA6",
+        "created": 1792431774682,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "inboxID": "msg_155425bc20010DTISryzEOLxgb"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2628,
+      "event": {
+        "id": "evt_1554261d0001aZklfJ962IQO31",
+        "created": 1792431776208,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_155425bde001dMRBDrVgGeGn9V",
+          "started": 1792431774690
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 5,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2628,
+      "event": {
+        "id": "evt_1554261d8001LJ1StCwn0shpwe",
+        "created": 1792431776216,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "assistantMessageID": "msg_155425bde001dMRBDrVgGeGn9V",
+          "id": "call_00_7q418y48p6dikb3bnse0w0zz",
+          "name": "question"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 6,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2629,
+      "event": {
+        "id": "evt_1554261dd001z5zcQtK55GM570",
+        "created": 1792431776221,
+        "type": "project.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "canonical": "/private/tmp/oc2-spike/projects/scen",
+          "time": {
+            "created": 1792431240537,
+            "updated": 1792431240537,
+            "active": 1792431776220
+          },
+          "sandboxes": []
+        }
+      }
+    },
+    {
+      "t": 2645,
+      "event": {
+        "id": "evt_1554261ea001Crc433GofycW31",
+        "created": 1792431776234,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "assistantMessageID": "msg_155425bde001dMRBDrVgGeGn9V",
+          "id": "call_00_7q418y48p6dikb3bnse0w0zz",
+          "text": "{\"questions\": [{\"header\": \"Animal choice\", \"question\": \"Which animal do you pick?\", \"options\": [{\"label\": \"Cat\", \"description\": \"Pick the cat\"}, {\"label\": \"Dog\", \"description\": \"Pick the dog\"}, {\"labe…"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 7,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2645,
+      "event": {
+        "id": "evt_1554261ec001MrwB7lN0LO26dQ",
+        "created": 1792431776236,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "assistantMessageID": "msg_155425bde001dMRBDrVgGeGn9V",
+          "id": "call_00_7q418y48p6dikb3bnse0w0zz",
+          "input": {
+            "questions": [
+              {
+                "header": "Animal choice",
+                "question": "Which animal do you pick?",
+                "options": [
+                  {
+                    "label": "Cat",
+                    "description": "Pick the cat"
+                  },
+                  {
+                    "label": "Dog",
+                    "description": "Pick the dog"
+                  },
+                  {
+                    "label": "Fox",
+                    "description": "Pick the fox"
+                  }
+                ]
+              }
+            ]
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 8,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2645,
+      "event": {
+        "id": "evt_1554261ee001l988NF3ltZqmyj",
+        "created": 1792431776238,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "assistantMessageID": "msg_155425bde001dMRBDrVgGeGn9V"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 9,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2645,
+      "event": {
+        "id": "evt_1554261f0002H7FwenAopZUPqq",
+        "created": 1792431776240,
+        "type": "form.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "form": {
+            "id": "frm_1554261f0001VNFOv2oIVF9HVw",
+            "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+            "title": "Questions",
+            "metadata": {
+              "kind": "question",
+              "tool": {
+                "messageID": "msg_155425bde001dMRBDrVgGeGn9V",
+                "id": "call_00_7q418y48p6dikb3bnse0w0zz"
+              }
+            },
+            "fields": [
+              {
+                "key": "q0",
+                "title": "Animal choice",
+                "description": "Which animal do you pick?",
+                "type": "string",
+                "options": [
+                  {
+                    "value": "Cat",
+                    "label": "Cat",
+                    "description": "Pick the cat"
+                  },
+                  {
+                    "value": "Dog",
+                    "label": "Dog",
+                    "description": "Pick the dog"
+                  },
+                  {
+                    "value": "Fox",
+                    "label": "Fox",
+                    "description": "Pick the fox"
+                  }
+                ],
+                "custom": true
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "t": 3933,
+      "event": {
+        "id": "evt_1554266f3001vZxr37HK4xgjBA",
+        "created": 1792431777523,
+        "type": "form.cancelled",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "frm_1554261f0001VNFOv2oIVF9HVw",
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l"
+        }
+      }
+    },
+    {
+      "t": 3933,
+      "event": {
+        "id": "evt_1554266f40013Vh0XD1io44kJ4",
+        "created": 1792431777524,
+        "type": "session.tool.failed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "assistantMessageID": "msg_155425bde001dMRBDrVgGeGn9V",
+          "id": "call_00_7q418y48p6dikb3bnse0w0zz",
+          "error": {
+            "type": "aborted",
+            "message": "The user dismissed this question"
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 10,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 3933,
+      "event": {
+        "id": "evt_1554266f60012Lavc15jkLgNkP",
+        "created": 1792431777526,
+        "type": "session.step.failed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "assistantMessageID": "msg_155425bde001dMRBDrVgGeGn9V",
+          "error": {
+            "type": "aborted",
+            "message": "Step interrupted"
+          },
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 39,
+            "output": 102,
+            "reasoning": 0,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 11,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3933,
+      "event": {
+        "id": "evt_1554266f7001RgeP1yWnsvr4e3",
+        "created": 1792431777527,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "cost": 0,
+          "tokens": {
+            "input": 39,
+            "output": 102,
+            "reasoning": 0,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 3933,
+      "event": {
+        "id": "evt_1554266f7002ynSdWdO3M6UTZk",
+        "created": 1792431777527,
+        "type": "session.execution.interrupted",
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "reason": "shutdown"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 12,
+          "version": 1
+        }
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "t": 63,
+      "key": {
+        "text": "Use your question tool to ask me one single-select question: which animal, with options Cat, Dog and Fox. Then reply with the animal I picked."
+      }
+    },
+    {
+      "t": 1053,
+      "key": "Enter"
+    },
+    {
+      "t": 3903,
+      "key": "Esc"
+    }
+  ],
+  "pluginRoutes": [
+    {
+      "t": 1075,
+      "route": {
+        "type": "session",
+        "sessionID": "ses_eaabda43ffferVuefVIwYoG51l"
+      }
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+# Install Multi-Code and teach me to use it
+
+You are helping me install Multi-Code on my Mac, and then teaching me how to use it. Talk to me in the language I write in. In Chinese, call the voice secretary 小秘书. Do one step at a time. Ask me before you run any command that changes my system.
+
+Multi-Code is a free, MIT-licensed macOS app for Apple Silicon. It runs many Claude Code and OpenCode CLI sessions side by side, each in a real terminal, and tells me when one finishes or needs me. Source and full docs: https://github.com/Jasenpan1987/multi-code. If I ask something this text does not answer, read https://raw.githubusercontent.com/Jasenpan1987/multi-code/master/README.md first. Do not guess.
+
+## Part 1: install
+
+1. Check the Mac: `uname -m` must print `arm64`. If it doesn't, stop and tell me that Intel Macs are not supported.
+2. Check for a backend CLI: `claude --version` and `opencode --version`. Multi-Code needs at least one. OpenCode must be 2.x; Multi-Code refuses 1.x. If neither is there, or OpenCode is 1.x, ask me which I want, then install it:
+   - Claude Code: `curl -fsSL https://claude.ai/install.sh | sh`
+   - OpenCode 2 (also upgrades 1.x in place, sessions kept): `curl -fsSL https://opencode.ai/v2/install | bash`
+   Tell me that the voice secretary needs Claude Code, even if I only use OpenCode.
+3. Find the latest release's disk image:
+   `curl -fsSL https://api.github.com/repos/Jasenpan1987/multi-code/releases/latest | grep -o '"browser_download_url": *"[^"]*arm64\.dmg"'`
+   If there is none, stop and tell me there is no release to install yet.
+4. If Multi-Code is running, ask me to quit it first. Download the .dmg to `~/Downloads`, mount it with `hdiutil attach`, copy `Multi-Code.app` into `/Applications` (replacing an older copy), then `hdiutil detach` it.
+5. Clear the quarantine flag: `xattr -cr /Applications/Multi-Code.app`. The app is not signed with an Apple Developer certificate, so macOS blocks it without this. It is needed again after every upgrade.
+6. Open it: `open -a Multi-Code`. Then start Part 2.
+
+## Part 2: teach me
+
+Go through these lessons in order. For each one, tell me briefly what to do in the app, wait until I say it worked, then go on. Skip a lesson when I ask. Keep each lesson short.
+
+1. **First session.** Click **+ New** at the bottom of the left sidebar. Pick a backend: Claude Code or OpenCode. Then either **Open folder** (Browse to a project folder; the picker's **New Folder** button makes one for a new project) or **Clone from Git** (paste a link, pick **Clone into**, press **Clone**). An alias is optional. The CLI starts in that folder and resumes the folder's last session if there is one. If the session shows **OFFLINE**, its CLI isn't on my PATH: check `claude --version` or `opencode --version`.
+2. **The window.** Three columns: sessions, terminal, toolbox. Avatar grey means stopped (the ▶ button restarts it), lit means running, moving means working, shaking means unread alerts. Each row shows how full the context window is, green to red; hovering shows tokens and model. Right-click a row for Rename…, Duplicate, Restart, Remove. Rows can be dragged to reorder.
+3. **Alerts and switching.** When a session finishes or waits on me (a permission, a question, a plan), it chimes, its avatar shakes, it gets a red badge, and the Dock icon counts it. Typing or clicking in that session clears it. `Option+Shift+↓` / `↑` jumps to the next / previous unread session. `Cmd+1`…`Cmd+9` switch to the first nine (hold `Cmd` to see the digits). When a turn ends, the terminal shows the agent's conclusion from its first line; for Claude Code this needs `"tui": "default"` in `~/.claude/settings.json`. Don't edit that file yourself: changing `tui` while sessions run garbles them until they restart. Just tell me.
+4. **Compose Box.** `Cmd+L` opens an editor over the terminal for long messages. `Enter` sends, `Shift+Enter` adds a line, `Esc` cancels. Pasting an image attaches it.
+5. **Toolbox.** **Git**: branch and changed files; **View** opens a side-by-side diff, where selecting lines and pressing **Ask agent** puts `@path:start-end` into the Compose Box; **Go To** opens the file in VS Code; **MD** previews a Markdown file. **Quick Actions**: Clear and Compact type `/clear` and `/compact`; Show Cost types `/cost` (Claude Code only); **Resume Elsewhere** copies `claude --resume <id>` or `opencode -s <id>` to continue the session in another terminal; **Rename Session**. **Terminal**: a shell in the project folder that keeps running in the background. **View**: renders a `.md` file (paste its path, or click a `.md` path in the terminal).
+6. **Files from Finder.** Drag files onto the window to copy them into the selected project. The first drop asks for the project's default folder. Files are copied, never moved or overwritten. Files only, at most 10 files and 1 GB per drop.
+7. **Phone (optional).** Needs Tailscale on the Mac and the iPhone, in the same tailnet, with MagicDNS on. Notifications need iOS 16.4 or later and the app added to the Home Screen.
+   - On the Mac: Toolbox → **Phone** → click **Phone link: OFF** to turn it on. Three checks appear: Tailscale, HTTPS, Push. HTTPS needs HTTPS Certificates turned on in the DNS page of the Tailscale admin console (**Open admin console**), then **Set up HTTPS** → **Run it**, which runs `tailscale serve --bg --https=443 http://127.0.0.1:6768`. When all three pass, **Pair a phone** shows a QR code.
+   - On the iPhone: scan the QR with the Camera (it opens in Safari and pairs). Tap **Copy pairing link**, then Share → **Add to Home Screen**, and open Multi-Code from the new icon. If it opens unpaired, tap **Paste pairing link**. Then tap **Turn on notifications**.
+   - The phone lists sessions by state, shows each one as a chat, answers dialogs, and can stop a running turn. Slash commands such as `/compact` go as plain messages. The terminal button in a session's header opens its real terminal, for anything the chat can't show. With no connection it shows what it had last, and a reply typed offline is sent once the Mac is back. Reading a session on the phone clears its red dot on the Mac, and the other way round.
+8. **Voice secretary (optional).** Needs the Claude Code CLI; without it the switch is disabled and says so. Toolbox → **Secretary** → turn on Secretary Mode. When a session finishes or needs me, it writes a short brief in my language, using my own `claude` default model and login. The session on screen plays its brief at once; another session plays its brief when I click its red dot. For a dialog, I can type or dictate a reply such as "yes", "no, do X instead" or "always" in the card's box, and it presses the matching option or asks back. Voice needs a speech server (Address and Key in the same section); without one the brief is text.
+
+## Facts to keep straight
+
+- Multi-Code writes nothing into `~/.claude`, `~/.config/opencode` or my projects. Its own files are in `~/Library/Application Support/Multi-Code/`.
+- It has no server of its own. The phone link stays inside my tailnet, and notifications go from the Mac straight to Apple.
+- To upgrade: replace the app in `/Applications` and run the `xattr` command again.
+- macOS only, Apple Silicon only.

@@ -1,0 +1,1398 @@
+{
+  "scenario": "permission-reject-reason",
+  "opencodeVersion": "2.0.32",
+  "notes": "Reason given in the TUI. The TUI only offers a reason step for a subagent's request (packages/tui/src/routes/session/permission.tsx:248, session.parentID). Root asks a general subagent to 'mkdir sub-reject-dir'; child dialog; Right, Right, Enter opens 'Reject permission / Tell OpenCode what to do differently'; typed 'Do not create directories. Report that you were told not to.' + Enter. permission.replied{reject} (the reason is not in the event), child tool.failed, child continues and succeeds, then the root succeeds.",
+  "frames": [
+    {
+      "t": 1046,
+      "event": {
+        "id": "evt_155454cd40015Wc6DMTXrNk9Sw",
+        "created": 1792431967444,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "slug": "kind-harbor",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1074,
+      "event": {
+        "id": "evt_155454ce5001FUPk8VTIcw5A8K",
+        "created": 1792431967461,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_155454cd2001OT32Gk5vx04uiq",
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "Use your subagent tool to start one general subagent. Its task: use the shell tool to run exactly this command: mkdir sub-reject-dir, then report back. Do not run the command yourself.",
+              "files": [],
+              "agents": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1074,
+      "event": {
+        "id": "evt_155454ce6001wkuhnvyjvcesiq",
+        "created": 1792431967462,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1074,
+      "event": {
+        "id": "evt_155454ce9001LYuwd51likZKIc",
+        "created": 1792431967465,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 1074,
+      "event": {
+        "id": "evt_155454cea001TGQzU28341M6V3",
+        "created": 1792431967466,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "inboxID": "msg_155454cd2001OT32Gk5vx04uiq"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3494,
+      "event": {
+        "id": "evt_15545565c001sHd3C6XcV2Hrro",
+        "created": 1792431969884,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_155454cee001kBkIRJcryCX4nZ",
+          "started": 1792431967473
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 5,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3494,
+      "event": {
+        "id": "evt_155455662001iQ36rE25sct8Lq",
+        "created": 1792431969890,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "assistantMessageID": "msg_155454cee001kBkIRJcryCX4nZ",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 6,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3605,
+      "event": {
+        "id": "evt_1554556d1001UXQm4UcQMkeGh4",
+        "created": 1792431970001,
+        "type": "session.reasoning.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "assistantMessageID": "msg_155454cee001kBkIRJcryCX4nZ",
+          "ordinal": 0,
+          "delta": "The user wants me to start a general subagent with a specific task. Let me do that."
+        }
+      }
+    },
+    {
+      "t": 3839,
+      "event": {
+        "id": "evt_1554557bb0014Ld7QWQIYOB1di",
+        "created": 1792431970235,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "assistantMessageID": "msg_155454cee001kBkIRJcryCX4nZ",
+          "id": "call_00_shyb5bfsdbzl7fo0vd99f2fh",
+          "name": "subagent"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 7,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3860,
+      "event": {
+        "id": "evt_1554557cf001daurXumfjHHLhx",
+        "created": 1792431970255,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "assistantMessageID": "msg_155454cee001kBkIRJcryCX4nZ",
+          "ordinal": 0,
+          "text": "The user wants me to start a general subagent with a specific task. Let me do that.",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 8,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3860,
+      "event": {
+        "id": "evt_1554557d000197xu72fxwu4BwY",
+        "created": 1792431970256,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "assistantMessageID": "msg_155454cee001kBkIRJcryCX4nZ",
+          "id": "call_00_shyb5bfsdbzl7fo0vd99f2fh",
+          "text": "{\"agent\": \"general\", \"description\": \"Create directory via shell\", \"prompt\": \"Your task: use the shell tool to run exactly this command:\\n\\nmkdir sub-reject-dir\\n\\nThen report back whether the command …"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 9,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3861,
+      "event": {
+        "id": "evt_1554557d1001Z8jF9v0smIEKU4",
+        "created": 1792431970257,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "assistantMessageID": "msg_155454cee001kBkIRJcryCX4nZ",
+          "id": "call_00_shyb5bfsdbzl7fo0vd99f2fh",
+          "input": {
+            "agent": "general",
+            "description": "Create directory via shell",
+            "prompt": "Your task: use the shell tool to run exactly this command:\n\nmkdir sub-reject-dir\n\nThen report back whether the command succeeded, including any output or error message. Do not run any other commands."
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 10,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3861,
+      "event": {
+        "id": "evt_1554557d2001spGmTmyMz8oxH9",
+        "created": 1792431970258,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "assistantMessageID": "msg_155454cee001kBkIRJcryCX4nZ"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 11,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3876,
+      "event": {
+        "id": "evt_1554557d50016nZ9V536eidkDn",
+        "created": 1792431970261,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "slug": "quiet-garden",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "parentID": "ses_eaabab32fffee44AMSVVL8udES",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "title": "Create directory via shell",
+          "agent": "general",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3876,
+      "event": {
+        "id": "evt_1554557d6001ad3wBmT4UpGoYV",
+        "created": 1792431970262,
+        "type": "session.tool.progress",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "assistantMessageID": "msg_155454cee001kBkIRJcryCX4nZ",
+          "id": "call_00_shyb5bfsdbzl7fo0vd99f2fh",
+          "metadata": {
+            "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+            "status": "running"
+          }
+        }
+      }
+    },
+    {
+      "t": 3877,
+      "event": {
+        "id": "evt_1554557d7002JYJU2nm405jssH",
+        "created": 1792431970263,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_1554557d7001ywf177c1VABuwP",
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "You are a subagent spawned by another session.\nYour task: use the shell tool to run exactly this command:\n\nmkdir sub-reject-dir\n\nThen report back whether the command succeeded, including any output or…"
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3877,
+      "event": {
+        "id": "evt_1554557d8001ZosfroruPsC92z",
+        "created": 1792431970264,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3877,
+      "event": {
+        "id": "evt_1554557db001e54T4p97tpdRxu",
+        "created": 1792431970267,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 3877,
+      "event": {
+        "id": "evt_1554557dc001fmH66y6K31KzWi",
+        "created": 1792431970268,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "inboxID": "msg_1554557d7001ywf177c1VABuwP"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4406,
+      "event": {
+        "id": "evt_1554559f2001xUiyPccqyh5qtF",
+        "created": 1792431970802,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "cost": 0,
+          "tokens": {
+            "input": 76,
+            "output": 10,
+            "reasoning": 190,
+            "cache": {
+              "read": 512,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 4406,
+      "event": {
+        "id": "evt_1554559f4001DtYFJy1xdtp9P5",
+        "created": 1792431970804,
+        "type": "session.renamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "title": "Creating sub-reject-dir via subagent"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 13,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 6136,
+      "event": {
+        "id": "evt_1554560ad001myjjKR3FaWl12h",
+        "created": 1792431972525,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "agent": "general",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_1554557de001Yy7oAL0L02W4KF",
+          "started": 1792431970276
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 5,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 6136,
+      "event": {
+        "id": "evt_1554560b3001xPiwYMsSDTMc2m",
+        "created": 1792431972531,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "assistantMessageID": "msg_1554557de001Yy7oAL0L02W4KF",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 6,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 6233,
+      "event": {
+        "id": "evt_155456116001q1NM1NrXHkPsRq",
+        "created": 1792431972630,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "assistantMessageID": "msg_1554557de001Yy7oAL0L02W4KF",
+          "id": "call_00_ybxj11sjgjm0a9exujqkimfw",
+          "name": "shell"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 7,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 6245,
+      "event": {
+        "id": "evt_15545611e001mciJtn11OqlVAN",
+        "created": 1792431972638,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "assistantMessageID": "msg_1554557de001Yy7oAL0L02W4KF",
+          "ordinal": 0,
+          "text": "The user wants me to run exactly `mkdir sub-reject-dir` using the shell tool, and report whether it succeeded.\n\nLet me run it.",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 8,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 6245,
+      "event": {
+        "id": "evt_155456120001CQJzNMwspKWonK",
+        "created": 1792431972640,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "assistantMessageID": "msg_1554557de001Yy7oAL0L02W4KF",
+          "id": "call_00_ybxj11sjgjm0a9exujqkimfw",
+          "text": "{\"command\": \"mkdir sub-reject-dir\"}"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 9,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 6246,
+      "event": {
+        "id": "evt_155456121001yC31jHtU0gItPn",
+        "created": 1792431972641,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "assistantMessageID": "msg_1554557de001Yy7oAL0L02W4KF",
+          "id": "call_00_ybxj11sjgjm0a9exujqkimfw",
+          "input": {
+            "command": "mkdir sub-reject-dir"
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 10,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 6246,
+      "event": {
+        "id": "evt_1554561220014kCBeQohwwCtEv",
+        "created": 1792431972642,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "assistantMessageID": "msg_1554557de001Yy7oAL0L02W4KF"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 11,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 6246,
+      "event": {
+        "id": "evt_155456125002Syq1YgqO8Wy01D",
+        "created": 1792431972645,
+        "type": "permission.asked",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "per_1554561250011E7QT8IbOJ1N0P",
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "action": "shell",
+          "resources": [
+            "mkdir sub-reject-dir"
+          ],
+          "save": [
+            "mkdir *"
+          ],
+          "source": {
+            "type": "tool",
+            "messageID": "msg_1554557de001Yy7oAL0L02W4KF",
+            "id": "call_00_ybxj11sjgjm0a9exujqkimfw"
+          }
+        }
+      }
+    },
+    {
+      "t": 18820,
+      "event": {
+        "id": "evt_155459237001InXG04KvCehajq",
+        "created": 1792431985207,
+        "type": "permission.replied",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "requestID": "per_1554561250011E7QT8IbOJ1N0P",
+          "reply": "reject"
+        }
+      }
+    },
+    {
+      "t": 18820,
+      "event": {
+        "id": "evt_155459238001h7OxrCz5M5zbXp",
+        "created": 1792431985208,
+        "type": "session.tool.failed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "assistantMessageID": "msg_1554557de001Yy7oAL0L02W4KF",
+          "id": "call_00_ybxj11sjgjm0a9exujqkimfw",
+          "error": {
+            "type": "permission.rejected",
+            "message": "Do not create directories. Report that you were told not to."
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 12,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 18820,
+      "event": {
+        "id": "evt_155459239001N0agLHK0qfR4ML",
+        "created": 1792431985209,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "assistantMessageID": "msg_1554557de001Yy7oAL0L02W4KF",
+          "finish": "tool-calls",
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 139,
+            "output": 42,
+            "reasoning": 31,
+            "cache": {
+              "read": 4224,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 13,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 18820,
+      "event": {
+        "id": "evt_15545923a001zAIKLxcYA2s3BQ",
+        "created": 1792431985210,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "cost": 0,
+          "tokens": {
+            "input": 139,
+            "output": 42,
+            "reasoning": 31,
+            "cache": {
+              "read": 4224,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 18820,
+      "event": {
+        "id": "evt_155459243001iCiJ4OjLJQ3xnx",
+        "created": 1792431985219,
+        "type": "project.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "canonical": "/private/tmp/oc2-spike/projects/scen",
+          "time": {
+            "created": 1792431240537,
+            "updated": 1792431240537,
+            "active": 1792431985219
+          },
+          "sandboxes": []
+        }
+      }
+    },
+    {
+      "t": 20061,
+      "event": {
+        "id": "evt_155459718001xPWryvWfnevLtd",
+        "created": 1792431986456,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "agent": "general",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_15545923e001gIMA62X2RBtpXY",
+          "started": 1792431985218
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 14,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 20061,
+      "event": {
+        "id": "evt_15545971b001Tv4gALYM1vz3iZ",
+        "created": 1792431986459,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "assistantMessageID": "msg_15545923e001gIMA62X2RBtpXY",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 15,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 21199,
+      "event": {
+        "id": "evt_155459b88001vbttP44S526x3J",
+        "created": 1792431987592,
+        "type": "session.text.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "assistantMessageID": "msg_15545923e001gIMA62X2RBtpXY",
+          "ordinal": 0
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 16,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 21303,
+      "event": {
+        "id": "evt_155459bf3001qHE3zKwxRkQpT0",
+        "created": 1792431987699,
+        "type": "session.text.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "assistantMessageID": "msg_15545923e001gIMA62X2RBtpXY",
+          "ordinal": 0,
+          "delta": "The command did **not** succeed.\n\n**Command:** `mkdir sub-reject-dir`\n\n**Result:**"
+        }
+      }
+    },
+    {
+      "t": 21395,
+      "event": {
+        "id": "evt_155459c35001RPzZj5hT8X60TD",
+        "created": 1792431987765,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "assistantMessageID": "msg_15545923e001gIMA62X2RBtpXY",
+          "ordinal": 0,
+          "text": "The tool returned an error: permission rejected. Message: \"Do not create directories. Report that you were told not to.\"\n\nInteresting — I should report back exactly what happened. The message appears …",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 17,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 21395,
+      "event": {
+        "id": "evt_155459c3a001KNIRIlRHwCR5hh",
+        "created": 1792431987770,
+        "type": "session.text.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "assistantMessageID": "msg_15545923e001gIMA62X2RBtpXY",
+          "ordinal": 0,
+          "text": "The command did **not** succeed.\n\n**Command:** `mkdir sub-reject-dir`\n\n**Result:** Blocked by a permission rejection before execution.\n\n**Error:**\n```\npermission.rejected\nDo not create directories. Re…"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 18,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 21395,
+      "event": {
+        "id": "evt_155459c3c0018dPZ9T10DsmZ2F",
+        "created": 1792431987772,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "assistantMessageID": "msg_15545923e001gIMA62X2RBtpXY"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 19,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 21395,
+      "event": {
+        "id": "evt_155459c3e001PsnyKfYNLxP1mv",
+        "created": 1792431987774,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "assistantMessageID": "msg_15545923e001gIMA62X2RBtpXY",
+          "finish": "stop",
+          "rawFinish": "stop",
+          "cost": 0,
+          "tokens": {
+            "input": 126,
+            "output": 83,
+            "reasoning": 171,
+            "cache": {
+              "read": 4352,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 20,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 21395,
+      "event": {
+        "id": "evt_155459c3f0018RIsToOWu1c9XG",
+        "created": 1792431987775,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "cost": 0,
+          "tokens": {
+            "input": 265,
+            "output": 125,
+            "reasoning": 202,
+            "cache": {
+              "read": 8576,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 21395,
+      "event": {
+        "id": "evt_155459c40001gxL6m2OF2vEk5d",
+        "created": 1792431987776,
+        "type": "session.execution.succeeded",
+        "data": {
+          "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+          "seq": 21,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 21395,
+      "event": {
+        "id": "evt_155459c420012GoVopnIjOZlgQ",
+        "created": 1792431987778,
+        "type": "session.tool.success",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "assistantMessageID": "msg_155454cee001kBkIRJcryCX4nZ",
+          "id": "call_00_shyb5bfsdbzl7fo0vd99f2fh",
+          "content": [
+            {
+              "type": "text",
+              "text": "<subagent sessionID=\"ses_eaabaa82bffe9eL4CY1CPRZYMZ\" state=\"completed\">\nThe command did **not** succeed.\n\n**Command:** `mkdir sub-reject-dir`\n\n**Result:** Blocked by a permission rejection before exec…"
+            }
+          ],
+          "metadata": {
+            "sessionID": "ses_eaabaa82bffe9eL4CY1CPRZYMZ",
+            "status": "completed",
+            "truncated": false
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 14,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 21395,
+      "event": {
+        "id": "evt_155459c43001lvLxs54OZZcgwp",
+        "created": 1792431987779,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "assistantMessageID": "msg_155454cee001kBkIRJcryCX4nZ",
+          "finish": "tool-calls",
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 52,
+            "output": 114,
+            "reasoning": 20,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 15,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 21395,
+      "event": {
+        "id": "evt_155459c44001vSvZQuNZRfstZc",
+        "created": 1792431987780,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "cost": 0,
+          "tokens": {
+            "input": 128,
+            "output": 124,
+            "reasoning": 210,
+            "cache": {
+              "read": 5760,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 24113,
+      "event": {
+        "id": "evt_15545a6e5001ClExE76Ouv9qAQ",
+        "created": 1792431990501,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_155459c4b001aNEMFNLyFaFhop",
+          "started": 1792431987793
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 16,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 24113,
+      "event": {
+        "id": "evt_15545a6ed001tfgxSoBOLSYL3p",
+        "created": 1792431990509,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "assistantMessageID": "msg_155459c4b001aNEMFNLyFaFhop",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 17,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 24733,
+      "event": {
+        "id": "evt_15545a95b001uR6GypwBebQ8ap",
+        "created": 1792431991131,
+        "type": "session.text.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "assistantMessageID": "msg_155459c4b001aNEMFNLyFaFhop",
+          "ordinal": 0
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 18,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 25361,
+      "event": {
+        "id": "evt_15545abc0001zxZbtIUb8yCcyA",
+        "created": 1792431991744,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "assistantMessageID": "msg_155459c4b001aNEMFNLyFaFhop",
+          "ordinal": 0,
+          "text": "The subagent was blocked by permission rejection, and the error message said \"Do not create directories. Report that you were told not to.\"\n\nI should report this back to the user honestly. I was not s…",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 19,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 25362,
+      "event": {
+        "id": "evt_15545abc7001ZTjjWclep3uNnY",
+        "created": 1792431991751,
+        "type": "session.text.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "assistantMessageID": "msg_155459c4b001aNEMFNLyFaFhop",
+          "ordinal": 0,
+          "text": "The subagent ran, but the command was blocked before execution.\n\n**Subagent result:**\n- Command attempted: `mkdir sub-reject-dir`\n- Outcome: **not executed** — rejected by a permission check\n- Error t…"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 20,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 25362,
+      "event": {
+        "id": "evt_15545abcb0014qNhXzqgiJuR1r",
+        "created": 1792431991755,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "assistantMessageID": "msg_155459c4b001aNEMFNLyFaFhop"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 21,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 25362,
+      "event": {
+        "id": "evt_15545abcd001p0XvLnQVpTIn29",
+        "created": 1792431991757,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "assistantMessageID": "msg_155459c4b001aNEMFNLyFaFhop",
+          "finish": "stop",
+          "rawFinish": "stop",
+          "cost": 0,
+          "tokens": {
+            "input": 312,
+            "output": 109,
+            "reasoning": 122,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 22,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 25362,
+      "event": {
+        "id": "evt_15545abcf001abVEjTrXnDWDe7",
+        "created": 1792431991759,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "cost": 0,
+          "tokens": {
+            "input": 440,
+            "output": 233,
+            "reasoning": 332,
+            "cache": {
+              "read": 11008,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 25362,
+      "event": {
+        "id": "evt_15545abd0001sRpS4wUzIdvnXC",
+        "created": 1792431991760,
+        "type": "session.execution.succeeded",
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 23,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 25383,
+      "event": {
+        "id": "evt_15545abe6001jvUynBRRIERKgK",
+        "created": 1792431991782,
+        "type": "session.viewed",
+        "data": {
+          "sessionID": "ses_eaabab32fffee44AMSVVL8udES",
+          "idle": 1792431991760
+        },
+        "durable": {
+          "aggregateID": "ses_eaabab32fffee44AMSVVL8udES",
+          "seq": 24,
+          "version": 1
+        }
+      }
+    }
+  ],
+  "omitted": {
+    "repeatedDeltaFrames": {
+      "session.reasoning.delta": 15,
+      "session.text.delta": 5
+    }
+  },
+  "inputs": [
+    {
+      "t": 58,
+      "key": {
+        "text": "Use your subagent tool to start one general subagent. Its task: use the shell tool to run exactly this command: mkdir sub-reject-dir, then report back. Do not run the command yourself."
+      }
+    },
+    {
+      "t": 1033,
+      "key": "Enter"
+    },
+    {
+      "t": 7614,
+      "key": "Right"
+    },
+    {
+      "t": 8023,
+      "key": "Right"
+    },
+    {
+      "t": 8964,
+      "key": "Enter"
+    },
+    {
+      "t": 17870,
+      "key": {
+        "text": "Do not create directories. Report that you were told not to."
+      }
+    },
+    {
+      "t": 18806,
+      "key": "Enter"
+    }
+  ],
+  "pluginRoutes": [
+    {
+      "t": 1055,
+      "route": {
+        "type": "session",
+        "sessionID": "ses_eaabab32fffee44AMSVVL8udES"
+      }
+    }
+  ]
+}

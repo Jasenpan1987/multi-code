@@ -1,0 +1,3375 @@
+/* Theme variables — outer chrome (titlebar, sidebar, header) keeps the
+   same blue across all themes; only the inner panels (content area,
+   toolbox body, terminal section, overlays) re-skin per theme. */
+:root {
+  --content-bg: #f0f4fa;
+  --content-placeholder-fg: #888;
+  --content-overlay-bg: rgba(240, 244, 250, 0.9);
+  --content-starting-overlay-bg: rgba(240, 244, 250, 0.85);
+  --content-spinner-track: #c6d9f1;
+  --content-spinner-spin: #2d5a8a;
+  --content-starting-fg: #556;
+  --content-offline-fg: #b8c8de;
+  --content-offline-shadow: #fff;
+  --toolbox-body-bg: #f0f4fa;
+  --toolbox-body-fg: #1a1a1a;
+  --toolbox-placeholder-fg: #888;
+  --terminal-section-bg: #000;
+  --terminal-section-exited-fg: #ccc;
+  --compose-bg: #f6f9fe;
+  --compose-border: #7b9cc7;
+  --compose-fg: #1a1a1a;
+  --compose-textarea-bg: #fff;
+  --compose-textarea-border: #aac;
+  --compose-focus-border: #4a8ac4;
+  --compose-hint-fg: #889;
+  --compose-chip-bg: #e3edfa;
+  --compose-chip-fg: #2d5a8a;
+  --compose-chip-border: #b8cde8;
+  --diff-text-fg: #1a1a1a;
+  --diff-gutter-fg: #999;
+  --diff-sep: #dde4ec;
+  --diff-add-bg: #e2f7e6;
+  --diff-del-bg: #fdeaec;
+  /* The side of a row that has no counterpart — greyed rather than blank, so an
+     addition reads as "nothing was here" rather than as an empty line. */
+  --diff-empty-bg: #f6f7f9;
+  --diff-selected-bg: rgba(45, 90, 138, 0.14);
+  --diff-selected-edge: #2d5a8a;
+  /* Overview ruler marks need full-strength colour to read at a few pixels. */
+  --diff-ruler-add: #2da44e;
+  --diff-ruler-del: #e5534b;
+  --diff-ruler-view: rgba(45, 90, 138, 0.16);
+  --diff-ruler-view-edge: rgba(45, 90, 138, 0.45);
+  /* Secretary card: its own accent, so the brief reads as the secretary's and
+     not as terminal output or the compose box. */
+  --secretary-accent: #6a4c9c;
+  --secretary-quote-border: #c3b3e0;
+  --secretary-muted-fg: #778;
+  --secretary-warn-fg: #9a5b00;
+  /* The message after a file drop: copied, not copied. */
+  --drop-ok-fg: #1f7a3d;
+  --drop-failed-fg: #c62828;
+  /* Phone section: its checks (passes, fails), notes, rules and commands. */
+  --phone-ok-fg: #1f7a3d;
+  --phone-bad-fg: #c62828;
+  --phone-muted-fg: #6a7280;
+  --phone-rule: rgba(45, 90, 138, 0.16);
+  --phone-code-fg: #2d5a8a;
+  --phone-code-bg: rgba(0, 0, 0, 0.04);
+  --phone-panel-bg: rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="dark"] {
+  --content-bg: #1e1e1e;
+  --content-placeholder-fg: #969696;
+  --content-overlay-bg: rgba(30, 30, 30, 0.92);
+  --content-starting-overlay-bg: rgba(30, 30, 30, 0.85);
+  --content-spinner-track: #3c3c3c;
+  --content-spinner-spin: #4a8ac4;
+  --content-starting-fg: #cccccc;
+  --content-offline-fg: #4a4a4a;
+  --content-offline-shadow: #000;
+  --toolbox-body-bg: #252526;
+  --toolbox-body-fg: #d4d4d4;
+  --toolbox-placeholder-fg: #888;
+  --terminal-section-bg: #1e1e1e;
+  --terminal-section-exited-fg: #cccccc;
+  --compose-bg: #2a2a2c;
+  --compose-border: #4a4a4d;
+  --compose-fg: #d4d4d4;
+  --compose-textarea-bg: #1e1e1e;
+  --compose-textarea-border: #3c3c3c;
+  --compose-focus-border: #4a8ac4;
+  --compose-hint-fg: #888;
+  --compose-chip-bg: #333a44;
+  --compose-chip-fg: #9cc4e8;
+  --compose-chip-border: #44505e;
+  --diff-text-fg: #d4d4d4;
+  --diff-gutter-fg: #6e7681;
+  --diff-sep: #333;
+  --diff-add-bg: rgba(63, 185, 80, 0.16);
+  --diff-del-bg: rgba(248, 81, 73, 0.16);
+  --diff-empty-bg: #191919;
+  --diff-selected-bg: rgba(107, 163, 214, 0.2);
+  --diff-selected-edge: #6ba3d6;
+  --diff-ruler-add: #3fb950;
+  --diff-ruler-del: #f85149;
+  --diff-ruler-view: rgba(255, 255, 255, 0.12);
+  --diff-ruler-view-edge: rgba(255, 255, 255, 0.35);
+  --secretary-accent: #9a78d4;
+  --secretary-quote-border: #5e4f7a;
+  --secretary-muted-fg: #999;
+  --secretary-warn-fg: #e0b060;
+  --drop-ok-fg: #8fd9a3;
+  --drop-failed-fg: #ff8a80;
+  --phone-ok-fg: #8fd9a3;
+  --phone-bad-fg: #ff8a80;
+  --phone-muted-fg: #9a9a9a;
+  --phone-rule: #3c3c3c;
+  --phone-code-fg: #9cc4e4;
+  --phone-code-bg: rgba(255, 255, 255, 0.05);
+  --phone-panel-bg: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] .alerts-degraded-bar {
+  color: #f3d48a;
+  background: #3a3118;
+  border-bottom-color: #5c4a1c;
+}
+
+/* In dark mode, retint inner-panel text/icon colors so they remain
+   readable on the dark backgrounds. Outer chrome (titlebar, sidebar,
+   header, dialog/context-menu) is left untouched. */
+[data-theme="dark"] .toolbox-section-body .git-label,
+[data-theme="dark"] .toolbox-section-body .git-file-group-title {
+  color: #b0b0b0;
+}
+[data-theme="dark"] .toolbox-section-body .git-branch,
+[data-theme="dark"] .toolbox-section-body .git-count-staged,
+[data-theme="dark"] .toolbox-section-body .git-file-code-R,
+[data-theme="dark"] .toolbox-section-body .git-file-code-C {
+  color: #6ba3d6;
+}
+[data-theme="dark"] .toolbox-section-body .git-count,
+[data-theme="dark"] .toolbox-section-body .git-remote {
+  color: #d4d4d4;
+}
+[data-theme="dark"] .toolbox-section-body .git-file-row {
+  color: #d4d4d4;
+}
+[data-theme="dark"] .toolbox-section-body .git-file-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+[data-theme="dark"] .toolbox-section-body .git-file-dir {
+  color: #888;
+}
+[data-theme="dark"] .toolbox-section-body .git-file-tag {
+  color: #6ba3d6;
+}
+[data-theme="dark"] .toolbox-section-body .git-file-tag:hover {
+  background: rgba(107, 163, 214, 0.18);
+}
+[data-theme="dark"] .toolbox-section-body .git-files {
+  border-top-color: #3c3c3c;
+}
+[data-theme="dark"] .toolbox-section-body .quick-action-btn {
+  background: linear-gradient(180deg, #3c3c3c 0%, #2d2d2d 100%);
+  border-color: #555;
+  color: #d4d4d4;
+}
+[data-theme="dark"] .toolbox-section-body .quick-action-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #4a4a4a 0%, #383838 100%);
+}
+[data-theme="dark"] .toolbox-section-body .quick-action-btn:active:not(:disabled) {
+  background: linear-gradient(180deg, #2d2d2d 0%, #252525 100%);
+}
+
+[data-theme="sepia"] {
+  --content-bg: #f4ecd8;
+  --content-placeholder-fg: #8a7855;
+  --content-overlay-bg: rgba(244, 236, 216, 0.92);
+  --content-starting-overlay-bg: rgba(244, 236, 216, 0.85);
+  --content-spinner-track: #e0d4b8;
+  --content-spinner-spin: #5a4a30;
+  --content-starting-fg: #5a4a30;
+  --content-offline-fg: #c8b990;
+  --content-offline-shadow: #fff8e7;
+  --toolbox-body-bg: #efe4ca;
+  --toolbox-body-fg: #3a2f1d;
+  --toolbox-placeholder-fg: #8a7855;
+  --terminal-section-bg: #2c2418;
+  --terminal-section-exited-fg: #ebd9b4;
+  --compose-bg: #f7efdc;
+  --compose-border: #c8b990;
+  --compose-fg: #3a2f1d;
+  --compose-textarea-bg: #fffaf0;
+  --compose-textarea-border: #d6c8a4;
+  --compose-focus-border: #a8895a;
+  --compose-hint-fg: #8a7855;
+  --compose-chip-bg: #ece0c4;
+  --compose-chip-fg: #5a4a30;
+  --compose-chip-border: #d6c8a4;
+  --diff-text-fg: #3a2f1d;
+  --diff-gutter-fg: #a09070;
+  --diff-sep: #ded0b0;
+  --diff-add-bg: #e0ecc8;
+  --diff-del-bg: #f4dcd4;
+  --diff-empty-bg: #f0e8d4;
+  --diff-selected-bg: rgba(90, 74, 48, 0.14);
+  --diff-selected-edge: #5a4a30;
+  --diff-ruler-add: #5f8a2e;
+  --diff-ruler-del: #b5533c;
+  --diff-ruler-view: rgba(90, 74, 48, 0.16);
+  --diff-ruler-view-edge: rgba(90, 74, 48, 0.45);
+  --secretary-accent: #7d5374;
+  --secretary-quote-border: #cdb3b8;
+  --secretary-muted-fg: #8a7855;
+  --secretary-warn-fg: #9a5200;
+  --drop-ok-fg: #4f7a2a;
+  --drop-failed-fg: #b5332a;
+  --phone-ok-fg: #4f7a2a;
+  --phone-bad-fg: #b5332a;
+  --phone-muted-fg: #8a7855;
+  --phone-rule: #d6c8a4;
+  --phone-code-fg: #5a4a30;
+  --phone-code-bg: rgba(90, 74, 48, 0.08);
+  --phone-panel-bg: rgba(90, 74, 48, 0.06);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  font-family: "Tahoma", "Microsoft YaHei", "SimSun", sans-serif;
+  font-size: 12px;
+  background: #d6dff7;
+  overflow: hidden;
+}
+
+.app-container {
+  display: flex;
+  height: 100%;
+  border: 1px solid #7b9cc7;
+  padding-top: 28px;
+  position: relative;
+  background: linear-gradient(
+    180deg,
+    #a8d4ff 0%,
+    #7eb8ee 60%,
+    #d6dff7 100%
+  );
+}
+
+.app-container::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  -webkit-app-region: drag;
+  background: linear-gradient(
+    180deg,
+    #a8d4ff 0%,
+    #7eb8ee 100%
+  );
+  border-bottom: 1px solid rgba(45, 90, 138, 0.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+/* Sidebar — blue panel */
+.sidebar {
+  width: 180px;
+  min-width: 180px;
+  background: linear-gradient(180deg, #c6d9f1 0%, #a8c4e0 100%);
+  border-right: 1px solid #7b9cc7;
+  display: flex;
+  flex-direction: column;
+  /* For its fold tab, which sits on its right edge. */
+  position: relative;
+}
+
+.sidebar.folded {
+  width: 16px;
+  min-width: 16px;
+}
+
+.sidebar.folded .fold-strip {
+  flex: 1;
+  width: auto;
+}
+
+/* Holds the New button. */
+.sidebar-actions {
+  display: flex;
+  flex-shrink: 0;
+}
+
+/* New keeps `width: 100%` for where it stands outside this strip; inside the flex
+   row it fills the strip instead. */
+.sidebar-actions .new-instance-btn-bottom {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.new-instance-btn-bottom {
+  width: 100%;
+  padding: 14px 8px;
+  background: linear-gradient(180deg, #6ba3d6 0%, #4a8ac4 50%, #3a78b8 100%);
+  color: #fff;
+  border: none;
+  border-top: 1px solid #2d5a8a;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  text-shadow: 0 1px 2px rgba(30, 74, 122, 0.6);
+  flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.new-instance-btn-bottom:hover {
+  background: linear-gradient(180deg, #7bb4e2 0%, #5a9ad4 50%, #4a8ac4 100%);
+}
+
+.new-instance-btn-bottom:active {
+  background: linear-gradient(180deg, #4a8ac4 0%, #3a7ab4 50%, #2d5a8a 100%);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.contact-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2px 0;
+}
+
+.sidebar-placeholder {
+  padding: 12px 8px;
+  color: #556;
+  text-align: center;
+  font-style: italic;
+}
+
+/* Contact items */
+.contact-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  cursor: pointer;
+  gap: 10px;
+  border-bottom: 1px solid rgba(123, 156, 199, 0.2);
+}
+
+.contact-item:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.contact-item.selected {
+  background: rgba(255, 255, 255, 0.6);
+  border-left: 3px solid #2d5a8a;
+  padding-left: 9px;
+}
+
+.contact-item.stopped {
+  opacity: 0.45;
+}
+
+.contact-item.unread {
+  font-weight: bold;
+}
+
+/* Avatar: the backend's mascot on its own, straight on the sidebar. */
+.avatar {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Stopped: the mascot goes grey and dark, the way an offline contact does. */
+.avatar.offline {
+  filter: grayscale(1) brightness(0.75);
+}
+
+/* The parts that move are scaled and moved about their own box. */
+.mascot rect {
+  transform-box: fill-box;
+}
+
+/* Working, Clawd walks: every other leg lifts, the arms bob in turn. Two frames,
+   like the pixel art it is. */
+.avatar.working .clawd-leg {
+  transform-origin: top;
+  animation: clawd-step 0.5s steps(1, end) infinite;
+}
+
+.avatar.working .clawd-arm {
+  animation: clawd-arm 0.5s steps(1, end) infinite;
+}
+
+.avatar.working .clawd-alt {
+  animation-delay: -0.25s;
+}
+
+/* Working, OpenCode's block jumps up and down inside the O. */
+.avatar.working .opencode-block {
+  animation: opencode-block 0.6s steps(1, end) infinite;
+}
+
+/* Unread: the avatar shakes in short bursts, with a pause between, until the
+   builder looks at the session. */
+.avatar.alert {
+  animation: avatar-shake 1.6s infinite;
+}
+
+.contact-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1a1a1a;
+  min-width: 0;
+}
+
+/* While Cmd is held, the digit that shows this project with Cmd (contactHotkeys).
+   A key cap rather than a circle, so it doesn't read as an unread count. Not
+   bold on an unread row, for the same reason as .contact-context below. */
+.contact-hotkey {
+  box-sizing: border-box;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border: 1px solid #7b9cc7;
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 1px 0 #7b9cc7;
+  color: #2d5a8a;
+  font-size: 10px;
+  font-weight: normal;
+  line-height: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* The full name of a row whose name the sidebar cuts short, in a bubble beside
+   the row while the pointer is on it. ContactList sets left/top to the row's
+   right edge and middle. Fixed rather than absolute, because the list's
+   overflow would clip anything that leaves it. */
+.name-tip {
+  position: fixed;
+  transform: translate(9px, -50%);
+  z-index: 1200;
+  max-width: 420px;
+  padding: 5px 10px;
+  background: #f8f9fc;
+  border: 1px solid #7b9cc7;
+  border-radius: 4px;
+  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.15);
+  color: #1a1a1a;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  /* Delayed, so sweeping the pointer down the sidebar doesn't flash a bubble
+     for every row it crosses. */
+  animation: name-tip-in 0.12s ease-out 0.2s both;
+}
+
+/* The arrow, pointing back at the row. */
+.name-tip::before {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  background: inherit;
+  border-left: 1px solid #7b9cc7;
+  border-bottom: 1px solid #7b9cc7;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+@keyframes name-tip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Context usage, right-aligned on the same line as the project name. No
+   per-theme override: the sidebar keeps the same blue in every theme (see the
+   variables block at the top of this file).
+
+   `font-weight: normal` because `.contact-item.unread` bolds the whole row, and
+   a number that thickens on every notification reads as if it changed.
+   `tabular-nums` keeps it from shifting width as the digits change. */
+/* Drag to reorder. The row being carried fades; the row you are over grows a line on
+   the edge the drop will land against, so the result is visible before letting go. */
+.contact-item[data-dragging="true"] {
+  opacity: 0.4;
+}
+
+.contact-item[data-drop="before"] {
+  box-shadow: inset 0 2px 0 0 #4a8ac4;
+}
+
+.contact-item[data-drop="after"] {
+  box-shadow: inset 0 -2px 0 0 #4a8ac4;
+}
+
+.contact-context {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: normal;
+  color: #6c8099;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* Tinted only when the window size is known — `data-fill` is absent otherwise, so
+   an unknown denominator can never look like a comfortable one. Green to half full,
+   then through yellow to red (contextFillHue). */
+/* Lightness rises from green (30%) to red (40%): a dark yellow reads as olive and a
+   dark red as brown on the sidebar's light blue. */
+.contact-context[data-fill] {
+  color: hsl(var(--fill-hue) 85% calc(40% - var(--fill-hue) * 0.0833%));
+}
+
+.contact-context[data-fill="high"] {
+  font-weight: bold;
+}
+
+.start-btn {
+  margin-left: auto;
+  background: linear-gradient(180deg, #6ba3d6 0%, #4a8ac4 100%);
+  border: 1px solid #3d7ab3;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #fff;
+  font-size: 9px;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.start-btn:hover {
+  background: linear-gradient(180deg, #7bb4e2 0%, #5a9ad4 100%);
+}
+
+/* The unread count, chat-app style: a circle for one digit, a pill for more. */
+.unread-badge {
+  box-sizing: border-box;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #e53935;
+  color: #fff;
+  font-size: 10px;
+  font-weight: bold;
+  line-height: 16px;
+  text-align: center;
+  margin-left: auto;
+  flex-shrink: 0;
+  box-shadow: 0 0 2px rgba(229, 57, 53, 0.5);
+}
+
+/* Content area */
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--content-bg);
+  min-width: 280px;
+}
+
+/* Folded away (App). The attribute alone loses to the display above. */
+.content[hidden],
+.toolbox[hidden] {
+  display: none;
+}
+
+/* Resizer between content and toolbox */
+.resizer {
+  width: 4px;
+  cursor: col-resize;
+  background: #b8c8de;
+  flex-shrink: 0;
+  transition: background 0.15s;
+  /* For the two fold tabs on it. */
+  position: relative;
+}
+
+/* Folding panes away (App, ContactList). A tab on a pane's edge folds that pane
+   to a strip, and clicking the strip unfolds it. The tabs sit level with the
+   content header, where everything they overlap has padding to spare, so they
+   never cover a name or a line of the terminal. */
+.fold-tab {
+  position: absolute;
+  z-index: 30;
+  width: 14px;
+  height: 18px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #6ba3d6 0%, #4a8ac4 100%);
+  border: 1px solid #2d5a8a;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: bold;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.fold-tab:hover {
+  background: linear-gradient(180deg, #7bb4e2 0%, #5a9ad4 100%);
+}
+
+.fold-tab[data-edge="sidebar"] {
+  top: 13px;
+  right: -7px;
+}
+
+/* The divider is 4px wide; its two tabs stack, centred on it. */
+.fold-tab[data-edge="content"] {
+  top: 3px;
+  left: -5px;
+}
+
+.fold-tab[data-edge="toolbox"] {
+  top: 23px;
+  left: -5px;
+}
+
+.fold-strip {
+  width: 16px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0;
+  background: linear-gradient(180deg, #c6d9f1 0%, #a8c4e0 100%);
+  border: none;
+  color: #2d5a8a;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.fold-strip:hover {
+  background: linear-gradient(180deg, #d0e0f5 0%, #b3cee5 100%);
+}
+
+/* The sidebar and the toolbox draw the other borders. */
+.fold-strip[data-pane="toolbox"] {
+  border-left: 1px solid #7b9cc7;
+}
+
+/* Some session is waiting, on a folded session list. */
+.fold-strip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e53935;
+  box-shadow: 0 0 2px rgba(229, 57, 53, 0.5);
+}
+
+.resizer:hover,
+.resizer:active {
+  background: #7b9cc7;
+}
+
+.content-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 12px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.55) 0%,
+      rgba(255, 255, 255, 0) 50%
+    ),
+    linear-gradient(
+      180deg,
+      #a8d4ff 0%,
+      #7eb8ee 35%,
+      #4f93d4 75%,
+      #3878b8 100%
+    );
+  border-bottom: 1px solid #2d5a8a;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.35),
+    0 1px 2px rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.alerts-degraded-bar {
+  flex-shrink: 0;
+  padding: 4px 18px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #6b4a00;
+  background: #fff3cd;
+  border-bottom: 1px solid #e6c860;
+  cursor: help;
+}
+
+.content-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.content-header-name {
+  font-size: 15px;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(30, 74, 122, 0.6);
+  letter-spacing: 0.3px;
+}
+
+.content-header-status {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 1px 1px rgba(30, 74, 122, 0.5);
+}
+
+/* Backend badge in the header — names the current project's agent (Claude Code
+   vs OpenCode) so the backend is unmistakable at a glance. margin-right:auto
+   pushes the Online/Offline status to the far right. */
+.content-header-backend {
+  margin-left: 12px;
+  margin-right: auto;
+  font-size: 10px;
+  font-weight: bold;
+  letter-spacing: 0.3px;
+  padding: 2px 7px;
+  border-radius: 9px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  text-shadow: 0 1px 1px rgba(30, 74, 122, 0.5);
+}
+
+/* Brings back the shown session's latest secretary brief once its card is closed
+   (voice-secretary T-527). A pill like the backend badge, but a button. */
+.content-header-brief {
+  margin-right: 10px;
+  font-size: 10px;
+  font-weight: bold;
+  letter-spacing: 0.3px;
+  padding: 2px 8px;
+  border-radius: 9px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  text-shadow: 0 1px 1px rgba(30, 74, 122, 0.5);
+  cursor: pointer;
+}
+
+.content-header-brief:hover {
+  background: rgba(255, 255, 255, 0.36);
+  border-color: rgba(255, 255, 255, 0.75);
+}
+
+.content-terminal {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.content-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--content-placeholder-fg);
+  font-size: 13px;
+}
+
+.content-offline-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--content-overlay-bg);
+  pointer-events: none;
+}
+
+/* Why the last start launched nothing. Takes pointer events back from the overlay so
+   its text (an upgrade command) can be selected and copied. */
+.content-offline-error {
+  max-width: 80%;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--content-starting-fg);
+  pointer-events: auto;
+  user-select: text;
+  cursor: text;
+}
+
+.content-offline-text {
+  font-size: 56px;
+  font-weight: bold;
+  color: var(--content-offline-fg);
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 var(--content-offline-shadow);
+}
+
+.content-starting-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--content-starting-overlay-bg);
+  pointer-events: none;
+}
+
+.content-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--content-spinner-track);
+  border-top-color: var(--content-spinner-spin);
+  border-radius: 50%;
+  animation: content-spin 0.8s linear infinite;
+}
+
+.content-starting-text {
+  font-size: 12px;
+  color: var(--content-starting-fg);
+  letter-spacing: 0.5px;
+}
+
+@keyframes content-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Terminal */
+.terminal-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 2px;
+}
+
+.terminal-container .xterm {
+  height: 100%;
+}
+
+/* Every terminal, the toolbox shell included. Chromium sets two full-width
+   punctuation marks in a row at half width ("，，" → half, full), and xterm
+   measures each glyph's width as a row of 32 copies of it. So "，" measures as
+   half its real width, the gap is made up with letter-spacing, and every lone
+   "，" "。" "、" then draws half a character too wide. Measured: 6.3px per mark at
+   13px, so a line with a few of them pushed its last characters out of the
+   pane. With no trimming, measuring and drawing agree. */
+.xterm {
+  text-spacing-trim: space-all;
+}
+
+/* Toolbox — third column */
+.toolbox {
+  flex: 1;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  background: #e8eef8;
+  border-left: 1px solid #7b9cc7;
+  overflow: hidden;
+}
+
+.toolbox-section {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid #b8c8de;
+  flex-shrink: 0;
+  min-height: 0;
+}
+
+.toolbox-section.expanded {
+  flex: 1;
+}
+
+.toolbox-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: linear-gradient(180deg, #c6d9f1 0%, #a8c4e0 100%);
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: bold;
+  color: #2d5a8a;
+  text-align: left;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.toolbox-section-header:hover {
+  background: linear-gradient(180deg, #d0e0f5 0%, #b3cee5 100%);
+}
+
+.toolbox-section-chevron {
+  font-size: 10px;
+  width: 10px;
+  display: inline-block;
+}
+
+.toolbox-section-title {
+  flex: 1;
+}
+
+.toolbox-section-body {
+  flex: 1;
+  padding: 8px 10px;
+  overflow: auto;
+  background: var(--toolbox-body-bg);
+  color: var(--toolbox-body-fg);
+}
+
+.toolbox-placeholder {
+  color: var(--toolbox-placeholder-fg);
+  font-style: italic;
+  font-size: 11px;
+}
+
+/* Git section */
+.git-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.git-section-placeholder {
+  color: #888;
+  font-style: italic;
+  font-size: 11px;
+}
+
+.git-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.git-label {
+  color: #556;
+  min-width: 50px;
+  font-weight: bold;
+}
+
+.git-branch {
+  color: #2d5a8a;
+  font-weight: bold;
+  font-family: "Menlo", "Consolas", monospace;
+}
+
+.git-counts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.git-count {
+  font-family: "Menlo", "Consolas", monospace;
+  color: #444;
+}
+
+.git-count-new {
+  color: #c87a00;
+}
+
+.git-count-modified {
+  color: #1e7a3a;
+}
+
+.git-count-staged {
+  color: #2d5a8a;
+}
+
+.git-remote {
+  font-family: "Menlo", "Consolas", monospace;
+  color: #444;
+}
+
+/* Git file list */
+.git-files {
+  margin-top: 6px;
+  border-top: 1px dashed #b8c8de;
+  padding-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.git-files-too-many {
+  color: #888;
+  font-style: italic;
+  font-size: 11px;
+  padding: 4px 0;
+}
+
+.git-file-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.git-file-group-title {
+  font-size: 10px;
+  font-weight: bold;
+  color: #556;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.git-file-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 4px;
+  background: transparent;
+  border: none;
+  font-size: 11px;
+  font-family: "Menlo", "Consolas", monospace;
+  color: #1a1a1a;
+  text-align: left;
+  width: 100%;
+  border-radius: 2px;
+}
+
+.git-file-row:hover {
+  background: rgba(45, 90, 138, 0.08);
+}
+
+.git-file-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Shrinkable, so a long name gives way to the tags instead of pushing them
+     out of the row. */
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 60%;
+}
+
+.git-file-dir {
+  color: #888;
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+/* The row's destinations — MD (markdown preview), View (diff), Go To (VS Code).
+   They take the margin-left:auto push, so the status letter sits snug against
+   them rather than also pushing right. */
+.git-file-tags {
+  margin-left: auto;
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.git-file-tags + .git-file-code {
+  margin-left: 6px;
+}
+
+.git-file-tag {
+  font-size: 10px;
+  font-family: inherit;
+  color: #2d5a8a;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  border-radius: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.git-file-tag:hover {
+  background: rgba(45, 90, 138, 0.16);
+  text-decoration: underline;
+}
+
+.git-file-tag:focus-visible {
+  outline: 1px solid #2d5a8a;
+  outline-offset: -1px;
+}
+
+.git-file-code {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: bold;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.git-file-code-U {
+  color: #1e7a3a;
+}
+
+.git-file-code-M {
+  color: #c87a00;
+}
+
+.git-file-code-A {
+  color: #1e7a3a;
+}
+
+.git-file-code-D {
+  color: #c62828;
+}
+
+.git-file-code-R {
+  color: #2d5a8a;
+}
+
+.git-file-code-C {
+  color: #2d5a8a;
+}
+
+/* Quick Actions */
+.quick-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.quick-action-btn {
+  width: 100%;
+  padding: 6px 10px;
+  background: linear-gradient(180deg, #e8eef8 0%, #c6d9f1 100%);
+  border: 1px solid #7b9cc7;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  color: #2d5a8a;
+  text-align: left;
+}
+
+.quick-action-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #f0f4fa 0%, #d0e0f5 100%);
+}
+
+.quick-action-btn:active:not(:disabled) {
+  background: linear-gradient(180deg, #c6d9f1 0%, #a8c4e0 100%);
+}
+
+.quick-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.quick-action-error {
+  color: #c62828;
+  font-size: 10px;
+  padding: 4px 6px;
+  background: rgba(198, 40, 40, 0.08);
+  border-radius: 3px;
+  line-height: 1.4;
+}
+
+
+/* Terminal section */
+.terminal-section {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--terminal-section-bg);
+  margin: -8px -10px;
+  padding: 6px 6px 6px 8px;
+}
+
+.terminal-section-xterm {
+  flex: 1;
+  min-height: 0;
+}
+
+.terminal-section-exited {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 4px;
+  color: var(--terminal-section-exited-fg);
+  font-size: 11px;
+}
+
+/* Dialog */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.dialog {
+  background: #f0f4fa;
+  border: 2px solid #7b9cc7;
+  border-radius: 6px;
+  padding: 16px;
+  width: 400px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.dialog-title {
+  font-size: 13px;
+  font-weight: bold;
+  margin-bottom: 12px;
+  color: #2d5a8a;
+}
+
+.dialog-field {
+  margin-bottom: 10px;
+}
+
+.dialog-field label {
+  display: block;
+  font-size: 11px;
+  color: #444;
+  margin-bottom: 3px;
+}
+
+.path-input-row {
+  display: flex;
+  gap: 6px;
+}
+
+.dialog-input {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid #aac;
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: inherit;
+  background: #fff;
+}
+
+.dialog-input:focus {
+  outline: none;
+  border-color: #4a8ac4;
+}
+
+.browse-btn {
+  padding: 4px 10px;
+  background: linear-gradient(180deg, #f8f8f8 0%, #e8e8e8 100%);
+  border: 1px solid #aaa;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.browse-btn:hover {
+  background: linear-gradient(180deg, #fff 0%, #f0f0f0 100%);
+}
+
+/* Compose box — hotkey-summoned overlay anchored at the bottom of the active
+   terminal area. Compact, information-dense, themed via CSS variables. */
+.compose-box {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: var(--compose-bg);
+  color: var(--compose-fg);
+  border: 1px solid var(--compose-border);
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+}
+
+.compose-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.compose-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 220px;
+  padding: 2px 4px 2px 7px;
+  background: var(--compose-chip-bg);
+  color: var(--compose-chip-fg);
+  border: 1px solid var(--compose-chip-border);
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+.compose-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Image chip: a small thumbnail preview instead of a filename. Tighter padding
+   since the content is the image itself. */
+.compose-chip-image {
+  padding: 2px 4px 2px 2px;
+}
+
+.compose-chip-thumb {
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
+  border-radius: 6px;
+  display: block;
+}
+
+.compose-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.compose-chip-remove:hover {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.compose-textarea {
+  width: 100%;
+  min-height: 38px;
+  max-height: 200px;
+  resize: none;
+  padding: 6px 8px;
+  background: var(--compose-textarea-bg);
+  color: var(--compose-fg);
+  border: 1px solid var(--compose-textarea-border);
+  border-radius: 4px;
+  font-family: Menlo, Monaco, "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.compose-textarea:focus {
+  outline: none;
+  border-color: var(--compose-focus-border);
+}
+
+.compose-hint {
+  font-size: 10px;
+  color: var(--compose-hint-fg);
+  user-select: none;
+}
+
+/* Secretary card — the brief for a red-dot contact, over the top right of the
+   terminal area so the terminal's prompt and any dialog at the bottom stay in
+   view. Below the compose box if the two ever meet. */
+.secretary-card {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 40;
+  width: min(560px, calc(100% - 16px));
+  max-height: 45%;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px 8px 7px 9px;
+  background: var(--compose-bg);
+  color: var(--compose-fg);
+  border: 1px solid var(--compose-border);
+  border-left: 3px solid var(--secretary-accent);
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+  font-size: 12px;
+}
+
+.secretary-card-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.secretary-card-badge {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--secretary-accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: bold;
+  letter-spacing: 0.3px;
+}
+
+.secretary-card-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: bold;
+}
+
+.secretary-card-kind,
+.secretary-card-playing {
+  flex: none;
+  font-size: 10px;
+  white-space: nowrap;
+  color: var(--secretary-muted-fg);
+}
+
+.secretary-card-kind[data-kind="needs-you"] {
+  color: var(--secretary-warn-fg);
+  font-weight: bold;
+}
+
+.secretary-card-playing {
+  color: var(--secretary-accent);
+  font-weight: bold;
+}
+
+.secretary-card-spacer {
+  flex: 1;
+}
+
+.secretary-card-btn {
+  flex: none;
+  padding: 2px 7px;
+  background: var(--compose-chip-bg);
+  color: var(--compose-chip-fg);
+  border: 1px solid var(--compose-chip-border);
+  border-radius: 3px;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.secretary-card-btn:hover:not(:disabled) {
+  border-color: var(--compose-focus-border);
+}
+
+.secretary-card-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.secretary-card-close {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  color: var(--compose-fg);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.secretary-card-close:hover {
+  background: rgba(204, 51, 51, 0.12);
+  border-color: #c66;
+  color: #c33;
+}
+
+.secretary-card-text {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1px 0 1px 8px;
+  border-left: 2px solid var(--secretary-quote-border);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+/* The builder's replies and the secretary's answers (T-510), between the brief and
+   the reply box. Scrolls on its own so the box stays in view. */
+.secretary-card-exchanges {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 8px;
+}
+
+.secretary-card-exchange {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.45;
+  user-select: text;
+}
+
+.secretary-card-reply {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--compose-chip-bg);
+  white-space: pre-wrap;
+}
+
+.secretary-card-response {
+  white-space: pre-wrap;
+}
+
+.secretary-card-response[data-outcome="pending"] {
+  color: var(--secretary-muted-fg);
+  font-style: italic;
+}
+
+.secretary-card-response[data-outcome="refused"],
+.secretary-card-response[data-outcome="failed"] {
+  color: var(--secretary-warn-fg);
+}
+
+.secretary-card-replybox {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.secretary-card-input {
+  flex: 1;
+  min-width: 0;
+  max-height: 72px;
+  resize: none;
+  padding: 3px 6px;
+  background: var(--compose-textarea-bg);
+  color: var(--compose-fg);
+  border: 1px solid var(--compose-textarea-border);
+  border-radius: 4px;
+  font: inherit;
+  line-height: 1.4;
+}
+
+.secretary-card-input:focus {
+  outline: none;
+  border-color: var(--compose-focus-border);
+}
+
+.secretary-card-note {
+  flex: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--secretary-muted-fg);
+}
+
+.secretary-card-note[data-tone="warn"] {
+  color: var(--secretary-warn-fg);
+}
+
+.secretary-card-detail {
+  margin-left: 6px;
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.secretary-card-detail::before {
+  content: "· ";
+}
+
+.dialog-warning {
+  background: #fff8e1;
+  border: 1px solid #ffb300;
+  border-radius: 3px;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: #6d4c00;
+  margin-bottom: 10px;
+}
+
+.backend-options {
+  display: flex;
+  gap: 16px;
+  padding: 4px 0;
+}
+
+.backend-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #1a1a1a;
+}
+
+.backend-option input[type="radio"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.dialog-error {
+  color: #c62828;
+  font-size: 11px;
+  margin-bottom: 10px;
+}
+
+/* git's own words under "git clone failed". */
+.dialog-error pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: Menlo, Monaco, monospace;
+  font-size: 10.5px;
+  background: #fdecea;
+  border: 1px solid #f3b8b3;
+  border-radius: 3px;
+  padding: 6px 8px;
+  margin: 4px 0;
+  color: #8a1c14;
+  max-height: 140px;
+  overflow: auto;
+}
+
+/* New Instance dialog, epic new-project: the Open folder / Clone from Git switch,
+   the clone's target, progress and notes. */
+.dialog-input.full {
+  width: 100%;
+}
+
+.dialog-input:disabled {
+  background: #eef0f4;
+  color: #777;
+}
+
+.dialog-field label code {
+  font-family: Menlo, Monaco, monospace;
+  font-size: 10.5px;
+}
+
+.dialog-hint {
+  color: #888;
+}
+
+.mode-tabs {
+  display: flex;
+  margin-bottom: 12px;
+  border: 1px solid #7b9cc7;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.mode-tab {
+  flex: 1;
+  padding: 4px 0;
+  font-size: 11px;
+  font-family: inherit;
+  background: #fff;
+  color: #2d5a8a;
+  border: none;
+  cursor: pointer;
+}
+
+.mode-tab + .mode-tab {
+  border-left: 1px solid #7b9cc7;
+}
+
+.mode-tab.active {
+  background: linear-gradient(180deg, #6ba3d6 0%, #4a8ac4 100%);
+  color: #fff;
+  font-weight: bold;
+}
+
+.mode-tab:disabled {
+  cursor: not-allowed;
+}
+
+.target-path {
+  font-size: 11px;
+  color: #556;
+  margin-top: 4px;
+  font-family: Menlo, Monaco, monospace;
+  word-break: break-all;
+}
+
+.inline-btn {
+  margin-left: 6px;
+  padding: 1px 8px;
+  font-size: 11px;
+  border-radius: 3px;
+  border: 1px solid #c79100;
+  background: #fff;
+  color: #6d4c00;
+  cursor: pointer;
+}
+
+.clone-progress {
+  background: #fff;
+  border: 1px solid #aac;
+  border-radius: 3px;
+  padding: 6px 8px;
+  font-family: Menlo, Monaco, monospace;
+  font-size: 10.5px;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.clone-progress .line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.clone-progress .bar {
+  height: 5px;
+  background: #c6d9f1;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.clone-progress .bar > div {
+  height: 100%;
+  background: #4a8ac4;
+}
+
+.dialog-info {
+  background: #e8f1fb;
+  border: 1px solid #7b9cc7;
+  border-radius: 3px;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: #2d5a8a;
+  margin-bottom: 10px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.dialog-btn {
+  padding: 4px 14px;
+  border-radius: 3px;
+  border: 1px solid #aaa;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.dialog-btn.cancel {
+  background: linear-gradient(180deg, #f8f8f8 0%, #e0e0e0 100%);
+  color: #333;
+}
+
+.dialog-btn.primary {
+  background: linear-gradient(180deg, #6ba3d6 0%, #4a8ac4 100%);
+  color: #fff;
+  border-color: #3d7ab3;
+  font-weight: bold;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+.dialog-btn.primary:hover {
+  background: linear-gradient(180deg, #7bb4e2 0%, #5a9ad4 100%);
+}
+
+.dialog-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Context Menu */
+.context-menu {
+  position: fixed;
+  background: #f8f9fc;
+  border: 1px solid #7b9cc7;
+  border-radius: 3px;
+  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.15);
+  z-index: 2000;
+  min-width: 100px;
+  padding: 2px 0;
+}
+
+.context-menu-item {
+  padding: 4px 12px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.context-menu-item:hover {
+  background: #4a8ac4;
+  color: #fff;
+}
+
+.context-menu-item.disabled {
+  color: #999;
+  cursor: default;
+}
+
+.context-menu-item.disabled:hover {
+  background: transparent;
+  color: #999;
+}
+
+/* Theme toggle button — pinned to the top-right of the draggable titlebar */
+.version-badge {
+  position: absolute;
+  top: 10px;
+  right: 46px;
+  z-index: 10;
+  font-size: 10px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 1px rgba(30, 74, 122, 0.5);
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+  user-select: none;
+}
+
+/* Dev-build marker. A dev run and the installed app use separate data
+   directories and can be open at once; without this there is nothing on screen
+   that says which window is which, which is how you close the wrong one. The
+   badge is one signal, the amber titlebar below is the one you can't miss. */
+.version-badge-dev {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: #e8820c;
+  color: #fff;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  text-shadow: none;
+}
+
+.app-container[data-dev="true"]::before {
+  background: repeating-linear-gradient(
+    135deg,
+    #e8820c 0 14px,
+    #c96f08 14px 28px
+  );
+  border-bottom-color: #a35a05;
+}
+
+[data-theme="dark"] .version-badge {
+  color: rgba(220, 220, 220, 0.7);
+  text-shadow: none;
+}
+
+[data-theme="sepia"] .version-badge {
+  color: rgba(90, 74, 48, 0.8);
+  text-shadow: none;
+}
+
+.theme-toggle {
+  position: absolute;
+  top: 4px;
+  right: 10px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #6ba3d6 0%, #4a8ac4 100%);
+  border: 1px solid #2d5a8a;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  z-index: 10;
+  -webkit-app-region: no-drag;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 1px 2px rgba(0, 0, 0, 0.15);
+  text-shadow: 0 1px 1px rgba(30, 74, 122, 0.5);
+  line-height: 1;
+}
+
+.theme-toggle:hover {
+  background: linear-gradient(180deg, #7bb4e2 0%, #5a9ad4 100%);
+}
+
+.theme-toggle:active {
+  background: linear-gradient(180deg, #4a8ac4 0%, #3a7ab4 100%);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+/* Animations */
+@keyframes clawd-step {
+  50% {
+    transform: scaleY(0.5);
+  }
+}
+
+@keyframes clawd-arm {
+  50% {
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes opencode-block {
+  50% {
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes avatar-shake {
+  0%,
+  32%,
+  100% {
+    transform: translate(0, 0);
+  }
+  4% {
+    transform: translate(-2px, -1px);
+  }
+  8% {
+    transform: translate(2px, 1px);
+  }
+  12% {
+    transform: translate(-2px, 1px);
+  }
+  16% {
+    transform: translate(2px, -1px);
+  }
+  20% {
+    transform: translate(-2px, -1px);
+  }
+  24% {
+    transform: translate(2px, 1px);
+  }
+  28% {
+    transform: translate(-1px, 0);
+  }
+}
+
+/* Markdown (View) section */
+.markdown-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.markdown-section-bar {
+  display: flex;
+  gap: 6px;
+}
+
+.markdown-path-input {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid #aac;
+  border-radius: 3px;
+  font-size: 11px;
+  font-family: inherit;
+  background: #fff;
+  min-width: 0;
+}
+
+.markdown-path-input:focus {
+  outline: none;
+  border-color: #4a8ac4;
+}
+
+.markdown-refresh-btn {
+  padding: 4px 10px;
+  background: linear-gradient(180deg, #f8f8f8 0%, #e8e8e8 100%);
+  border: 1px solid #aaa;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.markdown-refresh-btn:hover {
+  background: linear-gradient(180deg, #fff 0%, #f0f0f0 100%);
+}
+
+.markdown-section-placeholder {
+  color: var(--toolbox-placeholder-fg);
+  font-style: italic;
+  font-size: 11px;
+}
+
+/* Rendered markdown output. Kept compact and readable within the narrow
+   toolbox column; long code lines scroll inside their block instead of
+   widening the layout. */
+.markdown-body {
+  color: var(--toolbox-body-fg);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.markdown-body > *:first-child {
+  margin-top: 0;
+}
+
+.markdown-body > *:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin: 12px 0 6px;
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+.markdown-body h1 {
+  font-size: 16px;
+}
+.markdown-body h2 {
+  font-size: 14px;
+}
+.markdown-body h3 {
+  font-size: 13px;
+}
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-size: 12px;
+}
+
+.markdown-body p {
+  margin: 6px 0;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.markdown-body li {
+  margin: 2px 0;
+}
+
+.markdown-body a {
+  color: #4a8ac4;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+
+.markdown-body blockquote {
+  margin: 6px 0;
+  padding: 2px 10px;
+  border-left: 3px solid rgba(128, 128, 128, 0.4);
+  color: var(--toolbox-placeholder-fg);
+}
+
+.markdown-body code {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  background: rgba(128, 128, 128, 0.15);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.markdown-body pre {
+  margin: 6px 0;
+  padding: 8px 10px;
+  background: rgba(128, 128, 128, 0.12);
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.markdown-body pre code {
+  background: none;
+  padding: 0;
+  white-space: pre;
+}
+
+.markdown-body table {
+  border-collapse: collapse;
+  margin: 6px 0;
+  font-size: 11px;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  padding: 3px 8px;
+  text-align: left;
+}
+
+.markdown-body th {
+  background: rgba(128, 128, 128, 0.12);
+  font-weight: 600;
+}
+
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+}
+
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid rgba(128, 128, 128, 0.35);
+  margin: 10px 0;
+}
+
+/* Mermaid diagrams: the SVG scales to the narrow column and overflows
+   horizontally within its own block rather than widening the layout. */
+.mermaid-block {
+  margin: 8px 0;
+  overflow-x: auto;
+}
+
+.mermaid-block svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-block-failed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ============================================================================
+   OpenCode backend skin — re-tints ONLY the outer chrome (titlebar, sidebar,
+   header, toolbox section headers, sidebar/quick-action buttons) from the
+   blue to a matching green. The inner panels (content area, toolbox
+   body, terminal, compose box) stay on the shared per-theme variables and are
+   deliberately left alone. Scoped to `.app-container[data-backend="opencode"]`,
+   which App sets from the SELECTED instance's backend, so the chrome tracks
+   selection. Green shades mirror the blue palette's lightness so the overall look
+   is preserved — only the hue shifts.
+   Blue → green reference:
+     #a8d4ff/#7eb8ee/#4f93d4/#3878b8 (gradients) → #a6e6b4/#7fd492/#4bb066/#2f9450
+     #c6d9f1/#a8c4e0 (panels)                    → #cbecd2/#a8d8b4
+     #2d5a8a (deep text/border)                  → #1f7a3d
+     #7b9cc7 (borders)                           → #7cc48f
+     #6ba3d6/#4a8ac4 (buttons)                   → #5bbf76/#3a9e54
+   ========================================================================== */
+.app-container[data-backend="opencode"] {
+  border-color: #7cc48f;
+  background: linear-gradient(180deg, #a6e6b4 0%, #7fd492 60%, #d6f2dc 100%);
+}
+
+.app-container[data-backend="opencode"]::before {
+  background: linear-gradient(180deg, #a6e6b4 0%, #7fd492 100%);
+  border-bottom-color: rgba(31, 122, 61, 0.3);
+}
+
+.app-container[data-backend="opencode"] .sidebar {
+  background: linear-gradient(180deg, #cbecd2 0%, #a8d8b4 100%);
+  border-right-color: #7cc48f;
+}
+
+.app-container[data-backend="opencode"] .contact-item {
+  border-bottom-color: rgba(124, 196, 143, 0.25);
+}
+
+.app-container[data-backend="opencode"] .contact-item.selected {
+  border-left-color: #1f7a3d;
+}
+
+.app-container[data-backend="opencode"] .start-btn {
+  background: linear-gradient(180deg, #5bbf76 0%, #3a9e54 100%);
+  border-color: #2f8446;
+}
+.app-container[data-backend="opencode"] .start-btn:hover {
+  background: linear-gradient(180deg, #6bcf86 0%, #4aae64 100%);
+}
+
+.app-container[data-backend="opencode"] .new-instance-btn-bottom {
+  background: linear-gradient(180deg, #5bbf76 0%, #3a9e54 50%, #2f8446 100%);
+  border-top-color: #1f7a3d;
+  text-shadow: 0 1px 2px rgba(20, 90, 45, 0.6);
+}
+.app-container[data-backend="opencode"] .new-instance-btn-bottom:hover {
+  background: linear-gradient(180deg, #6bcf86 0%, #5abe74 50%, #4aae64 100%);
+}
+.app-container[data-backend="opencode"] .new-instance-btn-bottom:active {
+  background: linear-gradient(180deg, #3a9e54 0%, #2f8e46 50%, #1f7a3d 100%);
+}
+
+.app-container[data-backend="opencode"] .content-header {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.55) 0%,
+      rgba(255, 255, 255, 0) 50%
+    ),
+    linear-gradient(180deg, #a6e6b4 0%, #7fd492 35%, #4bb066 75%, #2f9450 100%);
+  border-bottom-color: #1f7a3d;
+}
+.app-container[data-backend="opencode"] .content-header-name,
+.app-container[data-backend="opencode"] .content-header-status,
+.app-container[data-backend="opencode"] .content-header-backend,
+.app-container[data-backend="opencode"] .content-header-brief {
+  text-shadow: 0 1px 2px rgba(20, 90, 45, 0.6);
+}
+
+.app-container[data-backend="opencode"] .resizer:hover,
+.app-container[data-backend="opencode"] .resizer:active {
+  background: #7cc48f;
+}
+
+.app-container[data-backend="opencode"] .toolbox {
+  border-left-color: #7cc48f;
+}
+
+.app-container[data-backend="opencode"] .fold-tab {
+  background: linear-gradient(180deg, #5bbf76 0%, #3a9e54 100%);
+  border-color: #2f8446;
+}
+.app-container[data-backend="opencode"] .fold-tab:hover {
+  background: linear-gradient(180deg, #6bcf86 0%, #4aae64 100%);
+}
+
+.app-container[data-backend="opencode"] .fold-strip {
+  background: linear-gradient(180deg, #cbecd2 0%, #a8d8b4 100%);
+  color: #1f7a3d;
+}
+.app-container[data-backend="opencode"] .fold-strip:hover {
+  background: linear-gradient(180deg, #d6f2dc 0%, #b3e0be 100%);
+}
+.app-container[data-backend="opencode"] .fold-strip[data-pane="toolbox"] {
+  border-left-color: #7cc48f;
+}
+
+.app-container[data-backend="opencode"] .toolbox-section-header {
+  background: linear-gradient(180deg, #cbecd2 0%, #a8d8b4 100%);
+  color: #1f7a3d;
+}
+.app-container[data-backend="opencode"] .toolbox-section-header:hover {
+  background: linear-gradient(180deg, #d6f2dc 0%, #b3e0be 100%);
+}
+
+.app-container[data-backend="opencode"] .quick-action-btn {
+  background: linear-gradient(180deg, #e6f6ea 0%, #cbecd2 100%);
+  border-color: #7cc48f;
+  color: #1f7a3d;
+}
+.app-container[data-backend="opencode"] .quick-action-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #eff9f2 0%, #d6f2dc 100%);
+}
+.app-container[data-backend="opencode"] .quick-action-btn:active:not(:disabled) {
+  background: linear-gradient(180deg, #cbecd2 0%, #a8d8b4 100%);
+}
+
+/* Header badge fill per backend — subtle, still legible on the tinted header. */
+.content-header-backend[data-backend="opencode"] {
+  background: rgba(255, 255, 255, 0.28);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+
+/* Phone section (toolbox) — pairing + paired-device management. Follows the
+   quick-action button conventions so it reads as part of the same toolbox.
+   The Secretary section shares its switch, buttons and message boxes, so the
+   two app-wide sections look alike. */
+
+.phone-section,
+.secretary-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.phone-row,
+.secretary-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.phone-toggle,
+.secretary-toggle {
+  padding: 6px 10px;
+  background: linear-gradient(180deg, #e8eef8 0%, #c6d9f1 100%);
+  border: 1px solid #7b9cc7;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  color: #2d5a8a;
+  font-weight: bold;
+}
+
+.phone-toggle[data-on="true"],
+.secretary-toggle[data-on="true"] {
+  background: linear-gradient(180deg, #d9f0e0 0%, #a8d8b4 100%);
+  border-color: #4bb066;
+  color: #1f7a3d;
+}
+
+.phone-toggle:disabled,
+.secretary-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.phone-port,
+.secretary-tag {
+  color: #777;
+  font-size: 10px;
+}
+
+.phone-btn,
+.secretary-btn {
+  padding: 6px 10px;
+  background: linear-gradient(180deg, #e8eef8 0%, #c6d9f1 100%);
+  border: 1px solid #7b9cc7;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  color: #2d5a8a;
+}
+
+.phone-btn:hover:not(:disabled),
+.secretary-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #f0f4fa 0%, #d0e0f5 100%);
+}
+
+.phone-btn:disabled,
+.secretary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.phone-hint,
+.phone-error,
+.secretary-hint,
+.secretary-error {
+  line-height: 1.45;
+  padding: 5px 7px;
+  border-radius: 3px;
+}
+
+.phone-hint,
+.secretary-hint {
+  color: #555;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.phone-error,
+.secretary-error {
+  color: #c62828;
+  background: rgba(198, 40, 40, 0.08);
+}
+
+.phone-muted {
+  color: var(--phone-muted-fg);
+  line-height: 1.45;
+}
+
+/* The three checks, one row each as in the mockup: mark, name, what was found, and
+   the fix at the right; a note or the serve command's confirmation under it. */
+.phone-checks {
+  display: flex;
+  flex-direction: column;
+}
+
+.phone-check {
+  display: grid;
+  grid-template-columns: 12px 58px minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 6px;
+  row-gap: 4px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--phone-rule);
+  line-height: 1.45;
+}
+
+.phone-check-mark {
+  font-weight: bold;
+  color: var(--phone-muted-fg);
+}
+
+.phone-check[data-tone="ok"] .phone-check-mark {
+  color: var(--phone-ok-fg);
+}
+
+.phone-check[data-tone="bad"] .phone-check-mark {
+  color: var(--phone-bad-fg);
+}
+
+.phone-check-label {
+  color: var(--phone-muted-fg);
+}
+
+.phone-check-text[data-mono="true"] {
+  font-family: Menlo, Monaco, monospace;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.phone-check[data-tone="unknown"] .phone-check-text {
+  color: var(--phone-muted-fg);
+}
+
+.phone-check-note,
+.phone-check .phone-confirm {
+  grid-column: 3 / -1;
+}
+
+.phone-check-note {
+  color: var(--phone-muted-fg);
+  font-size: 10px;
+}
+
+/* A second press before anything that changes the machine or cuts a phone off: the
+   serve command, shown before it runs, and Revoke. */
+.phone-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px 7px;
+  border: 1px dashed var(--phone-rule);
+  border-radius: 3px;
+  background: var(--phone-panel-bg);
+  line-height: 1.45;
+}
+
+.phone-code {
+  font-family: Menlo, Monaco, monospace;
+  font-size: 10px;
+  color: var(--phone-code-fg);
+  background: var(--phone-code-bg);
+  padding: 1px 4px;
+  border-radius: 2px;
+  white-space: nowrap;
+  user-select: text;
+}
+
+/* The serve command and a pairing URL, on lines of their own: long, so they wrap
+   anywhere, and stay copyable verbatim. */
+.phone-confirm > .phone-code,
+.phone-pairing > .phone-code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Why no code is offered yet, and which check comes first. */
+.phone-gate {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 7px;
+  border-radius: 3px;
+  background: var(--phone-panel-bg);
+  line-height: 1.45;
+}
+
+/* A row's fix, a phone's Send test: small, like Revoke beside them. */
+.phone-act {
+  padding: 2px 6px;
+  font-size: 10px;
+  background: linear-gradient(180deg, #e8eef8 0%, #c6d9f1 100%);
+  border: 1px solid #7b9cc7;
+  border-radius: 2px;
+  color: #2d5a8a;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.phone-act:hover:not(:disabled) {
+  background: linear-gradient(180deg, #f0f4fa 0%, #d0e0f5 100%);
+}
+
+.phone-act:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.phone-caption {
+  color: var(--phone-muted-fg);
+  text-align: center;
+  line-height: 1.45;
+  max-width: 300px;
+}
+
+.phone-pairing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 8px;
+  background: var(--phone-panel-bg);
+  border-radius: 3px;
+}
+
+.phone-qr {
+  /* Rendered as a data URL at 240px; keep it crisp rather than smoothed. */
+  image-rendering: pixelated;
+  background: #fff;
+  border-radius: 2px;
+}
+
+.phone-devices,
+.secretary-server {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid #d0d0d0;
+  padding-top: 7px;
+}
+
+.phone-devices-title,
+.secretary-server-title {
+  font-weight: bold;
+  color: #555;
+}
+
+.phone-device-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--phone-rule);
+}
+
+.phone-device {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.phone-device-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #bbb;
+  flex: none;
+}
+
+.phone-device-dot[data-connected="true"] {
+  background: #4bb066;
+}
+
+.phone-device-name {
+  font-weight: bold;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phone-device-state {
+  color: var(--phone-muted-fg);
+  font-size: 10px;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.phone-device-note {
+  padding-left: 13px;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.phone-device-note[data-tone="ok"] {
+  color: var(--phone-ok-fg);
+}
+
+.phone-device-note[data-tone="bad"] {
+  color: var(--phone-bad-fg);
+}
+
+.phone-device-item .phone-confirm {
+  margin-left: 13px;
+}
+
+.phone-revoke,
+.secretary-clear {
+  padding: 2px 6px;
+  font-size: 10px;
+  background: none;
+  border: 1px solid #c9a0a0;
+  border-radius: 2px;
+  color: #a33;
+  cursor: pointer;
+}
+
+.phone-revoke:hover:not(:disabled),
+.secretary-clear:hover:not(:disabled) {
+  background: rgba(198, 40, 40, 0.08);
+}
+
+[data-theme="dark"] .toolbox-section-body .phone-toggle,
+[data-theme="dark"] .toolbox-section-body .phone-btn,
+[data-theme="dark"] .toolbox-section-body .phone-act,
+[data-theme="dark"] .toolbox-section-body .secretary-toggle,
+[data-theme="dark"] .toolbox-section-body .secretary-btn {
+  background: linear-gradient(180deg, #3c3c3c 0%, #2d2d2d 100%);
+  border-color: #555;
+  color: #d4d4d4;
+}
+
+[data-theme="dark"] .toolbox-section-body .phone-toggle[data-on="true"],
+[data-theme="dark"] .toolbox-section-body .secretary-toggle[data-on="true"] {
+  border-color: #4bb066;
+  color: #8fd9a3;
+}
+
+[data-theme="dark"] .toolbox-section-body .phone-hint,
+[data-theme="dark"] .toolbox-section-body .secretary-hint {
+  color: #b0b0b0;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] .toolbox-section-body .phone-error,
+[data-theme="dark"] .toolbox-section-body .secretary-error {
+  color: #ff8a80;
+  background: rgba(255, 138, 128, 0.1);
+}
+
+[data-theme="dark"] .toolbox-section-body .phone-devices,
+[data-theme="dark"] .toolbox-section-body .secretary-server {
+  border-top-color: #3c3c3c;
+}
+
+[data-theme="dark"] .toolbox-section-body .phone-devices-title,
+[data-theme="dark"] .toolbox-section-body .secretary-server-title,
+[data-theme="dark"] .toolbox-section-body .secretary-label,
+[data-theme="dark"] .toolbox-section-body .secretary-tag {
+  color: #a0a0a0;
+}
+
+
+/* Secretary section (toolbox) — what it doesn't share with the Phone section
+   above: the speech server's fields and the Test result line. */
+
+.secretary-fields {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.secretary-label {
+  color: #555;
+}
+
+/* Theme variables rather than fixed colours, so the fields follow light, dark
+   and sepia like the compose box does. */
+.secretary-input {
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--compose-textarea-border);
+  border-radius: 3px;
+  background: var(--compose-textarea-bg);
+  color: var(--compose-fg);
+  font-size: 11px;
+  font-family: inherit;
+}
+
+.secretary-input:focus {
+  outline: none;
+  border-color: var(--compose-focus-border);
+}
+
+.secretary-input:disabled {
+  opacity: 0.6;
+}
+
+.secretary-input::placeholder {
+  color: var(--compose-hint-fg);
+}
+
+.secretary-clear:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.secretary-test-line {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.secretary-test-line[data-tone="ok"] {
+  color: #1f7a3d;
+}
+
+.secretary-test-line[data-tone="warn"] {
+  color: #8a5200;
+}
+
+.secretary-test-line[data-tone="error"] {
+  color: #c62828;
+}
+
+[data-theme="dark"] .toolbox-section-body .secretary-test-line[data-tone="ok"] {
+  color: #8fd9a3;
+}
+
+[data-theme="dark"] .toolbox-section-body .secretary-test-line[data-tone="warn"] {
+  color: #f3d48a;
+}
+
+[data-theme="dark"] .toolbox-section-body .secretary-test-line[data-tone="error"],
+[data-theme="dark"] .toolbox-section-body .secretary-error {
+  color: #ff8a80;
+}
+
+[data-theme="dark"] .toolbox-section-body .secretary-error {
+  background: rgba(255, 138, 128, 0.1);
+}
+
+
+/* ============ Diff overlay ============
+   A read-only side-by-side view of one file's diff, opened from the Git
+   section's View tag. Nearly full-window: reading a diff in a narrow box is the
+   thing this feature exists to stop. */
+
+/* A movable, resizable window rather than a modal: with no backdrop the Git
+   section stays clickable, so opening a second file refreshes this window instead
+   of stacking another one. */
+.diff-window {
+  position: fixed;
+  background: #f0f4fa;
+  border: 2px solid #7b9cc7;
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 1100;
+}
+
+/* Bottom-right grip. */
+.diff-window-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  background: linear-gradient(
+    135deg,
+    transparent 0 45%,
+    #7b9cc7 45% 55%,
+    transparent 55% 70%,
+    #7b9cc7 70% 80%,
+    transparent 80%
+  );
+}
+
+.diff-window-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  cursor: move;
+  user-select: none;
+  background: linear-gradient(180deg, #e4ecf7 0%, #d4e0ef 100%);
+  border-bottom: 1px solid #7b9cc7;
+  flex: none;
+}
+
+/* Maximized fills the app window edge to edge and can't be dragged. */
+.diff-window.maximized {
+  border-radius: 0;
+}
+
+.diff-window.maximized .diff-window-header {
+  cursor: default;
+}
+
+.diff-window-path {
+  font-family: "Menlo", "Consolas", monospace;
+  font-size: 12px;
+  font-weight: bold;
+  color: #2d5a8a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+
+.diff-window-comparison {
+  font-size: 10px;
+  color: #667;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.diff-window-close {
+  font-size: 15px;
+  line-height: 1;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid #7b9cc7;
+  border-radius: 3px;
+  background: #f6f9fd;
+  color: #2d5a8a;
+  cursor: pointer;
+  flex: none;
+}
+
+.diff-window-close:hover {
+  background: #ffe0e0;
+  border-color: #c66;
+  color: #c33;
+}
+
+/* The scrolling body and the overview ruler side by side. */
+.diff-window-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.diff-window-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  background: #fff;
+}
+
+/* Where the changes are in the whole file, one lane per side: old on the left,
+   new on the right. Stops short of the bottom so the resize grip never covers a
+   mark at the end of the file. */
+.diff-ruler {
+  position: relative;
+  flex: none;
+  width: 14px;
+  margin-bottom: 14px;
+  border-left: 1px solid var(--diff-sep);
+  border-bottom: 1px solid var(--diff-sep);
+  background: var(--diff-empty-bg);
+  cursor: pointer;
+}
+
+.diff-ruler-mark {
+  position: absolute;
+  width: 5px;
+  /* A one-line change in a long file would otherwise round to nothing. */
+  min-height: 3px;
+  pointer-events: none;
+}
+
+.diff-ruler-mark[data-side="old"] {
+  left: 1px;
+  background: var(--diff-ruler-del);
+}
+
+.diff-ruler-mark[data-side="new"] {
+  right: 1px;
+  background: var(--diff-ruler-add);
+}
+
+/* The part of the file currently on screen. */
+.diff-ruler-view {
+  position: absolute;
+  left: 0;
+  right: 0;
+  min-height: 6px;
+  background: var(--diff-ruler-view);
+  box-shadow: inset 0 0 0 1px var(--diff-ruler-view-edge);
+  pointer-events: none;
+}
+
+[data-theme="dark"] .diff-window {
+  background: #252526;
+  border-color: #3c3c3c;
+}
+
+[data-theme="dark"] .diff-window-header {
+  background: linear-gradient(180deg, #3c3c3c 0%, #2d2d2d 100%);
+  border-bottom-color: #3c3c3c;
+}
+
+[data-theme="dark"] .diff-window-path {
+  color: #6ba3d6;
+}
+
+[data-theme="dark"] .diff-window-comparison {
+  color: #999;
+}
+
+[data-theme="dark"] .diff-window-close {
+  background: #2d2d2d;
+  border-color: #4a4a4a;
+  color: #d4d4d4;
+}
+
+[data-theme="dark"] .diff-window-body {
+  background: #1e1e1e;
+}
+
+.diff-window-note {
+  flex: 1;
+  padding: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-family: "Menlo", "Consolas", monospace;
+  font-size: 12px;
+  color: #667;
+}
+
+.diff-window-note-action {
+  font-family: inherit;
+  font-size: 11px;
+  padding: 1px 6px;
+  border: 1px solid #7b9cc7;
+  border-radius: 3px;
+  background: #f6f9fd;
+  color: #2d5a8a;
+  cursor: pointer;
+}
+
+.diff-window-note-action:hover {
+  background: #e4ecf7;
+}
+
+[data-theme="dark"] .diff-window-note-action {
+  background: #2d2d2d;
+  border-color: #4a4a4a;
+  color: #6ba3d6;
+}
+
+.diff-window-footer {
+  flex: none;
+  padding: 4px 8px;
+  border-top: 1px solid #b8c8de;
+  font-size: 10px;
+  color: #667;
+  background: #f6f9fd;
+}
+
+/* One grid for both sides: a row is four cells, so alignment is structural and
+   cannot drift the way two scroll containers kept in sync by script can. Long
+   lines wrap inside their own half rather than widening the grid, so the old and
+   new versions are always both on screen; the row takes the height of its taller
+   side. */
+.diff-grid {
+  display: grid;
+  /* minmax(0, 1fr) holds the halves at exactly half each: a plain 1fr can't go
+     below its longest line, and one long line on either side used to widen both
+     halves until the new version was pushed off screen. The gutters are
+     max-content so a 4-digit line number always fits. */
+  grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
+  /* The overview ruler measures rows by offsetTop, which needs the grid to be
+     their offset parent. */
+  position: relative;
+  font-family: "Menlo", "Consolas", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.diff-gutter {
+  text-align: right;
+  padding: 0 6px;
+  min-width: 34px;
+  color: var(--diff-gutter-fg);
+  border-right: 1px solid var(--diff-sep);
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* The line number is generated content, so it can never land in a selection —
+   copying a block of the diff yields the code and nothing else. */
+.diff-gutter::before {
+  content: attr(data-line);
+}
+
+/* The middle seam between the old and new halves. */
+.diff-grid > .diff-gutter:nth-child(4n + 3) {
+  border-left: 2px solid var(--diff-sep);
+}
+
+/* pre-wrap keeps indentation and wraps only where the line runs out of room;
+   `anywhere` also breaks a token with no spaces in it, such as a long URL, which
+   would otherwise spill into the other half. */
+.diff-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 0 6px;
+  color: var(--diff-text-fg);
+}
+
+.diff-text[data-kind="add"],
+.diff-gutter[data-kind="add"] {
+  background: var(--diff-add-bg);
+}
+
+.diff-text[data-kind="del"],
+.diff-gutter[data-kind="del"] {
+  background: var(--diff-del-bg);
+}
+
+.diff-text[data-kind="empty"],
+.diff-gutter[data-kind="empty"] {
+  background: var(--diff-empty-bg);
+}
+
+/* Selection rides on top of the add/remove tint rather than replacing it — a
+   selected addition still reads as an addition. A background-image layer composites
+   over the background-color; a solid background would hide it. */
+.diff-text[data-selected="true"],
+.diff-gutter[data-selected="true"] {
+  background-image: linear-gradient(
+    var(--diff-selected-bg),
+    var(--diff-selected-bg)
+  );
+}
+
+/* Left edge marker on the selected run, drawn as an inset shadow so it costs no
+   layout width. */
+.diff-grid > .diff-gutter:nth-child(4n + 1)[data-selected="true"] {
+  box-shadow: inset 2px 0 0 var(--diff-selected-edge);
+}
+
+/* The reference the current selection would insert. */
+.diff-window-refbar {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 8px;
+  border-bottom: 1px solid #b8c8de;
+  background: #eaf1fb;
+}
+
+.diff-window-ref {
+  font-family: "Menlo", "Consolas", monospace;
+  font-size: 11px;
+  color: #2d5a8a;
+}
+
+.diff-window-ref-note {
+  font-size: 10px;
+  color: #8a7a55;
+}
+
+[data-theme="dark"] .diff-window-refbar {
+  background: #2a2a2c;
+  border-bottom-color: #3c3c3c;
+}
+
+[data-theme="dark"] .diff-window-ref {
+  color: #6ba3d6;
+}
+
+[data-theme="dark"] .diff-window-ref-note {
+  color: #c8a86a;
+}
+
+[data-theme="dark"] .diff-window-note,
+[data-theme="dark"] .diff-window-footer {
+  color: #999;
+}
+
+[data-theme="dark"] .diff-window-footer {
+  background: #2d2d2d;
+  border-top-color: #3c3c3c;
+}
+
+/* "Ask agent" sits at the end of the reference bar. */
+.diff-window-ask {
+  margin-left: auto;
+  font-family: inherit;
+  font-size: 11px;
+  padding: 1px 8px;
+  border: 1px solid #7b9cc7;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #f6f9fd 0%, #e4ecf7 100%);
+  color: #2d5a8a;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.diff-window-ask:hover:not(:disabled) {
+  background: linear-gradient(180deg, #fff 0%, #eaf1fb 100%);
+}
+
+.diff-window-ask:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+[data-theme="dark"] .diff-window-ask {
+  background: linear-gradient(180deg, #3c3c3c 0%, #2d2d2d 100%);
+  border-color: #4a4a4a;
+  color: #6ba3d6;
+}
+
+/* ============ File drop ============
+   Over the whole window while files are dragged onto it (useFileDrop). Above the
+   dialogs and the diff window, though it never shows while one is open. Its
+   contents take no pointer events, so the overlay itself is the one drag target
+   and crossing its text doesn't fire enter/leave pairs. Themed like the compose
+   box. */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  /* The title strip is a window-drag region; not while files are coming. */
+  -webkit-app-region: no-drag;
+}
+
+.drop-overlay * {
+  pointer-events: none;
+}
+
+.drop-card {
+  width: min(440px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  background: var(--compose-bg);
+  color: var(--compose-fg);
+  border: 2px dashed var(--compose-focus-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  text-align: center;
+}
+
+/* Nowhere to drop: no dashed drop-zone edge. */
+.drop-card[data-kind="refused"] {
+  border-style: solid;
+  border-color: var(--compose-border);
+}
+
+.drop-card-label,
+.drop-card-path {
+  font-size: 11px;
+  color: var(--compose-hint-fg);
+}
+
+.drop-card-name {
+  font-size: 15px;
+  font-weight: bold;
+  color: var(--compose-chip-fg);
+  overflow-wrap: anywhere;
+}
+
+.drop-card-path {
+  font-family: Menlo, Monaco, "Courier New", monospace;
+  overflow-wrap: anywhere;
+  /* A path's runs of spaces are part of it. */
+  white-space: pre-wrap;
+}
+
+.drop-card-title {
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.drop-card-why {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* The drop's dialog (FileDropDialog): where the files go, and which. In the
+   dialogs' own palette, which no theme changes. */
+.file-drop-dialog:focus {
+  outline: none;
+}
+
+.file-drop-dialog .dialog-title {
+  overflow-wrap: anywhere;
+}
+
+.file-drop-folder,
+.file-drop-names {
+  font-family: Menlo, Monaco, "Courier New", monospace;
+  overflow-wrap: anywhere;
+  /* A path's runs of spaces are part of it. */
+  white-space: pre-wrap;
+}
+
+.file-drop-folder {
+  font-size: 12px;
+  color: #2d5a8a;
+}
+
+.file-drop-names {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0 0 0 16px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #444;
+}
+
+.file-drop-names li {
+  overflow: hidden;
+  /* One line, spaces kept. */
+  white-space: pre;
+  text-overflow: ellipsis;
+}
+
+.file-drop-more {
+  color: #889;
+}
+
+.file-drop-change {
+  margin-top: 12px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 11px;
+  color: #2d5a8a;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.file-drop-change:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.file-drop-dialog .dialog-actions {
+  margin-top: 6px;
+}
+
+.file-drop-hint {
+  margin-top: 8px;
+  font-size: 10px;
+  color: #889;
+}
+
+/* The message after a drop (DropMessage): a card per drop at the bottom right,
+   over the toolbox when it shows, so the terminal's prompt at the bottom left stays
+   in view while the builder types a path into it. Above the terminal and the
+   compose box, under the dialogs: a drop's next dialog covers it. The stack itself
+   takes no pointer, only its cards. Themed like the compose box. */
+.drop-message-stack {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 900;
+  width: min(420px, calc(100% - 24px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.drop-message {
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px 6px 8px;
+  background: var(--compose-bg);
+  color: var(--compose-fg);
+  border: 1px solid var(--compose-border);
+  border-left: 3px solid var(--compose-focus-border);
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: auto;
+  cursor: default;
+  user-select: none;
+}
+
+.drop-message[data-tone="ok"] {
+  border-left-color: var(--drop-ok-fg);
+}
+
+.drop-message[data-tone="failed"] {
+  border-left-color: var(--drop-failed-fg);
+}
+
+.drop-message-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.drop-message-line[data-path] .drop-message-text {
+  font-family: Menlo, Monaco, "Courier New", monospace;
+  font-size: 11px;
+}
+
+.drop-message-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  /* A path's runs of spaces are part of it. */
+  white-space: pre-wrap;
+}
+
+.drop-message-mark {
+  flex: none;
+  width: 10px;
+  font-weight: bold;
+  text-align: center;
+}
+
+.drop-message-line[data-tone="ok"] .drop-message-mark {
+  color: var(--drop-ok-fg);
+}
+
+.drop-message-line[data-tone="failed"] .drop-message-mark {
+  color: var(--drop-failed-fg);
+}
+
+.drop-message-line[data-tone="busy"],
+.drop-message-line[data-tone="more"] {
+  color: var(--compose-hint-fg);
+}
+
+/* Under the lines that have a mark, not under the marks. */
+.drop-message-line[data-tone="more"] {
+  padding-left: 16px;
+  font-size: 11px;
+}

@@ -1,0 +1,99 @@
+{
+  "cli": "2.1.291",
+  "scenario": "stop-hook-block",
+  "description": "A Stop hook in the project's .claude/settings.json returns decision=block the first time; the agent carries on, then stops for real.",
+  "deliveries": [
+    {
+      "ms": 0,
+      "payload": {
+        "session_id": "c13672ff-a836-49f3-a955-aa21bb9ff0bd",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-stopblock/c13672ff-a836-49f3-a955-aa21bb9ff0bd.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-stopblock",
+        "prompt_id": "6b4f7adc-df93-4504-a4cb-2a0f50943db7",
+        "permission_mode": "default",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Reply with just the word hi. Do not use any tools."
+      }
+    },
+    {
+      "ms": 924,
+      "payload": {
+        "session_id": "c13672ff-a836-49f3-a955-aa21bb9ff0bd",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-stopblock/c13672ff-a836-49f3-a955-aa21bb9ff0bd.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-stopblock",
+        "prompt_id": "6b4f7adc-df93-4504-a4cb-2a0f50943db7",
+        "permission_mode": "default",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "last_assistant_message": "hi",
+        "background_tasks": [],
+        "session_crons": []
+      }
+    },
+    {
+      "ms": 925,
+      "payload": {
+        "session_id": "c13672ff-a836-49f3-a955-aa21bb9ff0bd",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-stopblock/c13672ff-a836-49f3-a955-aa21bb9ff0bd.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-stopblock",
+        "prompt_id": "6b4f7adc-df93-4504-a4cb-2a0f50943db7",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "211cd1e0-1ecd-4a23-a7e6-2ba16819246f",
+        "message_id": "ebcbc630-4fa2-4e0a-920d-7469a9e062dd",
+        "index": 0,
+        "final": true,
+        "delta": "hi"
+      }
+    },
+    {
+      "ms": 1776,
+      "payload": {
+        "session_id": "c13672ff-a836-49f3-a955-aa21bb9ff0bd",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-stopblock/c13672ff-a836-49f3-a955-aa21bb9ff0bd.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-stopblock",
+        "prompt_id": "6b4f7adc-df93-4504-a4cb-2a0f50943db7",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "211cd1e0-1ecd-4a23-a7e6-2ba16819246f",
+        "message_id": "e833fd50-7839-430f-940a-5a0ce39d594a",
+        "index": 0,
+        "final": true,
+        "delta": "again"
+      }
+    },
+    {
+      "ms": 1779,
+      "payload": {
+        "session_id": "c13672ff-a836-49f3-a955-aa21bb9ff0bd",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-stopblock/c13672ff-a836-49f3-a955-aa21bb9ff0bd.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-stopblock",
+        "prompt_id": "6b4f7adc-df93-4504-a4cb-2a0f50943db7",
+        "permission_mode": "default",
+        "hook_event_name": "Stop",
+        "stop_hook_active": true,
+        "last_assistant_message": "again",
+        "background_tasks": [],
+        "session_crons": []
+      }
+    }
+  ],
+  "registry": [
+    {
+      "ms": -795,
+      "status": "idle"
+    },
+    {
+      "ms": -70,
+      "status": "busy"
+    },
+    {
+      "ms": 1833,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": -194,
+      "key": "enter"
+    }
+  ]
+}

@@ -1,0 +1,689 @@
+{
+  "scenario": "question-single",
+  "opencodeVersion": "2.0.32",
+  "notes": "Question tool, one single-select field (Apple/Banana/Cherry + 'Type your own answer'); Down, Enter. form.replied {q0:'Banana'}.",
+  "frames": [
+    {
+      "t": 1036,
+      "event": {
+        "id": "evt_1554122c6001mKqxnO6OV3ZHAG",
+        "created": 1792431694534,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "slug": "calm-tiger",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1063,
+      "event": {
+        "id": "evt_1554122d4001R1TKzWIPJJGZNW",
+        "created": 1792431694548,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_1554122c30011ZMf75Xb2uuaz0",
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "Use your question tool to ask me one single-select question: which fruit, with options Apple, Banana and Cherry. Then reply with the fruit I picked.",
+              "files": [],
+              "agents": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1063,
+      "event": {
+        "id": "evt_1554122d5001sNfrXD2Mmz2bu0",
+        "created": 1792431694549,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1064,
+      "event": {
+        "id": "evt_1554122d9001fkGAKNE5JBy6QP",
+        "created": 1792431694553,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 1064,
+      "event": {
+        "id": "evt_1554122d90020QxaLB9d53bIhn",
+        "created": 1792431694553,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "inboxID": "msg_1554122c30011ZMf75Xb2uuaz0"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2850,
+      "event": {
+        "id": "evt_1554129d4001xyaY7qVgQNyfXE",
+        "created": 1792431696340,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_1554122de001cBaMqT2qpZco8N",
+          "started": 1792431694561
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 5,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2850,
+      "event": {
+        "id": "evt_1554129d9001ziUnwrYKzg0C3y",
+        "created": 1792431696345,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "assistantMessageID": "msg_1554122de001cBaMqT2qpZco8N",
+          "id": "call_00_6zdb6pdgl6y8wjasuesj2dtw",
+          "name": "question"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 6,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2894,
+      "event": {
+        "id": "evt_155412a03001PtRhqoKItz5Fu1",
+        "created": 1792431696387,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "assistantMessageID": "msg_1554122de001cBaMqT2qpZco8N",
+          "id": "call_00_6zdb6pdgl6y8wjasuesj2dtw",
+          "text": "{\"questions\": [{\"question\": \"Which fruit do you prefer?\", \"header\": \"Favorite fruit\", \"options\": [{\"label\": \"Apple\", \"description\": \"Choose Apple\"}, {\"label\": \"Banana\", \"description\": \"Choose Banana\"}…"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 7,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2894,
+      "event": {
+        "id": "evt_155412a05001vRF71d19d4unGO",
+        "created": 1792431696389,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "assistantMessageID": "msg_1554122de001cBaMqT2qpZco8N",
+          "id": "call_00_6zdb6pdgl6y8wjasuesj2dtw",
+          "input": {
+            "questions": [
+              {
+                "question": "Which fruit do you prefer?",
+                "header": "Favorite fruit",
+                "options": [
+                  {
+                    "label": "Apple",
+                    "description": "Choose Apple"
+                  },
+                  {
+                    "label": "Banana",
+                    "description": "Choose Banana"
+                  },
+                  {
+                    "label": "Cherry",
+                    "description": "Choose Cherry"
+                  }
+                ]
+              }
+            ]
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 8,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2894,
+      "event": {
+        "id": "evt_155412a060016qCJTgqiaxRynx",
+        "created": 1792431696390,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "assistantMessageID": "msg_1554122de001cBaMqT2qpZco8N"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 9,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2894,
+      "event": {
+        "id": "evt_155412a09001qYSF8zOX7zDeEx",
+        "created": 1792431696393,
+        "type": "form.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "form": {
+            "id": "frm_155412a08001E5t4Fw5x36lIKg",
+            "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+            "title": "Questions",
+            "metadata": {
+              "kind": "question",
+              "tool": {
+                "messageID": "msg_1554122de001cBaMqT2qpZco8N",
+                "id": "call_00_6zdb6pdgl6y8wjasuesj2dtw"
+              }
+            },
+            "fields": [
+              {
+                "key": "q0",
+                "title": "Favorite fruit",
+                "description": "Which fruit do you prefer?",
+                "type": "string",
+                "options": [
+                  {
+                    "value": "Apple",
+                    "label": "Apple",
+                    "description": "Choose Apple"
+                  },
+                  {
+                    "value": "Banana",
+                    "label": "Banana",
+                    "description": "Choose Banana"
+                  },
+                  {
+                    "value": "Cherry",
+                    "label": "Cherry",
+                    "description": "Choose Cherry"
+                  }
+                ],
+                "custom": true
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "t": 4046,
+      "event": {
+        "id": "evt_155412e87001DAJngmph9NTp1t",
+        "created": 1792431697543,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "cost": 0,
+          "tokens": {
+            "input": 63,
+            "output": 8,
+            "reasoning": 121,
+            "cache": {
+              "read": 512,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 4046,
+      "event": {
+        "id": "evt_155412e880015LDTlW6iMNWqlh",
+        "created": 1792431697544,
+        "type": "session.renamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "title": "Fruit preference question with three options"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 11,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4787,
+      "event": {
+        "id": "evt_155413162001iKVRpej2DVgtWu",
+        "created": 1792431698274,
+        "type": "form.replied",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "frm_155412a08001E5t4Fw5x36lIKg",
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "answer": {
+            "q0": "Banana"
+          }
+        }
+      }
+    },
+    {
+      "t": 4787,
+      "event": {
+        "id": "evt_155413162002NPIP8OtTWAj8JX",
+        "created": 1792431698274,
+        "type": "session.tool.success",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "assistantMessageID": "msg_1554122de001cBaMqT2qpZco8N",
+          "id": "call_00_6zdb6pdgl6y8wjasuesj2dtw",
+          "content": [
+            {
+              "type": "text",
+              "text": "User has answered your questions: \"Which fruit do you prefer?\"=\"Banana\". You can now continue with the user's answers in mind."
+            }
+          ],
+          "metadata": {
+            "answers": [
+              [
+                "Banana"
+              ]
+            ],
+            "truncated": false
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 12,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 4787,
+      "event": {
+        "id": "evt_155413164001vZRaEUGLczrEWl",
+        "created": 1792431698276,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "assistantMessageID": "msg_1554122de001cBaMqT2qpZco8N",
+          "finish": "tool-calls",
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 39,
+            "output": 101,
+            "reasoning": 0,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 13,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4787,
+      "event": {
+        "id": "evt_155413165001qqB2y2gw5G8wfg",
+        "created": 1792431698277,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "cost": 0,
+          "tokens": {
+            "input": 102,
+            "output": 109,
+            "reasoning": 121,
+            "cache": {
+              "read": 5760,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 6776,
+      "event": {
+        "id": "evt_155413928001BGwYbhWKacjoEO",
+        "created": 1792431700265,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_155413168001w3W4dXQZGWKK0i",
+          "started": 1792431698285
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 14,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 6776,
+      "event": {
+        "id": "evt_155413930001sEX8SGEBadgxRu",
+        "created": 1792431700272,
+        "type": "session.text.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "assistantMessageID": "msg_155413168001w3W4dXQZGWKK0i",
+          "ordinal": 0
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 15,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 6882,
+      "event": {
+        "id": "evt_155413999001jiZMW7T4BWuDQj",
+        "created": 1792431700377,
+        "type": "session.text.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "assistantMessageID": "msg_155413168001w3W4dXQZGWKK0i",
+          "ordinal": 0,
+          "delta": "You picked **Banana**."
+        }
+      }
+    },
+    {
+      "t": 6945,
+      "event": {
+        "id": "evt_1554139d2001M7z0w0C68WN0RM",
+        "created": 1792431700434,
+        "type": "session.text.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "assistantMessageID": "msg_155413168001w3W4dXQZGWKK0i",
+          "ordinal": 0,
+          "text": "You picked **Banana**."
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 16,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 6945,
+      "event": {
+        "id": "evt_1554139d50011P3z253OltuYCT",
+        "created": 1792431700437,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "assistantMessageID": "msg_155413168001w3W4dXQZGWKK0i"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 17,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 6945,
+      "event": {
+        "id": "evt_1554139d60017XJ3WKtQjzvWpv",
+        "created": 1792431700438,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "assistantMessageID": "msg_155413168001w3W4dXQZGWKK0i",
+          "finish": "stop",
+          "rawFinish": "stop",
+          "cost": 0,
+          "tokens": {
+            "input": 180,
+            "output": 7,
+            "reasoning": 0,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 18,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 6945,
+      "event": {
+        "id": "evt_1554139d8001VUKXvlSTmK81zt",
+        "created": 1792431700440,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "cost": 0,
+          "tokens": {
+            "input": 282,
+            "output": 116,
+            "reasoning": 121,
+            "cache": {
+              "read": 11008,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 6945,
+      "event": {
+        "id": "evt_1554139da001UMl54DBPc7Lh6O",
+        "created": 1792431700442,
+        "type": "session.execution.succeeded",
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 19,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 6963,
+      "event": {
+        "id": "evt_1554139ed001K55XVB6Ak85Ppy",
+        "created": 1792431700461,
+        "type": "session.viewed",
+        "data": {
+          "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "idle": 1792431700442
+        },
+        "durable": {
+          "aggregateID": "ses_eaabedd3effel6MgvZ8QF0G5k6",
+          "seq": 20,
+          "version": 1
+        }
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "t": 34,
+      "key": {
+        "text": "Use your question tool to ask me one single-select question: which fruit, with options Apple, Banana and Cherry. Then reply with the fruit I picked."
+      }
+    },
+    {
+      "t": 1024,
+      "key": "Enter"
+    },
+    {
+      "t": 4101,
+      "key": "Down"
+    },
+    {
+      "t": 4773,
+      "key": "Enter"
+    }
+  ],
+  "pluginRoutes": [
+    {
+      "t": 1043,
+      "route": {
+        "type": "session",
+        "sessionID": "ses_eaabedd3effel6MgvZ8QF0G5k6"
+      }
+    }
+  ]
+}

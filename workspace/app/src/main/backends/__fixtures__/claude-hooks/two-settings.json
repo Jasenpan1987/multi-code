@@ -1,0 +1,54 @@
+{
+  "cli": "2.1.291",
+  "scenario": "two-settings",
+  "description": "Two --settings flags, each registering UserPromptSubmit and Stop. One delivery per event arrived, from the second file only (the probe tagged each file's command; tags are not part of the payload). The first file's other hooks (SessionStart, SessionEnd) never fired either: the last --settings replaces the earlier one.",
+  "deliveries": [
+    {
+      "ms": 0,
+      "payload": {
+        "session_id": "7f7e73ad-7352-4b0a-a231-187fd05c95d3",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-twosettings/7f7e73ad-7352-4b0a-a231-187fd05c95d3.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-twosettings",
+        "prompt_id": "e47d0334-9f56-4aeb-a704-e9a74c6bbdd4",
+        "permission_mode": "default",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Reply with just the word hi. Do not use any tools."
+      }
+    },
+    {
+      "ms": 2009,
+      "payload": {
+        "session_id": "7f7e73ad-7352-4b0a-a231-187fd05c95d3",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-twosettings/7f7e73ad-7352-4b0a-a231-187fd05c95d3.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-twosettings",
+        "prompt_id": "e47d0334-9f56-4aeb-a704-e9a74c6bbdd4",
+        "permission_mode": "default",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "last_assistant_message": "hi",
+        "background_tasks": [],
+        "session_crons": []
+      }
+    }
+  ],
+  "registry": [
+    {
+      "ms": -703,
+      "status": "idle"
+    },
+    {
+      "ms": -28,
+      "status": "busy"
+    },
+    {
+      "ms": 2055,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": -98,
+      "key": "enter"
+    }
+  ]
+}

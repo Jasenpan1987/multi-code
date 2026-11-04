@@ -1,0 +1,178 @@
+{
+  "cli": "2.1.291",
+  "scenario": "mcp-permission-approved-always",
+  "description": "The same MCP tool, answered 'Yes, and don't ask again'.",
+  "deliveries": [
+    {
+      "ms": 0,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "d1d7fb1b-326e-403a-9fd8-f4f0bdf05eee",
+        "permission_mode": "default",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Call the mcp__spike__ping tool once, then reply with just the result."
+      }
+    },
+    {
+      "ms": 1124,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "d1d7fb1b-326e-403a-9fd8-f4f0bdf05eee",
+        "permission_mode": "default",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__spike__ping",
+        "tool_input": {},
+        "tool_use_id": "toolu_bdrk_01WxXsuQJWfVg6YtnhAuPgYu",
+        "mcp_server": {
+          "name": "spike",
+          "source": "dynamic"
+        }
+      }
+    },
+    {
+      "ms": 1160,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "d1d7fb1b-326e-403a-9fd8-f4f0bdf05eee",
+        "permission_mode": "default",
+        "hook_event_name": "PermissionRequest",
+        "tool_name": "mcp__spike__ping",
+        "tool_input": {},
+        "permission_suggestions": [
+          {
+            "type": "addRules",
+            "rules": [
+              {
+                "toolName": "mcp__spike__ping"
+              }
+            ],
+            "behavior": "allow",
+            "destination": "localSettings"
+          }
+        ],
+        "mcp_server": {
+          "name": "spike",
+          "source": "dynamic"
+        }
+      }
+    },
+    {
+      "ms": 2256,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "d1d7fb1b-326e-403a-9fd8-f4f0bdf05eee",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "mcp__spike__ping",
+        "tool_input": {},
+        "tool_response": [
+          {
+            "type": "text",
+            "text": "pong"
+          }
+        ],
+        "tool_use_id": "toolu_bdrk_01WxXsuQJWfVg6YtnhAuPgYu",
+        "duration_ms": 22,
+        "mcp_server": {
+          "name": "spike",
+          "source": "dynamic"
+        }
+      }
+    },
+    {
+      "ms": 2303,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "d1d7fb1b-326e-403a-9fd8-f4f0bdf05eee",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolBatch",
+        "tool_calls": [
+          {
+            "tool_name": "mcp__spike__ping",
+            "tool_input": {},
+            "tool_use_id": "toolu_bdrk_01WxXsuQJWfVg6YtnhAuPgYu",
+            "tool_response": [
+              {
+                "type": "text",
+                "text": "pong"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "ms": 4032,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "d1d7fb1b-326e-403a-9fd8-f4f0bdf05eee",
+        "permission_mode": "default",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "last_assistant_message": "pong",
+        "background_tasks": [],
+        "session_crons": []
+      }
+    },
+    {
+      "ms": 4032,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "d1d7fb1b-326e-403a-9fd8-f4f0bdf05eee",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "4948d5c3-5d52-4232-8d53-628557cfa9be",
+        "message_id": "2a4b0c70-dd2f-4488-846a-30453f445128",
+        "index": 0,
+        "final": true,
+        "delta": "pong"
+      }
+    }
+  ],
+  "registry": [
+    {
+      "ms": -643,
+      "status": "idle"
+    },
+    {
+      "ms": -20,
+      "status": "busy"
+    },
+    {
+      "ms": 1140,
+      "status": "waiting",
+      "waitingFor": "permission prompt"
+    },
+    {
+      "ms": 2225,
+      "status": "busy"
+    },
+    {
+      "ms": 4047,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": -42,
+      "key": "enter"
+    },
+    {
+      "ms": 2190,
+      "key": "2 (Yes, and don't ask again for spike \u2014 Ping commands in /priva)"
+    }
+  ]
+}

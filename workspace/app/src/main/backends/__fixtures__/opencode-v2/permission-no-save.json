@@ -1,0 +1,748 @@
+{
+  "scenario": "permission-no-save",
+  "opencodeVersion": "2.0.32",
+  "notes": "A permission with no `save`: the question tool's own permission check passes no save (core/src/tool/plugin/question.ts:64); made to ask with a temporary config rule question->ask. permission.asked has no `save` key at all (absent, not []). Dialog shows only 'Allow once  Reject'. Enter (Allow once); then the question form; digit 2 picked Green and submitted at once.",
+  "frames": [
+    {
+      "t": 1025,
+      "event": {
+        "id": "evt_155408488001PoLWX0xKyMnc7Q",
+        "created": 1792431654024,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "slug": "witty-planet",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1026,
+      "event": {
+        "id": "evt_15540848a001cWcYdyIvL6Im7v",
+        "created": 1792431654026,
+        "type": "project.updated",
+        "data": {
+          "id": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "canonical": "/private/tmp/oc2-spike/projects/scen",
+          "time": {
+            "created": 1792431240537,
+            "updated": 1792431240537,
+            "active": 1792431654026
+          },
+          "sandboxes": []
+        }
+      }
+    },
+    {
+      "t": 1065,
+      "event": {
+        "id": "evt_15540849f001KK17C3h0Yk0VzA",
+        "created": 1792431654047,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_155408484001oJjo4LsKDBoFNt",
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "Use your question tool to ask me one single-select question: which color, with options Red, Green and Blue. Then reply with the color I picked.",
+              "files": [],
+              "agents": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1066,
+      "event": {
+        "id": "evt_1554084a0001A7wRoS5gMw2J6B",
+        "created": 1792431654048,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1066,
+      "event": {
+        "id": "evt_1554084a5001UwUHpDNNFTqK43",
+        "created": 1792431654053,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 1066,
+      "event": {
+        "id": "evt_1554084a700168FEA6mmGpBznS",
+        "created": 1792431654055,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "inboxID": "msg_155408484001oJjo4LsKDBoFNt"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3244,
+      "event": {
+        "id": "evt_155408d330011ZFkLajZ37H8nL",
+        "created": 1792431656243,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "cost": 0,
+          "tokens": {
+            "input": 63,
+            "output": 6,
+            "reasoning": 107,
+            "cache": {
+              "read": 512,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 3244,
+      "event": {
+        "id": "evt_155408d34001hiCuMEDP7f083j",
+        "created": 1792431656244,
+        "type": "session.renamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "title": "Single-select color choice question"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 6,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3741,
+      "event": {
+        "id": "evt_155408f19001l2ki2r1jv7hj93",
+        "created": 1792431656729,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_1554084ad001VWVd2fTLqFtPwk",
+          "started": 1792431654065
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 7,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3741,
+      "event": {
+        "id": "evt_155408f20001jd7ejTm6LFmwMr",
+        "created": 1792431656736,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "assistantMessageID": "msg_1554084ad001VWVd2fTLqFtPwk",
+          "id": "call_00_td07x59k7qn1sz6jjeorvep2",
+          "name": "question"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 8,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3769,
+      "event": {
+        "id": "evt_155408f3c001vaF6j0Ie5r5pOb",
+        "created": 1792431656764,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "assistantMessageID": "msg_1554084ad001VWVd2fTLqFtPwk",
+          "id": "call_00_td07x59k7qn1sz6jjeorvep2",
+          "text": "{\"questions\": [{\"question\": \"Which color do you pick?\", \"header\": \"Color Choice\", \"options\": [{\"label\": \"Red\", \"description\": \"Pick red\"}, {\"label\": \"Green\", \"description\": \"Pick green\"}, {\"label\": \"B…"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 9,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3769,
+      "event": {
+        "id": "evt_155408f3e001TZ95NdW6sLRbpV",
+        "created": 1792431656766,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "assistantMessageID": "msg_1554084ad001VWVd2fTLqFtPwk",
+          "id": "call_00_td07x59k7qn1sz6jjeorvep2",
+          "input": {
+            "questions": [
+              {
+                "question": "Which color do you pick?",
+                "header": "Color Choice",
+                "options": [
+                  {
+                    "label": "Red",
+                    "description": "Pick red"
+                  },
+                  {
+                    "label": "Green",
+                    "description": "Pick green"
+                  },
+                  {
+                    "label": "Blue",
+                    "description": "Pick blue"
+                  }
+                ],
+                "multiple": false
+              }
+            ]
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 10,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3769,
+      "event": {
+        "id": "evt_155408f3f001o3R40zZn8hkfAv",
+        "created": 1792431656767,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "assistantMessageID": "msg_1554084ad001VWVd2fTLqFtPwk"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 11,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3769,
+      "event": {
+        "id": "evt_155408f41002uX4Jf9XJiMfaI2",
+        "created": 1792431656769,
+        "type": "permission.asked",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "per_155408f41001w2adsdPIvHskcm",
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "action": "question",
+          "resources": [
+            "*"
+          ],
+          "source": {
+            "type": "tool",
+            "messageID": "msg_1554084ad001VWVd2fTLqFtPwk",
+            "id": "call_00_td07x59k7qn1sz6jjeorvep2"
+          }
+        }
+      }
+    },
+    {
+      "t": 12461,
+      "event": {
+        "id": "evt_15540b134001dEG3qAs6UFZPn2",
+        "created": 1792431665460,
+        "type": "permission.replied",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "requestID": "per_155408f41001w2adsdPIvHskcm",
+          "reply": "once"
+        }
+      }
+    },
+    {
+      "t": 12461,
+      "event": {
+        "id": "evt_15540b135001pq96uT3aMSuHB7",
+        "created": 1792431665461,
+        "type": "form.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "form": {
+            "id": "frm_15540b134002hFO9n2uxWlQ50s",
+            "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+            "title": "Questions",
+            "metadata": {
+              "kind": "question",
+              "tool": {
+                "messageID": "msg_1554084ad001VWVd2fTLqFtPwk",
+                "id": "call_00_td07x59k7qn1sz6jjeorvep2"
+              }
+            },
+            "fields": [
+              {
+                "key": "q0",
+                "title": "Color Choice",
+                "description": "Which color do you pick?",
+                "type": "string",
+                "options": [
+                  {
+                    "value": "Red",
+                    "label": "Red",
+                    "description": "Pick red"
+                  },
+                  {
+                    "value": "Green",
+                    "label": "Green",
+                    "description": "Pick green"
+                  },
+                  {
+                    "value": "Blue",
+                    "label": "Blue",
+                    "description": "Pick blue"
+                  }
+                ],
+                "custom": true
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "t": 20182,
+      "event": {
+        "id": "evt_15540cf51001ReJ7vQWMplqKXz",
+        "created": 1792431673169,
+        "type": "form.replied",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "frm_15540b134002hFO9n2uxWlQ50s",
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "answer": {
+            "q0": "Green"
+          }
+        }
+      }
+    },
+    {
+      "t": 20182,
+      "event": {
+        "id": "evt_15540cf52001KjX5o72lrD4zYb",
+        "created": 1792431673170,
+        "type": "session.tool.success",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "assistantMessageID": "msg_1554084ad001VWVd2fTLqFtPwk",
+          "id": "call_00_td07x59k7qn1sz6jjeorvep2",
+          "content": [
+            {
+              "type": "text",
+              "text": "User has answered your questions: \"Which color do you pick?\"=\"Green\". You can now continue with the user's answers in mind."
+            }
+          ],
+          "metadata": {
+            "answers": [
+              [
+                "Green"
+              ]
+            ],
+            "truncated": false
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 12,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 20182,
+      "event": {
+        "id": "evt_15540cf53001v88dDMM7xrfXXU",
+        "created": 1792431673171,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "assistantMessageID": "msg_1554084ad001VWVd2fTLqFtPwk",
+          "finish": "tool-calls",
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 39,
+            "output": 103,
+            "reasoning": 0,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 13,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 20182,
+      "event": {
+        "id": "evt_15540cf540013b6CztV3ieRouA",
+        "created": 1792431673172,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "cost": 0,
+          "tokens": {
+            "input": 102,
+            "output": 109,
+            "reasoning": 107,
+            "cache": {
+              "read": 5760,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 21421,
+      "event": {
+        "id": "evt_15540d42e001SrCnGvEJ0IJBSe",
+        "created": 1792431674414,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_15540cf59001GlUkds3geO1RCK",
+          "started": 1792431673181
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 14,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 21421,
+      "event": {
+        "id": "evt_15540d430001QxLTdE3Lvo0zDB",
+        "created": 1792431674416,
+        "type": "session.text.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "assistantMessageID": "msg_15540cf59001GlUkds3geO1RCK",
+          "ordinal": 0
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 15,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 21421,
+      "event": {
+        "id": "evt_15540d432001M8FowMCePWH8AX",
+        "created": 1792431674418,
+        "type": "session.text.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "assistantMessageID": "msg_15540cf59001GlUkds3geO1RCK",
+          "ordinal": 0,
+          "delta": "You picked **Green**."
+        }
+      }
+    },
+    {
+      "t": 21421,
+      "event": {
+        "id": "evt_15540d432002Km2rGkN7LxVFeU",
+        "created": 1792431674418,
+        "type": "session.text.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "assistantMessageID": "msg_15540cf59001GlUkds3geO1RCK",
+          "ordinal": 0,
+          "text": "You picked **Green**."
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 16,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 21421,
+      "event": {
+        "id": "evt_15540d433001G8o8FQmA7NNSnB",
+        "created": 1792431674419,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "assistantMessageID": "msg_15540cf59001GlUkds3geO1RCK"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 17,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 21421,
+      "event": {
+        "id": "evt_15540d434001wL7vo1rkhnxfrq",
+        "created": 1792431674420,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "assistantMessageID": "msg_15540cf59001GlUkds3geO1RCK",
+          "finish": "stop",
+          "rawFinish": "stop",
+          "cost": 0,
+          "tokens": {
+            "input": 181,
+            "output": 6,
+            "reasoning": 0,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 18,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 21422,
+      "event": {
+        "id": "evt_15540d435001LXfMVk96UhbEum",
+        "created": 1792431674421,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "cost": 0,
+          "tokens": {
+            "input": 283,
+            "output": 115,
+            "reasoning": 107,
+            "cache": {
+              "read": 11008,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 21422,
+      "event": {
+        "id": "evt_15540d435002StzLstgPCfF1Ah",
+        "created": 1792431674421,
+        "type": "session.execution.succeeded",
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 19,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 21442,
+      "event": {
+        "id": "evt_15540d44a0012TGotAnC37Gcgn",
+        "created": 1792431674442,
+        "type": "session.viewed",
+        "data": {
+          "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "idle": 1792431674421
+        },
+        "durable": {
+          "aggregateID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3",
+          "seq": 20,
+          "version": 1
+        }
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "t": 80,
+      "key": {
+        "text": "Use your question tool to ask me one single-select question: which color, with options Red, Green and Blue. Then reply with the color I picked."
+      }
+    },
+    {
+      "t": 1011,
+      "key": "Enter"
+    },
+    {
+      "t": 12457,
+      "key": "Enter"
+    },
+    {
+      "t": 20166,
+      "key": "2"
+    }
+  ],
+  "pluginRoutes": [
+    {
+      "t": 1034,
+      "route": {
+        "type": "session",
+        "sessionID": "ses_eaabf7b7dffeWIMbFMtbtBOQt3"
+      }
+    }
+  ]
+}

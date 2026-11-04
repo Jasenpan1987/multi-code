@@ -1,0 +1,302 @@
+{
+  "cli": "2.1.291",
+  "scenario": "subagent",
+  "description": "An Agent call with no run_in_background given (the CLI launches it async), running a 10s Bash call.",
+  "deliveries": [
+    {
+      "ms": 0,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "61aab84c-2efb-4509-ab35-e40ae70fafeb",
+        "permission_mode": "default",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Use the Agent tool to launch one general-purpose subagent whose only job is to run the Bash command `sleep 10` and then reply ok. After it returns, reply with just done."
+      }
+    },
+    {
+      "ms": 1160,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "61aab84c-2efb-4509-ab35-e40ae70fafeb",
+        "permission_mode": "default",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Agent",
+        "tool_input": {
+          "description": "Run sleep command",
+          "prompt": "Run the Bash command `sleep 10` and then reply ok.",
+          "subagent_type": "general-purpose"
+        },
+        "tool_use_id": "toolu_bdrk_01RbUwrABRKVmf4L2nd6ivEc"
+      }
+    },
+    {
+      "ms": 1194,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "61aab84c-2efb-4509-ab35-e40ae70fafeb",
+        "agent_id": "aa0ef642050779cf1",
+        "agent_type": "general-purpose",
+        "hook_event_name": "SubagentStart"
+      }
+    },
+    {
+      "ms": 1194,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "61aab84c-2efb-4509-ab35-e40ae70fafeb",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Agent",
+        "tool_input": {
+          "description": "Run sleep command",
+          "prompt": "Run the Bash command `sleep 10` and then reply ok.",
+          "subagent_type": "general-purpose"
+        },
+        "tool_response": {
+          "isAsync": true,
+          "status": "async_launched",
+          "agentId": "aa0ef642050779cf1",
+          "description": "Run sleep command",
+          "resolvedModel": "au.anthropic.claude-haiku-4-5-20251001-v1:0",
+          "prompt": "Run the Bash command `sleep 10` and then reply ok.",
+          "outputFile": "/private/tmp/claude-501/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068/tasks/aa0ef642050779cf1.output",
+          "canReadOutputFile": true
+        },
+        "tool_use_id": "toolu_bdrk_01RbUwrABRKVmf4L2nd6ivEc",
+        "duration_ms": 5
+      }
+    },
+    {
+      "ms": 1226,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "61aab84c-2efb-4509-ab35-e40ae70fafeb",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolBatch",
+        "tool_calls": [
+          {
+            "tool_name": "Agent",
+            "tool_input": {
+              "subagent_type": "general-purpose",
+              "description": "Run sleep command",
+              "prompt": "Run the Bash command `sleep 10` and then reply ok."
+            },
+            "tool_use_id": "toolu_bdrk_01RbUwrABRKVmf4L2nd6ivEc",
+            "tool_response": [
+              {
+                "type": "text",
+                "text": "Async agent launched successfully. (This tool result is internal metadata \u2014 never quote or paste any part of it, including the agentId below, into a user-facing reply.)\nagentId: aa0ef642050779cf1 (internal ID - do not mention to user. Use SendMessage with to: 'aa0ef642050779cf1', summary: '<5-10 word recap>' to continue this agent.)\nThe agent is working in the background. You will be notified automatically when it completes. You know nothing about its results until that notification arrives \u2014 do not report, assume, or predict them; continue other work or respond to the user in the meantime.\nDo not duplicate this agent's work \u2014 avoid working with the same files or topics it is using.\noutput_file: /private/tmp/claude-501/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068/tasks/aa0ef642050779cf1.output\nDo NOT Read or tail this file via the shell tool \u2014 it is the full subagent JSONL transcript and reading it will overflow your context. If the user asks for progress, say the agent is still running; you'll get a completion notification."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "ms": 2244,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "61aab84c-2efb-4509-ab35-e40ae70fafeb",
+        "permission_mode": "default",
+        "agent_id": "aa0ef642050779cf1",
+        "agent_type": "general-purpose",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "sleep 10",
+          "description": "Sleep for 10 seconds"
+        },
+        "tool_use_id": "toolu_bdrk_01VG2tMH9kXyXHjNu24faoD3"
+      }
+    },
+    {
+      "ms": 2523,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "61aab84c-2efb-4509-ab35-e40ae70fafeb",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "80da905c-8028-453e-a978-4745b0521d41",
+        "message_id": "77e7b7a3-9f0e-4086-8e24-7e00b810a065",
+        "index": 0,
+        "final": true,
+        "delta": "Waiting for the agent to complete."
+      }
+    },
+    {
+      "ms": 2523,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "61aab84c-2efb-4509-ab35-e40ae70fafeb",
+        "permission_mode": "default",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "last_assistant_message": "Waiting for the agent to complete.",
+        "background_tasks": [
+          {
+            "id": "aa0ef642050779cf1",
+            "type": "subagent",
+            "status": "running",
+            "description": "Run sleep command",
+            "agent_type": "general-purpose"
+          }
+        ],
+        "session_crons": []
+      }
+    },
+    {
+      "ms": 12300,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "61aab84c-2efb-4509-ab35-e40ae70fafeb",
+        "permission_mode": "default",
+        "agent_id": "aa0ef642050779cf1",
+        "agent_type": "general-purpose",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "sleep 10",
+          "description": "Sleep for 10 seconds"
+        },
+        "tool_response": {
+          "stdout": "",
+          "stderr": "",
+          "interrupted": false,
+          "isImage": false,
+          "noOutputExpected": false
+        },
+        "tool_use_id": "toolu_bdrk_01VG2tMH9kXyXHjNu24faoD3",
+        "duration_ms": 10023
+      }
+    },
+    {
+      "ms": 12329,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "61aab84c-2efb-4509-ab35-e40ae70fafeb",
+        "permission_mode": "default",
+        "agent_id": "aa0ef642050779cf1",
+        "agent_type": "general-purpose",
+        "hook_event_name": "PostToolBatch",
+        "tool_calls": [
+          {
+            "tool_name": "Bash",
+            "tool_input": {
+              "command": "sleep 10",
+              "description": "Sleep for 10 seconds"
+            },
+            "tool_use_id": "toolu_bdrk_01VG2tMH9kXyXHjNu24faoD3",
+            "tool_response": "(Bash completed with no output)"
+          }
+        ]
+      }
+    },
+    {
+      "ms": 13064,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "61aab84c-2efb-4509-ab35-e40ae70fafeb",
+        "permission_mode": "default",
+        "agent_id": "aa0ef642050779cf1",
+        "agent_type": "general-purpose",
+        "hook_event_name": "SubagentStop",
+        "stop_hook_active": false,
+        "agent_transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068/subagents/agent-aa0ef642050779cf1.jsonl",
+        "last_assistant_message": "OK.",
+        "background_tasks": [
+          {
+            "id": "aa0ef642050779cf1",
+            "type": "subagent",
+            "status": "running",
+            "description": "Run sleep command",
+            "agent_type": "general-purpose"
+          }
+        ],
+        "session_crons": []
+      }
+    },
+    {
+      "ms": 13118,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "af86eade-ee0b-48ee-a082-372025f7e30b",
+        "permission_mode": "default",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "<task-notification>\n<task-id>aa0ef642050779cf1</task-id>\n<tool-use-id>toolu_bdrk_01RbUwrABRKVmf4L2nd6ivEc</tool-use-id>\n<output-file>/private/tmp/claude-501/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068/tasks/aa0ef642050779cf1.output</output-file>\n<status>completed</status>\n<summary>Agent \"Run sleep command\" finished</summary>\n<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>\n<result>OK.</result>\n<usage><subagent_tokens>13641</subagent_tokens><tool_uses>1</tool_uses><duration_ms>11920</duration_ms></usage>\n</task-notification>"
+      }
+    },
+    {
+      "ms": 13791,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "af86eade-ee0b-48ee-a082-372025f7e30b",
+        "permission_mode": "default",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "last_assistant_message": "done",
+        "background_tasks": [],
+        "session_crons": []
+      }
+    },
+    {
+      "ms": 13791,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "af86eade-ee0b-48ee-a082-372025f7e30b",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "2e97f1d5-2668-48f1-8e4f-908073e5fa61",
+        "message_id": "a0104cab-a476-4e79-a5c6-da0e7c5a2278",
+        "index": 0,
+        "final": true,
+        "delta": "done"
+      }
+    }
+  ],
+  "registry": [
+    {
+      "ms": -645,
+      "status": "idle"
+    },
+    {
+      "ms": 26,
+      "status": "busy"
+    },
+    {
+      "ms": 13833,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": -44,
+      "key": "enter"
+    }
+  ]
+}

@@ -1,0 +1,242 @@
+{
+  "cli": "2.1.291",
+  "scenario": "bypass-ask-question",
+  "description": "--dangerously-skip-permissions; AskUserQuestion answered 1.",
+  "deliveries": [
+    {
+      "ms": 0,
+      "payload": {
+        "session_id": "f9f7c955-d1ff-4205-877b-1c0283c49ffe",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-bypass/f9f7c955-d1ff-4205-877b-1c0283c49ffe.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-bypass",
+        "prompt_id": "142ff702-74ac-45a5-b26a-bffc6c0d4520",
+        "permission_mode": "bypassPermissions",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Use the AskUserQuestion tool to ask me whether I prefer tea or coffee, with those two options. After I answer, reply with just noted."
+      }
+    },
+    {
+      "ms": 2547,
+      "payload": {
+        "session_id": "f9f7c955-d1ff-4205-877b-1c0283c49ffe",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-bypass/f9f7c955-d1ff-4205-877b-1c0283c49ffe.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-bypass",
+        "prompt_id": "142ff702-74ac-45a5-b26a-bffc6c0d4520",
+        "permission_mode": "bypassPermissions",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "AskUserQuestion",
+        "tool_input": {
+          "questions": [
+            {
+              "question": "\u4f60\u66f4\u559c\u6b22\u8336\u8fd8\u662f\u5496\u5561\uff1f",
+              "header": "\u996e\u54c1\u504f\u597d",
+              "options": [
+                {
+                  "label": "\u8336",
+                  "description": "\u66f4\u559c\u6b22\u559d\u8336"
+                },
+                {
+                  "label": "\u5496\u5561",
+                  "description": "\u66f4\u559c\u6b22\u559d\u5496\u5561"
+                }
+              ],
+              "multiSelect": false
+            }
+          ]
+        },
+        "tool_use_id": "toolu_bdrk_01Dy5nZtAePy3FoJjJwbzkaN"
+      }
+    },
+    {
+      "ms": 2650,
+      "payload": {
+        "session_id": "f9f7c955-d1ff-4205-877b-1c0283c49ffe",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-bypass/f9f7c955-d1ff-4205-877b-1c0283c49ffe.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-bypass",
+        "prompt_id": "142ff702-74ac-45a5-b26a-bffc6c0d4520",
+        "permission_mode": "bypassPermissions",
+        "hook_event_name": "PermissionRequest",
+        "tool_name": "AskUserQuestion",
+        "tool_input": {
+          "questions": [
+            {
+              "question": "\u4f60\u66f4\u559c\u6b22\u8336\u8fd8\u662f\u5496\u5561\uff1f",
+              "header": "\u996e\u54c1\u504f\u597d",
+              "options": [
+                {
+                  "label": "\u8336",
+                  "description": "\u66f4\u559c\u6b22\u559d\u8336"
+                },
+                {
+                  "label": "\u5496\u5561",
+                  "description": "\u66f4\u559c\u6b22\u559d\u5496\u5561"
+                }
+              ],
+              "multiSelect": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "ms": 4257,
+      "payload": {
+        "session_id": "f9f7c955-d1ff-4205-877b-1c0283c49ffe",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-bypass/f9f7c955-d1ff-4205-877b-1c0283c49ffe.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-bypass",
+        "prompt_id": "142ff702-74ac-45a5-b26a-bffc6c0d4520",
+        "permission_mode": "bypassPermissions",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "AskUserQuestion",
+        "tool_input": {
+          "questions": [
+            {
+              "question": "\u4f60\u66f4\u559c\u6b22\u8336\u8fd8\u662f\u5496\u5561\uff1f",
+              "header": "\u996e\u54c1\u504f\u597d",
+              "options": [
+                {
+                  "label": "\u8336",
+                  "description": "\u66f4\u559c\u6b22\u559d\u8336"
+                },
+                {
+                  "label": "\u5496\u5561",
+                  "description": "\u66f4\u559c\u6b22\u559d\u5496\u5561"
+                }
+              ],
+              "multiSelect": false
+            }
+          ],
+          "answers": {
+            "\u4f60\u66f4\u559c\u6b22\u8336\u8fd8\u662f\u5496\u5561\uff1f": "\u8336"
+          },
+          "annotations": {}
+        },
+        "tool_response": {
+          "questions": [
+            {
+              "question": "\u4f60\u66f4\u559c\u6b22\u8336\u8fd8\u662f\u5496\u5561\uff1f",
+              "header": "\u996e\u54c1\u504f\u597d",
+              "options": [
+                {
+                  "label": "\u8336",
+                  "description": "\u66f4\u559c\u6b22\u559d\u8336"
+                },
+                {
+                  "label": "\u5496\u5561",
+                  "description": "\u66f4\u559c\u6b22\u559d\u5496\u5561"
+                }
+              ],
+              "multiSelect": false
+            }
+          ],
+          "answers": {
+            "\u4f60\u66f4\u559c\u6b22\u8336\u8fd8\u662f\u5496\u5561\uff1f": "\u8336"
+          },
+          "annotations": {}
+        },
+        "tool_use_id": "toolu_bdrk_01Dy5nZtAePy3FoJjJwbzkaN",
+        "duration_ms": 1
+      }
+    },
+    {
+      "ms": 4430,
+      "payload": {
+        "session_id": "f9f7c955-d1ff-4205-877b-1c0283c49ffe",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-bypass/f9f7c955-d1ff-4205-877b-1c0283c49ffe.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-bypass",
+        "prompt_id": "142ff702-74ac-45a5-b26a-bffc6c0d4520",
+        "permission_mode": "bypassPermissions",
+        "hook_event_name": "PostToolBatch",
+        "tool_calls": [
+          {
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+              "questions": [
+                {
+                  "question": "\u4f60\u66f4\u559c\u6b22\u8336\u8fd8\u662f\u5496\u5561\uff1f",
+                  "header": "\u996e\u54c1\u504f\u597d",
+                  "options": [
+                    {
+                      "label": "\u8336",
+                      "description": "\u66f4\u559c\u6b22\u559d\u8336"
+                    },
+                    {
+                      "label": "\u5496\u5561",
+                      "description": "\u66f4\u559c\u6b22\u559d\u5496\u5561"
+                    }
+                  ],
+                  "multiSelect": false
+                }
+              ]
+            },
+            "tool_use_id": "toolu_bdrk_01Dy5nZtAePy3FoJjJwbzkaN",
+            "tool_response": "Your questions have been answered: \"\u4f60\u66f4\u559c\u6b22\u8336\u8fd8\u662f\u5496\u5561\uff1f\"=\"\u8336\". You can now continue with these answers in mind."
+          }
+        ]
+      }
+    },
+    {
+      "ms": 5202,
+      "payload": {
+        "session_id": "f9f7c955-d1ff-4205-877b-1c0283c49ffe",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-bypass/f9f7c955-d1ff-4205-877b-1c0283c49ffe.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-bypass",
+        "prompt_id": "142ff702-74ac-45a5-b26a-bffc6c0d4520",
+        "permission_mode": "bypassPermissions",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "last_assistant_message": "\u5df2\u8bb0\u5f55\u3002",
+        "background_tasks": [],
+        "session_crons": []
+      }
+    },
+    {
+      "ms": 5204,
+      "payload": {
+        "session_id": "f9f7c955-d1ff-4205-877b-1c0283c49ffe",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-bypass/f9f7c955-d1ff-4205-877b-1c0283c49ffe.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-bypass",
+        "prompt_id": "142ff702-74ac-45a5-b26a-bffc6c0d4520",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "d8944d0b-f428-43fd-809e-6e6f4a666b4a",
+        "message_id": "869594d8-b88a-4899-a4f6-fb444a22046a",
+        "index": 0,
+        "final": true,
+        "delta": "\u5df2\u8bb0\u5f55\u3002"
+      }
+    }
+  ],
+  "registry": [
+    {
+      "ms": -1105,
+      "status": "idle"
+    },
+    {
+      "ms": 56,
+      "status": "busy"
+    },
+    {
+      "ms": 2656,
+      "status": "waiting",
+      "waitingFor": "input needed"
+    },
+    {
+      "ms": 4054,
+      "status": "busy"
+    },
+    {
+      "ms": 5259,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": -497,
+      "key": "enter"
+    },
+    {
+      "ms": 3705,
+      "key": "1 (tea)"
+    }
+  ]
+}

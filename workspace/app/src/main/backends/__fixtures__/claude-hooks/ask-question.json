@@ -1,0 +1,242 @@
+{
+  "cli": "2.1.291",
+  "scenario": "ask-question",
+  "description": "AskUserQuestion with two options, answered 1.",
+  "deliveries": [
+    {
+      "ms": 0,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "1df9dc33-154d-4e39-900a-5d4731c99f18",
+        "permission_mode": "default",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Use the AskUserQuestion tool to ask me whether I prefer tea or coffee, with those two options. After I answer, reply with just noted."
+      }
+    },
+    {
+      "ms": 2085,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "1df9dc33-154d-4e39-900a-5d4731c99f18",
+        "permission_mode": "default",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "AskUserQuestion",
+        "tool_input": {
+          "questions": [
+            {
+              "question": "Do you prefer tea or coffee?",
+              "header": "Beverage",
+              "options": [
+                {
+                  "label": "Tea",
+                  "description": "Hot or cold leaf-based beverage"
+                },
+                {
+                  "label": "Coffee",
+                  "description": "Hot or cold bean-based beverage"
+                }
+              ],
+              "multiSelect": false
+            }
+          ]
+        },
+        "tool_use_id": "toolu_bdrk_01EHE7Mpsz3Kigb2RhuBiKRk"
+      }
+    },
+    {
+      "ms": 2118,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "1df9dc33-154d-4e39-900a-5d4731c99f18",
+        "permission_mode": "default",
+        "hook_event_name": "PermissionRequest",
+        "tool_name": "AskUserQuestion",
+        "tool_input": {
+          "questions": [
+            {
+              "question": "Do you prefer tea or coffee?",
+              "header": "Beverage",
+              "options": [
+                {
+                  "label": "Tea",
+                  "description": "Hot or cold leaf-based beverage"
+                },
+                {
+                  "label": "Coffee",
+                  "description": "Hot or cold bean-based beverage"
+                }
+              ],
+              "multiSelect": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "ms": 3184,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "1df9dc33-154d-4e39-900a-5d4731c99f18",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "AskUserQuestion",
+        "tool_input": {
+          "questions": [
+            {
+              "question": "Do you prefer tea or coffee?",
+              "header": "Beverage",
+              "options": [
+                {
+                  "label": "Tea",
+                  "description": "Hot or cold leaf-based beverage"
+                },
+                {
+                  "label": "Coffee",
+                  "description": "Hot or cold bean-based beverage"
+                }
+              ],
+              "multiSelect": false
+            }
+          ],
+          "answers": {
+            "Do you prefer tea or coffee?": "Tea"
+          },
+          "annotations": {}
+        },
+        "tool_response": {
+          "questions": [
+            {
+              "question": "Do you prefer tea or coffee?",
+              "header": "Beverage",
+              "options": [
+                {
+                  "label": "Tea",
+                  "description": "Hot or cold leaf-based beverage"
+                },
+                {
+                  "label": "Coffee",
+                  "description": "Hot or cold bean-based beverage"
+                }
+              ],
+              "multiSelect": false
+            }
+          ],
+          "answers": {
+            "Do you prefer tea or coffee?": "Tea"
+          },
+          "annotations": {}
+        },
+        "tool_use_id": "toolu_bdrk_01EHE7Mpsz3Kigb2RhuBiKRk",
+        "duration_ms": 1
+      }
+    },
+    {
+      "ms": 3219,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "1df9dc33-154d-4e39-900a-5d4731c99f18",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolBatch",
+        "tool_calls": [
+          {
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+              "questions": [
+                {
+                  "question": "Do you prefer tea or coffee?",
+                  "header": "Beverage",
+                  "options": [
+                    {
+                      "label": "Tea",
+                      "description": "Hot or cold leaf-based beverage"
+                    },
+                    {
+                      "label": "Coffee",
+                      "description": "Hot or cold bean-based beverage"
+                    }
+                  ],
+                  "multiSelect": false
+                }
+              ]
+            },
+            "tool_use_id": "toolu_bdrk_01EHE7Mpsz3Kigb2RhuBiKRk",
+            "tool_response": "Your questions have been answered: \"Do you prefer tea or coffee?\"=\"Tea\". You can now continue with these answers in mind."
+          }
+        ]
+      }
+    },
+    {
+      "ms": 3979,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "1df9dc33-154d-4e39-900a-5d4731c99f18",
+        "permission_mode": "default",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "last_assistant_message": "noted",
+        "background_tasks": [],
+        "session_crons": []
+      }
+    },
+    {
+      "ms": 3979,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "1df9dc33-154d-4e39-900a-5d4731c99f18",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "8f6893ef-4d30-4bb2-aac2-e64ee9110e48",
+        "message_id": "7391619a-7ece-40f9-8b3d-b04731514e6a",
+        "index": 0,
+        "final": true,
+        "delta": "noted"
+      }
+    }
+  ],
+  "registry": [
+    {
+      "ms": -649,
+      "status": "idle"
+    },
+    {
+      "ms": 4,
+      "status": "busy"
+    },
+    {
+      "ms": 2103,
+      "status": "waiting",
+      "waitingFor": "input needed"
+    },
+    {
+      "ms": 3187,
+      "status": "busy"
+    },
+    {
+      "ms": 3994,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": -48,
+      "key": "enter"
+    },
+    {
+      "ms": 3150,
+      "key": "1 (tea)"
+    }
+  ]
+}

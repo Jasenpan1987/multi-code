@@ -1,0 +1,557 @@
+# Multi-Code
+
+> [中文文档](./README.zh-CN.md)
+
+A desktop application for managing multiple terminal-based coding-agent sessions from a single interface. It supports two backends — **Claude Code** and **OpenCode** — and you can mix both. Each agent session appears as an entry in a sidebar, with full terminal fidelity and notification support.
+
+**Zero residue:** Multi-Code spawns the real `claude` / `opencode` CLI directly and never writes into their config or session directories. Uninstalling the app leaves no trace in `~/.claude/`, `~/.config/opencode/`, or your projects. It only keeps a few small files of its own, in its own data folder (see [Data persistence](#data-persistence)).
+
+## Why
+
+When working with multiple coding-agent sessions across different projects simultaneously, you run into context contamination and missed notifications. Multi-Code solves this by giving each session its own isolated terminal view while providing unified notification management — regardless of whether the session is Claude Code or OpenCode. And when you step away from the screen, a **secretary** tells you out loud what each session did or is asking, and takes your answer in plain words (see [Voice Secretary](#voice-secretary-1)).
+
+## Features
+
+### Core
+- **Multi-Backend** — Each instance runs either **Claude Code** or **OpenCode**. Pick the backend when creating an instance; mix both freely, even in the same project directory
+- **Instance Management** — Spawn, restart, and remove agent sessions per project directory
+- **New project or clone** — The **+ New** dialog has two modes. **Open folder** takes a folder that exists; the folder picker's **New Folder** button makes one for a new project (Multi-Code puts nothing in it). **Clone from Git** takes a Git link (https, SSH `git@…`, or a GitHub page), a parent folder and an optional folder name (empty means the repo's name, as with `git clone`), shows git's progress with a Cancel button, then starts the session in the clone. git runs with your login-shell environment, so your SSH key and git settings apply, and it never prompts: a login it can't do fails with git's own words. A folder already there is never written to (**Open it** starts a session in it instead), and Cancel, a failure or quitting removes only the folder this clone made
+- **Full Terminal Fidelity** — Real PTY via node-pty, rendered in xterm.js. No chat abstraction, no message parsing
+- **Session Notifications** — Knows when an agent has finished or is waiting on you (Claude reports it through hooks Multi-Code passes at launch; OpenCode 2 through its own background service's event stream); plays audio, shakes the contact's avatar, and counts it on the contact's red badge and the macOS Dock icon
+- **Context usage at a glance** — Each contact row shows how full that session's context window is, as a percentage (one decimal below 10%, as in Claude Code's own status line), green up to half full, then through yellow to red. Hover for the exact token count, the model, and when it was measured. Where the window size can't be established reliably, the row shows the raw token count instead of guessing a percentage. Stopped sessions show their last known usage too
+- **Follows `/clear`, `/new` and `/compact`** — When a running CLI moves to another session (`/clear`, `/new`, and for OpenCode also `/sessions` or one of its tabs), Multi-Code follows it, so context usage, notifications, and the phone keep tracking the live session. While OpenCode sits on its home screen after `/new`, the row shows no figure. After a compaction the row shows Claude Code's own figure for the rebuilt window, or for OpenCode nothing until its next reply, never the size before
+- **OpenCode's own tabs** — OpenCode 2's tab bar shows inside Multi-Code as it does in a terminal, following your own `cli.json`. Click a tab to switch: `Ctrl+Tab` doesn't reach OpenCode in Multi-Code's terminal. OpenCode keeps tabs per project directory, so two OpenCode contacts on one project see each other's sessions as tabs; open the other contact's tab and both terminals show that session, and both alert for it
+- **Persistence** — Instance list (including each instance's backend) saved to disk, survives app restart
+- **Drag to reorder** — Drag contacts up and down the sidebar; the order is saved and survives a restart
+- **Rename and Duplicate** — Right-click a contact to rename it in the list (blank goes back to the folder name), or to duplicate it: a second contact on the same project, in a fresh session, right below the original. Each contact keeps and resumes its own session
+- **Switch with `Cmd+1`…`Cmd+9`** — Hold `Cmd` and the first nine contacts in the list show their digit; `Cmd` plus the digit switches to that contact and puts the cursor in its terminal
+- **Next unread with `Option+Shift+↓`** — `Option+Shift+↓` switches to the next contact with unread alerts, looking down the list from the one shown and round to the top; `Option+Shift+↑` looks up (Slack's and Discord's keys). As with `Cmd+1`…`Cmd+9`, the cursor goes into its terminal and the session you leave keeps its badge. In the Compose Box the keys keep their usual text-selection meaning
+- **Lands on the conclusion** — When a turn finishes, the terminal shows its conclusion (what the agent said after its last tool call) from the first line, so you start reading there and scroll up yourself for the steps. A session out of sight when it finished jumps when you next switch to it; one you're reading higher up stays put, and a conclusion already on screen doesn't move. For Claude Code this needs its classic renderer (`"tui": "default"` in `~/.claude/settings.json`); its fullscreen renderer scrolls itself and is left alone. OpenCode is moved with its own "previous message" command, on two keys Multi-Code binds only in the terminals it starts (Cmd+Ctrl+Option+Shift+F11/F12, which no keyboard can send there). Terminals keep 5,000 lines of scrollback
+- **Compose Box** — `Cmd+L` summons an editor over the terminal: multi-line input, mouse editing, `Enter` to send / `Shift+Enter` for a newline, and image paste (with a thumbnail preview) sent as an `@<path>` attachment. For long messages the folded TUI input makes awkward. Works for both backends
+- **Drop files from Finder** — Drag files from Finder onto any part of the window to copy them into the selected contact's project, without opening VS Code. The first drop in a project asks for its default folder (it can be outside the project); every later drop asks "Put 2 files in multi-code?" and shows the folder: **Put here** (`Enter`), **Somewhere else…** for this drop only, or **Change default path…**. Files are copied, never moved or overwritten (a name already there becomes `report 2.docx`, as in Finder), and a short message shows where each one went. Nothing is typed into the session. One drop takes files only, at most 10 and 1 GB in total; past that, or with a folder in it, nothing is copied and the message says to use Finder. Each project keeps its own default folder
+- **Side-by-side diff** — Open any changed file from the Git section in a movable, resizable diff window. Select lines and hit **Ask agent** to drop an `@path:start-end` reference into the Compose Box
+- **Three-Column Layout** — Contact list | terminal | toolbox, with a draggable splitter between terminal and toolbox
+
+### Toolbox (per-instance utility panel)
+- **Git section** — Current branch, file counts (new / modified / staged), remote ahead/behind, and a file list where each row has **View** (side-by-side diff), **Go To** (open in VS Code), and for Markdown files **MD** (preview). Renames show as renames. Polls every 5s while the section is expanded
+- **Quick Actions** — One-click buttons for common operations:
+  - **Go to Code Base** — Open the project in VS Code
+  - **Show Cost / Clear / Compact** — Auto-type `/cost`, `/clear`, `/compact` into the terminal (Show Cost is disabled for OpenCode, which has no inline cost command; its `/stats` page shows usage)
+  - **Resume Elsewhere** — Copy the backend's resume command to clipboard for handoff to a standalone terminal (`claude --resume <id>` or `opencode -s <id>`)
+  - **Rename Session** — Give the current session a name, using each backend's own `/rename`
+- **Terminal section** — Embedded real shell (your default `$SHELL`) running in the project's directory. Persists in background across collapses and instance switches
+- **View section** — Render a Markdown file inline: paste a `.md` path (or click a `.md` path in the terminal output, or the "View" affordance on a changed `.md` in the Git section). Supports GitHub-flavored Markdown, math (KaTeX), Mermaid diagrams, and local/remote images
+- **Phone section** — Turn the phone link on, see what it still needs (Tailscale, HTTPS, Push) and how to fix it, pair a phone, and send a test notification to or revoke each paired phone (see [Phone Link](#phone-link) below)
+- **Secretary section** — The Secretary Mode switch and the speech server settings (see [Voice Secretary](#voice-secretary-1) below)
+
+### Phone Link
+- **A phone app on your Home Screen** — The desktop serves a web app to your iPhone over HTTPS. Add it to the Home Screen and it opens like an app, with its own icon. Nothing to install from the App Store
+- **Every session at a glance** — One list grouped by state: Needs you, Working, Finished, Idle. Each row says what the dialog asks, the tool the agent is on, the first sentence of its conclusion, or the last thing it said
+- **Read a session like a chat** — Your messages as bubbles, the agent's text as Markdown. A finished turn's tool calls fold into one line ("12 tools · 6 read · 3 edited · 2 commands"); tap it for one line per tool. The conclusion is always shown, and opening a finished session lands on it
+- **Reply, answer, stop** — Type a reply; only Send sends, so a Chinese IME's Return never does. Answer every dialog in full: a permission with the CLI's own options and a reason for No, every question of a question box (multi-select included), a plan with "tell Claude what to change". Stop a running turn, as Esc does at the desk
+- **Slash commands from the phone** — Send `/compact`, `/model` or any other command as a message; the command and the CLI's reply show as a grey line ("/token · Unknown command: /token"). After `/new` or `/clear` the chat starts afresh on the new session
+- **Read on one, read on both** — Open a session on the phone and its red dot on the desk goes out (a session the phone is watching doesn't light one); read it at the desk and it stops being Finished on the phone
+- **Opens with no connection** — It shows what it had last, with its age, and says what is out of reach: the phone's network, your Mac, or Multi-Code on it. A reply typed offline waits on the phone and is sent once when the Mac is back
+- **Notifications** — A push every time a session finishes or needs you, with the app closed and the phone locked. A newer one replaces the older one for the same session, the icon's badge counts the sessions that need you, and tapping one opens that session. A phone with the app open gets none: it shows the change itself
+- **Terminal fallback** — The real terminal at the Mac's width, with a key row (Esc, Tab, Shift+Tab, arrows, Space, Return, Ctrl+C), for anything the chat can't show
+- **Tailnet only, no relay** — Reachable only inside your [Tailscale](https://tailscale.com) tailnet, through `tailscale serve`; Multi-Code's port listens on this Mac only. Notifications go from your Mac straight to Apple's push service, encrypted to the phone
+- **End-to-end encrypted** — NaCl box (Curve25519 + XSalsa20-Poly1305) inside the HTTPS connection. Your phone pins the desktop's public key at pairing, so nothing at that address can impersonate it
+- **Revocable** — Each paired phone has its own token; revoking one disconnects it at once and stops its notifications
+
+### Voice Secretary
+- **A brief, not a readout** — When a session finishes or needs you, a secretary retells what happened in its own words: what was asked, what was done, whether it worked. For a dialog, it says what the operation does and why, then asks the question
+- **Hear it without looking** — With Secretary Mode on, the session on screen plays its brief the moment it has news. Any other session plays its brief when you click its red dot, so two sessions never talk over each other
+- **Answer in words** — A card for a dialog has its own reply box. Type or dictate "yes", "no, do X instead" or "always", and the secretary presses the right option. A reply it can't read for sure gets a question back, and nothing is pressed
+- **Your language** — Each brief follows the language of your latest message in that session: English, or Chinese with English technical terms kept as they are
+- **Voice optional** — The voice comes from a speech server you point it at. With none, or one that is down, the card shows the brief as text and nothing else changes
+- **Both backends** — Claude Code and OpenCode sessions both get a secretary
+
+### Visual / UX
+- **Compact layout** — Dense sidebar, small avatars, and blue gradient chrome, so many sessions fit on one screen
+- **Avatars that show what an agent is doing** — Each contact's avatar is its backend's mascot: Claude Code's Clawd, or OpenCode's mark. Grey while stopped, lit while running, moving while a turn runs (Clawd walks, OpenCode's block jumps), and shaking in short bursts while the contact has unread alerts
+- **Themes** — Light, dark, and sepia, switched from the top-right toggle
+- **Backend at a glance** — Claude Code instances show Clawd and blue window chrome; OpenCode instances show OpenCode's mark and green chrome. The header also names the backend
+- **Long names in a bubble** — A name too long for the sidebar shows in full in a bubble beside its row when you hover it
+- **Fold any pane** — The small arrow tabs on the pane edges fold the session list, the terminal or the toolbox to a thin strip; click the strip to bring it back. Fold the terminal and the toolbox fills the window, for reading a Markdown file at full width
+- **Version badge** — The current build version shows in the top-right of the window (next to the theme toggle), so you can always tell which build is running. A dev build adds a **DEV** chip and amber stripes across the titlebar, and an orange **DEV** sash across its Dock icon, so it can't be mistaken for the installed app
+- **Mac-style shortcuts** — In the agent terminal, `Cmd+Backspace` clears the input line and `Cmd+Left` / `Cmd+Right` jump to its start / end. `Cmd+R` is disabled so it can't reload the window by accident
+- **Links open in your browser** — A link clicked in a terminal, a plain URL or a terminal hyperlink, opens in your default browser rather than in a Multi-Code window. Only web and mail links open. A link ends where Chinese, Japanese or Korean text or full-width punctuation starts, so `…/a.html。下一句` opens `…/a.html`
+- **Dock count** — The macOS Dock icon shows the total of unread alerts across all sessions, chat-app style. Only the installed app shows it; a dev run never does
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Desktop | Electron 35 |
+| Language | TypeScript (strict, ES2024, ESM) |
+| Frontend | React 19 |
+| Terminal | xterm.js 5.5 + FitAddon |
+| PTY | node-pty 1.0 |
+| Bundler | rspack 1.3 |
+| Lint | oxlint + eslint |
+| Test | vitest |
+| Package Manager | pnpm (workspace monorepo) |
+
+## Project Structure
+
+```
+multi-code/
+├── workspace/
+│   └── app/
+│       ├── src/
+│       │   ├── main/           # Electron main process
+│       │   │   ├── index.ts          # Entry point, window creation, dock icon, mdimg:// protocol
+│       │   │   ├── dev-icon.ts       # Paints the DEV sash on a dev run's Dock icon
+│       │   │   ├── process-manager.ts # Spawns & manages agent CLI processes (backend-agnostic)
+│       │   │   ├── backends/          # Backend abstraction: claude.ts, opencode.ts, registry
+│       │   │   ├── run-state.ts       # Run state per instance (starting / idle / busy / blocked)
+│       │   │   ├── alert-server/      # Local /alert endpoint the agents report their state to, and its spawn files
+│       │   │   ├── remote/            # Phone Link: WebSocket server, crypto, paired devices, Tailscale checks, Web Push
+│       │   │   ├── secretary/         # Voice secretary: brief writer, speech client, reply interpreter
+│       │   │   ├── shell-manager.ts  # Spawns & manages shell PTYs (toolbox Terminal)
+│       │   │   ├── file-drop.ts      # Copies files dropped from Finder, Finder-style names, never overwrites
+│       │   │   ├── new-project.ts    # New dialog: checks a typed folder, runs git clone, removes only the folder it made
+│       │   │   ├── git-status.ts     # Git status reader (used by toolbox)
+│       │   │   ├── git-diff.ts       # Reads a file's diff as aligned old/new rows
+│       │   │   ├── ipc-handlers.ts    # IPC endpoint registration
+│       │   │   ├── preload.ts         # Context bridge (electronAPI)
+│       │   │   ├── settings-store.ts  # settings.json (theme, phone link, secretary, drop folders) and the speech key
+│       │   │   └── store.ts           # contacts.json (in Electron's userData folder)
+│       │   ├── renderer/       # React UI
+│       │   │   ├── App.tsx
+│       │   │   ├── components/       # ContactList, TerminalView, Toolbox + sections, DiffWindow, etc.
+│       │   │   ├── hooks/            # useNotifications, useTheme
+│       │   │   ├── audio/            # Web Audio notification sounds
+│       │   │   ├── assets/           # Icons (gaming.png), sound files
+│       │   │   └── styles/           # Global CSS
+│       │   ├── renderer-mobile/ # Phone Link web client (served to the phone)
+│       │   └── shared/         # Shared TypeScript types, the Git link parser (gitUrl.ts)
+│       ├── package.json
+│       └── rspack.renderer.config.ts
+├── docs/                       # Business docs, specs, knowledge base
+├── package.json                # Root workspace config
+├── pnpm-workspace.yaml
+└── tsconfig.json
+```
+
+## Installing the .dmg (end users)
+
+> Apple Silicon Macs only (M1/M2/M3/M4). Intel Macs are not supported.
+
+You will receive a `Multi-Code-0.1.0-arm64.dmg` file directly (e.g. via Slack/Drive/AirDrop). Follow the steps below. The `0.1.0` in the filename here is just an example; your file carries whatever version you were sent.
+
+### Prerequisite: a backend CLI
+
+Multi-Code drives real agent CLIs — install **at least one** backend before launching. You only need the CLI for the backend(s) you actually plan to use; neither is mandatory if you only want the other. The one exception is the voice secretary: it always runs `claude`, so it needs the Claude Code CLI even if all your sessions are OpenCode.
+
+**Claude Code CLI** (for Claude Code instances):
+
+```bash
+curl -fsSL https://claude.ai/install.sh | sh
+claude --version   # verify
+```
+
+**OpenCode CLI** (optional — only for OpenCode instances). Multi-Code needs **OpenCode 2**; 1.x is no longer supported. The same command upgrades a 1.x install in place, and your sessions carry over:
+
+```bash
+curl -fsSL https://opencode.ai/v2/install | bash
+opencode --version   # verify: opencode v2.x
+```
+
+If the relevant command prints a version number, you're good. If you pick a backend in the app whose CLI isn't installed, that instance simply comes up OFFLINE.
+
+### Step 1 — Install the app
+
+1. Double-click the `Multi-Code-0.1.0-arm64.dmg` file you received
+2. In the disk window that opens, drag the **Multi-Code** icon into the **Applications** folder
+3. Eject the mounted disk (right-click → Eject, or drag it to the Trash)
+
+### Step 2 — Clear the quarantine flag (required, do once)
+
+This app is not signed with an Apple Developer certificate, so macOS Gatekeeper will block it from running by default. Run this command once in Terminal to remove the quarantine flag:
+
+```bash
+xattr -cr /Applications/Multi-Code.app
+```
+
+### Step 3 — Launch
+
+Open Multi-Code from Launchpad or the Applications folder. From now on, double-click works as normal — you don't need to repeat Step 2.
+
+### Troubleshooting
+
+**"Multi-Code can't be opened" / nothing happens on double-click**
+You skipped Step 2. Run the `xattr` command above and try again.
+
+**Created an instance but the chat window says OFFLINE**
+The backend's CLI isn't on your PATH. Verify with `claude --version` (or `opencode --version` for an OpenCode instance). If that fails, reinstall that CLI (see Prerequisite above).
+
+**Upgrading to a new version**
+Drag the new `Multi-Code.app` into Applications (replace the old one), then run `xattr -cr /Applications/Multi-Code.app` again before launching.
+
+---
+
+## Development (run from source)
+
+### Prerequisites
+
+- Node.js >= 20
+- pnpm >= 9
+- At least one backend CLI in PATH: Claude Code (`claude`) and/or OpenCode 2 (`opencode`)
+
+### Install & Run
+
+```bash
+pnpm install
+pnpm start
+```
+
+### Scripts
+
+```bash
+pnpm start        # Build and launch the app
+pnpm build        # Build renderer + main process
+pnpm lint         # Run oxlint + eslint
+pnpm lint:fix     # Auto-fix lint issues
+pnpm type         # Type check without emit
+pnpm test         # Run vitest
+pnpm run pack     # Package the .app only (directory output; for testing, not a release)
+pnpm dist         # Build the installer (.dmg in workspace/app/release/)
+pnpm harness      # Phone dev harness: the phone app against scripted sessions
+pnpm harness:shot # Screenshot a phone screen at iPhone size (Playwright WebKit)
+```
+
+## Usage Guide
+
+Multi-Code positions itself as a **lightweight agent orchestration hub**: run multiple Claude Code / OpenCode sessions in parallel, watch them at a glance, send quick commands. When a session needs deep "edit code while watching the AI" work, hand it off to an IDE-integrated or standalone terminal with one click.
+
+### Creating an instance
+
+1. Click the **"+ New"** button at the bottom of the left sidebar
+2. Choose a **backend** — **Claude Code** or **OpenCode**. The picker defaults to whichever you used last. If you select OpenCode and its CLI isn't on your PATH, or is a 1.x version, an inline warning appears with what to do (you can still create the instance; a 1.x one won't start until upgraded)
+3. Choose how to get the project folder. The dialog opens in the mode you used last:
+   - **Open folder**: select a project directory with Browse, or type a path (`~` is your home folder). For a new project, press **New Folder** in the Browse picker. A path that doesn't exist is refused
+   - **Clone from Git**: paste a Git link, pick **Clone into** (it starts at the folder you cloned into last), and optionally a **Folder name**. Press **Clone** and wait in the dialog: git's progress shows, and **Cancel clone** stops it and removes the half-made folder. If the target already exists, **Open it** starts a session in it instead
+4. Optionally fill in an alias (the session's name in the contact list, not the folder's)
+5. Click Create (or wait for the clone) — the app spawns the chosen CLI in that directory (`claude` or `opencode`), resuming a prior session if one exists. The instance's avatar is **Clawd for Claude Code, OpenCode's mark for OpenCode**.
+
+> The same directory can host both a Claude Code and an OpenCode instance at once — they run independently. Creating a duplicate of the *same* backend in the same directory still warns you (as before).
+
+### Main layout (three columns)
+
+```
+┌──────────────┬─────────────────────┬─────────────────────┐
+│ Contact List │ Terminal (agent)    │ Toolbox             │
+│              │                     │  ▾ Git              │
+│  + New       │                     │  ▸ Quick Actions    │
+│              │                     │  ▸ Terminal         │
+│              │                     │  ▸ View             │
+│              │                     │  ▸ Phone            │
+│              │                     │  ▸ Secretary        │
+└──────────────┴─────────────────────┴─────────────────────┘
+```
+
+- **Left** — Instance list. Lit avatar = running, gray = stopped; it moves while the agent works and shakes while the contact has unread alerts. Each row shows context usage. Drag rows to reorder. Right-click for Rename… / Duplicate / Restart / Remove. Hold `Cmd` to see each contact's `Cmd+1`…`Cmd+9` digit. Stopped instances show a ▶ button to restart.
+- **Middle** — The main agent chat (real terminal — Claude Code or OpenCode's TUI). Light Aqua-blue background tuned for ANSI diff blocks.
+- **Right** — Toolbox, accordion-style: only one section is expanded at a time and fills the available vertical space. Git is expanded by default.
+- **Between middle and right** — A **draggable splitter**. Drag to resize. Each side has a 280px minimum.
+
+### Compose Box
+
+The TUI's own input is folded, which is awkward for long messages, multi-line content, or attaching images. Use the Compose Box instead:
+
+1. Press **`Cmd+L`** in the terminal to summon it (any running instance, Claude Code or OpenCode; a no-op for stopped instances)
+2. Type freely — **`Enter` sends**, **`Shift+Enter` inserts a newline**, **`Esc` cancels**
+3. To attach an image, just **paste it** (e.g. a screenshot) — a thumbnail chip appears; on send the image goes to claude as an `@<path>` attachment
+4. Switching instances discards the draft (each instance's draft is independent)
+
+### Toolbox sections
+
+#### Git
+- Shows current branch, file counts, and remote ahead/behind
+- Lists each changed file, with tags at the end of the row:
+  - **View** — open the file's side-by-side diff (see [Diff window](#diff-window) below)
+  - **Go To** — open the project in VS Code and reveal the file. If the project isn't open yet, its window is launched (rather than dropping the file into whatever window is frontmost)
+  - **MD** — on `.md` / `.markdown` files, preview the file inline in the View section below
+- A renamed file shows under its new name and diffs as a rename, not as a whole new file
+- If there are more than 20 changed files, the list is hidden and a "too many files" message is shown
+- Strict cwd check: only the cwd's own `.git` is inspected; parent directories are not searched. Subdirectories of a repo show "Not a git repository" by design.
+
+#### Quick Actions
+| Button | What it does |
+|--------|--------------|
+| Go to Code Base | Runs `code <cwd>` — opens the project in VS Code, or activates the existing window if it's already open |
+| Show Cost | Types `/cost` into the main terminal. **Disabled for OpenCode** (no inline cost command) with an explanatory tooltip |
+| Clear | Types `/clear` into the main terminal |
+| Compact | Types `/compact` into the main terminal |
+| Resume Elsewhere | Copies the backend's resume command — `claude --resume <session-id>` or `opencode -s <session-id>` — to the clipboard |
+| Rename Session | Asks for a name and renames the session through the backend's own `/rename` |
+
+#### View
+- Renders a Markdown file inline in the toolbox column
+- Open a file three ways: paste its path into the input and press Enter, **click a `.md` path in the terminal output**, or click the **MD** tag next to a changed `.md` file in the Git section
+- Supports GitHub-flavored Markdown, math (`$…$` / `$$…$$` via KaTeX), Mermaid diagrams, and images (local images resolve relative to the file; remote `https://` images load directly)
+- Only `.md` / `.markdown` files, capped at 2 MB; anything else shows a plain inline message. Raw HTML in the Markdown is not executed
+
+#### Terminal
+- Real shell PTY (uses your `$SHELL`), black background and white text like Terminal.app
+- Opens in the instance's project directory
+- Lazy-spawned on first expand, then **kept alive in the background** — switching to another instance or collapsing the section does not kill the process
+- Anything works: `vim`, `pnpm test`, `git commit`, etc.
+
+### Diff window
+
+Click **View** on a row in the Git section to open that file's diff.
+
+- Old version on the left, new on the right, aligned row by row, with whole-file context. One scroll moves both halves
+- It's a window, not a modal: drag it by the header, resize it from the corner, and keep using the rest of the app. Opening another file reuses the same window in the same place. `Esc` closes it
+- **Select lines** — click a row, shift-click to extend, or drag across a range. A bar shows the reference the selection makes (`@path:start-end`)
+- **Ask agent** — appends that reference to the Compose Box and opens it with the cursor after it, so you can type your question. Ask about two places and both references accumulate
+- Copying text out of the diff copies code only, without line numbers
+- If a diff can't be shown, it says why: binary, too large, not found, no changes, or git failed. Very long files are truncated at 5,000 rows with a note
+
+### Notification behavior
+
+Notifications work identically for both backends — only the source differs. Claude Code reports its own state through hooks: every `claude` Multi-Code starts gets a `--settings` file from Multi-Code's data folder whose hooks post to the app's local `/alert` endpoint. Nothing is written to your own Claude settings, so `claude` run in an ordinary terminal is unaffected. OpenCode 2 runs every session in one background service shared by all its windows (terminals, VS Code, Multi-Code), and Multi-Code listens to that service's event stream for finishes and dialogs. A small report-only plugin, loaded only into the terminals Multi-Code starts (named in that process's `OPENCODE_CLI_CONFIG_CONTENT`, next to your own `cli.json` plugins), tells it which session each terminal is showing. Nothing is written to `~/.config/opencode/` or a project's `.opencode/`. Stopping an OpenCode contact, or quitting Multi-Code, closes its terminal only: a turn still running finishes in that service, as when a VS Code terminal closes, and a stopped contact raises no alerts for it.
+
+- Agent finishes, or stops to wait on you (a permission prompt, a question, a plan approval) → plays the "ding" once, for every instance, including the one you're looking at
+- Avatar shakes, in short bursts until you look, and the contact's red badge counts one more
+- The macOS Dock icon shows the total across all sessions (installed app only)
+- Typing, or clicking anywhere in a session's page, stops its chime and clears its red dot. Clicking a contact in the list does the same for that contact, and so does switching to it with `Cmd+1`…`Cmd+9` or `Option+Shift+↓`/`↑`; the session you leave keeps its badge. Nothing clears on a timer or on window focus alone
+- A turn you interrupt with Esc, or a dialog you deny, doesn't chime
+- If a session's hooks or plugin never report (for example `"disableAllHooks": true` in your Claude settings), a bar on its page says Multi-Code can't tell when it finishes, instead of going quiet
+
+### Offline state
+
+- Stopped instances have a gray avatar
+- When a stopped instance is selected: the chat area shows a large **OFFLINE** label
+- All toolbox sections are force-collapsed and cannot be expanded
+- To bring it back online: click the ▶ button on the contact entry to relaunch its backend CLI
+
+### Resuming a session in your IDE
+
+When a session enters deep "edit code while watching the AI" territory:
+
+1. Toolbox → Quick Actions → click **Resume Elsewhere** — the backend's resume command is now on your clipboard (`claude --resume <id>` or `opencode -s <id>`)
+2. Open a terminal in VS Code (or iTerm / Terminal.app), `cd` to the project root
+3. Paste and press Enter — the agent continues this session in that environment
+4. You can leave Multi-Code running, or close it
+
+### Phone Link
+
+Watch your agents, read what they did and answer them from your iPhone, so an
+agent doesn't sit blocked just because you stepped away. The phone reaches your
+Mac from anywhere through [Tailscale](https://tailscale.com), over HTTPS.
+
+**What you need:** Tailscale on the Mac and on the iPhone, in the same tailnet,
+with MagicDNS on (Tailscale's default). Notifications need the app on the Home
+Screen (iOS 16.4 or later).
+
+**Setup on the Mac (once):**
+
+1. Toolbox → **Phone** → click **Phone link: OFF** to turn it on. Three checks
+   appear: Tailscale, HTTPS and Push, each saying what is missing. If Tailscale
+   isn't running, **Open Tailscale** starts it
+2. HTTPS needs your tailnet's HTTPS Certificates: **Open admin console** opens the
+   DNS page of Tailscale's admin console, where you enable them (once per
+   tailnet). Then click **Set up HTTPS**. It shows the command it will run,
+   `tailscale serve --bg --https=443 http://127.0.0.1:6768`, and runs it when you
+   click **Run it**
+3. When all three checks pass, click **Pair a phone**. A QR code appears
+
+**Setup on the iPhone (once):**
+
+1. Scan the QR with the Camera. It opens in Safari, which pairs with your Mac
+2. Tap **Copy pairing link**, then Safari's Share button → **Add to Home Screen**,
+   and open Multi-Code from the new icon. The Home Screen app may not share
+   Safari's storage: if it opens unpaired, tap **Paste pairing link**. (The Mac's
+   Phone panel has a **Copy pairing link** too, which Universal Clipboard carries
+   to the iPhone)
+3. In the Home Screen app, tap **Turn on notifications** and allow them. It works
+   only from the Home Screen icon; opened in Safari, the app says so
+
+The app's first screen shows which of the three steps is done and which is next.
+
+**Using it:**
+
+- The list groups your sessions: Needs you, Working, Finished, Idle, each with how
+  long it has been in that state
+- Open a session to read it as a chat. Tap a turn's fold line for each tool, with
+  the lines added and removed by an edit and whether a command worked.
+  **Earlier turns** loads ten more
+- Type at the bottom and tap **Send**. Return makes a new line. While a turn runs,
+  the message still goes and the CLI queues it ("Queued until this turn ends").
+  With no connection it waits ("Waiting to send"), can be cancelled, and is sent
+  once when the Mac is back
+- A slash command goes like any message. It and the CLI's reply show as a grey
+  line; a long reply (`/cost`, say) folds after three lines. After `/new` or
+  `/clear` the chat empties and says "New session". (OpenCode starts its new session
+  only with the next message, so its old chat stays until then)
+- Reading is shared: opening a session on the phone clears its red dot on the desk,
+  and reading it at the desk makes it Idle on the phone. The desk still chimes
+- When a session needs you, the dialog takes the compose box's place: the CLI's
+  own options as buttons, a field for a reason on No (OpenCode: Reject), every
+  question of a question box with **Submit answers**, the whole plan. "Always
+  allow", "don't ask again" and auto-accept edits ask "Are you sure?" first. If
+  the dialog was answered at the desk meanwhile, the phone says so and presses
+  nothing. Dialogs can't be answered offline
+- While a turn runs, a bar shows the running tool, how long the turn has run and
+  **Stop**, which ends the turn as Esc does at the desk. It isn't offered while a
+  dialog is open, since Esc would answer the dialog
+- The terminal button in a session's header opens its real terminal, for what the
+  chat can't show (an MCP form, say)
+- Notifications read "<session> · Finished" with the first sentence of the
+  conclusion, or "<session> · Needs you" with what the dialog asks. Each phone's
+  **Send test** in the Mac's Phone panel sends one to check
+
+Answers reach the CLI the way the secretary's do: Claude Code's as the keys of its
+own dialogs, through the secretary's tested key flows, and only while that same
+dialog is still open; OpenCode's through its API, by request id. A dialog the phone
+can't show says so and offers the terminal.
+
+**Security notes:**
+
+- The phone reaches your Mac only inside your tailnet, through `tailscale serve`.
+  Multi-Code's port (6768) listens on `127.0.0.1`, so nothing else on your network
+  reaches it
+- Enabling HTTPS Certificates puts your machine's name
+  (`<machine>.<tailnet>.ts.net`) in public Certificate Transparency logs, for good.
+  Only devices in your tailnet can reach it
+- Multi-Code runs `tailscale serve` only when you click **Set up HTTPS**. If port
+  443 already serves something else, the panel says so and changes nothing. It
+  never removes the serve, even with Phone link off; `tailscale serve --https=443
+  off` undoes it
+- Every frame is sealed with NaCl box inside the HTTPS connection, and your phone
+  pins the desktop's public key at pairing, so nothing else at that address can
+  impersonate your desktop
+- Notifications go from your Mac straight to Apple's push service, encrypted to the
+  phone (Web Push encryption), so Apple sees only ciphertext. No server of ours is
+  involved
+- The QR and the pairing link hold a secret for one phone. Treat them like a
+  password: if one leaks, revoke its row. **New code** cancels the code it replaces
+  when no phone has used it yet
+- Revoke a lost phone in the same panel: it disconnects at once, its token stops
+  working and it gets no more notifications
+
+**After upgrading from an earlier Multi-Code:** a phone paired with the old phone
+link (an `http://<ip>:6768` address) isn't carried over. Remove its old Home Screen
+icon and pair it again; the Phone panel says so too.
+
+### Voice Secretary
+
+For when you step away from the screen. Each session gets a secretary that briefs
+you out loud when the session finishes or needs you, the way a secretary briefs a
+boss: a retold account with the details, not the screen read aloud.
+
+**What it needs:**
+
+- **For the briefs:** the Claude Code CLI, logged in. The secretary runs the `claude`
+  already on your machine with its default model and login, the ones plain `claude`
+  uses from your `~/.claude/settings.json`, so any account works and it asks for no
+  keys of its own. It always runs `claude`, so install Claude Code even if your
+  sessions are all OpenCode. Without it the secretary is off: the **Secretary Mode**
+  switch can't be turned on, and the Secretary section says Claude Code is needed.
+  Once you install it, the secretary comes back with no restart, as you left it. Each
+  call is one-shot: no tools, and nothing saved to your session history
+- **For the voice (optional):** a speech server built from `deploy/tts-server/`
+  (Qwen3-TTS, voice Serena). Other engines with the same OpenAI speech API won't pass
+  **Test**, because the request names the Serena voice. With no server, every brief
+  is text only
+
+**Setup:**
+
+1. Toolbox → **Secretary**. To have a voice, fill in the speech server's
+   **Address** and **Key**, click **Save**, then **Test**. Test tells you whether the
+   server answers, whether the key is accepted, and whether a sample comes back.
+   Leave both empty for text only
+2. Click **Secretary Mode: OFF** to turn it on. It applies to every session and
+   stays on across restarts. Sessions that already have a red dot get their brief
+   prepared straight away
+
+**Using it:**
+
+- Chimes, red badges and the Dock count work exactly as before. The secretary only
+  adds a brief at the same moments
+- The session on screen opens its card and plays its brief on its own, once the
+  voice is ready
+- Any other session waits for you: click its red dot and its card opens and plays.
+  Clicking a contact with no red dot plays nothing
+- Only one brief plays at a time. The card has **▶ Replay**, **■ Stop** and **×**
+  to close
+- The card stays after you type in the session or answer the dialog. Once closed,
+  the **Secretary** button in the session header brings the latest brief back,
+  silent until you press Replay
+- Turning Secretary Mode off stops the audio and closes the card
+
+**Answering a dialog in words:**
+
+A card for a permission prompt, a question or a plan approval has a reply box. It is
+not the Compose Box: nothing you type there goes into the terminal as text.
+
+- Say "yes", "no", pick an option by name or number, or give your own answer for
+  "Other"
+- "No, do X instead" denies the dialog, then sends "do X" as your next message. A
+  plan sent back carries what you want changed
+- A question box with several questions, or a multi-select one, is answered whole.
+  You can answer in one reply or across several; nothing is pressed until every
+  question has an answer
+- "Don't ask again" and "accept edits without asking" are picked only when you
+  clearly ask for them, and only after the secretary asks you to confirm and you say
+  yes
+- A reply that could mean two things gets a question back. A question ("what does
+  this script delete?") gets an answer. Neither presses anything
+- After acting, the card shows one line saying what it did
+- If the dialog has gone or changed by the time you reply, or someone types in the
+  terminal while its keys go in, it stops and says so
+- For OpenCode, it answers through OpenCode's own API, by request id, so an answer
+  can't land in a different dialog: the permission prompt (including a Reject with a
+  reason, which the agent receives), and question boxes of every shape, your own typed
+  answer included
+- A card for a finished turn has no reply box; reply in the terminal as usual
+
+**Privacy:**
+
+- Transcript excerpts go only to the model that writes the brief. The brief text
+  goes only to your speech server
+- Briefs and audio are kept in memory and never written to disk
+- The speech key lives alone in a `0600` file in Multi-Code's data folder. It is
+  never shown after you save it, never logged, and never sent to the window
+- With Secretary Mode off, nothing is called and nothing costs anything
+
+**Same limitation as the phone:** for Claude Code, answering presses the CLI's option
+keys, which is a UI convention, not an API (OpenCode's dialogs are answered through
+its API). When the secretary can't map your answer to a key it trusts, it says so and
+points you to the terminal.
+
+### Data persistence
+
+Everything Multi-Code keeps lives in Electron's user-data folder. On macOS that is `~/Library/Application Support/Multi-Code/` for the installed app, and `~/Library/Application Support/multi-code/` when running from source. On a standard macOS disk, file names ignore case, so these are the same folder: a dev build and the installed app share one contact list, and running both at once makes them overwrite each other's files.
+
+- `contacts.json` — instance list (directory + alias + backend), in sidebar order
+- `settings.json` — theme, whether Phone Link is on, Secretary Mode, the speech server address, and each project's default drop folder
+- `speech-key` — the secretary's speech server key, alone in a `0600` file. Never in `settings.json`, never logged; kept across runs
+- `remote-identity.json`, `remote-devices.json` — Phone Link keys, and the paired phones with each one's notification subscription and last push error; `0600`
+- `remote-push.json` — the Web Push keys your Mac signs notifications with; `0600`, made once and kept. If it is lost, a new pair is made and each phone subscribes again the next time its app opens
+- `alert-settings.json`, `alert-hook.curl` — every Claude instance's `--settings` (alert hooks only) and the curl config holding the `/alert` token; `0600`, removed on shutdown
+- `opencode/tui/tui.js`, `opencode/alert.json` — the report-only terminal plugin every OpenCode terminal Multi-Code starts loads, and the `/alert` address and token it reads; `0600`, removed on shutdown
+- On app restart, the contact list is restored (all entries start as stopped — relaunch manually)
+- Session content itself is managed by the backend CLI (Claude Code under `~/.claude/`, OpenCode under `~/.local/share/opencode/`); Multi-Code does not store any conversation data and never writes into those directories. It reads OpenCode 2's database read-only for transcripts and context usage
+
+## How It Works
+
+1. User creates an instance by selecting a project directory and a backend (Claude Code / OpenCode)
+2. App spawns the backend CLI (`claude` / `opencode`, resuming a prior session if one exists) via node-pty in that directory. OpenCode gets your login shell's environment (read once per run), so its tools find what a terminal would; when OpenCode's background service isn't running yet, Multi-Code starts it first with that environment. Multi-Code also looks for OpenCode's service, database and config where that environment puts them (`XDG_*`, `OPENCODE_DB` set in your shell's rc files). Backends are pluggable behind a small `Backend` interface in `src/main/backends/`
+3. PTY stdout is piped in real-time to an xterm.js terminal in the renderer
+4. Each agent's state comes from the agent: Claude Code reports it through report-only hooks passed with `--settings` at launch (finished, waiting on a permission prompt or question), OpenCode 2 through its shared background service's event stream, with a report-only terminal plugin naming the session each terminal shows. Dialogs answered from the phone or the secretary go to OpenCode's API by request id. Whether a turn is running, for the avatar, comes from the same places: the `status` in Claude Code's `~/.claude/sessions/<pid>.json`, read once a second, and OpenCode's turn events. Neither writes anything into the user's own config
+5. On a finish or a needs-you: audio + a shaking avatar + one more on the red badge and the Dock count, for every instance. The red dot stays until you type or click in that session, or select it
+6. Toolbox sections each manage their own lifecycle:
+   - Git: shells out to `git` every 5s while expanded
+   - Terminal: lazy-spawns a shell PTY on first expand, persists across collapses
+7. Instances persist to `contacts.json` in Electron's user-data folder
+8. The main process runs a small HTTP server on `127.0.0.1` for as long as the app is open (OS-assigned port, bearer-token auth). Its one path, `/alert`, is where the agents' hooks and plugin report their own state
+9. When Phone Link is on, the main process also runs a server on `127.0.0.1:6768` that serves the phone app and a WebSocket carrying the session list, transcripts, dialogs and the same PTY bytes to paired phones. The phone reaches it only through `tailscale serve`, which gives it HTTPS at the Mac's tailnet name; frames are sealed with NaCl box inside that connection. Notifications are Web Push messages the Mac sends straight to Apple's push service, encrypted to each phone, with no relay involved
+10. When Secretary Mode is on, each finished or needs-you event goes to a one-shot `claude -p --bare --no-session-persistence` call that writes the brief, then to the speech server for audio. A reply on the card goes through a second such call, which decides what to press; the keys go in only while that same dialog is still showing
+
+## License
+
+[MIT](./LICENSE)

@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en" data-lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Multi-Code: coding agent sessions in one window</title>
+  <meta name="description" content="Multi-Code runs Claude Code and OpenCode sessions side by side in real terminals on macOS. It alerts you when a session finishes or needs input, on your Mac or phone, with optional voice summaries." />
+  <meta property="og:title" content="Multi-Code" />
+  <meta property="og:description" content="Run your Claude Code and OpenCode sessions in one window, each in a real terminal. Includes session alerts, a phone web app and a voice secretary." />
+  <meta property="og:image" content="https://jasenpan1987.github.io/multi-code/img/desktop-dark.png" />
+  <meta property="og:type" content="website" />
+  <link rel="icon" type="image/png" href="img/icon.png" />
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png" />
+  <link rel="stylesheet" href="style.css" />
+  <script>
+    // Before first paint, so the page never flashes the other language.
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem("lang"); } catch (e) {}
+      var lang = saved || ((navigator.language || "").toLowerCase().indexOf("zh") === 0 ? "zh" : "en");
+      document.documentElement.setAttribute("data-lang", lang);
+      document.documentElement.setAttribute("lang", lang === "zh" ? "zh-CN" : "en");
+    })();
+  </script>
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="#top"><img src="img/icon.png" alt="" width="28" height="28" />Multi-Code</a>
+      <nav class="nav-links">
+        <a href="#desk"><span lang="en">Features</span><span lang="zh">功能</span></a>
+        <a href="#phone"><span lang="en">Phone</span><span lang="zh">手机</span></a>
+        <a href="#secretary"><span lang="en">Secretary</span><span lang="zh">小秘书</span></a>
+        <a href="#install"><span lang="en">Install</span><span lang="zh">安装</span></a>
+        <a href="https://github.com/Jasenpan1987/multi-code">GitHub</a>
+        <button class="lang-toggle" type="button" aria-label="Switch language"><span lang="en">中文</span><span lang="zh">EN</span></button>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="wrap">
+        <h1>
+          <span lang="en">Coding agent sessions,<br />in one window.</span>
+          <span lang="zh">多个编码 agent 会话，<br />放在一个窗口里。</span>
+        </h1>
+        <p class="lead">
+          <span lang="en">Multi-Code runs Claude Code and OpenCode sessions side by side, each in a real terminal. It alerts you when a session finishes or needs input. Check on your Mac or phone, or have the voice secretary tell you.</span>
+          <span lang="zh">Multi-Code 可以并排运行多个 Claude Code 和 OpenCode 会话，每个都有自己的真终端。会话做完了，或者在等你回答，会有提醒。电脑和手机上都能看，也可以让语音小秘书讲给你听。</span>
+        </p>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/Jasenpan1987/multi-code/releases/latest">
+            <span lang="en">Download for macOS</span><span lang="zh">下载 macOS 版</span>
+          </a>
+          <a class="btn" href="https://github.com/Jasenpan1987/multi-code">
+            <span lang="en">View on GitHub</span><span lang="zh">去 GitHub 看代码</span>
+          </a>
+        </div>
+        <p class="fine">
+          <span lang="en">Free and open source (MIT) · macOS, Apple Silicon only</span>
+          <span lang="zh">免费开源（MIT）· 仅支持 Apple Silicon Mac</span>
+          · <a href="#agent"><span lang="en">Install with your AI agent</span><span lang="zh">让 AI agent 帮你装</span></a>
+        </p>
+        <figure class="shot window">
+          <picture>
+            <source srcset="img/desktop-dark.png" media="(prefers-color-scheme: dark)" />
+            <img src="img/desktop-light.png" alt="Multi-Code with five sessions in the sidebar, a Claude Code terminal and the toolbox" onerror="this.closest('figure').classList.add('missing')" />
+          </picture>
+        </figure>
+      </div>
+    </section>
+
+    <section class="pillars">
+      <div class="wrap grid three">
+        <div class="pillar">
+          <h3><span lang="en">Real terminals</span><span lang="zh">真终端</span></h3>
+          <p>
+            <span lang="en">Multi-Code runs the actual <code>claude</code> and <code>opencode</code> CLIs in node-pty + xterm.js. No chat wrapper or output parsing. Keys and dialogs work just as they do in your terminal.</span>
+            <span lang="zh">用 node-pty + xterm.js 直接运行 <code>claude</code> 和 <code>opencode</code> CLI。不套聊天界面，也不解析输出。按键和确认框都跟你自己终端里的一样。</span>
+          </p>
+        </div>
+        <div class="pillar">
+          <h3><span lang="en">Session alerts</span><span lang="zh">会话提醒</span></h3>
+          <p>
+            <span lang="en">When a session finishes or waits for input, you get a sound, a shaking avatar, a red badge and a Dock count. <kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>↓</kbd> jumps to the next unread session.</span>
+            <span lang="zh">会话做完或在等你时，会响一声，头像会抖，也有红色未读数和 Dock 角标。按 <kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>↓</kbd> 跳到下一个未读会话。</span>
+          </p>
+        </div>
+        <div class="pillar">
+          <h3><span lang="en">No files left behind</span><span lang="zh">卸载后不留文件</span></h3>
+          <p>
+            <span lang="en">It writes nothing to <code>~/.claude</code>, <code>~/.config/opencode</code> or your projects. Running <code>claude</code> and <code>opencode</code> on their own works as before. Uninstalling leaves nothing behind.</span>
+            <span lang="zh">不往 <code>~/.claude</code>、<code>~/.config/opencode</code> 或项目里写东西。单独运行 <code>claude</code> 和 <code>opencode</code> 不受影响，卸载后也不留文件。</span>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section id="desk" class="section">
+      <div class="wrap">
+        <p class="eyebrow"><span lang="en">On your Mac</span><span lang="zh">电脑上</span></p>
+        <h2><span lang="en">Run several sessions at once.</span><span lang="zh">同时开多个会话。</span></h2>
+        <div class="grid three features">
+          <div class="feature">
+            <h4><span lang="en">Claude Code and OpenCode</span><span lang="zh">Claude Code 和 OpenCode</span></h4>
+            <p><span lang="en">Choose a backend for each session. You can use both in the same project.</span><span lang="zh">每个会话可以选不同的后端，同一个项目里也能混着用。</span></p>
+          </div>
+          <div class="feature">
+            <h4><span lang="en">Context usage</span><span lang="zh">Context 用量</span></h4>
+            <p><span lang="en">Each sidebar row shows context window usage, from green to red. Hover to see the token count and model.</span><span lang="zh">侧边栏每行会显示 context 窗口用了多少，颜色从绿到红。鼠标放上去能看 token 数和模型。</span></p>
+          </div>
+          <div class="feature">
+            <h4><span lang="en">Conclusion first</span><span lang="zh">从结论开始看</span></h4>
+            <p><span lang="en">When a turn ends, the terminal scrolls to the first line of the agent's conclusion. Scroll up to read the steps.</span><span lang="zh">一轮结束后，终端会滚到 agent 结论的第一行。往上滚可以看过程。</span></p>
+          </div>
+          <div class="feature">
+            <h4><span lang="en">Compose Box</span><span lang="zh">消息编辑框</span></h4>
+            <p><span lang="en"><kbd>Cmd</kbd>+<kbd>L</kbd> opens an editor over the terminal for long messages. You can edit with the mouse and paste images.</span><span lang="zh"><kbd>Cmd</kbd>+<kbd>L</kbd> 在终端上打开编辑框，用来写长消息。可以用鼠标编辑，也能粘贴图片。</span></p>
+          </div>
+          <div class="feature">
+            <h4><span lang="en">Git and diff</span><span lang="zh">Git 和 diff</span></h4>
+            <p><span lang="en">See the branch and changed files, with a side-by-side diff. Select lines to send to the agent as <code>@path:start-end</code>.</span><span lang="zh">查看 branch 和变更文件，diff 左右对照。选中几行，就能用 <code>@path:start-end</code> 发给 agent。</span></p>
+          </div>
+          <div class="feature">
+            <h4><span lang="en">Toolbox</span><span lang="zh">工具箱</span></h4>
+            <p><span lang="en">Open a shell in the project folder or read Markdown with Mermaid and math. Run <code>/clear</code> and <code>/compact</code> with one click.</span><span lang="zh">在项目目录里开 shell，或查看带 Mermaid 和公式的 Markdown。点一下就能运行 <code>/clear</code> 和 <code>/compact</code>。</span></p>
+          </div>
+          <div class="feature">
+            <h4><span lang="en">Files from Finder</span><span lang="zh">从 Finder 拖文件</span></h4>
+            <p><span lang="en">Drag files onto the window to copy them into the project's default folder. Existing files are never overwritten.</span><span lang="zh">把文件拖到窗口上，会复制到项目的默认文件夹。已有文件不会被覆盖。</span></p>
+          </div>
+          <div class="feature">
+            <h4><span lang="en">New project or clone</span><span lang="zh">新建项目或 clone</span></h4>
+            <p><span lang="en">Open a folder or clone a Git repo using your own SSH keys, then start a session there.</span><span lang="zh">打开文件夹，或者用自己的 SSH 密钥 clone Git repo，然后在里面开会话。</span></p>
+          </div>
+          <div class="feature">
+            <h4><span lang="en">Keyboard shortcuts</span><span lang="zh">快捷键</span></h4>
+            <p><span lang="en"><kbd>Cmd</kbd>+<kbd>1</kbd>…<kbd>9</kbd> switches sessions. <kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>↓</kbd> opens the next unread session. <kbd>Cmd</kbd>+<kbd>⌫</kbd> clears a line.</span><span lang="zh"><kbd>Cmd</kbd>+<kbd>1</kbd>…<kbd>9</kbd> 切换会话。<kbd>Option</kbd>+<kbd>Shift</kbd>+<kbd>↓</kbd> 跳到下一个未读会话。<kbd>Cmd</kbd>+<kbd>⌫</kbd> 清空一行。</span></p>
+          </div>
+          <div class="feature">
+            <h4><span lang="en">Avatars show state</span><span lang="zh">头像看状态</span></h4>
+            <p><span lang="en">Grey when stopped, lit when running, moving while the agent works, shaking when there's news. Claude Code sessions are blue, OpenCode sessions green.</span><span lang="zh">停了是灰的，运行中会亮，agent 干活时头像会动，有新消息就抖。Claude Code 的会话是蓝色，OpenCode 的是绿色。</span></p>
+          </div>
+          <div class="feature">
+            <h4><span lang="en">Several sessions per project</span><span lang="zh">一个项目开多个会话</span></h4>
+            <p><span lang="en">Right-click a session and pick Duplicate to start another one on the same project. Each keeps and resumes its own session.</span><span lang="zh">右键一个会话选 Duplicate，就在同一个项目上再开一个。每个都记住自己的会话，下次接着用。</span></p>
+          </div>
+          <div class="feature">
+            <h4><span lang="en">Hand off to your IDE</span><span lang="zh">交给 IDE 接着做</span></h4>
+            <p><span lang="en">Resume Elsewhere copies <code>claude --resume &lt;id&gt;</code> or <code>opencode -s &lt;id&gt;</code>. Paste it in VS Code's terminal and the same session carries on there.</span><span lang="zh">Resume Elsewhere 会复制 <code>claude --resume &lt;id&gt;</code> 或 <code>opencode -s &lt;id&gt;</code>。粘贴到 VS Code 的终端里，同一个会话就在那边接着跑。</span></p>
+          </div>
+        </div>
+        <figure class="shot window small">
+          <img src="img/compose.png" alt="The Compose Box open over a Claude Code terminal" onerror="this.closest('figure').classList.add('missing')" />
+        </figure>
+      </div>
+    </section>
+
+    <section id="phone" class="section alt">
+      <div class="wrap">
+        <p class="eyebrow"><span lang="en">On your phone</span><span lang="zh">手机上</span></p>
+        <h2><span lang="en">Reply without going back to your Mac.</span><span lang="zh">不在电脑前，也能回复 agent。</span></h2>
+        <p class="lead left">
+          <span lang="en">Add the phone web app to your iPhone's Home Screen. No App Store download or account needed. It doesn't use a relay server.</span>
+          <span lang="zh">把手机网页 App 加到 iPhone 主屏幕就能用。不用从 App Store 下载，也不用注册账号。连接不经过中转服务器。</span>
+        </p>
+        <div class="phones">
+          <figure class="shot phone">
+            <img src="img/phone-list.png" alt="Sessions grouped by state" onerror="this.closest('figure').classList.add('missing')" />
+            <figcaption><span lang="en">Sessions by state</span><span lang="zh">按状态看会话</span></figcaption>
+          </figure>
+          <figure class="shot phone">
+            <img src="img/phone-chat.png" alt="A session read as a chat" onerror="this.closest('figure').classList.add('missing')" />
+            <figcaption><span lang="en">Read as chat</span><span lang="zh">按聊天记录看</span></figcaption>
+          </figure>
+          <figure class="shot phone">
+            <img src="img/phone-dialog.png" alt="Answering a dialog from the phone" onerror="this.closest('figure').classList.add('missing')" />
+            <figcaption><span lang="en">Answer dialogs</span><span lang="zh">回答确认框</span></figcaption>
+          </figure>
+        </div>
+        <ul class="checks">
+          <li><span lang="en">All sessions grouped by state: Needs you, Working, Finished, Idle.</span><span lang="zh">所有会话按状态分组：Needs you、Working、Finished、Idle。</span></li>
+          <li><span lang="en">Read sessions as chat. Tool calls collapse to one line; the conclusion stays visible.</span><span lang="zh">会话按聊天记录显示。工具调用收成一行，结论会一直显示。</span></li>
+          <li><span lang="en">Answer permissions, question boxes and plans in full. You can also stop a running turn.</span><span lang="zh">权限、问题框和计划都能完整作答，也能停止正在运行的一轮。</span></li>
+          <li><span lang="en">Receive push notifications while the phone is locked. Tap to open the session.</span><span lang="zh">锁屏时也能收到推送，点一下就打开对应会话。</span></li>
+          <li><span lang="en">Send slash commands such as <code>/compact</code> or <code>/model</code> as messages, and see the CLI's reply.</span><span lang="zh">像发消息一样发 <code>/compact</code>、<code>/model</code> 这些斜杠命令，也能看到 CLI 的回复。</span></li>
+          <li><span lang="en">For anything the chat can't show, open the session's real terminal, with a row of keys (Esc, Tab, arrows, Ctrl+C).</span><span lang="zh">聊天视图显示不了的，可以打开那个会话的真终端，下面有一排按键（Esc、Tab、方向键、Ctrl+C）。</span></li>
+          <li><span lang="en">It opens with no connection and shows what it had last. A reply typed offline is sent once the Mac is back.</span><span lang="zh">没网也能打开，显示上次拿到的内容。没网时打的回复，等连上 Mac 再发出去。</span></li>
+          <li><span lang="en">Read a session on the phone and its red dot on the Mac goes out, and the other way round.</span><span lang="zh">在手机上看过的会话，电脑上的红点会消失，反过来也一样。</span></li>
+          <li><span lang="en">Accessible only within your <a href="https://tailscale.com">Tailscale</a> tailnet, with end-to-end encryption in addition to HTTPS.</span><span lang="zh">只能从你的 <a href="https://tailscale.com">Tailscale</a> tailnet 访问，除了 HTTPS，还有一层端到端加密。</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="secretary" class="section">
+      <div class="wrap">
+        <div>
+          <p class="eyebrow"><span lang="en">Voice secretary</span><span lang="zh">语音小秘书</span></p>
+          <h2><span lang="en">Hear what happened while you're away.</span><span lang="zh">离开电脑后，听小秘书讲结果。</span></h2>
+          <p class="lead left">
+            <span lang="en">When a session finishes or needs input, the secretary retells what you asked and what the agent did, including whether it worked. For a dialog, it explains the operation and why it's needed before asking you.</span>
+            <span lang="zh">会话做完或等你回答时，小秘书会用自己的话讲一遍你提的要求、agent 做了什么，以及有没有做成。遇到确认框，会先说明操作内容和原因，再问你。</span>
+          </p>
+          <ul class="checks">
+            <li><span lang="en">With Secretary Mode on, the session on screen speaks its brief as soon as it has news. Other sessions wait until you click their red dot, so two never talk at once.</span><span lang="zh">打开小秘书模式后，屏幕上的会话一有消息就播报。其他会话要等你点它的红点才播，不会两个同时说话。</span></li>
+            <li><span lang="en">Reply in your own words, such as "yes" or "no, do X instead". You can say "always" too. It selects the matching option, or asks you to clarify if unsure.</span><span lang="zh">直接说“可以”或“不行，改成 X”，也可以说“以后都可以”。小秘书会选对应的选项，拿不准就再问你。</span></li>
+            <li><span lang="en">It uses your language: English, or Chinese with technical terms left in English.</span><span lang="zh">你用英文，小秘书就用英文；你用中文，就讲中文，英文技术名词保留原样。</span></li>
+            <li><span lang="en">Voice is optional. Without a speech server, you get the summary as text.</span><span lang="zh">语音不是必需的。没有语音服务器时，小秘书会用文字汇报。</span></li>
+            <li><span lang="en">The secretary uses your own <code>claude</code> CLI with its default model and login. Claude Code must be installed, even for OpenCode sessions.</span><span lang="zh">小秘书运行你自己的 <code>claude</code> CLI，用它默认的模型和登录。所以要装 Claude Code，只用 OpenCode 也一样。</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="install" class="section alt">
+      <div class="wrap">
+        <p class="eyebrow"><span lang="en">Install</span><span lang="zh">安装</span></p>
+        <h2><span lang="en">Four steps, about two minutes.</span><span lang="zh">四步，大约两分钟。</span></h2>
+        <p class="lead left">
+          <span lang="en">Requires an Apple Silicon Mac (M1 or later). Intel Macs are not supported.</span>
+          <span lang="zh">需要 Apple Silicon Mac（M1 或更新）。不支持 Intel Mac。</span>
+        </p>
+        <div id="agent" class="agent-copy">
+          <div>
+            <h4><span lang="en">Or let your AI agent do it</span><span lang="zh">也可以让 AI agent 帮你装</span></h4>
+            <p>
+              <span lang="en">Copy a prompt and paste it into Claude Code or OpenCode. The agent installs Multi-Code step by step and asks before each command that changes your system. Then it walks you through the app, one lesson at a time.</span>
+              <span lang="zh">复制一段提示词，粘贴给 Claude Code 或 OpenCode。agent 会一步步把 Multi-Code 装好，改系统的命令都会先问你。装好以后，它再一课一课教你怎么用。</span>
+            </p>
+          </div>
+          <div class="agent-copy-actions">
+            <button class="btn primary agent-copy-btn" type="button"><span lang="en">Copy prompt</span><span lang="zh">复制提示词</span></button>
+            <a href="agent-prompt.txt"><span lang="en">See what it copies</span><span lang="zh">看看复制的内容</span></a>
+          </div>
+        </div>
+        <ol class="steps">
+          <li>
+            <h4><span lang="en">Install a backend CLI</span><span lang="zh">装一个后端 CLI</span></h4>
+            <p><span lang="en">Install at least one: Claude Code or OpenCode 2. The voice secretary requires Claude Code.</span><span lang="zh">至少装一个：Claude Code 或 OpenCode 2。语音小秘书需要 Claude Code。</span></p>
+            <pre><code>curl -fsSL https://claude.ai/install.sh | sh</code><button class="copy" type="button">Copy</button></pre>
+            <pre><code>curl -fsSL https://opencode.ai/v2/install | bash</code><button class="copy" type="button">Copy</button></pre>
+          </li>
+          <li>
+            <h4><span lang="en">Download and move to Applications</span><span lang="zh">下载后拖进“应用程序”</span></h4>
+            <p><span lang="en">Get the <code>.dmg</code> from the <a href="https://github.com/Jasenpan1987/multi-code/releases/latest">latest release</a>. Open it and drag Multi-Code into the Applications folder.</span><span lang="zh">从<a href="https://github.com/Jasenpan1987/multi-code/releases/latest">最新版本</a>下载 <code>.dmg</code>，打开后把 Multi-Code 拖进“应用程序”文件夹。</span></p>
+          </li>
+          <li>
+            <h4><span lang="en">Clear the quarantine flag</span><span lang="zh">清除隔离标记</span></h4>
+            <p><span lang="en">The app isn't signed with an Apple Developer certificate, so macOS blocks it. Run this once to let it open, and again after each upgrade.</span><span lang="zh">这个 app 没有 Apple 开发者证书签名，macOS 会拦住它。运行一次这条命令就能打开，每次升级后要再运行一次。</span></p>
+            <pre><code>xattr -cr /Applications/Multi-Code.app</code><button class="copy" type="button">Copy</button></pre>
+          </li>
+          <li>
+            <h4><span lang="en">Open and add a project</span><span lang="zh">打开 app，添加项目</span></h4>
+            <p><span lang="en">Open Multi-Code and click <b>+ New</b>. Choose a project folder or paste a Git link.</span><span lang="zh">打开 Multi-Code，点 <b>+ New</b>，选项目文件夹，或者粘贴 Git 链接。</span></p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section id="faq" class="section">
+      <div class="wrap">
+        <h2><span lang="en">Details</span><span lang="zh">其他说明</span></h2>
+        <div class="grid two faq">
+          <div>
+            <h4><span lang="en">Where your code goes</span><span lang="zh">代码会发到哪里</span></h4>
+            <p><span lang="en">Multi-Code has no server and doesn't send your code anywhere itself. The CLIs still connect to their model providers. The phone connection stays within your tailnet. Push notifications go directly from your Mac to Apple.</span><span lang="zh">Multi-Code 没有自己的服务器，也不会另发一份代码。CLI 还是照常连接各自的模型服务。手机连接只在你的 tailnet 内，推送从 Mac 直接发给 Apple。</span></p>
+          </div>
+          <div>
+            <h4><span lang="en">Your CLI settings stay unchanged</span><span lang="zh">不改 Claude Code 或 OpenCode 设置</span></h4>
+            <p><span lang="en">Its hooks and plugin only report status. They live in its own data folder and are passed only to sessions it starts.</span><span lang="zh">hook 和插件只报告状态，文件放在 Multi-Code 自己的数据目录里，只传给它启动的会话。</span></p>
+          </div>
+          <div>
+            <h4><span lang="en">Windows and Linux</span><span lang="zh">Windows 和 Linux</span></h4>
+            <p><span lang="en">Not supported at the moment. Multi-Code is macOS only.</span><span lang="zh">目前不支持，只有 macOS 版。</span></p>
+          </div>
+          <div>
+            <h4><span lang="en">Cost</span><span lang="zh">费用</span></h4>
+            <p><span lang="en">Multi-Code is free and MIT licensed. You still pay for the models your CLIs use, as before.</span><span lang="zh">Multi-Code 免费，按 MIT 协议开源。模型费用跟以前一样，由你的 CLI 账号支付。</span></p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <span>Multi-Code · MIT License</span>
+      <a href="https://github.com/Jasenpan1987/multi-code">GitHub</a>
+    </div>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>

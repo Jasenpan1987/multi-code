@@ -1,0 +1,263 @@
+{
+  "cli": "2.1.291",
+  "scenario": "mcp-permission-denied-no",
+  "description": "An MCP tool with no allow rule (three options: Yes / Yes, don't ask again / No), answered No.",
+  "deliveries": [
+    {
+      "ms": 0,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "9505950f-b815-4b95-ad44-ee726bb78eee",
+        "permission_mode": "default",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Call the mcp__spike__ping tool once, then reply with just the result."
+      }
+    },
+    {
+      "ms": 2387,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "9505950f-b815-4b95-ad44-ee726bb78eee",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "09626269-199b-435d-bd90-316b084e1d28",
+        "message_id": "c3c26197-c070-466f-af9c-4d4616fada5e",
+        "index": 0,
+        "final": true,
+        "delta": "I need to fetch the schema for this deferred tool first."
+      }
+    },
+    {
+      "ms": 2395,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "9505950f-b815-4b95-ad44-ee726bb78eee",
+        "permission_mode": "default",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "ToolSearch",
+        "tool_input": {
+          "query": "select:mcp__spike__ping",
+          "max_results": 1
+        },
+        "tool_use_id": "toolu_bdrk_016N972g77QTz1DQVG73yjxE"
+      }
+    },
+    {
+      "ms": 3534,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "9505950f-b815-4b95-ad44-ee726bb78eee",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "ToolSearch",
+        "tool_input": {
+          "query": "select:mcp__spike__ping",
+          "max_results": 1
+        },
+        "tool_response": {
+          "matches": [
+            "mcp__spike__ping"
+          ],
+          "query": "select:mcp__spike__ping",
+          "total_deferred_tools": 19
+        },
+        "tool_use_id": "toolu_bdrk_016N972g77QTz1DQVG73yjxE",
+        "duration_ms": 10
+      }
+    },
+    {
+      "ms": 3693,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "9505950f-b815-4b95-ad44-ee726bb78eee",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolBatch",
+        "tool_calls": [
+          {
+            "tool_name": "ToolSearch",
+            "tool_input": {
+              "query": "select:mcp__spike__ping",
+              "max_results": 1
+            },
+            "tool_use_id": "toolu_bdrk_016N972g77QTz1DQVG73yjxE",
+            "tool_response": [
+              {
+                "type": "tool_reference",
+                "tool_name": "mcp__spike__ping"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "ms": 4879,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "9505950f-b815-4b95-ad44-ee726bb78eee",
+        "permission_mode": "default",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "ToolSearch",
+        "tool_input": {
+          "query": "select:mcp__spike__ping",
+          "max_results": 1
+        },
+        "tool_use_id": "toolu_bdrk_01Md2sXpvcnr4S7fQBzPCchT"
+      }
+    },
+    {
+      "ms": 4880,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "9505950f-b815-4b95-ad44-ee726bb78eee",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "09626269-199b-435d-bd90-316b084e1d28",
+        "message_id": "f1db4f09-30cd-4c40-a66b-331e03a90c9b",
+        "index": 0,
+        "final": true,
+        "delta": "I need to load the tool schema first. Let me fetch it:"
+      }
+    },
+    {
+      "ms": 4945,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "9505950f-b815-4b95-ad44-ee726bb78eee",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "ToolSearch",
+        "tool_input": {
+          "query": "select:mcp__spike__ping",
+          "max_results": 1
+        },
+        "tool_response": {
+          "matches": [
+            "mcp__spike__ping"
+          ],
+          "query": "select:mcp__spike__ping",
+          "total_deferred_tools": 19
+        },
+        "tool_use_id": "toolu_bdrk_01Md2sXpvcnr4S7fQBzPCchT",
+        "duration_ms": 1
+      }
+    },
+    {
+      "ms": 5017,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "9505950f-b815-4b95-ad44-ee726bb78eee",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolBatch",
+        "tool_calls": [
+          {
+            "tool_name": "ToolSearch",
+            "tool_input": {
+              "query": "select:mcp__spike__ping",
+              "max_results": 1
+            },
+            "tool_use_id": "toolu_bdrk_01Md2sXpvcnr4S7fQBzPCchT",
+            "tool_response": [
+              {
+                "type": "tool_reference",
+                "tool_name": "mcp__spike__ping"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "ms": 5914,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "9505950f-b815-4b95-ad44-ee726bb78eee",
+        "permission_mode": "default",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__spike__ping",
+        "tool_input": {},
+        "tool_use_id": "toolu_bdrk_01HGP3d3m9PeqdYYCPFoaKWB",
+        "mcp_server": {
+          "name": "spike",
+          "source": "dynamic"
+        }
+      }
+    },
+    {
+      "ms": 5965,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "9505950f-b815-4b95-ad44-ee726bb78eee",
+        "permission_mode": "default",
+        "hook_event_name": "PermissionRequest",
+        "tool_name": "mcp__spike__ping",
+        "tool_input": {},
+        "permission_suggestions": [
+          {
+            "type": "addRules",
+            "rules": [
+              {
+                "toolName": "mcp__spike__ping"
+              }
+            ],
+            "behavior": "allow",
+            "destination": "localSettings"
+          }
+        ],
+        "mcp_server": {
+          "name": "spike",
+          "source": "dynamic"
+        }
+      }
+    }
+  ],
+  "registry": [
+    {
+      "ms": -692,
+      "status": "idle"
+    },
+    {
+      "ms": 32,
+      "status": "busy"
+    },
+    {
+      "ms": 5984,
+      "status": "waiting",
+      "waitingFor": "permission prompt"
+    },
+    {
+      "ms": 7063,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": -89,
+      "key": "enter"
+    },
+    {
+      "ms": 7022,
+      "key": "3 (No)"
+    }
+  ]
+}

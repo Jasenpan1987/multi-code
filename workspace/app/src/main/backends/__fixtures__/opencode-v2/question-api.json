@@ -1,0 +1,799 @@
+{
+  "scenario": "question-api",
+  "opencodeVersion": "2.0.32",
+  "notes": "Form open in the TUI; GET /api/session/:id/form lists it; POST /api/session/:id/form/:formID/reply {answer:{q0:'Saturn'}} -> 204, TUI shows the answer; second POST {answer:{q0:'Mars'}} -> 409 FormAlreadySettledError.",
+  "frames": [
+    {
+      "t": 1042,
+      "event": {
+        "id": "evt_15542a71e001Dezi0ggxb3MQCP",
+        "created": 1792431793951,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "slug": "eager-orchid",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1069,
+      "event": {
+        "id": "evt_15542a72e001wh9Rww2Iks1PHH",
+        "created": 1792431793966,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_15542a71c001Nnvz2mGezCx4IZ",
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "Use your question tool to ask me one single-select question: which planet, with options Mars, Venus and Saturn. Then reply with the planet I picked.",
+              "files": [],
+              "agents": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1069,
+      "event": {
+        "id": "evt_15542a72f0011T5Em0GDii59GF",
+        "created": 1792431793967,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1069,
+      "event": {
+        "id": "evt_15542a732001RCkw9CRixClvsF",
+        "created": 1792431793970,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 1069,
+      "event": {
+        "id": "evt_15542a733001EDJNANzXeuDrZZ",
+        "created": 1792431793971,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "inboxID": "msg_15542a71c001Nnvz2mGezCx4IZ"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1764,
+      "event": {
+        "id": "evt_15542a9f0001mWDhgb1QMOdhJk",
+        "created": 1792431794672,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "cost": 0,
+          "tokens": {
+            "input": 102,
+            "output": 108,
+            "reasoning": 139,
+            "cache": {
+              "read": 5760,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 1764,
+      "event": {
+        "id": "evt_15542a9f1001mAUZB8VKeD5RxO",
+        "created": 1792431794673,
+        "type": "session.renamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "title": "Animal preference single-select question"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabda43ffferVuefVIwYoG51l",
+          "seq": 14,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2943,
+      "event": {
+        "id": "evt_15542ae80001GGj4v8HZ9QRWmX",
+        "created": 1792431795840,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_15542a7370017ydtfWWwB4k14O",
+          "started": 1792431793978
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 5,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2943,
+      "event": {
+        "id": "evt_15542ae86001U6jig19BofTnJu",
+        "created": 1792431795846,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "assistantMessageID": "msg_15542a7370017ydtfWWwB4k14O",
+          "id": "call_00_a82rmqt6cz9225s7mh7swrh6",
+          "name": "question"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 6,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2951,
+      "event": {
+        "id": "evt_15542ae8f001T86OCD0IHSMt4K",
+        "created": 1792431795855,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "assistantMessageID": "msg_15542a7370017ydtfWWwB4k14O",
+          "id": "call_00_a82rmqt6cz9225s7mh7swrh6",
+          "text": "{\"questions\": [{\"question\": \"Which planet do you pick?\", \"header\": \"Planet choice\", \"options\": [{\"label\": \"Mars\", \"description\": \"The red planet\"}, {\"label\": \"Venus\", \"description\": \"The second planet…"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 7,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2951,
+      "event": {
+        "id": "evt_15542ae90001AgLUFjc8cidJms",
+        "created": 1792431795856,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "assistantMessageID": "msg_15542a7370017ydtfWWwB4k14O",
+          "id": "call_00_a82rmqt6cz9225s7mh7swrh6",
+          "input": {
+            "questions": [
+              {
+                "question": "Which planet do you pick?",
+                "header": "Planet choice",
+                "options": [
+                  {
+                    "label": "Mars",
+                    "description": "The red planet"
+                  },
+                  {
+                    "label": "Venus",
+                    "description": "The second planet from the Sun"
+                  },
+                  {
+                    "label": "Saturn",
+                    "description": "The ringed planet"
+                  }
+                ]
+              }
+            ]
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 8,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2951,
+      "event": {
+        "id": "evt_15542ae92001hVvgLS6zXB22r0",
+        "created": 1792431795858,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "assistantMessageID": "msg_15542a7370017ydtfWWwB4k14O"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 9,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2951,
+      "event": {
+        "id": "evt_15542ae94002qIMplxHZmwPWTp",
+        "created": 1792431795860,
+        "type": "form.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "form": {
+            "id": "frm_15542ae94001g7SNM42jXAqgo3",
+            "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+            "title": "Questions",
+            "metadata": {
+              "kind": "question",
+              "tool": {
+                "messageID": "msg_15542a7370017ydtfWWwB4k14O",
+                "id": "call_00_a82rmqt6cz9225s7mh7swrh6"
+              }
+            },
+            "fields": [
+              {
+                "key": "q0",
+                "title": "Planet choice",
+                "description": "Which planet do you pick?",
+                "type": "string",
+                "options": [
+                  {
+                    "value": "Mars",
+                    "label": "Mars",
+                    "description": "The red planet"
+                  },
+                  {
+                    "value": "Venus",
+                    "label": "Venus",
+                    "description": "The second planet from the Sun"
+                  },
+                  {
+                    "value": "Saturn",
+                    "label": "Saturn",
+                    "description": "The ringed planet"
+                  }
+                ],
+                "custom": true
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "t": 9839,
+      "event": {
+        "id": "evt_15542c97a0018owl09BNz7Tdt5",
+        "created": 1792431802746,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "cost": 0,
+          "tokens": {
+            "input": 63,
+            "output": 5,
+            "reasoning": 137,
+            "cache": {
+              "read": 512,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 9839,
+      "event": {
+        "id": "evt_15542c97b0011M95lcnul04y65",
+        "created": 1792431802747,
+        "type": "session.renamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "title": "Single-select planet question"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 11,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 16562,
+      "event": {
+        "id": "evt_15542e3b4001Xvw1ql783fOnAO",
+        "created": 1792431809460,
+        "type": "form.replied",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "frm_15542ae94001g7SNM42jXAqgo3",
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "answer": {
+            "q0": "Saturn"
+          }
+        }
+      }
+    },
+    {
+      "t": 16562,
+      "event": {
+        "id": "evt_15542e3b40020YCo5G9PCoacmE",
+        "created": 1792431809460,
+        "type": "session.tool.success",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "assistantMessageID": "msg_15542a7370017ydtfWWwB4k14O",
+          "id": "call_00_a82rmqt6cz9225s7mh7swrh6",
+          "content": [
+            {
+              "type": "text",
+              "text": "User has answered your questions: \"Which planet do you pick?\"=\"Saturn\". You can now continue with the user's answers in mind."
+            }
+          ],
+          "metadata": {
+            "answers": [
+              [
+                "Saturn"
+              ]
+            ],
+            "truncated": false
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 12,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 16562,
+      "event": {
+        "id": "evt_15542e3b6001z4WLpf25Z1g42D",
+        "created": 1792431809462,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "assistantMessageID": "msg_15542a7370017ydtfWWwB4k14O",
+          "finish": "tool-calls",
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 39,
+            "output": 109,
+            "reasoning": 0,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 13,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 16562,
+      "event": {
+        "id": "evt_15542e3b60029rcu26I6Yt817y",
+        "created": 1792431809462,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "cost": 0,
+          "tokens": {
+            "input": 102,
+            "output": 114,
+            "reasoning": 137,
+            "cache": {
+              "read": 5760,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 19122,
+      "event": {
+        "id": "evt_15542edaa001JpObhWsPeT97y5",
+        "created": 1792431812011,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_15542e3bb0012ciBQvmCo67Eea",
+          "started": 1792431809471
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 14,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 19122,
+      "event": {
+        "id": "evt_15542edb3001c0OInG3y3mnh8P",
+        "created": 1792431812019,
+        "type": "session.text.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "assistantMessageID": "msg_15542e3bb0012ciBQvmCo67Eea",
+          "ordinal": 0
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 15,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 19122,
+      "event": {
+        "id": "evt_15542edb70018r2wjYOC0YWVQT",
+        "created": 1792431812023,
+        "type": "session.text.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "assistantMessageID": "msg_15542e3bb0012ciBQvmCo67Eea",
+          "ordinal": 0,
+          "delta": "You picked **Saturn** 🪐"
+        }
+      }
+    },
+    {
+      "t": 19122,
+      "event": {
+        "id": "evt_15542edb80013g9yH0IsjAPcwJ",
+        "created": 1792431812024,
+        "type": "session.text.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "assistantMessageID": "msg_15542e3bb0012ciBQvmCo67Eea",
+          "ordinal": 0,
+          "text": "You picked **Saturn** 🪐"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 16,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 19122,
+      "event": {
+        "id": "evt_15542edb9001juwmo1tefmXkFx",
+        "created": 1792431812025,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "assistantMessageID": "msg_15542e3bb0012ciBQvmCo67Eea"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 17,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 19122,
+      "event": {
+        "id": "evt_15542edbb0011EK1tpboRGiKhq",
+        "created": 1792431812027,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "assistantMessageID": "msg_15542e3bb0012ciBQvmCo67Eea",
+          "finish": "stop",
+          "rawFinish": "stop",
+          "cost": 0,
+          "tokens": {
+            "input": 188,
+            "output": 10,
+            "reasoning": 0,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 18,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 19122,
+      "event": {
+        "id": "evt_15542edbd001av56bw15rBr5n5",
+        "created": 1792431812029,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "cost": 0,
+          "tokens": {
+            "input": 290,
+            "output": 124,
+            "reasoning": 137,
+            "cache": {
+              "read": 11008,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 19122,
+      "event": {
+        "id": "evt_15542edbe001QP3shNqjyHxpEn",
+        "created": 1792431812030,
+        "type": "session.execution.succeeded",
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 19,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 19144,
+      "event": {
+        "id": "evt_15542edd50018lu5gc1t56Lxwq",
+        "created": 1792431812053,
+        "type": "session.viewed",
+        "data": {
+          "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "idle": 1792431812030
+        },
+        "durable": {
+          "aggregateID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+          "seq": 20,
+          "version": 1
+        }
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "t": 60,
+      "key": {
+        "text": "Use your question tool to ask me one single-select question: which planet, with options Mars, Venus and Saturn. Then reply with the planet I picked."
+      }
+    },
+    {
+      "t": 1029,
+      "key": "Enter"
+    }
+  ],
+  "http": [
+    {
+      "t": 16510,
+      "method": "GET",
+      "path": "/api/session/ses_eaabd58e5ffeCV2bXfsr8uLbmo/form",
+      "status": 200,
+      "response": {
+        "data": [
+          {
+            "id": "frm_15542ae94001g7SNM42jXAqgo3",
+            "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo",
+            "title": "Questions",
+            "metadata": {
+              "kind": "question",
+              "tool": {
+                "messageID": "msg_15542a7370017ydtfWWwB4k14O",
+                "id": "call_00_a82rmqt6cz9225s7mh7swrh6"
+              }
+            },
+            "fields": [
+              {
+                "key": "q0",
+                "title": "Planet choice",
+                "description": "Which planet do you pick?",
+                "type": "string",
+                "options": [
+                  {
+                    "value": "Mars",
+                    "label": "Mars",
+                    "description": "The red planet"
+                  },
+                  {
+                    "value": "Venus",
+                    "label": "Venus",
+                    "description": "The second planet from the Sun"
+                  },
+                  {
+                    "value": "Saturn",
+                    "label": "Saturn",
+                    "description": "The ringed planet"
+                  }
+                ],
+                "custom": true
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "t": 16548,
+      "method": "POST",
+      "path": "/api/session/ses_eaabd58e5ffeCV2bXfsr8uLbmo/form/frm_15542ae94001g7SNM42jXAqgo3/reply",
+      "body": {
+        "answer": {
+          "q0": "Saturn"
+        }
+      },
+      "status": 204
+    },
+    {
+      "t": 17922,
+      "method": "POST",
+      "path": "/api/session/ses_eaabd58e5ffeCV2bXfsr8uLbmo/form/frm_15542ae94001g7SNM42jXAqgo3/reply",
+      "body": {
+        "answer": {
+          "q0": "Mars"
+        }
+      },
+      "status": 409,
+      "response": {
+        "_tag": "FormAlreadySettledError",
+        "id": "frm_15542ae94001g7SNM42jXAqgo3",
+        "message": "Form already settled: frm_15542ae94001g7SNM42jXAqgo3"
+      }
+    }
+  ],
+  "pluginRoutes": [
+    {
+      "t": 1050,
+      "route": {
+        "type": "session",
+        "sessionID": "ses_eaabd58e5ffeCV2bXfsr8uLbmo"
+      }
+    }
+  ]
+}

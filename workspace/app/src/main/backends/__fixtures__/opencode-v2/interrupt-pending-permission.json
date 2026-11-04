@@ -1,0 +1,555 @@
+{
+  "scenario": "interrupt-pending-permission",
+  "opencodeVersion": "2.0.32",
+  "notes": "Extra, settles 'does an interrupted turn leave a pending permission with no reply event': permission asked for 'ln -s …', then POST /api/session/:id/interrupt (what double Esc calls) -> 200 {interrupted:true}. Only execution.interrupted{reason:user}: NO permission.replied. GET …/permission -> [] and a reply -> 404. The TUI kept showing the (now stale) permission dialog until a key was pressed; Enter just closed it, with no event (14 s later, at the end of this window).",
+  "frames": [
+    {
+      "t": 1067,
+      "event": {
+        "id": "evt_155441422001aAjNB0j2bv5eQh",
+        "created": 1792431887394,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "slug": "eager-orchid",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1096,
+      "event": {
+        "id": "evt_155441430001QjpQxL3RENHpOa",
+        "created": 1792431887408,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_15544141d001F7Gl1QhEUC0ESk",
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "Use your shell tool to run exactly this command: ln -s moved.txt link.txt",
+              "files": [],
+              "agents": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1097,
+      "event": {
+        "id": "evt_155441432001aO3JI5vp6Cn7F2",
+        "created": 1792431887410,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1097,
+      "event": {
+        "id": "evt_155441437001bousRSH0gXZ4yP",
+        "created": 1792431887415,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 1097,
+      "event": {
+        "id": "evt_155441438001OQPQBQN4Nn1FU9",
+        "created": 1792431887416,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "inboxID": "msg_15544141d001F7Gl1QhEUC0ESk"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2413,
+      "event": {
+        "id": "evt_155441953001uBBgrdkSY6Uoh0",
+        "created": 1792431888723,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_15544143d001xywSm5Rs6xC34m",
+          "started": 1792431887424
+        },
+        "durable": {
+          "aggregateID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "seq": 5,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2413,
+      "event": {
+        "id": "evt_15544195b001yJwoetfPm08K7f",
+        "created": 1792431888731,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "assistantMessageID": "msg_15544143d001xywSm5Rs6xC34m",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "seq": 6,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2458,
+      "event": {
+        "id": "evt_15544198d0016ITdTTkOb7Nrx7",
+        "created": 1792431888781,
+        "type": "session.reasoning.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "assistantMessageID": "msg_15544143d001xywSm5Rs6xC34m",
+          "ordinal": 0,
+          "delta": "The user asks to run exactly `ln -s moved.txt link.txt`. Let me do it."
+        }
+      }
+    },
+    {
+      "t": 2458,
+      "event": {
+        "id": "evt_15544198e001321qLb9lnpBeCp",
+        "created": 1792431888782,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "assistantMessageID": "msg_15544143d001xywSm5Rs6xC34m",
+          "id": "call_00_ax35aebuba0th7jn0a7b6j84",
+          "name": "shell"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "seq": 7,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2529,
+      "event": {
+        "id": "evt_1554419d1001mrylgaLBTXxaEf",
+        "created": 1792431888849,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "assistantMessageID": "msg_15544143d001xywSm5Rs6xC34m",
+          "ordinal": 0,
+          "text": "The user asks to run exactly `ln -s moved.txt link.txt`. Let me do it.",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "seq": 8,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2529,
+      "event": {
+        "id": "evt_1554419d3001Yik28YkR0msr6q",
+        "created": 1792431888851,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "assistantMessageID": "msg_15544143d001xywSm5Rs6xC34m",
+          "id": "call_00_ax35aebuba0th7jn0a7b6j84",
+          "text": "{\"command\": \"ln -s moved.txt link.txt\"}"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "seq": 9,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2529,
+      "event": {
+        "id": "evt_1554419d5001LYq77kHfLo7mcl",
+        "created": 1792431888853,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "assistantMessageID": "msg_15544143d001xywSm5Rs6xC34m",
+          "id": "call_00_ax35aebuba0th7jn0a7b6j84",
+          "input": {
+            "command": "ln -s moved.txt link.txt"
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "seq": 10,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2529,
+      "event": {
+        "id": "evt_1554419d6001vGIIaqIX0nwTgZ",
+        "created": 1792431888854,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "assistantMessageID": "msg_15544143d001xywSm5Rs6xC34m"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "seq": 11,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2529,
+      "event": {
+        "id": "evt_1554419da0029zTBvnAwPqyUOp",
+        "created": 1792431888858,
+        "type": "permission.asked",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "per_1554419da001mISJoWV07hgB3w",
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "action": "shell",
+          "resources": [
+            "ln -s moved.txt link.txt"
+          ],
+          "save": [
+            "ln *"
+          ],
+          "source": {
+            "type": "tool",
+            "messageID": "msg_15544143d001xywSm5Rs6xC34m",
+            "id": "call_00_ax35aebuba0th7jn0a7b6j84"
+          }
+        }
+      }
+    },
+    {
+      "t": 2778,
+      "event": {
+        "id": "evt_155441ad20014qfL0Sm09F305f",
+        "created": 1792431889106,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "cost": 0,
+          "tokens": {
+            "input": 49,
+            "output": 9,
+            "reasoning": 46,
+            "cache": {
+              "read": 512,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 2778,
+      "event": {
+        "id": "evt_155441ad2002m9CZsqSeRdJ072",
+        "created": 1792431889106,
+        "type": "session.renamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "title": "Create symlink link.txt to moved.txt"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "seq": 13,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3856,
+      "event": {
+        "id": "evt_155441f05001qad4qQjktMqYaT",
+        "created": 1792431890181,
+        "type": "session.tool.failed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "assistantMessageID": "msg_15544143d001xywSm5Rs6xC34m",
+          "id": "call_00_ax35aebuba0th7jn0a7b6j84",
+          "error": {
+            "type": "aborted",
+            "message": "Tool execution interrupted"
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "seq": 14,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 3856,
+      "event": {
+        "id": "evt_155441f06001paIyZ25emWoXIr",
+        "created": 1792431890182,
+        "type": "session.step.failed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "assistantMessageID": "msg_15544143d001xywSm5Rs6xC34m",
+          "error": {
+            "type": "aborted",
+            "message": "Step interrupted"
+          },
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 25,
+            "output": 43,
+            "reasoning": 20,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "seq": 15,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3857,
+      "event": {
+        "id": "evt_155441f0700174HGY9uVNj26Iu",
+        "created": 1792431890183,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "cost": 0,
+          "tokens": {
+            "input": 74,
+            "output": 52,
+            "reasoning": 66,
+            "cache": {
+              "read": 5760,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 3857,
+      "event": {
+        "id": "evt_155441f08001XbaO5TkdqIi9SN",
+        "created": 1792431890184,
+        "type": "session.execution.interrupted",
+        "data": {
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "reason": "user"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "seq": 16,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3877,
+      "event": {
+        "id": "evt_155441f1c0012ybOh92ztApXXF",
+        "created": 1792431890204,
+        "type": "session.viewed",
+        "data": {
+          "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "idle": 1792431890184
+        },
+        "durable": {
+          "aggregateID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb",
+          "seq": 17,
+          "version": 1
+        }
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "t": 58,
+      "key": {
+        "text": "Use your shell tool to run exactly this command: ln -s moved.txt link.txt"
+      }
+    },
+    {
+      "t": 1051,
+      "key": "Enter"
+    },
+    {
+      "t": 18242,
+      "key": "Enter"
+    }
+  ],
+  "http": [
+    {
+      "t": 3848,
+      "method": "POST",
+      "path": "/api/session/ses_eaabbebe4ffeg4C6rzB9u5aDgb/interrupt",
+      "status": 200
+    },
+    {
+      "t": 5465,
+      "method": "GET",
+      "path": "/api/session/ses_eaabbebe4ffeg4C6rzB9u5aDgb/permission",
+      "status": 200,
+      "response": {
+        "data": []
+      }
+    },
+    {
+      "t": 5505,
+      "method": "POST",
+      "path": "/api/session/ses_eaabbebe4ffeg4C6rzB9u5aDgb/permission/per_1554419da001mISJoWV07hgB3w/reply",
+      "body": {
+        "decision": "once"
+      },
+      "status": 404,
+      "response": {
+        "_tag": "PermissionNotFoundError",
+        "requestID": "per_1554419da001mISJoWV07hgB3w",
+        "message": "Permission request not found: per_1554419da001mISJoWV07hgB3w"
+      }
+    }
+  ],
+  "pluginRoutes": [
+    {
+      "t": 1074,
+      "route": {
+        "type": "session",
+        "sessionID": "ses_eaabbebe4ffeg4C6rzB9u5aDgb"
+      }
+    }
+  ]
+}

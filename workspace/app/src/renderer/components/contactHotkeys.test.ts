@@ -1,0 +1,320 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  HINT_DELAY_MS,
+  hotkeyDigit,
+  hotkeyTargets,
+  listenForContactHotkeys,
+  nextUnread,
+  unreadStep,
+} from "./contactHotkeys";
+
+describe("hotkeyTargets", () => {
+  const project = (id: string) => ({ id });
+
+  it("keeps only the first nine contacts, in stored order", () => {
+    const many = Array.from({ length: 12 }, (_, i) => project(`p${i + 1}`));
+    expect(hotkeyTargets(many)).toEqual(
+      ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9"]
+    );
+  });
+});
+
+describe("hotkeyDigit", () => {
+  const chord = (code: string, mods: Partial<Record<string, boolean>> = {}) => ({
+    code,
+    metaKey: true,
+    ctrlKey: false,
+    altKey: false,
+    shiftKey: false,
+    ...mods,
+  });
+
+  it("reads Cmd plus 1 to 9", () => {
+    expect(hotkeyDigit(chord("Digit1"))).toBe(1);
+    expect(hotkeyDigit(chord("Digit9"))).toBe(9);
+  });
+
+  it("ignores 0, other keys, and the digit without Cmd", () => {
+    expect(hotkeyDigit(chord("Digit0"))).toBeNull();
+    expect(hotkeyDigit(chord("KeyC"))).toBeNull();
+    expect(hotkeyDigit(chord("Digit1", { metaKey: false }))).toBeNull();
+  });
+
+  it("ignores Cmd plus another modifier, which is some other shortcut", () => {
+    expect(hotkeyDigit(chord("Digit1", { shiftKey: true }))).toBeNull();
+    expect(hotkeyDigit(chord("Digit1", { altKey: true }))).toBeNull();
+    expect(hotkeyDigit(chord("Digit1", { ctrlKey: true }))).toBeNull();
+  });
+});
+
+describe("unreadStep", () => {
+  const chord = (code: string, mods: Partial<Record<string, boolean>> = {}) => ({
+    code,
+    metaKey: false,
+    ctrlKey: false,
+    altKey: true,
+    shiftKey: true,
+    ...mods,
+  });
+
+  it("reads Option+Shift+Down as the next and Option+Shift+Up as the previous", () => {
+    expect(unreadStep(chord("ArrowDown"))).toBe(1);
+    expect(unreadStep(chord("ArrowUp"))).toBe(-1);
+  });
+
+  it("ignores the arrows without both Option and Shift, or with Cmd or Ctrl", () => {
+    expect(unreadStep(chord("ArrowDown", { altKey: false }))).toBeNull();
+    expect(unreadStep(chord("ArrowDown", { shiftKey: false }))).toBeNull();
+    expect(unreadStep(chord("ArrowDown", { metaKey: true }))).toBeNull();
+    expect(unreadStep(chord("ArrowUp", { ctrlKey: true }))).toBeNull();
+    expect(unreadStep(chord("ArrowLeft"))).toBeNull();
+  });
+});
+
+describe("nextUnread", () => {
+  const order = ["m", "a", "b", "c", "d"];
+
+  it("finds the nearest contact with unread alerts below or above the shown one", () => {
+    const unread = new Map([["a", 1], ["d", 2]]);
+    expect(nextUnread(order, unread, "b", 1)).toBe("d");
+    expect(nextUnread(order, unread, "b", -1)).toBe("a");
+  });
+
+  it("goes round the end of the list", () => {
+    const unread = new Map([["a", 1]]);
+    expect(nextUnread(order, unread, "c", 1)).toBe("a");
+    expect(nextUnread(order, new Map([["d", 1]]), "a", -1)).toBe("d");
+  });
+
+  it("skips the shown contact, so a lone unread one there gives nothing", () => {
+    expect(nextUnread(order, new Map([["b", 1]]), "b", 1)).toBeNull();
+    expect(nextUnread(order, new Map(), "b", -1)).toBeNull();
+  });
+
+  it("starts from the top for Down and the bottom for Up with nothing shown", () => {
+    const unread = new Map([["a", 1], ["c", 1]]);
+    expect(nextUnread(order, unread, null, 1)).toBe("a");
+    expect(nextUnread(order, unread, null, -1)).toBe("c");
+  });
+
+  it("takes a shown contact that is no longer listed as nothing shown", () => {
+    expect(nextUnread(order, new Map([["m", 1]]), "gone", 1)).toBe("m");
+  });
+
+  it("gives nothing for an empty list", () => {
+    expect(nextUnread([], new Map([["a", 1]]), null, 1)).toBeNull();
+  });
+});
+
+describe("listenForContactHotkeys", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  // A window stand-in: Node's EventTarget, with key events built from plain Events.
+  function setup() {
+    const target = new EventTarget();
+    const state = {
+      targets: ["a", "b", "c"],
+      // What Option+Shift+Down and Up would show.
+      unread: { next: "c" as string | null, previous: "a" as string | null },
+      paused: false,
+      shown: false,
+      selected: [] as string[],
+    };
+    const stop = listenForContactHotkeys(target, {
+      targets: () => state.targets,
+      unreadTarget: (step) => (step === 1 ? state.unread.next : state.unread.previous),
+      select: (id) => state.selected.push(id),
+      showHints: (shown) => {
+        state.shown = shown;
+      },
+      paused: () => state.paused,
+    });
+    const send = (type: string, key: string, code: string, metaKey: boolean) => {
+      const e = Object.assign(new Event(type, { cancelable: true }), {
+        key,
+        code,
+        metaKey,
+        ctrlKey: false,
+        altKey: false,
+        shiftKey: false,
+      });
+      target.dispatchEvent(e);
+      return e;
+    };
+    return {
+      state,
+      stop,
+      cmdDown: () => send("keydown", "Meta", "MetaLeft", true),
+      cmdUp: () => send("keyup", "Meta", "MetaLeft", false),
+      cmd: (key: string, code: string) => send("keydown", key, code, true),
+      plain: (key: string, code: string) => send("keydown", key, code, false),
+      // Option+Shift plus an arrow, from the element `from` stands in for: its
+      // `closest` matches the selectors in `inside`.
+      optShift: (code: "ArrowDown" | "ArrowUp", inside: string[] = []) => {
+        const e = Object.assign(new Event("keydown", { cancelable: true }), {
+          key: code,
+          code,
+          metaKey: false,
+          ctrlKey: false,
+          altKey: true,
+          shiftKey: true,
+        });
+        const from = {
+          closest: (selector: string) =>
+            selector.split(",").some((s) => inside.includes(s.trim())) ? {} : null,
+        };
+        Object.defineProperty(e, "target", { value: from });
+        target.dispatchEvent(e);
+        return e;
+      },
+      blur: () => target.dispatchEvent(new Event("blur")),
+    };
+  }
+
+  it("shows the next or previous unread contact for Option+Shift+Down or Up", () => {
+    const t = setup();
+    const e = t.optShift("ArrowDown");
+    t.optShift("ArrowUp");
+    expect(t.state.selected).toEqual(["c", "a"]);
+    expect(e.defaultPrevented).toBe(true);
+    expect(e.cancelBubble).toBe(true);
+  });
+
+  it("swallows Option+Shift+Down with no unread contact to show", () => {
+    const t = setup();
+    t.state.unread.next = null;
+    const e = t.optShift("ArrowDown");
+    expect(t.state.selected).toEqual([]);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it("takes the keys from the terminal's own textarea", () => {
+    const t = setup();
+    const e = t.optShift("ArrowDown", ["textarea", ".xterm"]);
+    expect(t.state.selected).toEqual(["c"]);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it("leaves them to a text field, where they select to a paragraph's end", () => {
+    const t = setup();
+    const inBox = t.optShift("ArrowDown", ["textarea"]);
+    const inInput = t.optShift("ArrowUp", ["input"]);
+    expect(t.state.selected).toEqual([]);
+    expect(inBox.defaultPrevented).toBe(false);
+    expect(inInput.defaultPrevented).toBe(false);
+  });
+
+  it("leaves Option+Shift+Down to an open dialog", () => {
+    const t = setup();
+    t.state.paused = true;
+    const e = t.optShift("ArrowDown");
+    expect(t.state.selected).toEqual([]);
+    expect(e.defaultPrevented).toBe(false);
+  });
+
+  it("shows the digits only once Cmd has been held for the delay", () => {
+    const t = setup();
+    t.cmdDown();
+    vi.advanceTimersByTime(HINT_DELAY_MS - 1);
+    expect(t.state.shown).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(t.state.shown).toBe(true);
+  });
+
+  it("hides them when Cmd is released, and never shows them for a quick release", () => {
+    const t = setup();
+    t.cmdDown();
+    vi.advanceTimersByTime(HINT_DELAY_MS);
+    t.cmdUp();
+    expect(t.state.shown).toBe(false);
+
+    t.cmdDown();
+    vi.advanceTimersByTime(HINT_DELAY_MS / 2);
+    t.cmdUp();
+    vi.advanceTimersByTime(HINT_DELAY_MS * 4);
+    expect(t.state.shown).toBe(false);
+  });
+
+  it("takes Cmd plus another key as some other shortcut, before or after the digits show", () => {
+    const t = setup();
+    t.cmdDown();
+    t.cmd("c", "KeyC");
+    vi.advanceTimersByTime(HINT_DELAY_MS * 4);
+    expect(t.state.shown).toBe(false);
+
+    t.cmdUp();
+    t.cmdDown();
+    vi.advanceTimersByTime(HINT_DELAY_MS);
+    t.cmd("v", "KeyV");
+    expect(t.state.shown).toBe(false);
+  });
+
+  it("hides them when the window loses focus, where the keyup never arrives", () => {
+    const t = setup();
+    t.cmdDown();
+    vi.advanceTimersByTime(HINT_DELAY_MS);
+    t.blur();
+    expect(t.state.shown).toBe(false);
+  });
+
+  it("selects the contact for Cmd plus its digit and keeps the key from the terminal", () => {
+    const t = setup();
+    const e = t.cmd("2", "Digit2");
+    expect(t.state.selected).toEqual(["b"]);
+    expect(e.defaultPrevented).toBe(true);
+    expect(e.cancelBubble).toBe(true);
+  });
+
+  it("keeps the digits up while Cmd is held, so a second digit can follow", () => {
+    const t = setup();
+    t.cmdDown();
+    vi.advanceTimersByTime(HINT_DELAY_MS);
+    t.cmd("1", "Digit1");
+    t.cmd("3", "Digit3");
+    expect(t.state.selected).toEqual(["a", "c"]);
+    expect(t.state.shown).toBe(true);
+  });
+
+  it("swallows a digit with no contact behind it", () => {
+    const t = setup();
+    const e = t.cmd("9", "Digit9");
+    expect(t.state.selected).toEqual([]);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it("reads the contacts at each key press, so a reorder applies at once", () => {
+    const t = setup();
+    t.state.targets = ["c", "a"];
+    t.cmd("1", "Digit1");
+    expect(t.state.selected).toEqual(["c"]);
+  });
+
+  it("lets a digit typed without Cmd through to the terminal", () => {
+    const t = setup();
+    const e = t.plain("1", "Digit1");
+    expect(t.state.selected).toEqual([]);
+    expect(e.defaultPrevented).toBe(false);
+  });
+
+  it("leaves every key to an open dialog", () => {
+    const t = setup();
+    t.state.paused = true;
+    t.cmdDown();
+    vi.advanceTimersByTime(HINT_DELAY_MS * 4);
+    expect(t.state.shown).toBe(false);
+    const e = t.cmd("1", "Digit1");
+    expect(t.state.selected).toEqual([]);
+    expect(e.defaultPrevented).toBe(false);
+  });
+
+  it("stops listening, and drops a pending show, once stopped", () => {
+    const t = setup();
+    t.cmdDown();
+    t.stop();
+    vi.advanceTimersByTime(HINT_DELAY_MS * 4);
+    expect(t.state.shown).toBe(false);
+    t.cmd("1", "Digit1");
+    expect(t.state.selected).toEqual([]);
+  });
+});

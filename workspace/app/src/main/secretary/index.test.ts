@@ -1,0 +1,1108 @@
+// The orchestrator with the brief writer, the speech client and the event source
+// faked: each fake call stays pending until the test settles it, so every step of
+// a brief (preparing, text, audio) can be looked at on its own, and a newer event
+// or a clear can land while a call is still in flight.
+
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { SecretaryEvent, SecretaryEventListener } from "../process-manager";
+import type { BriefLanguage, SecretaryBriefState } from "../../shared/types";
+import type { Brief } from "./briefWriter";
+import type { SpeechOptions, SpeechServer, SynthesizeResult } from "./speech";
+import type { AnswerPlan, Dialog } from "./dialog";
+import type { Interpretation, ReplyInterpreterInput } from "./replyInterpreter";
+import type { AnswerOutcome } from "../process-manager";
+
+// Anything in this module graph touching the disk is recorded, never performed.
+const disk = vi.hoisted(() => {
+  const writes: string[] = [];
+  const WRITE = /^(write|append|mkdir|mkdtemp|rename|copy|cp|rm|unlink|truncate|symlink|link|chmod|chown|utimes|open|createWriteStream)/;
+  const guard = (real: Record<string, unknown>, name: string) => {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(real)) {
+      out[key] =
+        typeof value === "function" && WRITE.test(key)
+          ? () => {
+              writes.push(`${name}.${key}`);
+            }
+          : value;
+    }
+    return { ...out, default: out };
+  };
+  return { writes, guard };
+});
+vi.mock("fs", async (orig) => disk.guard(await orig(), "fs"));
+vi.mock("node:fs", async (orig) => disk.guard(await orig(), "fs"));
+vi.mock("fs/promises", async (orig) => disk.guard(await orig(), "fs/promises"));
+vi.mock("node:fs/promises", async (orig) => disk.guard(await orig(), "fs/promises"));
+
+// The default instance's real modules. Every test builds its own secretary on
+// fakes; these only keep the import from loading electron, node-pty or userData.
+vi.mock("electron", () => ({ BrowserWindow: { getAllWindows: () => [] } }));
+vi.mock("../process-manager", () => ({
+  processManager: {
+    onSecretaryEvent: () => () => {},
+    liveSecretaryEvents: () => [],
+  },
+}));
+vi.mock("../settings-store", () => ({
+  loadSpeechServer: () => {
+    throw new Error("a test read the real speech settings");
+  },
+}));
+vi.mock("./briefWriter", () => ({
+  writeBriefFor: () => {
+    throw new Error("a test called the real brief writer");
+  },
+}));
+vi.mock("./replyInterpreter", () => ({
+  interpretReply: () => {
+    throw new Error("a test called the real reply interpreter");
+  },
+}));
+vi.mock("../backends/claude", () => ({
+  findClaudeCli: () => {
+    throw new Error("a test looked for the real claude");
+  },
+}));
+
+import { createSecretary, NO_SERVER_REASON } from "./index";
+import { TARGET_DBFS } from "./loudness";
+import type { SecretaryDeps } from "./index";
+
+interface Pending<T> {
+  settle: (value: T) => void;
+  signal: AbortSignal;
+}
+
+interface WriteCall extends Pending<Brief> {
+  instanceId: string;
+  event: SecretaryEvent;
+}
+
+interface InterpretCall extends Pending<Interpretation> {
+  input: ReplyInterpreterInput;
+}
+
+interface AnswerCall {
+  instanceId: string;
+  seq: number;
+  plan: AnswerPlan;
+  signal: AbortSignal;
+  settle: (outcome: AnswerOutcome) => void;
+}
+
+interface SpeakCall extends Pending<SynthesizeResult> {
+  server: SpeechServer;
+  text: string;
+  language: BriefLanguage;
+}
+
+const SERVER: SpeechServer = { url: "https://tts.example.com", key: "sk-test" };
+const WAV = Buffer.from("RIFF\0\0\0\0WAVEfmt fake");
+
+const ev = (seq: number, kind: SecretaryEvent["kind"] = "finished"): SecretaryEvent => ({
+  kind,
+  seq,
+  at: 1_000 + seq,
+});
+
+const brief = (text: string, language: BriefLanguage = "Chinese"): Brief => ({
+  ok: true,
+  language,
+  text,
+});
+
+// Lets the orchestrator's awaits run.
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+function harness() {
+  let listener: SecretaryEventListener | null = null;
+  const live: { instanceId: string; event: SecretaryEvent }[] = [];
+  const writes: WriteCall[] = [];
+  const speaks: SpeakCall[] = [];
+  const sent: unknown[][] = [];
+  const speech = { server: SERVER };
+  const interprets: InterpretCall[] = [];
+  const answers: AnswerCall[] = [];
+  const dialogs: { dialog: Dialog | null } = { dialog: null };
+  // Whether `claude` is installed. Found unless a test takes it away.
+  const claude = { found: true };
+
+  // Like the real ones: an abort resolves "aborted". A test can still settle the
+  // call afterwards, to play a writer that comes back anyway.
+  function pending<T>(signal: AbortSignal, aborted: T, push: (p: Pending<T>) => void) {
+    return new Promise<T>((resolve) => {
+      signal.addEventListener("abort", () => resolve(aborted));
+      push({ settle: resolve, signal });
+    });
+  }
+
+  const deps: SecretaryDeps = {
+    claudeFound: vi.fn(() => claude.found),
+    onSecretaryEvent: vi.fn((l: SecretaryEventListener) => {
+      listener = l;
+      return () => {
+        listener = null;
+      };
+    }),
+    liveSecretaryEvents: vi.fn(() => live),
+    writeBriefFor: vi.fn((instanceId: string, event: SecretaryEvent, signal: AbortSignal) =>
+      pending<Brief>(signal, { ok: false, reason: "aborted" }, (p) =>
+        writes.push({ ...p, instanceId, event })
+      )
+    ),
+    loadSpeechServer: vi.fn(() => speech.server),
+    synthesize: vi.fn(
+      (server: SpeechServer, text: string, language: BriefLanguage, options: SpeechOptions) =>
+        pending<SynthesizeResult>(options.signal!, { ok: false, reason: "aborted" }, (p) =>
+          speaks.push({ ...p, server, text, language })
+        )
+    ),
+    send: vi.fn((...args: unknown[]) => {
+      sent.push(args);
+    }),
+    dialogFor: vi.fn(() => dialogs.dialog),
+    interpretReply: vi.fn((input: ReplyInterpreterInput, signal: AbortSignal) =>
+      pending<Interpretation>(signal, { ok: false, reason: "aborted" }, (p) =>
+        interprets.push({ ...p, input })
+      )
+    ),
+    answerDialog: vi.fn(
+      (instanceId: string, seq: number, plan: AnswerPlan, signal: AbortSignal) =>
+        new Promise<AnswerOutcome>((settle) => answers.push({ instanceId, seq, plan, signal, settle }))
+    ),
+  };
+
+  const secretary = createSecretary(deps);
+  return {
+    secretary,
+    deps,
+    live,
+    writes,
+    speaks,
+    speech,
+    interprets,
+    answers,
+    dialogs,
+    claude,
+    // As process-manager fires it: a new event, or null when it clears.
+    fire: (instanceId: string, event: SecretaryEvent | null) => listener?.(instanceId, event),
+    subscribed: () => listener !== null,
+    // Every secretary-brief push for the instance, in order.
+    pushes: (instanceId: string) =>
+      sent
+        .filter(([channel, id]) => channel === "secretary-brief" && id === instanceId)
+        .map(([, , state]) => state as SecretaryBriefState | null),
+    modePushes: () =>
+      sent.filter(([channel]) => channel === "secretary-mode").map(([, on]) => on),
+    sentCount: () => sent.length,
+  };
+}
+
+beforeEach(() => {
+  disk.writes.length = 0;
+});
+
+describe("mode off", () => {
+  it("prepares nothing, spawns nothing and calls nothing", async () => {
+    const h = harness();
+    h.secretary.start(false);
+    expect(h.subscribed()).toBe(true);
+
+    h.fire("a", ev(1));
+    h.fire("a", ev(2, "needs-you"));
+    h.fire("a", null);
+    await flush();
+
+    expect(h.deps.writeBriefFor).not.toHaveBeenCalled();
+    expect(h.deps.loadSpeechServer).not.toHaveBeenCalled();
+    expect(h.deps.synthesize).not.toHaveBeenCalled();
+    expect(h.deps.liveSecretaryEvents).not.toHaveBeenCalled();
+    expect(h.deps.send).not.toHaveBeenCalled();
+    expect(h.secretary.briefs()).toEqual({});
+    expect(h.secretary.isOn()).toBe(false);
+  });
+});
+
+describe("one event", () => {
+  it("goes preparing, then ready with the text while audio is pending, then audio ready", async () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(7, "needs-you"));
+
+    expect(h.pushes("a")).toEqual([{ seq: 7, kind: "needs-you", status: "preparing" }]);
+    expect(h.writes).toHaveLength(1);
+    expect(h.writes[0].instanceId).toBe("a");
+    expect(h.writes[0].event).toEqual(ev(7, "needs-you"));
+
+    h.writes[0].settle(brief("Shop 要跑一个删除脚本，问你行不行。"));
+    await flush();
+    const ready = {
+      seq: 7,
+      kind: "needs-you",
+      status: "ready",
+      text: "Shop 要跑一个删除脚本，问你行不行。",
+      language: "Chinese",
+    };
+    expect(h.pushes("a")[1]).toEqual({ ...ready, audio: "pending" });
+    expect(h.secretary.briefs()).toEqual({ a: { ...ready, audio: "pending" } });
+    expect(h.secretary.audioFor("a", 7)).toBeNull();
+
+    // The text, in its language, to the server read for this brief.
+    expect(h.speaks).toHaveLength(1);
+    expect(h.speaks[0]).toMatchObject({
+      server: SERVER,
+      text: "Shop 要跑一个删除脚本，问你行不行。",
+      language: "Chinese",
+    });
+
+    h.speaks[0].settle({ ok: true, wav: WAV });
+    await flush();
+    expect(h.pushes("a")).toEqual([
+      { seq: 7, kind: "needs-you", status: "preparing" },
+      { ...ready, audio: "pending" },
+      { ...ready, audio: "ready" },
+    ]);
+    expect(h.secretary.briefs()).toEqual({ a: { ...ready, audio: "ready" } });
+    expect(h.secretary.audioFor("a", 7)).toBe(WAV);
+    // The wav never rides an update.
+    expect(JSON.stringify(h.pushes("a"))).not.toContain("RIFF");
+  });
+
+  it("keeps the server's audio brought to speech loudness (T-515)", async () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.writes[0].settle(brief("Shop finished the migration.", "English"));
+    await flush();
+    // One second of a 220 Hz tone at -27 dBFS RMS, the server's level.
+    const pcm = Buffer.alloc(48000);
+    for (let i = 0; i < 24000; i++) {
+      const v = 0.0447 * Math.SQRT2 * Math.sin((2 * Math.PI * 220 * i) / 24000);
+      pcm.writeInt16LE(Math.round(v * 32768), i * 2);
+    }
+    const head = Buffer.alloc(44);
+    head.write("RIFF", 0, "latin1");
+    head.writeUInt32LE(36 + pcm.length, 4);
+    head.write("WAVEfmt ", 8, "latin1");
+    head.writeUInt32LE(16, 16);
+    head.writeUInt16LE(1, 20);
+    head.writeUInt16LE(1, 22);
+    head.writeUInt32LE(24000, 24);
+    head.writeUInt32LE(48000, 28);
+    head.writeUInt16LE(2, 32);
+    head.writeUInt16LE(16, 34);
+    head.write("data", 36, "latin1");
+    head.writeUInt32LE(pcm.length, 40);
+    h.speaks[0].settle({ ok: true, wav: Buffer.concat([head, pcm]) });
+    await flush();
+
+    const kept = h.secretary.audioFor("a", 1)!;
+    let sum = 0;
+    for (let i = 0; i < 24000; i++) sum += (kept.readInt16LE(44 + i * 2) / 32768) ** 2;
+    expect(20 * Math.log10(Math.sqrt(sum / 24000))).toBeCloseTo(TARGET_DBFS, 0);
+  });
+
+  it("is ready with audio unavailable and the reason when synthesis fails, and doesn't retry", async () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.writes[0].settle(brief("Shop finished the migration.", "English"));
+    await flush();
+    h.speaks[0].settle({ ok: false, reason: "timed out after 15 s" });
+    await flush();
+    await flush();
+
+    expect(h.pushes("a").at(-1)).toEqual({
+      seq: 1,
+      kind: "finished",
+      status: "ready",
+      text: "Shop finished the migration.",
+      language: "English",
+      audio: "unavailable",
+      voiceReason: "timed out after 15 s",
+    });
+    expect(h.secretary.audioFor("a", 1)).toBeNull();
+    expect(h.deps.writeBriefFor).toHaveBeenCalledTimes(1);
+    expect(h.deps.synthesize).toHaveBeenCalledTimes(1);
+  });
+
+  it("goes straight to audio unavailable with no server set, without a speech call", async () => {
+    const h = harness();
+    h.speech.server = { url: "", key: "" };
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.writes[0].settle(brief("Shop 做完了。"));
+    await flush();
+
+    expect(h.pushes("a")).toEqual([
+      { seq: 1, kind: "finished", status: "preparing" },
+      {
+        seq: 1,
+        kind: "finished",
+        status: "ready",
+        text: "Shop 做完了。",
+        language: "Chinese",
+        audio: "unavailable",
+        voiceReason: NO_SERVER_REASON,
+      },
+    ]);
+    expect(h.deps.synthesize).not.toHaveBeenCalled();
+  });
+
+  it("reads the server per brief, so one that comes back speaks the next brief", async () => {
+    const h = harness();
+    h.speech.server = { url: "", key: "" };
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.writes[0].settle(brief("first"));
+    await flush();
+    expect(h.deps.synthesize).not.toHaveBeenCalled();
+
+    h.speech.server = SERVER;
+    h.fire("a", ev(2));
+    h.writes[1].settle(brief("second"));
+    await flush();
+    expect(h.speaks).toHaveLength(1);
+    expect(h.speaks[0].text).toBe("second");
+    expect(h.deps.loadSpeechServer).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails when the brief writer fails, and calls no speech server", async () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(3, "needs-you"));
+    h.writes[0].settle({ ok: false, reason: "the CLI exited with code 1" });
+    await flush();
+
+    expect(h.pushes("a").at(-1)).toEqual({
+      seq: 3,
+      kind: "needs-you",
+      status: "failed",
+      reason: "the CLI exited with code 1",
+    });
+    expect(h.deps.loadSpeechServer).not.toHaveBeenCalled();
+    expect(h.deps.synthesize).not.toHaveBeenCalled();
+  });
+
+  it("fails rather than hangs when a writer breaks its contract and throws", async () => {
+    const h = harness();
+    vi.mocked(h.deps.writeBriefFor).mockRejectedValueOnce(new Error("spawn ENOENT"));
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    await flush();
+    expect(h.pushes("a").at(-1)).toEqual({
+      seq: 1,
+      kind: "finished",
+      status: "failed",
+      reason: "spawn ENOENT",
+    });
+  });
+});
+
+describe("a newer event", () => {
+  it("aborts the brief in flight, starts over, and discards the older result", async () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    const first = h.writes[0];
+
+    h.fire("a", ev(2, "needs-you"));
+    expect(first.signal.aborted).toBe(true);
+    expect(h.writes).toHaveLength(2);
+    expect(h.writes[1].event.seq).toBe(2);
+    // Straight from one brief to the next: no null in between.
+    expect(h.pushes("a")).toEqual([
+      { seq: 1, kind: "finished", status: "preparing" },
+      { seq: 2, kind: "needs-you", status: "preparing" },
+    ]);
+
+    // A writer that answers anyway is ignored.
+    first.settle(brief("stale"));
+    await flush();
+    expect(h.pushes("a")).toHaveLength(2);
+    expect(h.deps.synthesize).not.toHaveBeenCalled();
+
+    h.writes[1].settle(brief("fresh"));
+    await flush();
+    expect(h.pushes("a").at(-1)).toMatchObject({ seq: 2, status: "ready", text: "fresh" });
+  });
+
+  it("cancels the older brief's speech request and drops its audio", async () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.writes[0].settle(brief("old"));
+    await flush();
+    const oldSpeech = h.speaks[0];
+
+    h.fire("a", ev(2));
+    expect(oldSpeech.signal.aborted).toBe(true);
+    oldSpeech.settle({ ok: true, wav: WAV });
+    await flush();
+    expect(h.secretary.audioFor("a", 1)).toBeNull();
+    expect(h.secretary.audioFor("a", 2)).toBeNull();
+    expect(h.secretary.briefs().a).toEqual({ seq: 2, kind: "finished", status: "preparing" });
+  });
+});
+
+describe("a clear", () => {
+  it("keeps the brief, marked handled, and lets the work in flight finish", async () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(4, "needs-you"));
+    const write = h.writes[0];
+
+    h.fire("a", null);
+    expect(write.signal.aborted).toBe(false);
+    expect(h.pushes("a").at(-1)).toEqual({
+      seq: 4,
+      kind: "needs-you",
+      status: "preparing",
+      handled: true,
+    });
+
+    write.settle(brief("answered already"));
+    await flush();
+    h.speaks[0].settle({ ok: true, wav: WAV });
+    await flush();
+    expect(h.pushes("a").at(-1)).toEqual({
+      seq: 4,
+      kind: "needs-you",
+      status: "ready",
+      text: "answered already",
+      language: "Chinese",
+      audio: "ready",
+      handled: true,
+    });
+    expect(h.secretary.audioFor("a", 4)).not.toBeNull();
+  });
+
+  it("keeps a ready brief and its audio for a replay", async () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.writes[0].settle(brief("done"));
+    await flush();
+    h.speaks[0].settle({ ok: true, wav: WAV });
+    await flush();
+    const audio = h.secretary.audioFor("a", 1);
+    expect(audio).not.toBeNull();
+
+    h.fire("a", null);
+    expect(h.secretary.audioFor("a", 1)).toBe(audio);
+    expect(h.secretary.briefs().a).toMatchObject({ seq: 1, status: "ready", handled: true });
+  });
+
+  it("is told once: a second clear sends nothing", () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.fire("a", null);
+    const before = h.sentCount();
+    h.fire("a", null);
+    expect(h.sentCount()).toBe(before);
+  });
+
+  it("for an instance with no brief sends nothing", () => {
+    const h = harness();
+    h.secretary.start(true);
+    const before = h.sentCount();
+    h.fire("a", null);
+    expect(h.sentCount()).toBe(before);
+  });
+
+  it("then a newer event replaces the handled brief with a live one", () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.fire("a", null);
+    h.fire("a", ev(2));
+    expect(h.writes[0].signal.aborted).toBe(true);
+    expect(h.pushes("a").at(-1)).toEqual({ seq: 2, kind: "finished", status: "preparing" });
+  });
+});
+
+describe("forget", () => {
+  it("drops the removed instance's brief and aborts its work", () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.fire("a", null);
+    h.secretary.forget("a");
+    expect(h.writes[0].signal.aborted).toBe(true);
+    expect(h.pushes("a").at(-1)).toBeNull();
+    expect(h.secretary.briefs()).toEqual({});
+  });
+});
+
+describe("turning the mode on", () => {
+  it("prepares a brief for every live event, at once", () => {
+    const h = harness();
+    h.live.push({ instanceId: "a", event: ev(5) }, { instanceId: "b", event: ev(6, "needs-you") });
+    h.secretary.start(false);
+    h.secretary.setMode(true);
+
+    expect(h.modePushes()).toEqual([true]);
+    expect(h.writes.map((w) => [w.instanceId, w.event.seq])).toEqual([
+      ["a", 5],
+      ["b", 6],
+    ]);
+    expect(h.secretary.briefs()).toEqual({
+      a: { seq: 5, kind: "finished", status: "preparing" },
+      b: { seq: 6, kind: "needs-you", status: "preparing" },
+    });
+  });
+
+  it("at startup, with the mode saved on, prepares what is live", () => {
+    const h = harness();
+    h.live.push({ instanceId: "a", event: ev(1) });
+    h.secretary.start(true);
+    expect(h.secretary.isOn()).toBe(true);
+    expect(h.writes).toHaveLength(1);
+  });
+
+  it("again while on changes nothing", () => {
+    const h = harness();
+    h.live.push({ instanceId: "a", event: ev(1) });
+    h.secretary.start(true);
+    h.secretary.setMode(true);
+    expect(h.writes).toHaveLength(1);
+    expect(h.modePushes()).toEqual([true]);
+  });
+});
+
+describe("turning the mode off", () => {
+  it("aborts everything in flight, drops every brief, and ignores what comes back", async () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.fire("b", ev(2));
+    h.writes[1].settle(brief("b is done"));
+    await flush();
+    const [writeA] = h.writes;
+    const [speakB] = h.speaks;
+
+    h.secretary.setMode(false);
+    expect(writeA.signal.aborted).toBe(true);
+    expect(speakB.signal.aborted).toBe(true);
+    expect(h.pushes("a").at(-1)).toBeNull();
+    expect(h.pushes("b").at(-1)).toBeNull();
+    expect(h.modePushes()).toEqual([true, false]);
+    expect(h.secretary.briefs()).toEqual({});
+
+    const before = h.sentCount();
+    writeA.settle(brief("late"));
+    speakB.settle({ ok: true, wav: WAV });
+    await flush();
+    expect(h.sentCount()).toBe(before);
+    expect(h.secretary.audioFor("b", 2)).toBeNull();
+
+    // And stays off: new events start nothing.
+    h.fire("c", ev(3));
+    await flush();
+    expect(h.writes).toHaveLength(2);
+    expect(h.deps.synthesize).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("without the claude CLI", () => {
+  it("stays off with the mode saved on: no brief, no mode change, nothing called", async () => {
+    const h = harness();
+    h.claude.found = false;
+    h.live.push({ instanceId: "a", event: ev(1) });
+    h.secretary.start(true);
+    h.secretary.setMode(true);
+    h.fire("b", ev(2, "needs-you"));
+    h.fire("b", null);
+    await flush();
+
+    expect(h.secretary.isOn()).toBe(false);
+    expect(h.deps.writeBriefFor).not.toHaveBeenCalled();
+    expect(h.deps.synthesize).not.toHaveBeenCalled();
+    expect(h.deps.liveSecretaryEvents).not.toHaveBeenCalled();
+    expect(h.deps.send).not.toHaveBeenCalled();
+    expect(h.secretary.briefs()).toEqual({});
+    // Looked for at start, on the switch and before the brief.
+    expect(h.deps.claudeFound).toHaveBeenCalledTimes(3);
+  });
+
+  it("comes on by itself at the next brief once it is installed, and prepares what is live", () => {
+    const h = harness();
+    h.claude.found = false;
+    h.live.push({ instanceId: "a", event: ev(1) });
+    h.secretary.start(true);
+    h.claude.found = true;
+    h.fire("b", ev(2));
+
+    expect(h.secretary.isOn()).toBe(true);
+    expect(h.modePushes()).toEqual([true]);
+    expect(h.writes.map((w) => [w.instanceId, w.event.seq])).toEqual([
+      ["a", 1],
+      ["b", 2],
+    ]);
+  });
+
+  it("goes off when it disappears, aborting the work in flight, and comes back on when it returns", () => {
+    const h = harness();
+    h.live.push({ instanceId: "a", event: ev(1) });
+    h.secretary.start(true);
+    const [first] = h.writes;
+
+    h.claude.found = false;
+    expect(h.secretary.checkClaude()).toBe(false);
+    expect(h.secretary.isOn()).toBe(false);
+    expect(first.signal.aborted).toBe(true);
+    expect(h.pushes("a").at(-1)).toBeNull();
+    expect(h.modePushes()).toEqual([true, false]);
+
+    // The saved mode was never touched: found again, it is on with no switch.
+    h.claude.found = true;
+    expect(h.secretary.checkClaude()).toBe(true);
+    expect(h.secretary.isOn()).toBe(true);
+    expect(h.modePushes()).toEqual([true, false, true]);
+    expect(h.writes).toHaveLength(2);
+  });
+
+  it("is looked for but turns nothing on while the mode is saved off", () => {
+    const h = harness();
+    h.secretary.start(false);
+    expect(h.secretary.checkClaude()).toBe(true);
+    h.claude.found = false;
+    expect(h.secretary.checkClaude()).toBe(false);
+    expect(h.secretary.isOn()).toBe(false);
+    expect(h.deps.send).not.toHaveBeenCalled();
+  });
+});
+
+describe("audioFor", () => {
+  it("returns null for a seq that is no longer the instance's brief", async () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.writes[0].settle(brief("one"));
+    await flush();
+    h.speaks[0].settle({ ok: true, wav: WAV });
+    await flush();
+    expect(h.secretary.audioFor("a", 1)).toBe(WAV);
+    expect(h.secretary.audioFor("a", 0)).toBeNull();
+    expect(h.secretary.audioFor("b", 1)).toBeNull();
+
+    h.fire("a", ev(2));
+    expect(h.secretary.audioFor("a", 1)).toBeNull();
+  });
+});
+
+describe("stop", () => {
+  it("unsubscribes and aborts what is in flight", () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.secretary.stop();
+    expect(h.subscribed()).toBe(false);
+    expect(h.writes[0].signal.aborted).toBe(true);
+    expect(h.secretary.briefs()).toEqual({});
+  });
+});
+
+describe("the disk", () => {
+  it("is never written: briefs and audio live in memory only", async () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.writes[0].settle(brief("one"));
+    await flush();
+    h.speaks[0].settle({ ok: true, wav: WAV });
+    h.fire("b", ev(2, "needs-you"));
+    h.writes[1].settle({ ok: false, reason: "timed out" });
+    await flush();
+    h.fire("a", null);
+    h.secretary.setMode(false);
+    h.secretary.setMode(true);
+    h.secretary.stop();
+    await flush();
+
+    expect(disk.writes).toEqual([]);
+  });
+});
+
+describe("a reply on the card (T-509)", () => {
+  const PERMISSION: Dialog = {
+    kind: "permission",
+    backend: "claude",
+    toolName: "Bash",
+    toolInput: { command: "rm -rf build" },
+    options: [
+      { effect: "allow-once", label: "Yes" },
+      { effect: "allow-always", label: "Yes, and don't ask again" },
+      { effect: "deny", label: "No" },
+    ],
+  };
+  const QUESTION: Dialog = {
+    kind: "questions",
+    backend: "claude",
+    questions: [{ question: "Which color?", multiSelect: false, options: [{ label: "Red" }, { label: "Blue" }] }],
+  };
+
+  // A needs-you on "a" with its brief written, ready for replies.
+  async function waiting(dialog: Dialog | null = PERMISSION) {
+    const h = harness();
+    h.dialogs.dialog = dialog;
+    h.secretary.start(true);
+    h.fire("a", ev(3, "needs-you"));
+    h.writes[0].settle(brief("Shop 想删 build 文件夹。要允许吗？"));
+    await flush();
+    return h;
+  }
+  const last = (h: ReturnType<typeof harness>) => h.pushes("a").at(-1);
+
+  it("marks a dialog it can answer as replyable", async () => {
+    const h = await waiting();
+    expect(last(h)).toMatchObject({ seq: 3, status: "ready", replyable: true });
+    const none = await waiting(null);
+    expect(none.pushes("a").at(-1)).not.toHaveProperty("replyable");
+  });
+
+  it("reads the reply against the dialog and the brief, presses the plan, and says what it did", async () => {
+    const h = await waiting();
+    const done = h.secretary.reply("a", 3, "  是的  ");
+    expect(last(h)?.exchanges).toEqual([{ reply: "是的" }]);
+    expect(h.interprets[0].input).toEqual({
+      dialog: PERMISSION,
+      brief: "Shop 想删 build 文件夹。要允许吗？",
+      earlier: [],
+      reply: "是的",
+    });
+    h.interprets[0].settle({
+      ok: true,
+      action: "choose",
+      choice: { effect: "allow-once" },
+      message: "好，已经允许它这一次。",
+    });
+    await flush();
+    expect(h.answers.map(({ instanceId, seq, plan }) => ({ instanceId, seq, plan }))).toEqual([
+      { instanceId: "a", seq: 3, plan: { keys: ["1"] } },
+    ]);
+    h.answers[0].settle({ ok: true });
+    await done;
+    expect(last(h)?.exchanges).toEqual([
+      { reply: "是的", outcome: "pressed", response: "好，已经允许它这一次。" },
+    ]);
+  });
+
+  it("asks back and presses nothing, then hands the exchange to the next reading", async () => {
+    const h = await waiting();
+    const first = h.secretary.reply("a", 3, "嗯，再说吧");
+    h.interprets[0].settle({ ok: true, action: "ask", message: "要允许，还是不允许？" });
+    await first;
+    expect(h.answers).toHaveLength(0);
+    expect(last(h)?.exchanges?.[0]).toMatchObject({ outcome: "asked", response: "要允许，还是不允许？" });
+
+    void h.secretary.reply("a", 3, "允许");
+    expect(h.interprets[1].input.earlier).toEqual([
+      { builder: "嗯，再说吧", secretary: "要允许，还是不允许？" },
+    ]);
+  });
+
+  it("answers a question and presses nothing", async () => {
+    const h = await waiting();
+    const done = h.secretary.reply("a", 3, "这个命令会删什么？");
+    h.interprets[0].settle({ ok: true, action: "answer", message: "它会删 build 文件夹。" });
+    await done;
+    expect(h.answers).toHaveLength(0);
+    expect(last(h)?.exchanges?.[0]).toMatchObject({ outcome: "answered" });
+  });
+
+  it("asks to confirm don't-ask-again, and presses it on a plain yes to that, unread by the model", async () => {
+    const h = await waiting();
+    const first = h.secretary.reply("a", 3, "以后都可以");
+    h.interprets[0].settle({
+      ok: true,
+      action: "choose",
+      choice: { effect: "allow-always", explicit: true },
+      message: "好，以后都不问了。",
+    });
+    await first;
+    expect(h.answers).toHaveLength(0);
+    expect(last(h)?.exchanges?.[0]).toMatchObject({
+      outcome: "asked",
+      response: "确认一下：以后这类操作都不再问你，直接允许，对吗？回答“是”我就照办。",
+    });
+
+    const yes = h.secretary.reply("a", 3, "是");
+    await flush();
+    expect(h.interprets).toHaveLength(1);
+    expect(h.answers[0].plan).toEqual({ keys: ["2"] });
+    h.answers[0].settle({ ok: true });
+    await yes;
+    expect(last(h)?.exchanges?.[1]).toMatchObject({ outcome: "pressed", response: "好，以后都不问了。" });
+  });
+
+  it("reads anything but a plain yes to the confirmation afresh, and confirms only once", async () => {
+    const h = await waiting();
+    const first = h.secretary.reply("a", 3, "always");
+    h.interprets[0].settle({
+      ok: true,
+      action: "choose",
+      choice: { effect: "allow-always", explicit: true },
+      message: "Done.",
+    });
+    await first;
+    void h.secretary.reply("a", 3, "no, just this once");
+    expect(h.interprets).toHaveLength(2);
+    expect(h.interprets[1].input.earlier.at(-1)?.secretary).toMatch(/^To confirm/);
+    h.interprets[1].settle({ ok: true, action: "choose", choice: { effect: "allow-once" }, message: "Done, once." });
+    await flush();
+    expect(h.answers[0].plan).toEqual({ keys: ["1"] });
+  });
+
+  it("presses nothing once the dialog is answered in the terminal, before or during the reading", async () => {
+    const h = await waiting();
+    h.fire("a", null);
+    await h.secretary.reply("a", 3, "yes");
+    expect(h.interprets).toHaveLength(0);
+    expect(last(h)?.exchanges?.[0]).toMatchObject({
+      outcome: "refused",
+      response: "This dialog was already answered. I pressed nothing.",
+    });
+
+    const g = await waiting();
+    const done = g.secretary.reply("a", 3, "是的");
+    g.fire("a", null);
+    g.interprets[0].settle({ ok: true, action: "choose", choice: { effect: "allow-once" }, message: "好" });
+    await done;
+    expect(g.answers).toHaveLength(0);
+    expect(g.pushes("a").at(-1)?.exchanges?.[0]).toMatchObject({ outcome: "refused" });
+  });
+
+  it("refuses a dialog it can't answer in words, without reading the reply", async () => {
+    const h = await waiting(null);
+    await h.secretary.reply("a", 3, "yes");
+    expect(h.interprets).toHaveLength(0);
+    expect(h.pushes("a").at(-1)?.exchanges?.[0]).toMatchObject({
+      outcome: "refused",
+      response: "I can't answer this dialog. Please answer it in the terminal.",
+    });
+  });
+
+  it("says so when the keys found the dialog gone, or a new one came up", async () => {
+    for (const [reason, says] of [
+      ["answered", "The dialog was answered while I was thinking. I pressed nothing."],
+      ["changed", "A new dialog came up while I was pressing keys. I stopped. Please check the terminal."],
+      [
+        "interrupted",
+        "Someone typed in the terminal while I was pressing keys. I stopped. Please check the terminal.",
+      ],
+    ] as const) {
+      const h = await waiting();
+      const done = h.secretary.reply("a", 3, "yes");
+      h.interprets[0].settle({ ok: true, action: "choose", choice: { effect: "deny" }, message: "Denied." });
+      await flush();
+      h.answers[0].settle({ ok: false, reason });
+      await done;
+      expect(last(h)?.exchanges?.[0]).toMatchObject({ outcome: "refused", response: says });
+    }
+  });
+
+  it("adds a note when the CLI recorded something other than what was meant", async () => {
+    const h = await waiting(QUESTION);
+    const done = h.secretary.reply("a", 3, "蓝色");
+    h.interprets[0].settle({
+      ok: true,
+      action: "choose",
+      choice: { answers: [{ question: 1, picks: [2] }] },
+      message: "好，选了蓝色。",
+    });
+    await flush();
+    expect(h.answers[0].plan).toEqual({ keys: ["2"], expect: { "Which color?": "Blue" } });
+    h.answers[0].settle({
+      ok: true,
+      recorded: { toolName: "AskUserQuestion", toolInput: { answers: { "Which color?": "Red" } } },
+    });
+    await done;
+    expect(last(h)?.exchanges?.[0].response).toBe(
+      "好，选了蓝色。 注意：CLI 记下的答案和我想按的不一样：Which color?。请看一下终端。"
+    );
+  });
+
+  it("presses nothing when the reply can't be read, or while the last one is still being read", async () => {
+    const h = await waiting();
+    const first = h.secretary.reply("a", 3, "yes");
+    await h.secretary.reply("a", 3, "no");
+    expect(last(h)?.exchanges?.[1]).toMatchObject({
+      outcome: "refused",
+      response: "I'm still working on your last reply.",
+    });
+    h.interprets[0].settle({ ok: false, reason: "timed out after 60 s" });
+    await first;
+    expect(last(h)?.exchanges?.[0]).toMatchObject({
+      outcome: "failed",
+      detail: "timed out after 60 s",
+    });
+    expect(h.answers).toHaveLength(0);
+  });
+
+  it("reads nothing and presses nothing once claude is gone, and the secretary goes off", async () => {
+    const h = await waiting();
+    h.claude.found = false;
+    await h.secretary.reply("a", 3, "是的");
+    expect(h.deps.interpretReply).not.toHaveBeenCalled();
+    expect(h.answers).toHaveLength(0);
+    expect(h.secretary.isOn()).toBe(false);
+    expect(last(h)).toBeNull();
+  });
+
+  it("ignores a reply for an event that isn't the brief's any more", async () => {
+    const h = await waiting();
+    const before = h.sentCount();
+    await h.secretary.reply("a", 2, "yes");
+    await h.secretary.reply("b", 3, "yes");
+    expect(h.sentCount()).toBe(before);
+  });
+
+  it("calls off keys still going in when a newer event replaces the brief", async () => {
+    const h = await waiting();
+    void h.secretary.reply("a", 3, "yes");
+    h.interprets[0].settle({ ok: true, action: "choose", choice: { effect: "allow-once" }, message: "Done." });
+    await flush();
+    expect(h.answers[0].signal.aborted).toBe(false);
+    h.secretary.setMode(false);
+    expect(h.answers[0].signal.aborted).toBe(true);
+  });
+
+  it("stops reading when a newer event replaces the brief", async () => {
+    const h = await waiting();
+    const done = h.secretary.reply("a", 3, "yes");
+    h.fire("a", ev(4, "needs-you"));
+    expect(h.interprets[0].signal.aborted).toBe(true);
+    await done;
+    expect(h.answers).toHaveLength(0);
+  });
+});
+
+// OpenCode 2's dialogs are answered through its API (opencode-v2 T-607): the plan
+// carries the answer and no keys, and "always" is saved for the project.
+describe("a reply on an OpenCode dialog (opencode-v2 T-607)", () => {
+  const PERMISSION: Dialog = {
+    kind: "permission",
+    backend: "opencode",
+    toolName: "shell",
+    toolInput: { resources: ["rm -rf build"], metadata: {}, save: ["rm *"] },
+    options: [
+      { effect: "allow-once", label: "Allow once" },
+      {
+        effect: "allow-always",
+        label: "Always allow",
+        description: "Allow it, and save that for this project: calls like it are allowed from now on",
+      },
+      { effect: "deny", label: "Reject" },
+    ],
+  };
+  const QUESTIONS: Dialog = {
+    kind: "questions",
+    backend: "opencode",
+    questions: [
+      { question: "Which db?", multiSelect: false, options: [{ label: "Postgres" }, { label: "SQLite" }] },
+      { question: "Which extras?", multiSelect: true, options: [{ label: "Cache" }, { label: "Queue" }] },
+    ],
+  };
+
+  async function waiting(dialog: Dialog) {
+    const h = harness();
+    h.dialogs.dialog = dialog;
+    h.secretary.start(true);
+    h.fire("a", ev(3, "needs-you"));
+    h.writes[0].settle(brief("Shop 想删 build 文件夹。要允许吗？"));
+    await flush();
+    return h;
+  }
+  const last = (h: ReturnType<typeof harness>) => h.pushes("a").at(-1);
+
+  it("rejects with the builder's reason in the answer, and says what it did", async () => {
+    const h = await waiting(PERMISSION);
+    const done = h.secretary.reply("a", 3, "不行，用 ls 看看就好");
+    h.interprets[0].settle({
+      ok: true,
+      action: "choose",
+      choice: { effect: "deny", feedback: "用 ls 看看就好" },
+      message: "好，已经拒绝了，并告诉它用 ls 看看就好。",
+    });
+    await flush();
+    expect(h.answers[0].plan).toEqual({
+      keys: [],
+      answer: { kind: "permission", decision: "reject", message: "用 ls 看看就好" },
+    });
+    h.answers[0].settle({ ok: true });
+    await done;
+    expect(last(h)?.exchanges?.[0]).toMatchObject({ outcome: "pressed" });
+  });
+
+  it("asks once-or-always and confirms always as saved for this project", async () => {
+    const h = await waiting(PERMISSION);
+    const first = h.secretary.reply("a", 3, "always?");
+    h.interprets[0].settle({ ok: true, action: "choose", choice: { effect: "allow-always" }, message: "Done." });
+    await first;
+    expect(last(h)?.exchanges?.[0]).toMatchObject({
+      outcome: "asked",
+      response: "Allow it just this once, or save it for this project and allow it from now on?",
+    });
+
+    const second = h.secretary.reply("a", 3, "以后都可以");
+    h.interprets[1].settle({
+      ok: true,
+      action: "choose",
+      choice: { effect: "allow-always", explicit: true },
+      message: "好，这个项目以后都允许了。",
+    });
+    await second;
+    expect(h.answers).toHaveLength(0);
+    expect(last(h)?.exchanges?.[1]).toMatchObject({
+      outcome: "asked",
+      response:
+        "确认一下：允许它，并且给这个项目记下来，以后这类操作都直接允许，不再问你，对吗？回答“是”我就照办。",
+    });
+
+    const yes = h.secretary.reply("a", 3, "是");
+    await flush();
+    expect(h.answers[0].plan).toEqual({ keys: [], answer: { kind: "permission", decision: "always" } });
+    h.answers[0].settle({ ok: true });
+    await yes;
+    expect(last(h)?.exchanges?.[2]).toMatchObject({ outcome: "pressed", response: "好，这个项目以后都允许了。" });
+  });
+
+  it("answers a box of two questions, typed text included, in one answer", async () => {
+    const h = await waiting(QUESTIONS);
+    void h.secretary.reply("a", 3, "SQLite，再加个 Metrics");
+    h.interprets[0].settle({
+      ok: true,
+      action: "choose",
+      choice: {
+        answers: [
+          { question: 1, picks: [2] },
+          { question: 2, picks: [1], text: "Metrics" },
+        ],
+      },
+      message: "好，用 SQLite，加 Cache 和 Metrics。",
+    });
+    await flush();
+    expect(h.answers[0].plan).toEqual({
+      keys: [],
+      answer: { kind: "form", answer: { q0: "SQLite", q1: ["Cache", "Metrics"] } },
+    });
+  });
+
+  it("says the dialog was answered when OpenCode says it's gone, and asks for a look when it failed", async () => {
+    for (const [reason, says] of [
+      ["answered", "The dialog was answered while I was thinking. I pressed nothing."],
+      ["failed", "I couldn't confirm the answer reached the session. Please check the terminal."],
+    ] as const) {
+      const h = await waiting(PERMISSION);
+      const done = h.secretary.reply("a", 3, "yes");
+      h.interprets[0].settle({ ok: true, action: "choose", choice: { effect: "allow-once" }, message: "Done." });
+      await flush();
+      h.answers[0].settle({ ok: false, reason });
+      await done;
+      expect(last(h)?.exchanges?.[0]).toMatchObject({ outcome: "refused", response: says });
+    }
+  });
+});

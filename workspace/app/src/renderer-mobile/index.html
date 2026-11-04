@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover + the safe-area insets in base.css keep the layout clear
+         of the notch and the home indicator in the Home Screen app. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover"
+    />
+    <!-- Served from the Mac over HTTPS by `tailscale serve` (http://127.0.0.1 in
+         development). The socket goes to the same origin: 'self' covers it where a
+         browser counts ws: as same-origin, ws:/wss: where it doesn't. The service
+         worker (sw.js) must come from this origin too. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; img-src 'self' data:; worker-src 'self'; manifest-src 'self'"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <!-- "default", not black-translucent: the status bar takes the theme colour and
+         picks a legible text colour for it, light or dark. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Multi-Code" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#141518" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f0f4fa" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icons/icon-180.png" />
+    <title>Multi-Code</title>
+    <!-- Until bundle.js runs (base.css is inside it): its background, and a line
+         that says the page is still starting, so a slow start isn't a white page. -->
+    <style>
+      html, body { margin: 0; background: #141518; color: #9aa0aa; }
+      @media (prefers-color-scheme: light) { html, body { background: #f0f4fa; color: #5f6b7d; } }
+      .boot { margin: 0; padding-top: 40vh; text-align: center; font: 15px -apple-system, sans-serif; }
+    </style>
+  </head>
+  <body>
+    <!-- React replaces this on its first render. -->
+    <div id="root"><p class="boot">Opening Multi-Code…</p></div>
+  </body>
+</html>

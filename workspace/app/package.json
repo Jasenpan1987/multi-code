@@ -1,0 +1,90 @@
+{
+  "name": "multi-code",
+  "version": "0.10.4",
+  "description": "Multi-Code — Claude Code instance manager",
+  "author": "Jasen Pan",
+  "license": "MIT",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "start": "pnpm build && electron .",
+    "build": "rm -rf dist && pnpm build:renderer && pnpm build:mobile && pnpm build:main",
+    "build:renderer": "rspack build --config rspack.renderer.config.ts",
+    "build:mobile": "rspack build --config rspack.mobile.config.ts",
+    "build:main": "tsc -p tsconfig.main.json",
+    "pack": "pnpm build && electron-builder --dir",
+    "dist": "pnpm build && electron-builder",
+    "lint": "oxlint && eslint --cache",
+    "lint:fix": "oxlint --fix && eslint --fix",
+    "type": "tsc --noEmit",
+    "test": "vitest run",
+    "harness": "pnpm build:main && pnpm build:mobile && electron scripts/mobile-harness/main.ts --user-data-dir=/tmp/mc-harness-$$",
+    "harness:shot": "node scripts/mobile-harness/screenshot.ts"
+  },
+  "build": {
+    "appId": "com.multicode.app",
+    "productName": "Multi-Code",
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": "dmg",
+      "icon": "build/icon.icns",
+      "identity": null
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*",
+      "!node_modules/.cache"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "extraResources": [],
+    "asar": true,
+    "npmRebuild": false
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@rspack/cli": "^1.3.0",
+    "@rspack/core": "^1.3.0",
+    "@rspack/dev-server": "^1.1.0",
+    "@rspack/plugin-react-refresh": "^1.1.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/web-push": "^3.6.4",
+    "@types/ws": "^8.18.1",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "concurrently": "^9.0.0",
+    "css-loader": "^7.0.0",
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3",
+    "eslint": "^10.3.0",
+    "eslint-plugin-oxlint": "^0.16.0",
+    "oxlint": "^0.16.0",
+    "playwright": "1.64.1",
+    "react-refresh": "^0.17.0",
+    "style-loader": "^4.0.0",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.59.3",
+    "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
+    "better-sqlite3": "^13.0.3",
+    "katex": "^0.17.0",
+    "mermaid": "^11.16.0",
+    "node-pty": "^1.0.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "tweetnacl": "^1.0.3",
+    "web-push": "^3.6.7",
+    "ws": "^8.21.1"
+  }
+}

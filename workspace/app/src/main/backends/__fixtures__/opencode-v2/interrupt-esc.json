@@ -1,0 +1,458 @@
+{
+  "scenario": "interrupt-esc",
+  "opencodeVersion": "2.0.32",
+  "notes": "Long story prompt; after session.text.started, Esc then Esc 250 ms later. First Esc shows 'esc again to interrupt' in the footer; the second interrupts. Screen ends with '· interrupted'. Only execution.interrupted{reason:user}; no step/tool failure frames for a text-only step.",
+  "frames": [
+    {
+      "t": 1002,
+      "event": {
+        "id": "evt_1553f7e6b001KwdisuDbsqp1g4",
+        "created": 1792431586923,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "slug": "playful-sailor",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1002,
+      "event": {
+        "id": "evt_1553f7e6d001LnQXNph1Yxtv80",
+        "created": 1792431586925,
+        "type": "project.updated",
+        "data": {
+          "id": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "canonical": "/private/tmp/oc2-spike/projects/scen",
+          "time": {
+            "created": 1792431240537,
+            "updated": 1792431240537,
+            "active": 1792431586925
+          },
+          "sandboxes": []
+        }
+      }
+    },
+    {
+      "t": 1031,
+      "event": {
+        "id": "evt_1553f7e7d001O2PaUW9SkBEdLq",
+        "created": 1792431586941,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_1553f7e69001vxxEDf62aG7qdT",
+          "sessionID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "Write a 900-word story about a lighthouse keeper. Do not use any tools.",
+              "files": [],
+              "agents": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1032,
+      "event": {
+        "id": "evt_1553f7e7f001JDE9JHCCDB7iOa",
+        "created": 1792431586943,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaac08198ffeFMJMJP4JBPSkNu"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1032,
+      "event": {
+        "id": "evt_1553f7e82001zpOITtgWloOXOF",
+        "created": 1792431586946,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 1032,
+      "event": {
+        "id": "evt_1553f7e83001bQWuPpQEhIrrpy",
+        "created": 1792431586947,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "inboxID": "msg_1553f7e69001vxxEDf62aG7qdT"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2928,
+      "event": {
+        "id": "evt_1553f85f10015MDxpbHFaZADcU",
+        "created": 1792431588849,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "cost": 0,
+          "tokens": {
+            "input": 49,
+            "output": 6,
+            "reasoning": 50,
+            "cache": {
+              "read": 512,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 2929,
+      "event": {
+        "id": "evt_1553f85f2001CcISh7ggkNADyB",
+        "created": 1792431588850,
+        "type": "session.renamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "title": "Lighthouse keeper short story"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "seq": 6,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3642,
+      "event": {
+        "id": "evt_1553f88b7001eM8j5fUMnRbqUN",
+        "created": 1792431589559,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_1553f7e87001ee9kXBPe0EyTvm",
+          "started": 1792431586955
+        },
+        "durable": {
+          "aggregateID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "seq": 7,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3642,
+      "event": {
+        "id": "evt_1553f88ba00124e2bZ6L75dzw8",
+        "created": 1792431589562,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "assistantMessageID": "msg_1553f7e87001ee9kXBPe0EyTvm",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "seq": 8,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3747,
+      "event": {
+        "id": "evt_1553f8923001nCGcBxuyhg3eZz",
+        "created": 1792431589667,
+        "type": "session.reasoning.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "assistantMessageID": "msg_1553f7e87001ee9kXBPe0EyTvm",
+          "ordinal": 0,
+          "delta": "The user wants a 900-word story about a lighthouse keeper, no tools. So just write it directly. Let me craft a good story, roughly 900 words. I need to count approximately. Let me write carefully aiming ~900 words.\n\nI"
+        }
+      }
+    },
+    {
+      "t": 15341,
+      "event": {
+        "id": "evt_1553fb66e002oFp0ZxmTB7re4c",
+        "created": 1792431601262,
+        "type": "session.text.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "assistantMessageID": "msg_1553f7e87001ee9kXBPe0EyTvm",
+          "ordinal": 0
+        },
+        "durable": {
+          "aggregateID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "seq": 9,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 15445,
+      "event": {
+        "id": "evt_1553fb6d6001CJ515R1fZHOdtM",
+        "created": 1792431601367,
+        "type": "session.text.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "assistantMessageID": "msg_1553f7e87001ee9kXBPe0EyTvm",
+          "ordinal": 0,
+          "delta": "**The Lamp at Kestrel Point**\n\nThe lamp had a voice, and Elias knew it the"
+        }
+      }
+    },
+    {
+      "t": 17457,
+      "event": {
+        "id": "evt_1553fbeaf001T6mTQMTaAvt0zK",
+        "created": 1792431603375,
+        "type": "session.text.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "assistantMessageID": "msg_1553f7e87001ee9kXBPe0EyTvm",
+          "ordinal": 0,
+          "text": "**The Lamp at Kestrel Point**\n\nThe lamp had a voice, and Elias knew it the way a man knows his own breathing. On calm nights it hummed, a low satisfied note like a bee in a jar. On foul nights it hiss…"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "seq": 10,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 17457,
+      "event": {
+        "id": "evt_1553fbeb0001AigjOpjeYEPXws",
+        "created": 1792431603376,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "assistantMessageID": "msg_1553f7e87001ee9kXBPe0EyTvm",
+          "ordinal": 0,
+          "text": "The user wants a 900-word story about a lighthouse keeper, no tools. So just write it directly. Let me craft a good story, roughly 900 words. I need to count approximately. Let me write carefully aimi…",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "seq": 11,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 17457,
+      "event": {
+        "id": "evt_1553fbeb10013yUkE1ixhixcGx",
+        "created": 1792431603377,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "assistantMessageID": "msg_1553f7e87001ee9kXBPe0EyTvm"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "seq": 12,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 17457,
+      "event": {
+        "id": "evt_1553fbeb2001ZKkUBGgCydxCZk",
+        "created": 1792431603378,
+        "type": "session.step.failed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "assistantMessageID": "msg_1553f7e87001ee9kXBPe0EyTvm",
+          "error": {
+            "type": "aborted",
+            "message": "Step interrupted"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "seq": 13,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 17457,
+      "event": {
+        "id": "evt_1553fbeb300156nohjTTE9L7Lh",
+        "created": 1792431603379,
+        "type": "session.execution.interrupted",
+        "data": {
+          "sessionID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "reason": "user"
+        },
+        "durable": {
+          "aggregateID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "seq": 14,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 17474,
+      "event": {
+        "id": "evt_1553fbec5001H2C0UZb4NtNNk0",
+        "created": 1792431603397,
+        "type": "session.viewed",
+        "data": {
+          "sessionID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "idle": 1792431603379
+        },
+        "durable": {
+          "aggregateID": "ses_eaac08198ffeFMJMJP4JBPSkNu",
+          "seq": 15,
+          "version": 1
+        }
+      }
+    }
+  ],
+  "omitted": {
+    "repeatedDeltaFrames": {
+      "session.reasoning.delta": 76,
+      "session.text.delta": 14
+    }
+  },
+  "inputs": [
+    {
+      "t": 58,
+      "key": {
+        "text": "Write a 900-word story about a lighthouse keeper. Do not use any tools."
+      }
+    },
+    {
+      "t": 989,
+      "key": "Enter"
+    },
+    {
+      "t": 17066,
+      "key": "Esc"
+    },
+    {
+      "t": 17427,
+      "key": "Esc"
+    }
+  ],
+  "pluginRoutes": [
+    {
+      "t": 1008,
+      "route": {
+        "type": "session",
+        "sessionID": "ses_eaac08198ffeFMJMJP4JBPSkNu"
+      }
+    }
+  ]
+}

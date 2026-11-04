@@ -1,0 +1,151 @@
+{
+  "scenario": "api-error",
+  "opencodeVersion": "2.0.32",
+  "notes": "Driven by `opencode run -m opencode/no-such-model-t601 \"Reply with the word: hi\"` against the same scratch service (the TUI keeps its own model choice, so a bad config model never reached it). CLI printed 'Error: Model unavailable: opencode/no-such-model-t601'. execution.failed arrives 1 ms after execution.started, error.type provider.no-route, no status field.",
+  "frames": [
+    {
+      "t": 249,
+      "event": {
+        "id": "evt_155403aec00112DopZzBp7IIBA",
+        "created": 1792431635180,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabfc515ffekn8zTdbh7EWm0s",
+          "slug": "jolly-wolf",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "model": {
+            "id": "no-such-model-t601",
+            "providerID": "opencode"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabfc515ffekn8zTdbh7EWm0s",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 290,
+      "event": {
+        "id": "evt_155403af7001LiPAUvo02mxQt8",
+        "created": 1792431635191,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_155403af3001WI9slZ8dJCkMHH",
+          "sessionID": "ses_eaabfc515ffekn8zTdbh7EWm0s",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "\"Reply with the word: hi\"",
+              "files": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabfc515ffekn8zTdbh7EWm0s",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 364,
+      "event": {
+        "id": "evt_155403b12001Ydt9q2hcE68mjL",
+        "created": 1792431635218,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaabfc515ffekn8zTdbh7EWm0s"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabfc515ffekn8zTdbh7EWm0s",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 365,
+      "event": {
+        "id": "evt_155403b4f001JjjTIBy4C9mJsO",
+        "created": 1792431635279,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabfc515ffekn8zTdbh7EWm0s",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabfc515ffekn8zTdbh7EWm0s",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 365,
+      "event": {
+        "id": "evt_155403b50001l6mJWbmSZQbOw1",
+        "created": 1792431635280,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabfc515ffekn8zTdbh7EWm0s",
+          "inboxID": "msg_155403af3001WI9slZ8dJCkMHH"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabfc515ffekn8zTdbh7EWm0s",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 365,
+      "event": {
+        "id": "evt_155403b5a001aCJzXR0ZEbSOjy",
+        "created": 1792431635290,
+        "type": "session.execution.failed",
+        "data": {
+          "sessionID": "ses_eaabfc515ffekn8zTdbh7EWm0s",
+          "error": {
+            "type": "provider.no-route",
+            "message": "Model unavailable: opencode/no-such-model-t601"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabfc515ffekn8zTdbh7EWm0s",
+          "seq": 5,
+          "version": 1
+        }
+      }
+    }
+  ]
+}

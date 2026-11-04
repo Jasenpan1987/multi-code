@@ -1,0 +1,198 @@
+/* Terminal fallback (mockup 4.1). The top bar follows the colour scheme; the
+   terminal, its key row and its input line are dark in both, as the mockup draws
+   them: the CLIs paint for a dark terminal. */
+
+/* Fixed, so the page never scrolls under it when the keyboard comes up; its height
+   is .screen's 100dvh, or the visual viewport's while the line has focus
+   (TerminalScreen.tsx useKeyboardFrame). */
+.terminal-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+/* Kept mounted behind the chat (App.tsx); .screen's display: flex would show it. */
+.terminal-screen[hidden] {
+  display: none;
+}
+
+.terminal-screen .topbar .chat {
+  color: var(--accent);
+  font-size: 20px;
+}
+
+/* The terminal: what's left between the top bar and the key row. */
+.term-area {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background: #0c0c0c;
+}
+
+.term-box {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* As wide as the PTY's columns, so the box scrolls sideways rather than xterm
+   being squeezed into the phone's width. */
+.term-host {
+  display: inline-block;
+  vertical-align: top;
+  padding: 8px;
+}
+
+/* Touches go through the painted screen to xterm's viewport under it, a native
+   scroller for the scrollback (TerminalScreen.tsx keeps xterm's script scrolling
+   out). */
+.term-host .xterm-screen {
+  pointer-events: none;
+}
+
+.term-waiting {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  color: #8a8a8e;
+  font-size: 13px;
+  pointer-events: none;
+}
+
+/* There's more to the right: a fade at the edge and the hint, gone once the box is
+   scrolled all the way across. */
+.term-edge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 46px;
+  background: linear-gradient(90deg, transparent, rgba(12, 12, 12, 0.95));
+  pointer-events: none;
+}
+
+.term-cols {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  font-size: 11px;
+  line-height: 1.3;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ddd;
+  padding: 3px 8px;
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+.term-area.at-end .term-edge,
+.term-area.at-end .term-cols {
+  display: none;
+}
+
+/* Key row and input line */
+.term-foot {
+  background: #1c1c1e;
+}
+
+/* The keyboard covers the home indicator, so its inset goes while it is up. */
+.terminal-screen.typing .term-foot {
+  padding-bottom: 0;
+}
+
+.term-why {
+  padding: 6px 12px 0;
+  font-size: 12px;
+  color: #f3c68a;
+}
+
+/* All ten keys across the narrowest iPhone, none scrolled out of reach. */
+.keyrow {
+  display: flex;
+  gap: 5px;
+  padding: 6px 8px;
+}
+
+.key {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: #3a3a3c;
+  color: #fff;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
+  /* Quick taps (↓ ↓ ↓) shouldn't zoom the page. */
+  touch-action: manipulation;
+}
+
+.key[data-key="Shift+Tab"] {
+  flex-grow: 1.3;
+}
+
+.key:active {
+  background: #545458;
+}
+
+.key.r {
+  background: #5a2b2b;
+}
+
+.key.r:active {
+  background: #7a3a3a;
+}
+
+.key[aria-disabled="true"],
+.tinput .send[aria-disabled="true"] {
+  opacity: 0.4;
+}
+
+.tinput {
+  display: flex;
+  gap: 8px;
+  padding: 6px 8px;
+  border-top: 1px solid #2c2c2e;
+}
+
+/* 16 px: smaller text makes iOS zoom the page when the line gets focus. */
+.tinput input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 9px;
+  background: #2c2c2e;
+  color: #fff;
+  font: inherit;
+  font-size: 16px;
+  outline: none;
+}
+
+.tinput input::placeholder {
+  color: #8a8a8e;
+}
+
+.tinput .send {
+  flex: none;
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: #3a3a3c;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  touch-action: manipulation;
+}

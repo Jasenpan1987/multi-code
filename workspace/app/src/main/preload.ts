@@ -1,0 +1,237 @@
+import { contextBridge, ipcRenderer, webUtils } from "electron";
+import type { CloneProgress, ContextUsage } from "../shared/types";
+
+contextBridge.exposeInMainWorld("electronAPI", {
+  // Instance management
+  createInstance: (cwd: string, alias?: string, backend?: string) =>
+    ipcRenderer.invoke("create-instance", cwd, alias, backend),
+  backendAvailability: (backend: string) =>
+    ipcRenderer.invoke("backend-availability", backend),
+  startInstance: (id: string) => ipcRenderer.invoke("start-instance", id),
+  killInstance: (id: string) => ipcRenderer.invoke("kill-instance", id),
+  removeInstance: (id: string) => ipcRenderer.invoke("remove-instance", id),
+  restartInstance: (id: string) => ipcRenderer.invoke("restart-instance", id),
+  duplicateInstance: (id: string) => ipcRenderer.invoke("duplicate-instance", id),
+  listInstances: () => ipcRenderer.invoke("list-instances"),
+  loadContacts: () => ipcRenderer.invoke("load-contacts"),
+  moveContact: (dragId: string, targetId: string, placeBefore: boolean) =>
+    ipcRenderer.invoke("move-contact", dragId, targetId, placeBefore),
+  hasRunningInstanceAt: (cwd: string, backend?: string) =>
+    ipcRenderer.invoke("has-running-instance-at", cwd, backend),
+  setAlias: (id: string, alias: string) =>
+    ipcRenderer.invoke("set-alias", id, alias),
+  selectDirectory: (startFolder?: string, title?: string) =>
+    ipcRenderer.invoke("select-directory", startFolder, title),
+  checkFolder: (path: string) => ipcRenderer.invoke("check-folder", path),
+  cloneRepo: (url: string, parent: string, folderName: string) =>
+    ipcRenderer.invoke("clone-repo", url, parent, folderName),
+  cancelClone: () => ipcRenderer.invoke("clone-cancel"),
+  cloneDefaultParent: () => ipcRenderer.invoke("clone-default-parent"),
+  getGitStatus: (id: string) => ipcRenderer.invoke("get-git-status", id),
+  getResumeCommand: (id: string) =>
+    ipcRenderer.invoke("get-resume-command", id),
+  readReplyConclusion: (id: string) =>
+    ipcRenderer.invoke("read-reply-conclusion", id),
+  readFile: (instanceId: string, path: string) =>
+    ipcRenderer.invoke("read-file", instanceId, path),
+  // `side` is a DiffSide; typed loose here like `backend` above, and validated
+  // in the handler.
+  getFileDiff: (
+    instanceId: string,
+    relPath: string,
+    side: string,
+    oldPath?: string
+  ) => ipcRenderer.invoke("get-file-diff", instanceId, relPath, side, oldPath),
+  openInVSCode: (target: string, projectRoot?: string) =>
+    ipcRenderer.invoke("open-in-vscode", target, projectRoot),
+  openExternal: (url: string) => ipcRenderer.invoke("open-external", url),
+
+  setDockBadge: (count: number) => ipcRenderer.send("set-dock-badge", count),
+  acknowledgeInstance: (id: string) => ipcRenderer.send("instance-acknowledged", id),
+
+  // App
+  getAppVersion: () => ipcRenderer.invoke("get-app-version"),
+  isDevBuild: () => ipcRenderer.invoke("is-dev-build"),
+
+  // Settings
+  getSettings: () => ipcRenderer.invoke("settings-get"),
+  setTheme: (theme: string) => ipcRenderer.invoke("settings-set-theme", theme),
+
+  // Phone link
+  getRemoteStatus: () => ipcRenderer.invoke("remote-get-status"),
+  setRemoteEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke("remote-set-enabled", enabled),
+  createRemotePairing: (replacing?: string) => ipcRenderer.invoke("remote-create-pairing", replacing),
+  revokeRemoteDevice: (deviceId: string) =>
+    ipcRenderer.invoke("remote-revoke-device", deviceId),
+  setUpRemoteHttps: () => ipcRenderer.invoke("remote-setup-https"),
+  openTailscale: () => ipcRenderer.invoke("remote-open-tailscale"),
+  sendRemoteTestPush: (deviceId: string) =>
+    ipcRenderer.invoke("remote-test-push", deviceId),
+
+  // Secretary. `key` is a SpeechKeyChange; typed loose here like `backend`
+  // above, and validated in main.
+  getSecretarySettings: () => ipcRenderer.invoke("secretary:get-settings"),
+  setSecretaryMode: (enabled: boolean) =>
+    ipcRenderer.invoke("secretary:set-mode", enabled),
+  setSpeechServer: (url: string, key: unknown) =>
+    ipcRenderer.invoke("secretary:set-server", url, key),
+  testSpeechServer: () => ipcRenderer.invoke("secretary:test-server"),
+  getSecretaryBriefs: () => ipcRenderer.invoke("secretary:get-briefs"),
+  getSecretaryAudio: (instanceId: string, seq: number) =>
+    ipcRenderer.invoke("secretary:get-audio", instanceId, seq),
+  replyToSecretary: (instanceId: string, seq: number, text: string) =>
+    ipcRenderer.invoke("secretary:reply", instanceId, seq, text),
+
+  // File drop
+  getDropFolder: (instanceId: string) =>
+    ipcRenderer.invoke("file-drop-get-folder", instanceId),
+  setDropFolder: (instanceId: string, folder: string) =>
+    ipcRenderer.invoke("file-drop-set-folder", instanceId, folder),
+  describeDropped: (paths: string[]) =>
+    ipcRenderer.invoke("file-drop-describe", paths),
+  focusDropWindow: (until: number) => ipcRenderer.invoke("file-drop-focus-window", until),
+  pickDropFolder: (message: string, startFolder: string) =>
+    ipcRenderer.invoke("file-drop-pick-folder", message, startFolder),
+  copyDropped: (instanceId: string, sources: string[], targetDir: string) =>
+    ipcRenderer.invoke("file-drop-copy", instanceId, sources, targetDir),
+  // Here rather than in main: only the renderer's own File knows its path. The
+  // sandboxed preload may load webUtils.
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
+
+  // Compose box: clipboard image -> temp file (renderer has no fs access)
+  saveClipboardImage: () => ipcRenderer.invoke("save-clipboard-image"),
+  deleteTempImage: (path: string) =>
+    ipcRenderer.invoke("delete-temp-image", path),
+
+  // Terminal I/O
+  writeToInstance: (id: string, data: string) =>
+    ipcRenderer.send("pty-input", id, data),
+  sendViewKey: (id: string, command: string) =>
+    ipcRenderer.send("view-key", id, command),
+  resizeInstance: (id: string, cols: number, rows: number) =>
+    ipcRenderer.send("pty-resize", id, cols, rows),
+
+  // Shell terminal (toolbox Terminal section)
+  spawnShell: (id: string) => ipcRenderer.invoke("shell-spawn", id),
+  killShell: (id: string) => ipcRenderer.invoke("shell-kill", id),
+  writeToShell: (id: string, data: string) =>
+    ipcRenderer.send("shell-input", id, data),
+  resizeShell: (id: string, cols: number, rows: number) =>
+    ipcRenderer.send("shell-resize", id, cols, rows),
+
+  // Event listeners
+  onPtyOutput: (callback: (id: string, data: string) => void) => {
+    const listener = (_event: unknown, id: string, data: string) =>
+      callback(id, data);
+    ipcRenderer.on("pty-output", listener);
+    return () => {
+      ipcRenderer.removeListener("pty-output", listener);
+    };
+  },
+  onInstanceExit: (callback: (id: string, code: number) => void) => {
+    const listener = (_event: unknown, id: string, code: number) =>
+      callback(id, code);
+    ipcRenderer.on("instance-exit", listener);
+    return () => {
+      ipcRenderer.removeListener("instance-exit", listener);
+    };
+  },
+  onInstanceContextUsage: (
+    callback: (id: string, usage: ContextUsage | null) => void
+  ) => {
+    const listener = (_event: unknown, id: string, usage: ContextUsage | null) =>
+      callback(id, usage);
+    ipcRenderer.on("instance-context-usage", listener);
+    return () => {
+      ipcRenderer.removeListener("instance-context-usage", listener);
+    };
+  },
+  onInstanceWorking: (callback: (id: string, working: boolean) => void) => {
+    const listener = (_event: unknown, id: string, working: boolean) =>
+      callback(id, working);
+    ipcRenderer.on("instance-working", listener);
+    return () => {
+      ipcRenderer.removeListener("instance-working", listener);
+    };
+  },
+  onInstanceActivity: (callback: (id: string, type: string) => void) => {
+    const listener = (_event: unknown, id: string, type: string) =>
+      callback(id, type);
+    ipcRenderer.on("instance-activity", listener);
+    return () => {
+      ipcRenderer.removeListener("instance-activity", listener);
+    };
+  },
+  onCloneProgress: (callback: (progress: CloneProgress) => void) => {
+    const listener = (_event: unknown, progress: CloneProgress) => callback(progress);
+    ipcRenderer.on("clone-progress", listener);
+    return () => {
+      ipcRenderer.removeListener("clone-progress", listener);
+    };
+  },
+  onInstanceReadOnPhone: (callback: (id: string) => void) => {
+    const listener = (_event: unknown, id: string) => callback(id);
+    ipcRenderer.on("instance-read-on-phone", listener);
+    return () => {
+      ipcRenderer.removeListener("instance-read-on-phone", listener);
+    };
+  },
+  onInstanceSessionId: (callback: (id: string, sessionId: string) => void) => {
+    const listener = (_event: unknown, id: string, sessionId: string) =>
+      callback(id, sessionId);
+    ipcRenderer.on("instance-session-id", listener);
+    return () => {
+      ipcRenderer.removeListener("instance-session-id", listener);
+    };
+  },
+  onInstanceAlertsDegraded: (
+    callback: (id: string, degraded: boolean, reason?: string) => void
+  ) => {
+    const listener = (_event: unknown, id: string, degraded: boolean, reason?: string) =>
+      callback(id, degraded, reason);
+    ipcRenderer.on("instance-alerts-degraded", listener);
+    return () => {
+      ipcRenderer.removeListener("instance-alerts-degraded", listener);
+    };
+  },
+  onShellOutput: (callback: (id: string, data: string) => void) => {
+    const listener = (_event: unknown, id: string, data: string) =>
+      callback(id, data);
+    ipcRenderer.on("shell-output", listener);
+    return () => {
+      ipcRenderer.removeListener("shell-output", listener);
+    };
+  },
+  onShellExit: (callback: (id: string) => void) => {
+    const listener = (_event: unknown, id: string) => callback(id);
+    ipcRenderer.on("shell-exit", listener);
+    return () => {
+      ipcRenderer.removeListener("shell-exit", listener);
+    };
+  },
+  onRemoteStatus: (callback: (status: unknown) => void) => {
+    const listener = (_event: unknown, status: unknown) => callback(status);
+    ipcRenderer.on("remote-status", listener);
+    return () => {
+      ipcRenderer.removeListener("remote-status", listener);
+    };
+  },
+  onSecretaryBrief: (
+    callback: (instanceId: string, state: unknown) => void
+  ) => {
+    const listener = (_event: unknown, instanceId: string, state: unknown) =>
+      callback(instanceId, state);
+    ipcRenderer.on("secretary-brief", listener);
+    return () => {
+      ipcRenderer.removeListener("secretary-brief", listener);
+    };
+  },
+  onSecretaryMode: (callback: (enabled: boolean) => void) => {
+    const listener = (_event: unknown, enabled: boolean) => callback(enabled);
+    ipcRenderer.on("secretary-mode", listener);
+    return () => {
+      ipcRenderer.removeListener("secretary-mode", listener);
+    };
+  },
+});

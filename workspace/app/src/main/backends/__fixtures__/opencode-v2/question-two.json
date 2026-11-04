@@ -1,0 +1,723 @@
+{
+  "scenario": "question-two",
+  "opencodeVersion": "2.0.32",
+  "notes": "Two single-select fields in one form, tab row 'Drink  Size  Submit'. Digit 2 picked Coffee and moved to Size, digit 1 picked Small and moved to Submit, Enter. form.replied {q0:'Coffee', q1:'Small'}.",
+  "frames": [
+    {
+      "t": 1070,
+      "event": {
+        "id": "evt_15541e27b001BZfCOZNog4eMtP",
+        "created": 1792431743611,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "slug": "hidden-otter",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1099,
+      "event": {
+        "id": "evt_15541e28d001f1a9Aki9UwOPbk",
+        "created": 1792431743629,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_15541e279001yNYf1WC6pLJ27L",
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "Use your question tool ONCE with TWO single-select questions in the same call: first which drink (Tea or Coffee), second which size (Small or Large). Then reply with my two answers.",
+              "files": [],
+              "agents": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1099,
+      "event": {
+        "id": "evt_15541e28e0015LhAjVhzfLPpsc",
+        "created": 1792431743630,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1099,
+      "event": {
+        "id": "evt_15541e2910017bQxbI9qFUFgAd",
+        "created": 1792431743633,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 1099,
+      "event": {
+        "id": "evt_15541e292001a6InXGyw3Xf19X",
+        "created": 1792431743634,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "inboxID": "msg_15541e279001yNYf1WC6pLJ27L"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4621,
+      "event": {
+        "id": "evt_15541f04c001RRyY4dkXyEOUG7",
+        "created": 1792431747148,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_15541e296001yFphXr8G63A5Fv",
+          "started": 1792431743641
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 5,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4621,
+      "event": {
+        "id": "evt_15541f055001P4cTvL5nhnLzPI",
+        "created": 1792431747157,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "assistantMessageID": "msg_15541e296001yFphXr8G63A5Fv",
+          "id": "call_00_n5tvmejrf9nkkut8zvl57wbi",
+          "name": "question"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 6,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4653,
+      "event": {
+        "id": "evt_15541f076001BsKHXFvNPQZRFU",
+        "created": 1792431747190,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "assistantMessageID": "msg_15541e296001yFphXr8G63A5Fv",
+          "id": "call_00_n5tvmejrf9nkkut8zvl57wbi",
+          "text": "{\"questions\": [{\"header\": \"Drink\", \"question\": \"Which drink would you like?\", \"multiple\": false, \"options\": [{\"label\": \"Tea\", \"description\": \"A hot cup of tea\"}, {\"label\": \"Coffee\", \"description\": \"A …"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 7,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4653,
+      "event": {
+        "id": "evt_15541f078001uw1TfLmKhTWUSS",
+        "created": 1792431747192,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "assistantMessageID": "msg_15541e296001yFphXr8G63A5Fv",
+          "id": "call_00_n5tvmejrf9nkkut8zvl57wbi",
+          "input": {
+            "questions": [
+              {
+                "header": "Drink",
+                "question": "Which drink would you like?",
+                "multiple": false,
+                "options": [
+                  {
+                    "label": "Tea",
+                    "description": "A hot cup of tea"
+                  },
+                  {
+                    "label": "Coffee",
+                    "description": "A hot cup of coffee"
+                  }
+                ]
+              },
+              {
+                "header": "Size",
+                "question": "Which size would you like?",
+                "multiple": false,
+                "options": [
+                  {
+                    "label": "Small",
+                    "description": "Small size"
+                  },
+                  {
+                    "label": "Large",
+                    "description": "Large size"
+                  }
+                ]
+              }
+            ]
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 8,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4653,
+      "event": {
+        "id": "evt_15541f079001wUleuXJDtDBcAZ",
+        "created": 1792431747193,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "assistantMessageID": "msg_15541e296001yFphXr8G63A5Fv"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 9,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4653,
+      "event": {
+        "id": "evt_15541f07b002I1AAKCGBkvVg6D",
+        "created": 1792431747195,
+        "type": "form.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "form": {
+            "id": "frm_15541f07b001Jj0eYzGiHUHYzi",
+            "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+            "title": "Questions",
+            "metadata": {
+              "kind": "question",
+              "tool": {
+                "messageID": "msg_15541e296001yFphXr8G63A5Fv",
+                "id": "call_00_n5tvmejrf9nkkut8zvl57wbi"
+              }
+            },
+            "fields": [
+              {
+                "key": "q0",
+                "title": "Drink",
+                "description": "Which drink would you like?",
+                "type": "string",
+                "options": [
+                  {
+                    "value": "Tea",
+                    "label": "Tea",
+                    "description": "A hot cup of tea"
+                  },
+                  {
+                    "value": "Coffee",
+                    "label": "Coffee",
+                    "description": "A hot cup of coffee"
+                  }
+                ],
+                "custom": true
+              },
+              {
+                "key": "q1",
+                "title": "Size",
+                "description": "Which size would you like?",
+                "type": "string",
+                "options": [
+                  {
+                    "value": "Small",
+                    "label": "Small",
+                    "description": "Small size"
+                  },
+                  {
+                    "value": "Large",
+                    "label": "Large",
+                    "description": "Large size"
+                  }
+                ],
+                "custom": true
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "t": 4882,
+      "event": {
+        "id": "evt_15541f15c001EHSL2PF2DVyYgK",
+        "created": 1792431747420,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "cost": 0,
+          "tokens": {
+            "input": 72,
+            "output": 7,
+            "reasoning": 308,
+            "cache": {
+              "read": 512,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 4882,
+      "event": {
+        "id": "evt_15541f15e001snXEUkfp1d2ykq",
+        "created": 1792431747422,
+        "type": "session.renamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "title": "Drink and size selection questions"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 11,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 18193,
+      "event": {
+        "id": "evt_155422553001J1DRJRenWW582y",
+        "created": 1792431760723,
+        "type": "form.replied",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "frm_15541f07b001Jj0eYzGiHUHYzi",
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "answer": {
+            "q0": "Coffee",
+            "q1": "Small"
+          }
+        }
+      }
+    },
+    {
+      "t": 18193,
+      "event": {
+        "id": "evt_1554225540011L0KnrJOLfvQMU",
+        "created": 1792431760724,
+        "type": "session.tool.success",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "assistantMessageID": "msg_15541e296001yFphXr8G63A5Fv",
+          "id": "call_00_n5tvmejrf9nkkut8zvl57wbi",
+          "content": [
+            {
+              "type": "text",
+              "text": "User has answered your questions: \"Which drink would you like?\"=\"Coffee\", \"Which size would you like?\"=\"Small\". You can now continue with the user's answers in mind."
+            }
+          ],
+          "metadata": {
+            "answers": [
+              [
+                "Coffee"
+              ],
+              [
+                "Small"
+              ]
+            ],
+            "truncated": false
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 12,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 18193,
+      "event": {
+        "id": "evt_155422555001YWRdUDRBYmrhxE",
+        "created": 1792431760725,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "assistantMessageID": "msg_15541e296001yFphXr8G63A5Fv",
+          "finish": "tool-calls",
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 48,
+            "output": 151,
+            "reasoning": 0,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 13,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 18193,
+      "event": {
+        "id": "evt_155422556001hOggeAxFNIFbLJ",
+        "created": 1792431760726,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "cost": 0,
+          "tokens": {
+            "input": 120,
+            "output": 158,
+            "reasoning": 308,
+            "cache": {
+              "read": 5760,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 19364,
+      "event": {
+        "id": "evt_1554229f00017NGEvhVHbf8yV6",
+        "created": 1792431761904,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_15542255b001Kr3WH7gJsp77lg",
+          "started": 1792431760735
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 14,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 19364,
+      "event": {
+        "id": "evt_1554229f2001oz14pllxtl80HE",
+        "created": 1792431761906,
+        "type": "session.text.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "assistantMessageID": "msg_15542255b001Kr3WH7gJsp77lg",
+          "ordinal": 0
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 15,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 19417,
+      "event": {
+        "id": "evt_155422a23001kgDA4R95gaBy05",
+        "created": 1792431761955,
+        "type": "session.text.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "assistantMessageID": "msg_15542255b001Kr3WH7gJsp77lg",
+          "ordinal": 0,
+          "delta": "Your answers:\n\n1. **Drink:** Coffee\n2. **Size:** Small"
+        }
+      }
+    },
+    {
+      "t": 19418,
+      "event": {
+        "id": "evt_155422a240017k4uUwQerXGMAh",
+        "created": 1792431761956,
+        "type": "session.text.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "assistantMessageID": "msg_15542255b001Kr3WH7gJsp77lg",
+          "ordinal": 0,
+          "text": "Your answers:\n\n1. **Drink:** Coffee\n2. **Size:** Small"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 16,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 19418,
+      "event": {
+        "id": "evt_155422a250011xwom1gvV9KUvh",
+        "created": 1792431761957,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "assistantMessageID": "msg_15542255b001Kr3WH7gJsp77lg"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 17,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 19418,
+      "event": {
+        "id": "evt_155422a260014j5O6jPz13Ns3n",
+        "created": 1792431761958,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "assistantMessageID": "msg_15542255b001Kr3WH7gJsp77lg",
+          "finish": "stop",
+          "rawFinish": "stop",
+          "cost": 0,
+          "tokens": {
+            "input": 248,
+            "output": 18,
+            "reasoning": 0,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 18,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 19418,
+      "event": {
+        "id": "evt_155422a27001nW6U7AVeyQMeRF",
+        "created": 1792431761959,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "cost": 0,
+          "tokens": {
+            "input": 368,
+            "output": 176,
+            "reasoning": 308,
+            "cache": {
+              "read": 11008,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 19418,
+      "event": {
+        "id": "evt_155422a27002V8GTouLgM6RUWZ",
+        "created": 1792431761959,
+        "type": "session.execution.succeeded",
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 19,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 19437,
+      "event": {
+        "id": "evt_155422a3b0017CR66JbQdwIQmB",
+        "created": 1792431761979,
+        "type": "session.viewed",
+        "data": {
+          "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "idle": 1792431761959
+        },
+        "durable": {
+          "aggregateID": "ses_eaabe1d88ffetkPqn39VQqATA6",
+          "seq": 20,
+          "version": 1
+        }
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "t": 67,
+      "key": {
+        "text": "Use your question tool ONCE with TWO single-select questions in the same call: first which drink (Tea or Coffee), second which size (Small or Large). Then reply with my two answers."
+      }
+    },
+    {
+      "t": 1057,
+      "key": "Enter"
+    },
+    {
+      "t": 11168,
+      "key": "2"
+    },
+    {
+      "t": 12151,
+      "key": "1"
+    },
+    {
+      "t": 18178,
+      "key": "Enter"
+    }
+  ],
+  "pluginRoutes": [
+    {
+      "t": 1079,
+      "route": {
+        "type": "session",
+        "sessionID": "ses_eaabe1d88ffetkPqn39VQqATA6"
+      }
+    }
+  ]
+}

@@ -1,0 +1,210 @@
+{
+  "cli": "2.1.291",
+  "scenario": "bg-shell",
+  "description": "A background Bash call (run_in_background, sleep 25): the main reply ends while it runs; recorded until the shell finishes and the CLI settles.",
+  "deliveries": [
+    {
+      "ms": 0,
+      "payload": {
+        "session_id": "1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-bgshell/1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-bgshell",
+        "prompt_id": "dd65ca11-0df5-4ac4-a1e8-5ea23f549c39",
+        "permission_mode": "default",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Call the Bash tool exactly once with command `sleep 25` and the run_in_background parameter set to true. Do not wait for it to finish. After the tool call returns, reply with just started."
+      }
+    },
+    {
+      "ms": 1537,
+      "payload": {
+        "session_id": "1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-bgshell/1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-bgshell",
+        "prompt_id": "dd65ca11-0df5-4ac4-a1e8-5ea23f549c39",
+        "permission_mode": "default",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "sleep 25",
+          "description": "Start a 25-second background sleep task",
+          "run_in_background": true
+        },
+        "tool_use_id": "toolu_bdrk_01A7Ydx12u1afTj4UkDwchf6"
+      }
+    },
+    {
+      "ms": 1537,
+      "payload": {
+        "session_id": "1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-bgshell/1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-bgshell",
+        "prompt_id": "dd65ca11-0df5-4ac4-a1e8-5ea23f549c39",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "29cd7154-92be-4be2-b0cc-61f58c51a958",
+        "message_id": "4565ffaf-c3dd-4521-80e2-897cd03ceed3",
+        "index": 0,
+        "final": true,
+        "delta": "I'll start a background sleep task for you."
+      }
+    },
+    {
+      "ms": 2367,
+      "payload": {
+        "session_id": "1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-bgshell/1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-bgshell",
+        "prompt_id": "dd65ca11-0df5-4ac4-a1e8-5ea23f549c39",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "sleep 25",
+          "description": "Start a 25-second background sleep task",
+          "run_in_background": true
+        },
+        "tool_response": {
+          "stdout": "",
+          "stderr": "",
+          "interrupted": false,
+          "isImage": false,
+          "noOutputExpected": false,
+          "backgroundTaskId": "bd72zkbtr"
+        },
+        "tool_use_id": "toolu_bdrk_01A7Ydx12u1afTj4UkDwchf6",
+        "duration_ms": 799
+      }
+    },
+    {
+      "ms": 2393,
+      "payload": {
+        "session_id": "1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-bgshell/1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-bgshell",
+        "prompt_id": "dd65ca11-0df5-4ac4-a1e8-5ea23f549c39",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolBatch",
+        "tool_calls": [
+          {
+            "tool_name": "Bash",
+            "tool_input": {
+              "command": "sleep 25",
+              "description": "Start a 25-second background sleep task",
+              "run_in_background": true
+            },
+            "tool_use_id": "toolu_bdrk_01A7Ydx12u1afTj4UkDwchf6",
+            "tool_response": "Command running in background with ID: bd72zkbtr. Output is being written to: /private/tmp/claude-501/-private-tmp-mc-spike-work-bgshell/1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340/tasks/bd72zkbtr.output. You will be notified when it completes. To check interim output, use Read on that file path."
+          }
+        ]
+      }
+    },
+    {
+      "ms": 3160,
+      "payload": {
+        "session_id": "1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-bgshell/1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-bgshell",
+        "prompt_id": "dd65ca11-0df5-4ac4-a1e8-5ea23f549c39",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "29cd7154-92be-4be2-b0cc-61f58c51a958",
+        "message_id": "b6d8c9b6-cda0-4c1a-b546-81ba8182bd1a",
+        "index": 0,
+        "final": true,
+        "delta": "Just started."
+      }
+    },
+    {
+      "ms": 3162,
+      "payload": {
+        "session_id": "1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-bgshell/1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-bgshell",
+        "prompt_id": "dd65ca11-0df5-4ac4-a1e8-5ea23f549c39",
+        "permission_mode": "default",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "last_assistant_message": "Just started.",
+        "background_tasks": [
+          {
+            "id": "bd72zkbtr",
+            "type": "shell",
+            "status": "running",
+            "description": "Start a 25-second background sleep task",
+            "command": "sleep 25"
+          }
+        ],
+        "session_crons": []
+      }
+    },
+    {
+      "ms": 27428,
+      "payload": {
+        "session_id": "1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-bgshell/1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-bgshell",
+        "prompt_id": "5ebb8656-2946-401c-90f9-fde93bbd6829",
+        "permission_mode": "default",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "<task-notification>\n<task-id>bd72zkbtr</task-id>\n<tool-use-id>toolu_bdrk_01A7Ydx12u1afTj4UkDwchf6</tool-use-id>\n<output-file>/private/tmp/claude-501/-private-tmp-mc-spike-work-bgshell/1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340/tasks/bd72zkbtr.output</output-file>\n<status>completed</status>\n<summary>Background command \"Start a 25-second background sleep task\" completed (exit code 0)</summary>\n</task-notification>"
+      }
+    },
+    {
+      "ms": 28609,
+      "payload": {
+        "session_id": "1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-bgshell/1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-bgshell",
+        "prompt_id": "5ebb8656-2946-401c-90f9-fde93bbd6829",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "ee92f20c-d0af-4da5-b0f6-b11032c17f40",
+        "message_id": "1a1d89fb-88c1-4dfe-9a9f-e71b0e491def",
+        "index": 0,
+        "final": true,
+        "delta": "\u540e\u53f0\u4efb\u52a1\u5b8c\u6210\u4e86\u3002"
+      }
+    },
+    {
+      "ms": 28613,
+      "payload": {
+        "session_id": "1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-bgshell/1bb44e0f-7cc7-47c0-8fa6-d3ed1be8c340.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-bgshell",
+        "prompt_id": "5ebb8656-2946-401c-90f9-fde93bbd6829",
+        "permission_mode": "default",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "last_assistant_message": "\u540e\u53f0\u4efb\u52a1\u5b8c\u6210\u4e86\u3002",
+        "background_tasks": [],
+        "session_crons": []
+      }
+    }
+  ],
+  "registry": [
+    {
+      "ms": -666,
+      "status": "idle"
+    },
+    {
+      "ms": -3,
+      "status": "busy"
+    },
+    {
+      "ms": 3179,
+      "status": "shell"
+    },
+    {
+      "ms": 27398,
+      "status": "busy"
+    },
+    {
+      "ms": 28674,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": -61,
+      "key": "enter"
+    }
+  ]
+}

@@ -1,0 +1,755 @@
+{
+  "scenario": "two-roots",
+  "opencodeVersion": "2.0.32",
+  "notes": "Root A: long story prompt; right after A's execution.started, /sessions, Down, Enter to an older root B, prompt 'Now reply with exactly the word: third'. GET /api/session/active listed both as running. B started and finished while A ran; A finished later in the background. session.viewed only for B (A was not on screen). Plugin routes: A, then B.",
+  "frames": [
+    {
+      "t": 1040,
+      "event": {
+        "id": "evt_155483a98001zX33YPsMUsl2Ty",
+        "created": 1792432159384,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "slug": "curious-panda",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1040,
+      "event": {
+        "id": "evt_155483a9a001GgmjmreaWro6iR",
+        "created": 1792432159386,
+        "type": "project.updated",
+        "data": {
+          "id": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "canonical": "/private/tmp/oc2-spike/projects/scen",
+          "time": {
+            "created": 1792431240537,
+            "updated": 1792431240537,
+            "active": 1792432159386
+          },
+          "sandboxes": []
+        }
+      }
+    },
+    {
+      "t": 1071,
+      "event": {
+        "id": "evt_155483aac001oXFJ8TRnB6yfY0",
+        "created": 1792432159404,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_155483a95001AxF08nlGdpvuFE",
+          "sessionID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "Write a 3000-word story about a sailor who finds a map, in ten numbered chapters. Do not use any tools.",
+              "files": [],
+              "agents": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1071,
+      "event": {
+        "id": "evt_155483aad001AgpK6zsS77PJGv",
+        "created": 1792432159405,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaab7c56cffehBum3WDM6wZnnV"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1071,
+      "event": {
+        "id": "evt_155483ab0001QVqvv4o2LKgZf5",
+        "created": 1792432159408,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 1071,
+      "event": {
+        "id": "evt_155483ab1001Nl5mW6Rjfc9c3R",
+        "created": 1792432159409,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "inboxID": "msg_155483a95001AxF08nlGdpvuFE"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3474,
+      "event": {
+        "id": "evt_155484413001UsbZpTyn7bnJ3x",
+        "created": 1792432161811,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_155483ab5001C1pp56CSKM4Wlz",
+          "started": 1792432159417
+        },
+        "durable": {
+          "aggregateID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "seq": 5,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3475,
+      "event": {
+        "id": "evt_155484419001jitUxAtW7tkI6H",
+        "created": 1792432161817,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "assistantMessageID": "msg_155483ab5001C1pp56CSKM4Wlz",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "seq": 6,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3578,
+      "event": {
+        "id": "evt_155484481001GzPwha2CxJwhce",
+        "created": 1792432161921,
+        "type": "session.reasoning.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "assistantMessageID": "msg_155483ab5001C1pp56CSKM4Wlz",
+          "ordinal": 0,
+          "delta": "The user wants a 3000-word story about a sailor who finds a map, in ten numbered chapters. No tools."
+        }
+      }
+    },
+    {
+      "t": 3823,
+      "event": {
+        "id": "evt_155484579001h3m58eqQF5Cobb",
+        "created": 1792432162169,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "cost": 0,
+          "tokens": {
+            "input": 58,
+            "output": 11,
+            "reasoning": 92,
+            "cache": {
+              "read": 512,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 3823,
+      "event": {
+        "id": "evt_155484579002k0fx3z1pJcci43",
+        "created": 1792432162169,
+        "type": "session.renamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "title": "Sailor and the map: ten-chapter story"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "seq": 8,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 9374,
+      "event": {
+        "id": "evt_155485b1d001C6wZ8C9fl2U5l5",
+        "created": 1792432167709,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_155485b180011YN5989aqqijoY",
+          "sessionID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "Now reply with exactly the word: third",
+              "files": [],
+              "agents": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "seq": 44,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 9374,
+      "event": {
+        "id": "evt_155485b1e001Ia8GAYbHafO88X",
+        "created": 1792432167710,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "seq": 45,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 9374,
+      "event": {
+        "id": "evt_155485b21001ttPKlAdrHRyoT0",
+        "created": 1792432167713,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "inboxID": "msg_155485b180011YN5989aqqijoY"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "seq": 46,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 11881,
+      "event": {
+        "id": "evt_1554864e5001r9reidq7TyOECj",
+        "created": 1792432170213,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_155485b24001m3TswQI8D2sfNn",
+          "started": 1792432167720
+        },
+        "durable": {
+          "aggregateID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "seq": 47,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 11881,
+      "event": {
+        "id": "evt_1554864ea001l4Y0dCQ8klCAgW",
+        "created": 1792432170218,
+        "type": "session.text.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "assistantMessageID": "msg_155485b24001m3TswQI8D2sfNn",
+          "ordinal": 0
+        },
+        "durable": {
+          "aggregateID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "seq": 48,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 11881,
+      "event": {
+        "id": "evt_1554864ed001KhLXxRYSPS5jVC",
+        "created": 1792432170221,
+        "type": "session.text.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "assistantMessageID": "msg_155485b24001m3TswQI8D2sfNn",
+          "ordinal": 0,
+          "delta": "third"
+        }
+      }
+    },
+    {
+      "t": 11881,
+      "event": {
+        "id": "evt_1554864ed002I5F0eWDzOctnEq",
+        "created": 1792432170221,
+        "type": "session.text.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "assistantMessageID": "msg_155485b24001m3TswQI8D2sfNn",
+          "ordinal": 0,
+          "text": "third"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "seq": 49,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 11881,
+      "event": {
+        "id": "evt_1554864ef001mxigUW032YB3X5",
+        "created": 1792432170223,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "assistantMessageID": "msg_155485b24001m3TswQI8D2sfNn"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "seq": 50,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 11881,
+      "event": {
+        "id": "evt_1554864f0001Lgtk0ll8yVW12G",
+        "created": 1792432170224,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "assistantMessageID": "msg_155485b24001m3TswQI8D2sfNn",
+          "finish": "stop",
+          "rawFinish": "stop",
+          "cost": 0,
+          "tokens": {
+            "input": 80,
+            "output": 2,
+            "reasoning": 0,
+            "cache": {
+              "read": 6144,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "seq": 51,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 11881,
+      "event": {
+        "id": "evt_1554864f1001LDXZ7cvdoaiB10",
+        "created": 1792432170225,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "cost": 0,
+          "tokens": {
+            "input": 1322,
+            "output": 535,
+            "reasoning": 323,
+            "cache": {
+              "read": 28544,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 11881,
+      "event": {
+        "id": "evt_1554864f2001W57qO5tGE8XfrH",
+        "created": 1792432170226,
+        "type": "session.execution.succeeded",
+        "data": {
+          "sessionID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "seq": 52,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 11904,
+      "event": {
+        "id": "evt_15548650a0014z6FYMfmMCqUFH",
+        "created": 1792432170250,
+        "type": "session.viewed",
+        "data": {
+          "sessionID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "idle": 1792432170226
+        },
+        "durable": {
+          "aggregateID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt",
+          "seq": 53,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 23557,
+      "event": {
+        "id": "evt_15548928d002FcDxY1oacODVVz",
+        "created": 1792432181901,
+        "type": "session.text.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "assistantMessageID": "msg_155483ab5001C1pp56CSKM4Wlz",
+          "ordinal": 0
+        },
+        "durable": {
+          "aggregateID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "seq": 9,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 48507,
+      "event": {
+        "id": "evt_15548f3f8001vhiF2XE4wyA3S9",
+        "created": 1792432206840,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "assistantMessageID": "msg_155483ab5001C1pp56CSKM4Wlz",
+          "ordinal": 0,
+          "text": "The user wants a 3000-word story about a sailor who finds a map, in ten numbered chapters. No tools. I should just write it. Let me aim for about 300 words per chapter, ten chapters = ~3000 words.\n\nLe…",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "seq": 10,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 48508,
+      "event": {
+        "id": "evt_15548f3fc001F2khibLPmwsS0b",
+        "created": 1792432206844,
+        "type": "session.text.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "assistantMessageID": "msg_155483ab5001C1pp56CSKM4Wlz",
+          "ordinal": 0,
+          "text": "# The Lampblack Map\n\n## 1. What the Tide Returned\n\nThe sea gives up its dead in its own time, and it was on the third morning after the gale that the harbor at Bellhollow began to return what it had t…"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "seq": 11,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 48508,
+      "event": {
+        "id": "evt_15548f3ff001LpkfKO7icqJNZG",
+        "created": 1792432206847,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "assistantMessageID": "msg_155483ab5001C1pp56CSKM4Wlz"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "seq": 12,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 48508,
+      "event": {
+        "id": "evt_15548f402001FjtJOGQLimBEiW",
+        "created": 1792432206850,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "assistantMessageID": "msg_155483ab5001C1pp56CSKM4Wlz",
+          "finish": "stop",
+          "rawFinish": "stop",
+          "cost": 0,
+          "tokens": {
+            "input": 34,
+            "output": 3866,
+            "reasoning": 2124,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "seq": 13,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 48508,
+      "event": {
+        "id": "evt_15548f404001a33mZhXZN8Z97t",
+        "created": 1792432206852,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "cost": 0,
+          "tokens": {
+            "input": 92,
+            "output": 3877,
+            "reasoning": 2216,
+            "cache": {
+              "read": 5760,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 48508,
+      "event": {
+        "id": "evt_15548f4040025NZzXXET73KM4E",
+        "created": 1792432206853,
+        "type": "session.execution.succeeded",
+        "data": {
+          "sessionID": "ses_eaab7c56cffehBum3WDM6wZnnV"
+        },
+        "durable": {
+          "aggregateID": "ses_eaab7c56cffehBum3WDM6wZnnV",
+          "seq": 14,
+          "version": 1
+        }
+      }
+    }
+  ],
+  "omitted": {
+    "repeatedDeltaFrames": {
+      "session.reasoning.delta": 143,
+      "session.text.delta": 170
+    }
+  },
+  "inputs": [
+    {
+      "t": 86,
+      "key": {
+        "text": "Write a 3000-word story about a sailor who finds a map, in ten numbered chapters. Do not use any tools."
+      }
+    },
+    {
+      "t": 1024,
+      "key": "Enter"
+    },
+    {
+      "t": 3729,
+      "key": {
+        "text": "/sessions"
+      }
+    },
+    {
+      "t": 4713,
+      "key": "Enter"
+    },
+    {
+      "t": 6049,
+      "key": "Down"
+    },
+    {
+      "t": 6682,
+      "key": "Enter"
+    },
+    {
+      "t": 8367,
+      "key": {
+        "text": "Now reply with exactly the word: third"
+      }
+    },
+    {
+      "t": 9346,
+      "key": "Enter"
+    }
+  ],
+  "http": [
+    {
+      "t": 10516,
+      "method": "GET",
+      "path": "/api/session/active",
+      "status": 200,
+      "response": {
+        "data": {
+          "ses_eaab7c56cffehBum3WDM6wZnnV": {
+            "type": "running"
+          },
+          "ses_eaab9fa80ffeMBEuq6XT3Rvqlt": {
+            "type": "running"
+          }
+        }
+      }
+    }
+  ],
+  "pluginRoutes": [
+    {
+      "t": 1047,
+      "route": {
+        "type": "session",
+        "sessionID": "ses_eaab7c56cffehBum3WDM6wZnnV"
+      }
+    },
+    {
+      "t": 6703,
+      "route": {
+        "type": "session",
+        "sessionID": "ses_eaab9fa80ffeMBEuq6XT3Rvqlt"
+      }
+    }
+  ]
+}

@@ -1,0 +1,133 @@
+{
+  "cli": "2.1.291",
+  "scenario": "long-bash",
+  "description": "One foreground Bash call that runs 20s, auto-allowed.",
+  "deliveries": [
+    {
+      "ms": 0,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "09098dda-6dca-4065-8e12-8e0ac46196da",
+        "permission_mode": "default",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Use the Bash tool to run exactly: sleep 20  -- then reply with just ok."
+      }
+    },
+    {
+      "ms": 1207,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "09098dda-6dca-4065-8e12-8e0ac46196da",
+        "permission_mode": "default",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "sleep 20",
+          "description": "Sleep for 20 seconds"
+        },
+        "tool_use_id": "toolu_bdrk_018pSrsA151JrKoP77EfQufV"
+      }
+    },
+    {
+      "ms": 22567,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "09098dda-6dca-4065-8e12-8e0ac46196da",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "sleep 20",
+          "description": "Sleep for 20 seconds"
+        },
+        "tool_response": {
+          "stdout": "",
+          "stderr": "",
+          "interrupted": false,
+          "isImage": false,
+          "noOutputExpected": false
+        },
+        "tool_use_id": "toolu_bdrk_018pSrsA151JrKoP77EfQufV",
+        "duration_ms": 21314
+      }
+    },
+    {
+      "ms": 22646,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "09098dda-6dca-4065-8e12-8e0ac46196da",
+        "permission_mode": "default",
+        "hook_event_name": "PostToolBatch",
+        "tool_calls": [
+          {
+            "tool_name": "Bash",
+            "tool_input": {
+              "command": "sleep 20",
+              "description": "Sleep for 20 seconds"
+            },
+            "tool_use_id": "toolu_bdrk_018pSrsA151JrKoP77EfQufV",
+            "tool_response": "(Bash completed with no output)"
+          }
+        ]
+      }
+    },
+    {
+      "ms": 23463,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "09098dda-6dca-4065-8e12-8e0ac46196da",
+        "hook_event_name": "MessageDisplay",
+        "turn_id": "89a571ad-cff7-4f3a-83e8-c7852a1a3c51",
+        "message_id": "b87d2f56-1f26-4bd9-a476-9d3dd89ede61",
+        "index": 0,
+        "final": true,
+        "delta": "ok"
+      }
+    },
+    {
+      "ms": 23466,
+      "payload": {
+        "session_id": "dc499661-feb1-496b-92ad-26b050f19068",
+        "transcript_path": "~/.claude/projects/-private-tmp-mc-spike-work-main/dc499661-feb1-496b-92ad-26b050f19068.jsonl",
+        "cwd": "/private/tmp/mc-spike/work-main",
+        "prompt_id": "09098dda-6dca-4065-8e12-8e0ac46196da",
+        "permission_mode": "default",
+        "hook_event_name": "Stop",
+        "stop_hook_active": false,
+        "last_assistant_message": "ok",
+        "background_tasks": [],
+        "session_crons": []
+      }
+    }
+  ],
+  "registry": [
+    {
+      "ms": -665,
+      "status": "idle"
+    },
+    {
+      "ms": 9,
+      "status": "busy"
+    },
+    {
+      "ms": 23521,
+      "status": "idle"
+    }
+  ],
+  "inputs": [
+    {
+      "ms": -61,
+      "key": "enter"
+    }
+  ]
+}

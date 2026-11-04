@@ -1,0 +1,1066 @@
+{
+  "scenario": "question-api-custom",
+  "opencodeVersion": "2.0.32",
+  "notes": "POST form reply {answer:{q0:'Autumn, my own answer'}} (not one of the options; fields have custom:true) -> 204; form.replied carries the typed text; the model used it.",
+  "frames": [
+    {
+      "t": 1014,
+      "event": {
+        "id": "evt_155432003001EkW30thJP5RbvG",
+        "created": 1792431824899,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "slug": "jolly-cabin",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1050,
+      "event": {
+        "id": "evt_155432017001gVZ6mnBhRCVvbM",
+        "created": 1792431824919,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_155432001001x7s4wlCWUpg1OU",
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "Use your question tool to ask me one single-select question: which season, with options Spring, Summer and Winter. Then reply with exactly what I answered.",
+              "files": [],
+              "agents": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1050,
+      "event": {
+        "id": "evt_15543201800138Wi5rgxoKhECo",
+        "created": 1792431824920,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1051,
+      "event": {
+        "id": "evt_15543201d001R7Ad6sice5f9RV",
+        "created": 1792431824925,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 1051,
+      "event": {
+        "id": "evt_15543201f001h23q8e6mHkRoHt",
+        "created": 1792431824927,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "inboxID": "msg_155432001001x7s4wlCWUpg1OU"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3035,
+      "event": {
+        "id": "evt_1554327e3001EgD8g6Bjz62MiP",
+        "created": 1792431826915,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_155432024001D1rnJnrqwN7m99",
+          "started": 1792431824936
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 5,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3035,
+      "event": {
+        "id": "evt_1554327e7001nguIuI8G2nFJm6",
+        "created": 1792431826919,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155432024001D1rnJnrqwN7m99",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 6,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3138,
+      "event": {
+        "id": "evt_15543284e001kem1XNmnKQCFpT",
+        "created": 1792431827022,
+        "type": "session.reasoning.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155432024001D1rnJnrqwN7m99",
+          "ordinal": 0,
+          "delta": "The user wants me to use the question tool with a single question, single-select, options Spring, Summer"
+        }
+      }
+    },
+    {
+      "t": 3450,
+      "event": {
+        "id": "evt_155432984001ZuImNIaifmWEMh",
+        "created": 1792431827332,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "cost": 0,
+          "tokens": {
+            "input": 63,
+            "output": 4,
+            "reasoning": 191,
+            "cache": {
+              "read": 512,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 3451,
+      "event": {
+        "id": "evt_155432986001Euu80evdwfurlh",
+        "created": 1792431827334,
+        "type": "session.renamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "title": "Season preference question"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 8,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4886,
+      "event": {
+        "id": "evt_155432f21001TfZayVe6SDLLkd",
+        "created": 1792431828769,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155432024001D1rnJnrqwN7m99",
+          "id": "call_00_qx64mnlbkwx4i84g1hlwu7f1",
+          "name": "execute"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 9,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4972,
+      "event": {
+        "id": "evt_155432f6c001dLmtCT5ctHc0b8",
+        "created": 1792431828844,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155432024001D1rnJnrqwN7m99",
+          "ordinal": 0,
+          "text": "The user wants me to use the question tool with a single question, single-select, options Spring, Summer, Winter. Then reply exactly what they answered.\n\nThe question tool isn't in my Code Mode catalo…",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 10,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4972,
+      "event": {
+        "id": "evt_155432f6f001qM2PXveQdnJ3U7",
+        "created": 1792431828847,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155432024001D1rnJnrqwN7m99",
+          "id": "call_00_qx64mnlbkwx4i84g1hlwu7f1",
+          "text": "{\"code\": \"const r = await tools.question({\\n  questions: [\\n    {\\n      header: \\\"Season\\\",\\n      question: \\\"Which season?\\\",\\n      options: [\\n        { label: \\\"Spring\\\", description: \\\"Spring\\\"…"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 11,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4972,
+      "event": {
+        "id": "evt_155432f70001rI1OuvkXFUPpob",
+        "created": 1792431828848,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155432024001D1rnJnrqwN7m99",
+          "id": "call_00_qx64mnlbkwx4i84g1hlwu7f1",
+          "input": {
+            "code": "const r = await tools.question({\n  questions: [\n    {\n      header: \"Season\",\n      question: \"Which season?\",\n      options: [\n        { label: \"Spring\", description: \"Spring\" },\n        { label: \"Su…"
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 12,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4972,
+      "event": {
+        "id": "evt_155432f71001Qhn6v8kmM7PuqV",
+        "created": 1792431828849,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155432024001D1rnJnrqwN7m99"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 13,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4984,
+      "event": {
+        "id": "evt_155432f7b001GqbKra3Vp7InPk",
+        "created": 1792431828859,
+        "type": "session.tool.success",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155432024001D1rnJnrqwN7m99",
+          "id": "call_00_qx64mnlbkwx4i84g1hlwu7f1",
+          "content": [
+            {
+              "type": "text",
+              "text": "Unknown tool 'question'.\nUse search to find available tools."
+            }
+          ],
+          "metadata": {
+            "toolCalls": [],
+            "error": true,
+            "truncated": false
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 14,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 4984,
+      "event": {
+        "id": "evt_155432f7c001DDCBm2P9bm3xnN",
+        "created": 1792431828860,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155432024001D1rnJnrqwN7m99",
+          "finish": "tool-calls",
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 39,
+            "output": 120,
+            "reasoning": 309,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 15,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4984,
+      "event": {
+        "id": "evt_155432f7d001JuwevyL4iTpJmg",
+        "created": 1792431828861,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "cost": 0,
+          "tokens": {
+            "input": 102,
+            "output": 124,
+            "reasoning": 500,
+            "cache": {
+              "read": 5760,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 7298,
+      "event": {
+        "id": "evt_155433884001PiEkqgXY0S4uRN",
+        "created": 1792431831172,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_155432f81001kjqqZ0zaIElFkt",
+          "started": 1792431828869
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 16,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 7298,
+      "event": {
+        "id": "evt_15543388c001CHtAta3Mq1SKMN",
+        "created": 1792431831180,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155432f81001kjqqZ0zaIElFkt",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 17,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 7622,
+      "event": {
+        "id": "evt_1554339ca0016RmcZv7WrtZPFv",
+        "created": 1792431831498,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155432f81001kjqqZ0zaIElFkt",
+          "id": "call_00_3qz2a3qwpvxtt3q6ktu1hv2n",
+          "name": "question"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 18,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 7645,
+      "event": {
+        "id": "evt_1554339e4001b1JU2E4Vmac8pe",
+        "created": 1792431831524,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155432f81001kjqqZ0zaIElFkt",
+          "ordinal": 0,
+          "text": "Not available in Code Mode. Let me try calling the question tool directly as a top-level tool — the harness may allow it. The instruction says tools cannot be called directly, but question is defined …",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 19,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 7645,
+      "event": {
+        "id": "evt_1554339e6001TzqJLGVmaz69Pr",
+        "created": 1792431831526,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155432f81001kjqqZ0zaIElFkt",
+          "id": "call_00_3qz2a3qwpvxtt3q6ktu1hv2n",
+          "text": "{\"questions\": [{\"header\": \"Season\", \"question\": \"Which season do you pick?\", \"options\": [{\"label\": \"Spring\", \"description\": \"Spring\"}, {\"label\": \"Summer\", \"description\": \"Summer\"}, {\"label\": \"Winter\",…"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 20,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 7645,
+      "event": {
+        "id": "evt_1554339e80016UCbhe5B28Bwzq",
+        "created": 1792431831528,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155432f81001kjqqZ0zaIElFkt",
+          "id": "call_00_3qz2a3qwpvxtt3q6ktu1hv2n",
+          "input": {
+            "questions": [
+              {
+                "header": "Season",
+                "question": "Which season do you pick?",
+                "options": [
+                  {
+                    "label": "Spring",
+                    "description": "Spring"
+                  },
+                  {
+                    "label": "Summer",
+                    "description": "Summer"
+                  },
+                  {
+                    "label": "Winter",
+                    "description": "Winter"
+                  }
+                ],
+                "multiple": false
+              }
+            ]
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 21,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 7645,
+      "event": {
+        "id": "evt_1554339e9001ckbG7EEV31mXKX",
+        "created": 1792431831529,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155432f81001kjqqZ0zaIElFkt"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 22,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 7645,
+      "event": {
+        "id": "evt_1554339eb002CwMqCgTqVbr3U6",
+        "created": 1792431831531,
+        "type": "form.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "form": {
+            "id": "frm_1554339eb001kQNeSO0C0XbxVa",
+            "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+            "title": "Questions",
+            "metadata": {
+              "kind": "question",
+              "tool": {
+                "messageID": "msg_155432f81001kjqqZ0zaIElFkt",
+                "id": "call_00_3qz2a3qwpvxtt3q6ktu1hv2n"
+              }
+            },
+            "fields": [
+              {
+                "key": "q0",
+                "title": "Season",
+                "description": "Which season do you pick?",
+                "type": "string",
+                "options": [
+                  {
+                    "value": "Spring",
+                    "label": "Spring",
+                    "description": "Spring"
+                  },
+                  {
+                    "value": "Summer",
+                    "label": "Summer",
+                    "description": "Summer"
+                  },
+                  {
+                    "value": "Winter",
+                    "label": "Winter",
+                    "description": "Winter"
+                  }
+                ],
+                "custom": true
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "t": 8913,
+      "event": {
+        "id": "evt_155433ed0001IKhrfrsX90cc0a",
+        "created": 1792431832784,
+        "type": "form.replied",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "frm_1554339eb001kQNeSO0C0XbxVa",
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "answer": {
+            "q0": "Autumn, my own answer"
+          }
+        }
+      }
+    },
+    {
+      "t": 8913,
+      "event": {
+        "id": "evt_155433ed0002t8Jw9I5pz1nLXe",
+        "created": 1792431832784,
+        "type": "session.tool.success",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155432f81001kjqqZ0zaIElFkt",
+          "id": "call_00_3qz2a3qwpvxtt3q6ktu1hv2n",
+          "content": [
+            {
+              "type": "text",
+              "text": "User has answered your questions: \"Which season do you pick?\"=\"Autumn, my own answer\". You can now continue with the user's answers in mind."
+            }
+          ],
+          "metadata": {
+            "answers": [
+              [
+                "Autumn, my own answer"
+              ]
+            ],
+            "truncated": false
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 23,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 8913,
+      "event": {
+        "id": "evt_155433ed4001PVyJbJxZ6ePFFW",
+        "created": 1792431832788,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155432f81001kjqqZ0zaIElFkt",
+          "finish": "tool-calls",
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 491,
+            "output": 99,
+            "reasoning": 50,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 24,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 8913,
+      "event": {
+        "id": "evt_155433ed6001pYZfzN7ytkUTy0",
+        "created": 1792431832790,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "cost": 0,
+          "tokens": {
+            "input": 593,
+            "output": 223,
+            "reasoning": 550,
+            "cache": {
+              "read": 11008,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 10558,
+      "event": {
+        "id": "evt_155434542001cQ31ssytX3nUCF",
+        "created": 1792431834434,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_155433edb001NHWUucYfEkNoRe",
+          "started": 1792431832799
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 25,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 10558,
+      "event": {
+        "id": "evt_155434549001FMZLv6slvC0AhF",
+        "created": 1792431834441,
+        "type": "session.reasoning.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155433edb001NHWUucYfEkNoRe",
+          "ordinal": 0,
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 26,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 10991,
+      "event": {
+        "id": "evt_1554346f2001lvzbsamTNYF8Sw",
+        "created": 1792431834866,
+        "type": "session.text.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155433edb001NHWUucYfEkNoRe",
+          "ordinal": 0
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 27,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 10991,
+      "event": {
+        "id": "evt_1554346f6001C4h0ccQ0WoBXIp",
+        "created": 1792431834870,
+        "type": "session.reasoning.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155433edb001NHWUucYfEkNoRe",
+          "ordinal": 0,
+          "text": "The user answered \"Autumn, my own answer\" — a free-form typed answer. I should reply with exactly what they answered. So reply: Autumn, my own answer.\n\n\"Then reply with exactly what I answered.\" So my…",
+          "state": {
+            "reasoningField": "reasoning_content"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 28,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 10992,
+      "event": {
+        "id": "evt_1554346f8001xDSjuG8C8akwMr",
+        "created": 1792431834872,
+        "type": "session.text.delta",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155433edb001NHWUucYfEkNoRe",
+          "ordinal": 0,
+          "delta": "Autumn, my own answer"
+        }
+      }
+    },
+    {
+      "t": 10992,
+      "event": {
+        "id": "evt_1554346f80027GwqGz7wUSnO01",
+        "created": 1792431834872,
+        "type": "session.text.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155433edb001NHWUucYfEkNoRe",
+          "ordinal": 0,
+          "text": "Autumn, my own answer"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 29,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 10992,
+      "event": {
+        "id": "evt_1554346fa001gaIbSXy4MnDcM2",
+        "created": 1792431834874,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155433edb001NHWUucYfEkNoRe"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 30,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 10992,
+      "event": {
+        "id": "evt_1554346fb001AnP7mlu36GjNcn",
+        "created": 1792431834875,
+        "type": "session.step.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "assistantMessageID": "msg_155433edb001NHWUucYfEkNoRe",
+          "finish": "stop",
+          "rawFinish": "stop",
+          "cost": 0,
+          "tokens": {
+            "input": 300,
+            "output": 7,
+            "reasoning": 55,
+            "cache": {
+              "read": 5632,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 31,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 10992,
+      "event": {
+        "id": "evt_1554346fc00143Rj5mjG3Va3K8",
+        "created": 1792431834876,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "cost": 0,
+          "tokens": {
+            "input": 893,
+            "output": 230,
+            "reasoning": 605,
+            "cache": {
+              "read": 16640,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 10992,
+      "event": {
+        "id": "evt_1554346fd001eTjaKgkNEXuZ9K",
+        "created": 1792431834877,
+        "type": "session.execution.succeeded",
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 32,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 11013,
+      "event": {
+        "id": "evt_155434713001KS80LM2gJj40BL",
+        "created": 1792431834899,
+        "type": "session.viewed",
+        "data": {
+          "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "idle": 1792431834877
+        },
+        "durable": {
+          "aggregateID": "ses_eaabce000ffeRxY1fgRHFkeIrf",
+          "seq": 33,
+          "version": 1
+        }
+      }
+    }
+  ],
+  "omitted": {
+    "repeatedDeltaFrames": {
+      "session.reasoning.delta": 17
+    }
+  },
+  "inputs": [
+    {
+      "t": 74,
+      "key": {
+        "text": "Use your question tool to ask me one single-select question: which season, with options Spring, Summer and Winter. Then reply with exactly what I answered."
+      }
+    },
+    {
+      "t": 1002,
+      "key": "Enter"
+    }
+  ],
+  "http": [
+    {
+      "t": 8894,
+      "method": "POST",
+      "path": "/api/session/ses_eaabce000ffeRxY1fgRHFkeIrf/form/frm_1554339eb001kQNeSO0C0XbxVa/reply",
+      "body": {
+        "answer": {
+          "q0": "Autumn, my own answer"
+        }
+      },
+      "status": 204
+    }
+  ],
+  "pluginRoutes": [
+    {
+      "t": 1021,
+      "route": {
+        "type": "session",
+        "sessionID": "ses_eaabce000ffeRxY1fgRHFkeIrf"
+      }
+    }
+  ]
+}

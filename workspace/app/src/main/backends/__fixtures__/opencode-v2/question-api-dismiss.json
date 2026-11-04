@@ -1,0 +1,532 @@
+{
+  "scenario": "question-api-dismiss",
+  "opencodeVersion": "2.0.32",
+  "notes": "Extra: DELETE /api/session/:id/form/:formID (no message) -> 204: form.cancelled then execution.interrupted{shutdown} in the same ms. A second DELETE -> 409 FormAlreadySettledError.",
+  "frames": [
+    {
+      "t": 1030,
+      "event": {
+        "id": "evt_1554387e40016LFCTqm6mPxG8F",
+        "created": 1792431851492,
+        "type": "session.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "slug": "quiet-cabin",
+          "version": "2.0.32",
+          "projectID": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "location": {
+            "directory": "/private/tmp/oc2-spike/projects/scen"
+          },
+          "subpath": "",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 0,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1031,
+      "event": {
+        "id": "evt_1554387e6001FHbyM1Yl4KwVOe",
+        "created": 1792431851494,
+        "type": "project.updated",
+        "data": {
+          "id": "846d1ad0ea32e1386513fcca3d9fb653b775476d",
+          "canonical": "/private/tmp/oc2-spike/projects/scen",
+          "time": {
+            "created": 1792431240537,
+            "updated": 1792431240537,
+            "active": 1792431851494
+          },
+          "sandboxes": []
+        }
+      }
+    },
+    {
+      "t": 1060,
+      "event": {
+        "id": "evt_1554387f7001VjCPVQJznO8I9c",
+        "created": 1792431851511,
+        "type": "session.inbox.enqueued",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "inboxID": "msg_1554387e2001s3ab3EPo5PM0Gs",
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "item": {
+            "type": "user",
+            "payload": {
+              "text": "Use your question tool to ask me one single-select question: which number, with options One, Two and Three. Then reply with the number I picked.",
+              "files": [],
+              "agents": []
+            },
+            "delivery": "steer"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 1,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1060,
+      "event": {
+        "id": "evt_1554387f8001hq7P5xXBQsMKQm",
+        "created": 1792431851512,
+        "type": "session.execution.started",
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 2,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 1060,
+      "event": {
+        "id": "evt_1554387fb001yU868QRULHWXb5",
+        "created": 1792431851515,
+        "metadata": {
+          "instructions": {
+            "initial": true
+          }
+        },
+        "type": "session.instructions.updated",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "delta": {
+            "core/codemode": "e6428fd7742161f6c3a6c86e53cbbe2c6e4dcc462bbf1a1a07bc4fcbeb9e0b0b",
+            "core/skill-guidance": "8394362d28c82fa4d13c7a9f5568c05680f6687e07db8f426a0e3c92f3027dc9",
+            "core/date": "ca7509e2ab26589ce8a6dc0b35cc4ceee89848e9dae352e97c68a3bac01cc63c",
+            "core/environment": "ba33b2bd557980c75953c531ebb1dcbf34fca5a355a6adcc0fcc6b2f27b5c97c"
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 3,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 1060,
+      "event": {
+        "id": "evt_1554387fc0016BOFku9tMf9Xlu",
+        "created": 1792431851516,
+        "type": "session.inbox.delivered",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "inboxID": "msg_1554387e2001s3ab3EPo5PM0Gs"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 4,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2888,
+      "event": {
+        "id": "evt_155438f25001HD5rDXs0bJ6aQi",
+        "created": 1792431853349,
+        "type": "session.step.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "agent": "build",
+          "model": {
+            "id": "deepseek-v4.1-flash-free",
+            "providerID": "opencode",
+            "variant": "default"
+          },
+          "assistantMessageID": "msg_155438800001N43uxNmQuLGfFc",
+          "started": 1792431851523
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 5,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 2888,
+      "event": {
+        "id": "evt_155438f270014c2ZfMygOLB3nm",
+        "created": 1792431853351,
+        "type": "session.tool.input.started",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "assistantMessageID": "msg_155438800001N43uxNmQuLGfFc",
+          "id": "call_00_a0xibl3cn8pfcmagce4d2j2n",
+          "name": "question"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 6,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3053,
+      "event": {
+        "id": "evt_155438fc9001Bb1znTSyFKUrCh",
+        "created": 1792431853513,
+        "type": "session.tool.input.ended",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "assistantMessageID": "msg_155438800001N43uxNmQuLGfFc",
+          "id": "call_00_a0xibl3cn8pfcmagce4d2j2n",
+          "text": "{\"questions\": [{\"question\": \"Which number do you pick?\", \"header\": \"Pick a number\", \"options\": [{\"label\": \"One\", \"description\": \"Pick number one\"}, {\"label\": \"Two\", \"description\": \"Pick number two\"}, …"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 7,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3053,
+      "event": {
+        "id": "evt_155438fca001nBvzPFxE28c68h",
+        "created": 1792431853514,
+        "type": "session.tool.called",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "assistantMessageID": "msg_155438800001N43uxNmQuLGfFc",
+          "id": "call_00_a0xibl3cn8pfcmagce4d2j2n",
+          "input": {
+            "questions": [
+              {
+                "question": "Which number do you pick?",
+                "header": "Pick a number",
+                "options": [
+                  {
+                    "label": "One",
+                    "description": "Pick number one"
+                  },
+                  {
+                    "label": "Two",
+                    "description": "Pick number two"
+                  },
+                  {
+                    "label": "Three",
+                    "description": "Pick number three"
+                  }
+                ]
+              }
+            ]
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 8,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3053,
+      "event": {
+        "id": "evt_155438fcb001Fshk2rI2IPf7OD",
+        "created": 1792431853515,
+        "type": "session.step.streamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "assistantMessageID": "msg_155438800001N43uxNmQuLGfFc"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 9,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 3053,
+      "event": {
+        "id": "evt_155438fcd002L7GaeTT2zLlTR7",
+        "created": 1792431853517,
+        "type": "form.created",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "form": {
+            "id": "frm_155438fcd001k0HSpMK5o5pqUl",
+            "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+            "title": "Questions",
+            "metadata": {
+              "kind": "question",
+              "tool": {
+                "messageID": "msg_155438800001N43uxNmQuLGfFc",
+                "id": "call_00_a0xibl3cn8pfcmagce4d2j2n"
+              }
+            },
+            "fields": [
+              {
+                "key": "q0",
+                "title": "Pick a number",
+                "description": "Which number do you pick?",
+                "type": "string",
+                "options": [
+                  {
+                    "value": "One",
+                    "label": "One",
+                    "description": "Pick number one"
+                  },
+                  {
+                    "value": "Two",
+                    "label": "Two",
+                    "description": "Pick number two"
+                  },
+                  {
+                    "value": "Three",
+                    "label": "Three",
+                    "description": "Pick number three"
+                  }
+                ],
+                "custom": true
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "t": 3237,
+      "event": {
+        "id": "evt_155439083001Kju50JVmu7yzBh",
+        "created": 1792431853699,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "cost": 0,
+          "tokens": {
+            "input": 63,
+            "output": 9,
+            "reasoning": 179,
+            "cache": {
+              "read": 512,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 3237,
+      "event": {
+        "id": "evt_155439084001TkHVuVf1YHhod0",
+        "created": 1792431853700,
+        "type": "session.renamed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "title": "Number choice: One, Two, Three"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 11,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4336,
+      "event": {
+        "id": "evt_1554394cb00177YphaT7cgcthy",
+        "created": 1792431854795,
+        "type": "form.cancelled",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "id": "frm_155438fcd001k0HSpMK5o5pqUl",
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN"
+        }
+      }
+    },
+    {
+      "t": 4336,
+      "event": {
+        "id": "evt_1554394cc001yaMS1e9AAyamCE",
+        "created": 1792431854796,
+        "type": "session.tool.failed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "assistantMessageID": "msg_155438800001N43uxNmQuLGfFc",
+          "id": "call_00_a0xibl3cn8pfcmagce4d2j2n",
+          "error": {
+            "type": "aborted",
+            "message": "The user dismissed this question"
+          },
+          "executed": false
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 12,
+          "version": 2
+        }
+      }
+    },
+    {
+      "t": 4336,
+      "event": {
+        "id": "evt_1554394cd0019Rd5J6PG3CV1Q9",
+        "created": 1792431854797,
+        "type": "session.step.failed",
+        "location": {
+          "directory": "/private/tmp/oc2-spike/projects/scen"
+        },
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "assistantMessageID": "msg_155438800001N43uxNmQuLGfFc",
+          "error": {
+            "type": "aborted",
+            "message": "Step interrupted"
+          },
+          "rawFinish": "tool_calls",
+          "cost": 0,
+          "tokens": {
+            "input": 39,
+            "output": 103,
+            "reasoning": 0,
+            "cache": {
+              "read": 5248,
+              "write": 0
+            }
+          }
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 13,
+          "version": 1
+        }
+      }
+    },
+    {
+      "t": 4336,
+      "event": {
+        "id": "evt_1554394ce001734wVooNNIXWOO",
+        "created": 1792431854798,
+        "type": "session.usage.updated",
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "cost": 0,
+          "tokens": {
+            "input": 102,
+            "output": 112,
+            "reasoning": 179,
+            "cache": {
+              "read": 5760,
+              "write": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "t": 4336,
+      "event": {
+        "id": "evt_1554394cf001hOUdPp5AUQCGVu",
+        "created": 1792431854799,
+        "type": "session.execution.interrupted",
+        "data": {
+          "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "reason": "shutdown"
+        },
+        "durable": {
+          "aggregateID": "ses_eaabc781fffeY75DO92M4bk0tN",
+          "seq": 14,
+          "version": 1
+        }
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "t": 29,
+      "key": {
+        "text": "Use your question tool to ask me one single-select question: which number, with options One, Two and Three. Then reply with the number I picked."
+      }
+    },
+    {
+      "t": 1018,
+      "key": "Enter"
+    }
+  ],
+  "http": [
+    {
+      "t": 4328,
+      "method": "DELETE",
+      "path": "/api/session/ses_eaabc781fffeY75DO92M4bk0tN/form/frm_155438fcd001k0HSpMK5o5pqUl",
+      "status": 204
+    },
+    {
+      "t": 4398,
+      "method": "DELETE",
+      "path": "/api/session/ses_eaabc781fffeY75DO92M4bk0tN/form/frm_155438fcd001k0HSpMK5o5pqUl",
+      "status": 409,
+      "response": {
+        "_tag": "FormAlreadySettledError",
+        "id": "frm_155438fcd001k0HSpMK5o5pqUl",
+        "message": "Form already settled: frm_155438fcd001k0HSpMK5o5pqUl"
+      }
+    }
+  ],
+  "pluginRoutes": [
+    {
+      "t": 1037,
+      "route": {
+        "type": "session",
+        "sessionID": "ses_eaabc781fffeY75DO92M4bk0tN"
+      }
+    }
+  ]
+}
