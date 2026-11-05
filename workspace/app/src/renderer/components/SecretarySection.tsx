@@ -212,6 +212,11 @@ export function SecretarySection({ active }: SecretarySectionProps) {
             type="text"
             value={urlDraft}
             placeholder="none, text only"
+            title={
+              "A speech server built from deploy/tts-server/, or Cloudflare MeloTTS:\n" +
+              "https://api.cloudflare.com/client/v4/accounts/<account id>/ai/run/@cf/myshell-ai/melotts\n" +
+              "with a Workers AI API token as the key"
+            }
             spellCheck={false}
             autoComplete="off"
             disabled={!saved || busy}

@@ -453,10 +453,19 @@ boss: a retold account with the details, not the screen read aloud.
   switch can't be turned on, and the Secretary section says Claude Code is needed.
   Once you install it, the secretary comes back with no restart, as you left it. Each
   call is one-shot: no tools, and nothing saved to your session history
-- **For the voice (optional):** a speech server built from `deploy/tts-server/`
-  (Qwen3-TTS, voice Serena). Other engines with the same OpenAI speech API won't pass
-  **Test**, because the request names the Serena voice. With no server, every brief
-  is text only
+- **For the voice (optional):** one of two speech servers. Multi-Code tells them
+  apart by the address:
+  - A server built from `deploy/tts-server/` (Qwen3-TTS, voice Serena). Other engines
+    with the same OpenAI speech API won't pass **Test**, because the request names
+    the Serena voice
+  - Cloudflare Workers AI's MeloTTS, free within Cloudflare's daily allocation. The
+    address is
+    `https://api.cloudflare.com/client/v4/accounts/<account id>/ai/run/@cf/myshell-ai/melotts`
+    and the key is a Workers AI API token (Workers AI → **REST API** → **Create a
+    Workers AI API Token** in the Cloudflare dashboard). It has one voice per
+    language and no tone of voice settings
+
+  With no server, every brief is text only
 
 **Setup:**
 

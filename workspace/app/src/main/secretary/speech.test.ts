@@ -420,6 +420,122 @@ describe("a redirect from a real server", () => {
   });
 });
 
+describe("Cloudflare MeloTTS", () => {
+  const MODEL_PATH = "/client/v4/accounts/0123abcd/ai/run/@cf/myshell-ai/melotts";
+  const cf = { url: `https://api.cloudflare.com${MODEL_PATH}`, key: KEY };
+  // Workers AI's wrapper around the model's answer, as it really comes back.
+  const wrapped = (audioB64: unknown) =>
+    new Response(JSON.stringify({ result: { audio: audioB64 }, success: true, errors: [], messages: [] }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  const cfAudio = () => wrapped(wav().toString("base64"));
+
+  it("posts the brief and its language to the model URL with the token, and returns the wav", async () => {
+    const f = fakeFetch({ [MODEL_PATH]: cfAudio });
+    const res = await synthesize(cf, "Shop 那边做完了。", "Chinese", { fetch: f });
+
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.wav.equals(wav())).toBe(true);
+    const [url, init] = f.mock.calls[0];
+    expect(String(url)).toBe(cf.url);
+    expect(init?.method).toBe("POST");
+    expect(authOf(init)).toBe(`Bearer ${KEY}`);
+    // No voice, no tone: MeloTTS takes neither.
+    expect(JSON.parse(String(init?.body))).toEqual({ prompt: "Shop 那边做完了。", lang: "zh" });
+  });
+
+  it("says en for an English brief", async () => {
+    const f = fakeFetch({ [MODEL_PATH]: cfAudio });
+    await synthesize(cf, "Shop just finished.", "English", { fetch: f });
+    expect(JSON.parse(String(f.mock.calls[0][1]?.body)).lang).toBe("en");
+  });
+
+  it("takes an answer that is already audio as it is", async () => {
+    const f = fakeFetch({ [MODEL_PATH]: audio });
+    const res = await synthesize(cf, "hi", "English", { fetch: f });
+    expect(res.ok).toBe(true);
+  });
+
+  it("tolerates a trailing slash and an encoded @", async () => {
+    const f = fakeFetch({ [MODEL_PATH]: cfAudio });
+    for (const url of [`${cf.url}/`, cf.url.replace("@", "%40")]) {
+      const res = await synthesize({ url, key: KEY }, "hi", "English", { fetch: f });
+      expect(res.ok).toBe(true);
+    }
+  });
+
+  it("says a 401 may be the account ID as well as the token", async () => {
+    const f = fakeFetch({
+      [MODEL_PATH]: () =>
+        new Response(
+          JSON.stringify({ result: null, success: false, errors: [{ code: 10000, message: "Authentication error" }] }),
+          { status: 401 }
+        ),
+    });
+    const res = await synthesize(cf, "hi", "English", { fetch: f });
+    expect(res).toEqual({
+      ok: false,
+      reason: "key rejected, or the account ID in the address is wrong (HTTP 401)",
+    });
+  });
+
+  it("quotes Cloudflare's own error message", async () => {
+    const f = fakeFetch({
+      [MODEL_PATH]: () =>
+        new Response(
+          JSON.stringify({ success: false, errors: [{ code: 4006, message: "daily free allocation used up" }] }),
+          { status: 429 }
+        ),
+    });
+    const res = await synthesize(cf, "hi", "English", { fetch: f });
+    expect(res).toEqual({ ok: false, reason: "HTTP 429: daily free allocation used up" });
+  });
+
+  it("rejects an answer with no audio in it", async () => {
+    const f = fakeFetch({ [MODEL_PATH]: () => wrapped(undefined) });
+    const res = await synthesize(cf, "hi", "English", { fetch: f });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.reason).toMatch(/^not audio \(application\/json, \d+ bytes\)$/);
+  });
+
+  it("rejects audio that isn't WAV, as MeloTTS's schema says MP3", async () => {
+    const f = fakeFetch({ [MODEL_PATH]: () => wrapped(Buffer.from("ID3 not a wav at all").toString("base64")) });
+    const res = await synthesize(cf, "hi", "English", { fetch: f });
+    expect(res).toEqual({ ok: false, reason: "the audio isn't WAV (20 bytes)" });
+  });
+
+  it.each([
+    ["https://api.cloudflare.com", "needs the model's full address"],
+    ["https://api.cloudflare.com/client/v4/accounts/0123abcd/ai/run", "needs the model's full address"],
+    [
+      "https://api.cloudflare.com/client/v4/accounts/0123abcd/ai/run/@cf/deepgram/aura-1",
+      "only @cf/myshell-ai/melotts is supported on Cloudflare",
+    ],
+    ["http://api.cloudflare.com" + MODEL_PATH, "needs an https address"],
+  ])("refuses %j without a request", async (url, reason) => {
+    const f = fakeFetch({});
+    const res = await synthesize({ url, key: KEY }, "hi", "English", { fetch: f });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.reason).toContain(reason);
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("tests by synthesis alone: no /health call", async () => {
+    const f = fakeFetch({ [MODEL_PATH]: cfAudio });
+    const res = await testServer(cf, { fetch: f });
+    expect(res.ok).toBe(true);
+    expect(f.mock.calls.map(([u]) => new URL(String(u)).pathname)).toEqual([MODEL_PATH]);
+  });
+
+  it("fails the test at the address step for a Cloudflare address without the model", async () => {
+    const f = fakeFetch({});
+    const res = await testServer({ url: "https://api.cloudflare.com/", key: KEY }, { fetch: f });
+    expect(res).toMatchObject({ ok: false, step: "address" });
+    expect(f).not.toHaveBeenCalled();
+  });
+});
+
 describe("normalizeServerUrl", () => {
   it.each([
     ["https://tts.example.com", "https://tts.example.com"],

@@ -1,8 +1,15 @@
-// The secretary's voice: one HTTP call to a speech server with the OpenAI speech
-// API shape (`POST /v1/audio/speech`, bearer key), such as the one in
-// deploy/tts-server/. Any server built from there works, not only ours; another
-// engine of the same shape doesn't, since the request names the Serena voice and
-// carries Qwen-style tone instructions (G-004).
+// The secretary's voice: one HTTP call to a speech server. Two kinds, told apart by
+// the address alone, so Settings stays one address and one key:
+//
+// - A server with the OpenAI speech API shape (`POST /v1/audio/speech`, bearer key),
+//   such as the one in deploy/tts-server/. Any server built from there works, not
+//   only ours; another engine of the same shape doesn't, since the request names the
+//   Serena voice and carries Qwen-style tone instructions (G-004).
+// - Cloudflare Workers AI's MeloTTS, addressed by the model's own REST URL
+//   (CLOUDFLARE_EXAMPLE) with a Workers AI API token as the key. It is told the
+//   language, has one voice per language and takes no tone instructions. Its free
+//   daily allocation covers far more briefs than a day brings
+//   (docs/timeline/2026-11-05_cloudflare-tts-research.md).
 //
 // Nothing here imports electron: the caller passes the server it read from userData
 // (settings-store's `loadSpeechServer`), so this runs in tests and from a plain node
@@ -55,6 +62,18 @@ export const BRIEFING_INSTRUCTIONS: Record<BriefLanguage, string> = {
 
 const TEST_SENTENCE = "Hi, this is your secretary. The speech server is working.";
 
+// Cloudflare's API host; an address on it is a Workers AI model, never an
+// OpenAI-shaped server.
+const CLOUDFLARE_HOST = "api.cloudflare.com";
+export const CLOUDFLARE_MODEL = "@cf/myshell-ai/melotts";
+export const CLOUDFLARE_EXAMPLE = `https://api.cloudflare.com/client/v4/accounts/<account id>/ai/run/${CLOUDFLARE_MODEL}`;
+// MeloTTS's Chinese voice also reads the English terms in a Chinese brief.
+export const CLOUDFLARE_LANG: Record<BriefLanguage, string> = { Chinese: "zh", English: "en" };
+
+type Engine =
+  | { kind: "openai"; speech: URL; health: URL }
+  | { kind: "cloudflare"; speech: URL };
+
 // Trims, and drops trailing slashes and a trailing /v1: OpenAI-style clients take a
 // base URL ending in /v1, so that is what people paste, and the paths below add it.
 // Only scheme, host and path are kept: a query or fragment pasted along with the
@@ -89,8 +108,8 @@ function isLoopback(hostname: string): boolean {
   return hostname === "localhost" || hostname === "[::1]" || /^127(\.\d+){3}$/.test(hostname);
 }
 
-// The URL to call, or why there is none.
-function endpointOf(base: string, route: string): URL | string {
+// The kind of server an address is and the URLs to call, or why there are none.
+function engineOf(base: string): Engine | string {
   let url: URL;
   try {
     url = new URL(normalizeServerUrl(base));
@@ -101,13 +120,34 @@ function endpointOf(base: string, route: string): URL | string {
     return "needs an https address: plain http would send the key unencrypted";
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") return "not an http(s) address";
-  url.pathname = url.pathname.replace(/\/+$/, "") + route;
-  return url;
+
+  if (url.hostname === CLOUDFLARE_HOST) {
+    let path = url.pathname;
+    try {
+      path = decodeURIComponent(path);
+    } catch {
+      // A stray % stays as typed, and the match below says what is wrong.
+    }
+    const model = /^\/client\/v4\/accounts\/[^/]+\/ai\/run\/(.+)$/.exec(path)?.[1];
+    if (!model) return `needs the model's full address: ${CLOUDFLARE_EXAMPLE}`;
+    if (model !== CLOUDFLARE_MODEL) return `only ${CLOUDFLARE_MODEL} is supported on Cloudflare`;
+    // Called as matched, so a pasted %40 and a typed @ reach the same URL.
+    url.pathname = path;
+    return { kind: "cloudflare", speech: url };
+  }
+
+  const at = (route: string) => {
+    const routed = new URL(url);
+    routed.pathname = routed.pathname.replace(/\/+$/, "") + route;
+    return routed;
+  };
+  return { kind: "openai", speech: at("/v1/audio/speech"), health: at("/health") };
 }
 
-// `language` picks the tone instruction only. The server is not told the language:
-// it detects it itself (`Auto`), which the builder chose on 2026-10-08 for Chinese
-// briefs full of English terms, and kept after an A/B listen of 11 real briefs.
+// `language` picks the tone instruction only on an OpenAI-shaped server. That server
+// is not told the language: it detects it itself (`Auto`), which the builder chose on
+// 2026-10-08 for Chinese briefs full of English terms, and kept after an A/B listen of
+// 11 real briefs. MeloTTS has no detection, so Cloudflare is told it.
 export async function synthesize(
   server: SpeechServer,
   text: string,
@@ -115,24 +155,24 @@ export async function synthesize(
   options: SpeechOptions = {}
 ): Promise<SynthesizeResult> {
   if (!server.url.trim()) return { ok: false, reason: "no speech server set" };
-  const url = endpointOf(server.url, "/v1/audio/speech");
-  if (typeof url === "string") return { ok: false, reason: url };
+  const engine = engineOf(server.url);
+  if (typeof engine === "string") return { ok: false, reason: engine };
   if (!text.trim()) return { ok: false, reason: "nothing to say" };
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (server.key) headers.Authorization = `Bearer ${server.key}`;
+  const payload =
+    engine.kind === "cloudflare"
+      ? { prompt: text, lang: CLOUDFLARE_LANG[language] }
+      : {
+          input: text,
+          voice: VOICE,
+          instructions: BRIEFING_INSTRUCTIONS[language],
+          response_format: "wav",
+        };
   const got = await request(
-    url,
-    {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        input: text,
-        voice: VOICE,
-        instructions: BRIEFING_INSTRUCTIONS[language],
-        response_format: "wav",
-      }),
-    },
+    engine.speech,
+    { method: "POST", headers, body: JSON.stringify(payload) },
     options.timeoutMs ?? SPEECH_TIMEOUT_MS,
     options.fetch ?? fetch,
     options.signal
@@ -144,27 +184,49 @@ export async function synthesize(
     return { ok: false, reason: redirectReason(status, got.location) };
   }
   if (status === 401 || status === 403) {
+    // Cloudflare answers a wrong account ID in the address with the same 401
+    // "Authentication error" as a wrong token (measured 2026-11-05).
+    const rejected =
+      engine.kind === "cloudflare"
+        ? `key rejected, or the account ID in the address is wrong (HTTP ${status})`
+        : `key rejected (HTTP ${status})`;
     return {
       ok: false,
-      reason: server.key
-        ? `key rejected (HTTP ${status})`
-        : `the server wants a key and none is set (HTTP ${status})`,
+      reason: server.key ? rejected : `the server wants a key and none is set (HTTP ${status})`,
     };
   }
   if (status < 200 || status >= 300) {
     return { ok: false, reason: `HTTP ${status}${errorDetail(body, server.key)}` };
   }
-  if (!isWav(body)) {
-    return {
-      ok: false,
-      reason: scrub(`not audio (${contentType || "no content type"}, ${body.length} bytes)`, server.key),
-    };
+  const audio = engine.kind === "cloudflare" ? cloudflareAudio(body) : body;
+  if (!audio || !isWav(audio)) {
+    const what =
+      audio && audio !== body
+        ? `the audio isn't WAV (${audio.length} bytes)`
+        : `not audio (${contentType || "no content type"}, ${body.length} bytes)`;
+    return { ok: false, reason: scrub(what, server.key) };
   }
-  return { ok: true, wav: body };
+  return { ok: true, wav: audio };
+}
+
+// Workers AI wraps a model's answer: `{"result": {"audio": "<base64>"}, "success": true}`.
+// MeloTTS's audio is WAV (44.1 kHz, mono, 16-bit), though its schema says MP3
+// (measured 2026-11-05); the caller checks the header either way. A body that is
+// already audio is taken as it is.
+function cloudflareAudio(body: Buffer): Buffer | null {
+  if (isWav(body)) return body;
+  try {
+    const audio = JSON.parse(body.toString("utf8"))?.result?.audio;
+    return typeof audio === "string" ? Buffer.from(audio, "base64") : null;
+  } catch {
+    return null;
+  }
 }
 
 // The Test button: is anything there (/health), then does a one-sentence synthesis
-// come back as audio with this key. Stops at the first step that fails.
+// come back as audio with this key. Stops at the first step that fails. Cloudflare
+// has no /health of its own (any path there wants the token), so its test is the
+// synthesis alone.
 export async function testServer(
   server: SpeechServer,
   options: SpeechOptions = {}
@@ -173,22 +235,24 @@ export async function testServer(
   if (!server.url.trim()) {
     return { ok: false, step: "address", reason: "no speech server set, briefs are text only" };
   }
-  const health = endpointOf(server.url, "/health");
-  if (typeof health === "string") return { ok: false, step: "address", reason: health };
+  const engine = engineOf(server.url);
+  if (typeof engine === "string") return { ok: false, step: "address", reason: engine };
 
-  // No key on /health: it's public on ours, and the key goes nowhere it isn't needed.
-  const got = await request(
-    health,
-    { method: "GET" },
-    options.timeoutMs ?? HEALTH_TIMEOUT_MS,
-    options.fetch ?? fetch
-  );
-  if (!got.ok) return { ok: false, step: "health", reason: scrub(got.reason, server.key) };
-  // Below 500, something answered; a server without a /health route (404) may still
-  // speak, and synthesis is the real test. 5xx is the proxy up with the model not
-  // (Caddy's 502), or vLLM still loading.
-  if (got.status >= 500) {
-    return { ok: false, step: "health", reason: `server not ready (HTTP ${got.status})` };
+  if (engine.kind === "openai") {
+    // No key on /health: it's public on ours, and the key goes nowhere it isn't needed.
+    const got = await request(
+      engine.health,
+      { method: "GET" },
+      options.timeoutMs ?? HEALTH_TIMEOUT_MS,
+      options.fetch ?? fetch
+    );
+    if (!got.ok) return { ok: false, step: "health", reason: scrub(got.reason, server.key) };
+    // Below 500, something answered; a server without a /health route (404) may still
+    // speak, and synthesis is the real test. 5xx is the proxy up with the model not
+    // (Caddy's 502), or vLLM still loading.
+    if (got.status >= 500) {
+      return { ok: false, step: "health", reason: `server not ready (HTTP ${got.status})` };
+    }
   }
 
   const spoken = await synthesize(server, TEST_SENTENCE, "English", options);
@@ -253,7 +317,8 @@ function redirectReason(status: number, location: string): string {
 }
 
 // The server's own words for an error, shortened: vLLM answers
-// `{"error": {"message": …}}`, FastAPI-style servers `{"detail": …}`. The key is
+// `{"error": {"message": …}}`, FastAPI-style servers `{"detail": …}`, Cloudflare
+// `{"errors": [{"code": …, "message": …}]}`. The key is
 // scrubbed out before shortening: cut first, and a key straddling the cut would
 // leave its first half behind where the scrub can no longer recognise it.
 function errorDetail(body: Buffer, key: string): string {
@@ -262,7 +327,8 @@ function errorDetail(body: Buffer, key: string): string {
   let detail = text;
   try {
     const data = JSON.parse(text);
-    const found = data?.error?.message ?? data?.detail ?? data?.message ?? data?.error;
+    const found =
+      data?.error?.message ?? data?.detail ?? data?.message ?? data?.errors?.[0]?.message ?? data?.error;
     if (typeof found === "string") detail = found;
   } catch {
     // Not JSON: the text as it is.
