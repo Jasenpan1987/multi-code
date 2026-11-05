@@ -27,7 +27,8 @@
       "category": "public.app-category.developer-tools",
       "target": "dmg",
       "icon": "build/icon.icns",
-      "identity": null
+      "identity": "-",
+      "hardenedRuntime": false
     },
     "files": [
       "dist/**/*",
