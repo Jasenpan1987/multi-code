@@ -15,7 +15,7 @@ Multi-Code is a free, MIT-licensed macOS app for Apple Silicon. It runs many Cla
    `curl -fsSL https://api.github.com/repos/Jasenpan1987/multi-code/releases/latest | grep -o '"browser_download_url": *"[^"]*arm64\.dmg"'`
    If there is none, stop and tell me there is no release to install yet.
 4. If Multi-Code is running, ask me to quit it first. Download the .dmg to `~/Downloads`, mount it with `hdiutil attach`, copy `Multi-Code.app` into `/Applications` (replacing an older copy), then `hdiutil detach` it.
-5. Clear the quarantine flag: `xattr -cr /Applications/Multi-Code.app`. The app is not signed with an Apple Developer certificate, so macOS blocks it without this. It is needed again after every upgrade.
+5. Clear the quarantine flag: `xattr -cr /Applications/Multi-Code.app`. The app is not signed with an Apple Developer certificate, so macOS blocks it without this. It is needed again after every upgrade. If I already tried to open it and macOS said it "can't be opened" and offered Move to Trash, tell me to click Done, not Move to Trash.
 6. Open it: `open -a Multi-Code`. Then start Part 2.
 
 ## Part 2: teach me

@@ -138,7 +138,7 @@ multi-code/
 
 > Apple Silicon Macs only (M1/M2/M3/M4). Intel Macs are not supported.
 
-You will receive a `Multi-Code-0.1.0-arm64.dmg` file directly (e.g. via Slack/Drive/AirDrop). Follow the steps below. The `0.1.0` in the filename here is just an example; your file carries whatever version you were sent.
+Download the newest `Multi-Code-X.Y.Z-arm64.dmg` from the [latest release](https://github.com/Jasenpan1987/multi-code/releases/latest), then follow the steps below.
 
 ### Prerequisite: a backend CLI
 
@@ -162,13 +162,13 @@ If the relevant command prints a version number, you're good. If you pick a back
 
 ### Step 1 — Install the app
 
-1. Double-click the `Multi-Code-0.1.0-arm64.dmg` file you received
+1. Double-click the `.dmg` file you downloaded
 2. In the disk window that opens, drag the **Multi-Code** icon into the **Applications** folder
 3. Eject the mounted disk (right-click → Eject, or drag it to the Trash)
 
 ### Step 2 — Clear the quarantine flag (required, do once)
 
-This app is not signed with an Apple Developer certificate, so macOS Gatekeeper will block it from running by default. Run this command once in Terminal to remove the quarantine flag:
+This app is not signed with an Apple Developer certificate, so macOS Gatekeeper blocks a downloaded copy. If you open it first, macOS says Multi-Code "can't be opened" and offers **Move to Trash**: click **Done**, not Move to Trash. Then run this command once in Terminal to remove the quarantine flag:
 
 ```bash
 xattr -cr /Applications/Multi-Code.app
@@ -180,8 +180,8 @@ Open Multi-Code from Launchpad or the Applications folder. From now on, double-c
 
 ### Troubleshooting
 
-**"Multi-Code can't be opened" / nothing happens on double-click**
-You skipped Step 2. Run the `xattr` command above and try again.
+**"Multi-Code can't be opened", with a Move to Trash button / nothing happens on double-click**
+You skipped Step 2. Don't move it to the Trash. Run the `xattr` command above and try again.
 
 **Created an instance but the chat window says OFFLINE**
 The backend's CLI isn't on your PATH. Verify with `claude --version` (or `opencode --version` for an OpenCode instance). If that fails, reinstall that CLI (see Prerequisite above).

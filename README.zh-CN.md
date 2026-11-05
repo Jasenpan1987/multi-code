@@ -138,7 +138,7 @@ multi-code/
 
 > 仅支持 Apple Silicon Mac(M1 / M2 / M3 / M4)。Intel Mac 暂不支持。
 
-你会直接收到一个 `Multi-Code-0.1.0-arm64.dmg` 文件(比如通过 Slack / Drive / AirDrop)。按下面步骤来。文件名里的 `0.1.0` 只是举例,你拿到的是哪个版本就是哪个。
+从[最新版本](https://github.com/Jasenpan1987/multi-code/releases/latest)下载最新的 `Multi-Code-X.Y.Z-arm64.dmg`,然后按下面步骤来。
 
 ### 前置依赖:后端 CLI
 
@@ -162,13 +162,13 @@ opencode --version   # 验证:应显示 opencode v2.x
 
 ### 第 1 步 — 安装 app
 
-1. 双击你拿到的 `Multi-Code-0.1.0-arm64.dmg` 文件
+1. 双击你下载的 `.dmg` 文件
 2. 在弹出的磁盘窗口里,把 **Multi-Code** 图标拖到 **Applications** 文件夹
 3. 弹出挂载的磁盘(右键 → 推出,或拖到废纸篓)
 
 ### 第 2 步 — 清除隔离标记(必做,只做一次)
 
-这个 app 没有用 Apple Developer 证书签名,默认情况下 macOS Gatekeeper 会拒绝运行。在终端里跑这一行命令清掉隔离标记:
+这个 app 没有用 Apple Developer 证书签名,下载下来的 app 会被 macOS Gatekeeper 拦住。如果你先双击打开了,macOS 会说 Multi-Code "无法打开",并给出**移到废纸篓**的按钮:点**完成**,不要点移到废纸篓。然后在终端里跑这一行命令清掉隔离标记:
 
 ```bash
 xattr -cr /Applications/Multi-Code.app
@@ -180,8 +180,8 @@ xattr -cr /Applications/Multi-Code.app
 
 ### 常见问题
 
-**双击没反应 / 弹窗"无法打开"**
-没做第 2 步。去终端跑那行 `xattr` 命令,然后再试。
+**双击没反应 / 弹窗"无法打开"并让你移到废纸篓**
+没做第 2 步。不要移到废纸篓。去终端跑那行 `xattr` 命令,然后再试。
 
 **创建实例后聊天框一直显示 OFFLINE**
 对应后端的 CLI 不在 PATH 里。Claude Code 实例用 `claude --version` 验证,OpenCode 实例用 `opencode --version` 验证,不通就回到顶部重装对应的 CLI。
