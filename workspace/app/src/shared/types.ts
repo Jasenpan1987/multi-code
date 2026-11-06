@@ -68,6 +68,12 @@ export type SpeechTestResult =
 // `replyable`: a Needs-you whose dialog the secretary can answer in words (T-509);
 // the card offers its reply box until the brief is handled. `exchanges`: what the
 // builder said on the card and what the secretary did, oldest first.
+//
+// `at`: when the event happened (ms), which orders the secretary bar's queue
+// (shared/secretaryQueue.ts). `seen`: a Finished brief whose session was read since,
+// at the desk, on a phone, or from the bar (epic secretary-bar, Story 4); it no
+// longer waits for the builder. Never set on a Needs you: reading a session doesn't
+// answer its dialog.
 export type SecretaryBriefState = (
   | { seq: number; kind: SecretaryEventKind; status: "preparing" }
   | {
@@ -80,7 +86,13 @@ export type SecretaryBriefState = (
       voiceReason?: string;
     }
   | { seq: number; kind: SecretaryEventKind; status: "failed"; reason: string }
-) & { handled?: true; replyable?: true; exchanges?: SecretaryExchange[] };
+) & {
+  at: number;
+  handled?: true;
+  seen?: true;
+  replyable?: true;
+  exchanges?: SecretaryExchange[];
+};
 
 // One reply on a Needs-you card. `response` and `outcome` are absent while the
 // secretary works on it. pressed: it answered the dialog; asked: it asked back;
@@ -435,6 +447,10 @@ export interface ElectronAPI {
   // A reply typed or dictated on the card of that brief. What the secretary makes of
   // it arrives on "secretary-brief", in the brief's `exchanges`.
   replyToSecretary: (instanceId: string, seq: number, text: string) => Promise<void>;
+  // The secretary bar read that instance's Finished brief for event `seq` ("Got it",
+  // or it played to the end). True when main marked it seen and told the phones;
+  // false when `seq` is no longer the instance's brief, or it isn't a Finished.
+  secretarySeen: (instanceId: string, seq: number) => Promise<boolean>;
 
   // File drop. The ones taking an instance id act on that contact's project
   // directory, as stored, which keys its default folder: contacts on one project

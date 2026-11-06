@@ -24,7 +24,7 @@ Multi-Code phone harness · scenario home · userData /private/tmp/mc-harness-19
 ```
 
 Options: `--scenario <name>`, `--paused` (no clock: working turns move only on
-`/tick`), `--port <n>` and `--control-port <n>` (default: free ports, so several
+`/tick`), `--secretary` (Secretary Mode starts on, below), `--port <n>` and `--control-port <n>` (default: free ports, so several
 harnesses can run at once), `--host-name <name>` (default `MacBook Air`; the server
 sends `Multi-Code on <name>`). Ctrl+C stops it.
 
@@ -98,6 +98,19 @@ desktop's does:
 - Terminal keys (`input`) act as the CLI's would: text is typed, Return sends it (or
   picks the highlighted option of a dialog), Esc stops a turn or declines a dialog.
 
+## The secretary
+
+`secretary.ts` plays the desktop's secretary (epic secretary-bar): while Secretary
+Mode is on, every session that needs the builder or finished has a brief, with
+scripted text and, as its voice, six quiet seconds of a tone, served at the brief's
+`audioUrl` through the real `phoneAudio` (IMA ADPCM WAV, or PCM with `&f=pcm`). Live,
+a brief is written in steps (writing, the voice on its way, ready); paused, it is
+ready at once. A dialog answered, a session read or a new turn marks it as the desk's
+would. `secretary-mode`, `secretary-seen` and `secretary-reply` are gated as the
+desktop's host gates them; a reply is read for a second, then a yes answers the dialog
+(its first option), a question is answered, and anything else is asked back. The mode
+lasts across scenarios, as the desk's switch does.
+
 ## Control channel
 
 `curl <control>` lists the commands. The useful ones:
@@ -113,6 +126,9 @@ curl -XPOST "$C/resize/multi-code?cols=100&rows=30"
 curl -XPOST $C/drop                       # cut every socket (reconnect)
 curl -XPOST $C/half-open                  # open sockets go quiet, pings included
 curl -XPOST $C/offline; curl -XPOST $C/online   # the Mac unreachable, then back
+curl -XPOST $C/secretary/on               # Secretary Mode switched at the desk (/off)
+curl -XPOST $C/secretary/claude-missing   # the Mac loses the Claude Code CLI (/claude-found)
+curl -XPOST "$C/secretary/reply/multi-code?text=yes"   # a reply in words at the desk
 curl $C/log                               # every prompt / answer / interrupt / input and its ack
 ```
 
@@ -147,11 +163,18 @@ pairs, authenticates and prints the sessions of every scenario. `HarnessClient`
 ## Files
 
 - `main.ts`: the Electron entry; loads the compiled server from `dist/`.
+- `secretary.ts`: the secretary's mode, briefs, replies and voice.
 - `bridge.ts`: the only file that touches the server: the fake `RemoteHost`, and what
   is the harness's own (the log, half-open sockets), grafted onto its private members by
   bracket access so `pnpm type` checks every name.
 - `world.ts`: the sessions as they change. `scenarios.ts`: what they start as.
 - `control.ts`, `screenshot.ts`, `client.ts`, `harness.test.ts`.
+- `layout-check.ts`: the secretary bar's layout in WebKit, where the component tests
+  (markup only) can't look: on a phone on its side the folded bar keeps its height
+  above a permission card whose answers stay reachable, and on the terminal screen the
+  keyboard frame follows the focus to the bar's reply box. `node
+  scripts/mobile-harness/layout-check.ts --control $C [--shots <dir>]`; exits 1 on a
+  failed check.
 - `push-check.ts`: notifications and the Home Screen hand-off (T-811) in WebKit or
   Chrome, with the Home Screen, permission, PushManager and clipboard stubbed; its
   header says how to run it.

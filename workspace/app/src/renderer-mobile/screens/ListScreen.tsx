@@ -1,9 +1,12 @@
 // The session list (PRD Story 2, mockup 1A): every session the Mac lists, grouped
 // Needs you / Working / Finished / Idle with a count, empty groups left out. Live
-// while connected; from the cache, with its age in the banner, while not.
+// while connected; from the cache, with its age in the banner, while not. Under the
+// top bar, the Secretary Mode switch and, while it is on, the secretary's bar (epic
+// secretary-bar).
 
 import type { RemoteInstance, RemoteSessionState } from "../../shared/remote-protocol";
 import { ConnectionBadge, ConnectionBanner } from "../components/Connection";
+import { SecretaryBar, SecretarySwitch } from "../components/SecretaryBar";
 import { duration, shortAge, useNow } from "../format";
 import { navigate } from "../routes";
 import { useApp } from "../store";
@@ -29,6 +32,8 @@ export function ListScreen() {
           ⚙
         </a>
       </div>
+      <SecretarySwitch />
+      <SecretaryBar />
       <ConnectionBanner since={instancesAt} />
       <div className="screen-body">
         {instances === null ? (

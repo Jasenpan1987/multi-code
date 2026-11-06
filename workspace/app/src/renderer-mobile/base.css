@@ -25,6 +25,11 @@
   --sheet: #1f2126;
   --banner-bg: #3a2a12;
   --banner-text: #f3c68a;
+  /* The secretary's own colour (epic secretary-bar), so its words are never taken
+     for an agent's. */
+  --sec: #a395f2;
+  --sec-bg: #1f1d2b;
+  --sec-line: #353048;
   --mono: Menlo, "SF Mono", monospace;
 }
 
@@ -49,6 +54,9 @@
     --sheet: #ffffff;
     --banner-bg: #fdf0dc;
     --banner-text: #8a4d00;
+    --sec: #5b48c2;
+    --sec-bg: #f1effc;
+    --sec-line: #dcd6f4;
   }
 }
 

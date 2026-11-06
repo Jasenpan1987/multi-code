@@ -29,9 +29,11 @@ import {
   type PromptStateFrame,
   type RemoteChoice,
   type RemoteDialog,
+  type RemoteBrief,
   type RemoteInstance,
   type RemotePushSubscription,
   type RemoteStatus,
+  type SecretaryFrame,
   type ServerFrame,
   type TranscriptEntry,
 } from "../../shared/remote-protocol";
@@ -48,7 +50,8 @@ import {
   type PushResult,
   type VapidKeys,
 } from "./push";
-import type { RemoteHttpsSetup, RemoteTestPush } from "../../shared/types";
+import type { RemoteHttpsSetup, RemoteTestPush, SecretaryBriefState } from "../../shared/types";
+import type { PhoneAudioFormat } from "../secretary/phoneAudio";
 
 // A phone that never completes its handshake + auth in this window gets dropped,
 // so a port scanner can't hold sockets open.
@@ -85,6 +88,12 @@ const PREVIEW_REFRESH_MS = 5000;
 // size every PTY starts at.
 const DEFAULT_PTY_SIZE = { cols: 120, rows: 30 };
 
+// Where a phone plays a brief's audio from (epic secretary-bar): `?k=<key>`, a key
+// minted for one phone and one brief (RemoteBrief.audioUrl). A query, so the phone's
+// service worker never answers it or keeps it (sw.ts handles no URL with one), and
+// `no-store`, so neither does the browser's cache: the audio is not kept on the phone.
+export const AUDIO_PATH = "/secretary-audio";
+
 // Static files for the mobile client are only served from this directory, and
 // only for paths that resolve inside it.
 function mobileRoot(): string {
@@ -116,6 +125,22 @@ interface Connection {
   heartbeat: ReturnType<typeof setTimeout> | null;
   // When the phone last sent anything (ms); see LOOKING_MS.
   heardAt: number;
+  // The `secretary` frame as last sent, so an unchanged one isn't sent again.
+  secretary: string;
+}
+
+// A brief's audio key: the phone it was minted for, and the brief.
+interface AudioKey {
+  deviceId: string;
+  instanceId: string;
+  seq: number;
+}
+
+// The secretary as phones see it (RemoteHost.secretary).
+export interface HostSecretaryState {
+  on: boolean;
+  claudeFound: boolean;
+  briefs: Record<string, SecretaryBriefState>;
 }
 
 // How the desktop answered a frame carrying a `clientMsgId`, before it becomes an
@@ -161,6 +186,20 @@ export interface RemoteHost {
   answer: (id: string, seq: number, choice: RemoteChoice, confirmed: boolean) => Promise<HostAck>;
   // Stop the running turn.
   interrupt: (id: string) => Promise<HostAck>;
+  // The secretary's mode and every brief (epic secretary-bar), or null when this
+  // desktop has none. `fresh`: look for the `claude` CLI again (a phone just
+  // connected); else as last found. The host calls `broadcastSecretary` itself when
+  // anything here changes.
+  secretary: (fresh: boolean) => HostSecretaryState | null;
+  // Secretary Mode from a phone's switch, saved as the toolbox's is.
+  setSecretaryMode: (enabled: boolean) => Promise<HostAck>;
+  // A Finished brief dealt with on a phone: its session is read.
+  secretarySeen: (id: string, seq: number) => void;
+  // A reply in words on a Needs-you brief.
+  secretaryReply: (id: string, seq: number, text: string) => Promise<HostAck>;
+  // The brief's audio as a phone plays it, or null unless `seq` is the instance's
+  // brief and its audio is ready.
+  secretaryAudio: (id: string, seq: number, format: PhoneAudioFormat) => Buffer | null;
 }
 
 export interface RemoteServerOptions {
@@ -225,6 +264,11 @@ export class RemoteServer {
   // Per device, the push being sent to it, so the next one goes after it: a session's
   // older push must never land after its newer one, which it would replace.
   private pushQueues = new Map<string, Promise<unknown>>();
+  // Brief audio keys (AUDIO_PATH), by key, and each one's key by device and brief, so
+  // a phone keeps one key per brief across frames and reconnects. In memory: a
+  // desktop restart has no briefs either.
+  private audioKeys = new Map<string, AudioKey>();
+  private audioKeyOf = new Map<string, string>();
   private readonly heartbeatTimeoutMs: number;
 
   constructor(options: RemoteServerOptions = {}) {
@@ -318,6 +362,8 @@ export class RemoteServer {
     this.checks.unwatch();
     this.previewRefreshedAt.clear();
     this.lastInstances = "";
+    this.audioKeys.clear();
+    this.audioKeyOf.clear();
 
     const wss = this.wss;
     const server = this.httpServer;
@@ -386,6 +432,10 @@ export class RemoteServer {
     this.devices = this.devices.filter((d) => d.id !== deviceId);
     saveDevices(this.devices);
     this.acks.delete(deviceId);
+    // Its audio keys answer nothing from now on.
+    for (const [key, entry] of this.audioKeys) {
+      if (entry.deviceId === deviceId) this.forgetAudioKey(key, entry);
+    }
     // Drop any live connection using the revoked token. Snapshot first: the loop
     // deletes from the same set it iterates.
     const live = Array.from(this.connections);
@@ -700,6 +750,62 @@ export class RemoteServer {
     }
   }
 
+  // The secretary changed (its mode, a brief): every phone gets it whole. The audio
+  // keys of briefs that went are dropped first, phones or not: turned off and on
+  // again, the secretary prepares the same live event under the same seq, and a key
+  // kept from before would answer for its new audio.
+  broadcastSecretary() {
+    if (!this.host) return;
+    const state = this.host.secretary(false);
+    if (!state) return;
+    this.pruneAudioKeys(state.briefs);
+    if (!this.hasPhones()) return;
+    for (const conn of this.connections) {
+      if (conn.authed) this.sendSecretary(conn, state);
+    }
+  }
+
+  private sendSecretary(conn: Connection, state: HostSecretaryState) {
+    const briefs: Record<string, RemoteBrief> = {};
+    for (const [id, brief] of Object.entries(state.briefs)) {
+      const audible = brief.status === "ready" && brief.audio === "ready" && conn.deviceId;
+      briefs[id] = audible ? { ...brief, audioUrl: this.audioUrl(conn.deviceId!, id, brief.seq) } : brief;
+    }
+    const frame: SecretaryFrame = { type: "secretary", on: state.on, claudeFound: state.claudeFound, briefs };
+    const json = JSON.stringify(frame);
+    if (json === conn.secretary) return;
+    conn.secretary = json;
+    this.send(conn, frame);
+  }
+
+  // The path that phone plays that brief's audio from: one key per phone and brief,
+  // 256 random bits, made the first time it is asked for.
+  private audioUrl(deviceId: string, instanceId: string, seq: number): string {
+    const of = `${deviceId}\n${instanceId}\n${seq}`;
+    let key = this.audioKeyOf.get(of);
+    if (!key) {
+      key = crypto.randomBytes(32).toString("base64url");
+      this.audioKeyOf.set(of, key);
+      this.audioKeys.set(key, { deviceId, instanceId, seq });
+    }
+    return `${AUDIO_PATH}?k=${key}`;
+  }
+
+  // Keys for a brief that is no longer its session's, or whose audio isn't ready.
+  // AUDIO_PATH checks again on every request; this only keeps the maps small.
+  private pruneAudioKeys(briefs: Record<string, SecretaryBriefState>) {
+    for (const [key, entry] of this.audioKeys) {
+      const brief = briefs[entry.instanceId];
+      if (brief?.seq === entry.seq && brief.status === "ready" && brief.audio === "ready") continue;
+      this.forgetAudioKey(key, entry);
+    }
+  }
+
+  private forgetAudioKey(key: string, entry: AudioKey) {
+    this.audioKeys.delete(key);
+    this.audioKeyOf.delete(`${entry.deviceId}\n${entry.instanceId}\n${entry.seq}`);
+  }
+
   private sendInstances(conn: Connection) {
     if (!this.host) return;
     this.lastInstances = "";
@@ -754,11 +860,17 @@ export class RemoteServer {
     }
 
     const root = mobileRoot();
+    let url: URL;
     let requested: string;
     try {
-      requested = decodeURIComponent(new URL(req.url ?? "/", "http://x").pathname);
+      url = new URL(req.url ?? "/", "http://x");
+      requested = decodeURIComponent(url.pathname);
     } catch {
       res.writeHead(400).end();
+      return;
+    }
+    if (url.pathname === AUDIO_PATH) {
+      this.serveAudio(req, res, url);
       return;
     }
     if (requested === "/" || requested === "") requested = "/index.html";
@@ -817,6 +929,40 @@ export class RemoteServer {
     });
   }
 
+  // A brief's audio, for the key in the query: only while the phone it was minted for
+  // is paired and that brief is still its session's, with its audio ready; anything
+  // else is a 404, whatever the key. With byte ranges, which WebKit's player asks for
+  // before it plays (`bytes=0-1` first, measured 2026-11-06).
+  private serveAudio(req: http.IncomingMessage, res: http.ServerResponse, url: URL) {
+    const entry = this.audioKeys.get(url.searchParams.get("k") ?? "");
+    const paired = entry !== undefined && this.devices.some((d) => d.id === entry.deviceId);
+    const format: PhoneAudioFormat = url.searchParams.get("f") === "pcm" ? "pcm" : "adpcm";
+    let data: Buffer | null;
+    try {
+      data = paired && this.host ? this.host.secretaryAudio(entry.instanceId, entry.seq, format) : null;
+    } catch {
+      data = null;
+    }
+    const headers = { "cache-control": "no-store" };
+    if (!data) {
+      res.writeHead(404, { ...headers, "content-type": "text/plain" }).end("Not found");
+      return;
+    }
+    const audio = { ...headers, "content-type": "audio/wav", "accept-ranges": "bytes" };
+    const range = byteRange(req.headers.range, data.length);
+    if (range === "unsatisfiable") {
+      res.writeHead(416, { ...audio, "content-range": `bytes */${data.length}` }).end();
+      return;
+    }
+    const [start, end] = range ?? [0, data.length - 1];
+    res.writeHead(range ? 206 : 200, {
+      ...audio,
+      "content-length": end - start + 1,
+      ...(range ? { "content-range": `bytes ${start}-${end}/${data.length}` } : {}),
+    });
+    res.end(req.method === "HEAD" ? undefined : data.subarray(start, end + 1));
+  }
+
   // -------------------------------------------------------------------------
   // WebSocket: handshake, auth, frame dispatch
   // -------------------------------------------------------------------------
@@ -831,6 +977,7 @@ export class RemoteServer {
       authTimer: null,
       heartbeat: null,
       heardAt: Date.now(),
+      secretary: "",
     };
     this.connections.add(conn);
 
@@ -1006,6 +1153,14 @@ export class RemoteServer {
         pushEnabled: !!device.push,
       });
       this.sendInstances(conn);
+      // The secretary, with `claude` looked for again: it may have been installed
+      // since anyone last asked.
+      const secretary = this.host?.secretary(true);
+      if (secretary) {
+        this.pruneAudioKeys(secretary.briefs);
+        conn.secretary = "";
+        this.sendSecretary(conn, secretary);
+      }
       this.notifyStatus();
       return;
     }
@@ -1094,6 +1249,28 @@ export class RemoteServer {
           if (subscription === undefined) return MALFORMED;
           this.setPushSubscription(conn.deviceId, subscription);
           return { ok: true };
+        });
+        return;
+
+      case "secretary-mode":
+        this.acked(conn, frame.clientMsgId, async () => {
+          if (!this.host || typeof frame.enabled !== "boolean") return MALFORMED;
+          return this.host.setSecretaryMode(frame.enabled);
+        });
+        return;
+
+      case "secretary-seen":
+        if (typeof frame.instanceId !== "string" || typeof frame.seq !== "number") return;
+        this.host?.secretarySeen(frame.instanceId, frame.seq);
+        return;
+
+      case "secretary-reply":
+        this.acked(conn, frame.clientMsgId, async () => {
+          if (!this.host) return MALFORMED;
+          if (typeof frame.instanceId !== "string" || typeof frame.seq !== "number" || typeof frame.text !== "string") {
+            return MALFORMED;
+          }
+          return this.host.secretaryReply(frame.instanceId, frame.seq, frame.text);
         });
         return;
 
@@ -1201,6 +1378,22 @@ function subscriptionOf(value: unknown): RemotePushSubscription | null | undefin
     ...(typeof expirationTime === "number" ? { expirationTime } : {}),
     keys: { p256dh, auth },
   };
+}
+
+// A request's single byte range ("bytes=0-1", "bytes=100-", "bytes=-500"), clipped
+// to the body: null for none, or for anything else (several ranges, another unit),
+// which gets the whole body; "unsatisfiable" for one that starts past the end.
+export function byteRange(header: string | undefined, size: number): [number, number] | null | "unsatisfiable" {
+  const m = header ? /^bytes=(\d*)-(\d*)$/.exec(header.trim()) : null;
+  if (!m || (m[1] === "" && m[2] === "")) return null;
+  if (m[1] === "") {
+    const last = Math.min(Number(m[2]), size);
+    return last === 0 ? "unsatisfiable" : [size - last, size - 1];
+  }
+  const start = Number(m[1]);
+  const end = m[2] === "" ? size - 1 : Math.min(Number(m[2]), size - 1);
+  if (start >= size || end < start) return "unsatisfiable";
+  return [start, end];
 }
 
 // At most `max` characters, by code point, so a cut never splits one.

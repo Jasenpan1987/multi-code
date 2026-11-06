@@ -9,7 +9,9 @@
 //     acked; the desktop answers a clientMsgId it has already handled with the same
 //     ack and doesn't act on it twice, so a resend never sends a message twice.
 //   - `answer` and `interrupt` are never queued and never resent: a dialog or a
-//     turn may have moved on while the phone was away. One sent on a socket that
+//     turn may have moved on while the phone was away. Nor are the secretary's
+//     `secretary-mode` and `secretary-reply` (epic secretary-bar): offline the switch
+//     can't move and a reply needs the Mac. One sent on a socket that
 //     dropped before its ack is `unknown` ("may not have arrived, check the
 //     session"), and the builder looks again instead.
 
@@ -21,10 +23,18 @@ import type {
   InterruptFrame,
   PromptFrame,
   PushSubscribeFrame,
+  SecretaryModeFrame,
+  SecretaryReplyFrame,
   TranscriptEntry,
 } from "../shared/remote-protocol";
 
-export type OutboxFrame = PromptFrame | AnswerFrame | InterruptFrame | PushSubscribeFrame;
+export type OutboxFrame =
+  | PromptFrame
+  | AnswerFrame
+  | InterruptFrame
+  | PushSubscribeFrame
+  | SecretaryModeFrame
+  | SecretaryReplyFrame;
 
 // waiting — not on the open socket: queued offline, or back in the queue after the
 //           socket it went out on dropped (prompt and push-subscribe only)

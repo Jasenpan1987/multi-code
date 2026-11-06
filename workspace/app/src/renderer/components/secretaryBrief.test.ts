@@ -1,20 +1,25 @@
 import { describe, expect, it } from "vitest";
 import type { SecretaryBriefState } from "../../shared/types";
 import {
+  IDLE,
   applyBriefUpdate,
-  briefCardView,
+  barControls,
+  barState,
+  briefKey,
   briefLang,
-  cardOnArrival,
-  cardOnSelect,
-  cardToReopen,
+  editDraft,
+  isReadableBrief,
+  keepDrafts,
   mergeBriefSnapshot,
-  openCardBrief,
+  queueLabel,
+  readsOnEnd,
   replyView,
 } from "./secretaryBrief";
-import type { BriefMap } from "./secretaryBrief";
+import type { Drafts } from "./secretaryBrief";
 
 const preparing = (seq: number): SecretaryBriefState => ({
   seq,
+  at: seq,
   kind: "finished",
   status: "preparing",
 });
@@ -25,9 +30,10 @@ const ready = (
   voiceReason?: string
 ): SecretaryBriefState => ({
   seq,
+  at: seq,
   kind: "needs-you",
   status: "ready",
-  text: "Portals wants to run the tests.",
+  text: "Shop wants to run the tests.",
   language: "English",
   audio,
   voiceReason,
@@ -40,140 +46,10 @@ const handled = (state: SecretaryBriefState): SecretaryBriefState => ({
 
 const failed = (seq: number): SecretaryBriefState => ({
   seq,
+  at: seq,
   kind: "finished",
   status: "failed",
   reason: "timed out after 60 s",
-});
-
-describe("cardOnSelect", () => {
-  const briefs: BriefMap = { a: preparing(3), b: ready(4, "ready") };
-
-  it("opens the card for the brief's event when the contact showed a red dot", () => {
-    expect(cardOnSelect("a", true, new Set(["a"]), briefs)).toEqual({
-      instanceId: "a",
-      seq: 3,
-      play: true,
-    });
-    expect(cardOnSelect("b", true, new Set(["a", "b"]), briefs)).toEqual({
-      instanceId: "b",
-      seq: 4,
-      play: true,
-    });
-  });
-
-  it("opens nothing with Secretary Mode off", () => {
-    expect(cardOnSelect("a", false, new Set(["a"]), briefs)).toBeNull();
-  });
-
-  it("opens nothing for a contact without a red dot, brief or not", () => {
-    expect(cardOnSelect("a", true, new Set(["b"]), briefs)).toBeNull();
-    expect(cardOnSelect("a", true, new Set(), briefs)).toBeNull();
-  });
-
-  it("opens nothing for a red dot with no brief: the event was already dealt with", () => {
-    expect(cardOnSelect("c", true, new Set(["c"]), briefs)).toBeNull();
-  });
-
-  it("opens nothing for a red dot whose brief is handled: answered before the click", () => {
-    const kept = { a: handled(ready(3, "ready")) };
-    expect(cardOnSelect("a", true, new Set(["a"]), kept)).toBeNull();
-  });
-});
-
-describe("cardOnArrival", () => {
-  it("opens a new event's card for the contact on screen, to play", () => {
-    expect(cardOnArrival("a", preparing(5), "a", 4)).toEqual({ instanceId: "a", seq: 5, play: true });
-    expect(cardOnArrival("a", preparing(5), "a", undefined)).toEqual({
-      instanceId: "a",
-      seq: 5,
-      play: true,
-    });
-  });
-
-  it("opens nothing for a contact that isn't shown: it waits for a red-dot click", () => {
-    expect(cardOnArrival("a", preparing(5), "b", 4)).toBeNull();
-    expect(cardOnArrival("a", preparing(5), null, 4)).toBeNull();
-  });
-
-  it("opens nothing for a later push of the same event, so a closed card stays closed", () => {
-    expect(cardOnArrival("a", ready(5, "pending"), "a", 5)).toBeNull();
-    expect(cardOnArrival("a", ready(5, "ready"), "a", 5)).toBeNull();
-    expect(cardOnArrival("a", failed(5), "a", 5)).toBeNull();
-    expect(cardOnArrival("a", handled(preparing(5)), "a", 5)).toBeNull();
-    // A reply on the card while its brief is still being written is still "preparing".
-    const replying = { ...preparing(5), kind: "needs-you" as const, exchanges: [{ reply: "要" }] };
-    expect(cardOnArrival("a", replying, "a", 5)).toBeNull();
-  });
-
-  it("opens nothing for a drop", () => {
-    expect(cardOnArrival("a", null, "a", 5)).toBeNull();
-  });
-});
-
-describe("cardToReopen", () => {
-  const view = { modeOn: true, selectedId: "a", briefs: { a: handled(ready(3, "ready")) } };
-
-  it("brings back the shown contact's latest brief, handled or live, without playing it", () => {
-    expect(cardToReopen(null, view)).toEqual({ instanceId: "a", seq: 3, play: false });
-    expect(cardToReopen(null, { ...view, briefs: { a: preparing(4) } })).toEqual({
-      instanceId: "a",
-      seq: 4,
-      play: false,
-    });
-  });
-
-  it("has nothing while that brief's card is open", () => {
-    expect(cardToReopen({ instanceId: "a", seq: 3, play: true }, view)).toBeNull();
-  });
-
-  it("offers the newer brief when the open card is for an older one", () => {
-    const older = { instanceId: "a", seq: 2, play: true };
-    expect(cardToReopen(older, view)).toEqual({ instanceId: "a", seq: 3, play: false });
-  });
-
-  it("has nothing with no brief, no contact shown, or the mode off", () => {
-    expect(cardToReopen(null, { ...view, briefs: {} })).toBeNull();
-    expect(cardToReopen(null, { ...view, selectedId: null })).toBeNull();
-    expect(cardToReopen(null, { ...view, modeOn: false })).toBeNull();
-  });
-});
-
-describe("openCardBrief", () => {
-  const card = { instanceId: "a", seq: 3, play: true };
-  const view = { modeOn: true, selectedId: "a", briefs: { a: ready(3, "pending") } };
-
-  it("shows the brief the card was opened for, as it progresses", () => {
-    expect(openCardBrief(card, view)).toEqual(ready(3, "pending"));
-    expect(openCardBrief(card, { ...view, briefs: { a: ready(3, "ready") } })).toEqual(
-      ready(3, "ready")
-    );
-  });
-
-  it("closes when another contact is shown", () => {
-    expect(openCardBrief(card, { ...view, selectedId: "b" })).toBeNull();
-    expect(openCardBrief(card, { ...view, selectedId: null })).toBeNull();
-  });
-
-  it("closes when Secretary Mode goes off", () => {
-    expect(openCardBrief(card, { ...view, modeOn: false })).toBeNull();
-  });
-
-  it("stays open when the event clears: the builder typing in the terminal keeps the text", () => {
-    const kept = handled(ready(3, "ready"));
-    expect(openCardBrief(card, { ...view, briefs: { a: kept } })).toEqual(kept);
-  });
-
-  it("closes when the brief is dropped (the contact was removed)", () => {
-    expect(openCardBrief(card, { ...view, briefs: {} })).toBeNull();
-  });
-
-  it("closes when a newer event replaces the brief, which opens a card of its own", () => {
-    expect(openCardBrief(card, { ...view, briefs: { a: preparing(7) } })).toBeNull();
-  });
-
-  it("is closed with no card", () => {
-    expect(openCardBrief(null, view)).toBeNull();
-  });
 });
 
 describe("applyBriefUpdate", () => {
@@ -212,56 +88,153 @@ describe("mergeBriefSnapshot", () => {
   });
 });
 
-describe("briefCardView", () => {
-  it("says preparing until the text exists, with the voice still to come", () => {
-    expect(briefCardView(preparing(1))).toEqual({
-      kindLabel: "Finished",
-      text: null,
-      language: null,
-      note: { tone: "muted", text: "Preparing the brief…" },
-      audioReady: false,
-      voiceComing: true,
+describe("barState", () => {
+  it("says nothing is new with no brief at all", () => {
+    expect(barState(null, IDLE)).toEqual({ tone: "muted", text: "Nothing new" });
+  });
+
+  it("says the brief is being written until its text exists", () => {
+    expect(barState(preparing(1), IDLE)).toEqual({ tone: "muted", text: "Writing the brief…" });
+  });
+
+  it("says the voice is on its way while the text shows", () => {
+    expect(barState(ready(1, "pending"), IDLE)).toEqual({ tone: "muted", text: "Voice on its way…" });
+  });
+
+  it("is ready once the audio is, and playing while it plays", () => {
+    expect(barState(ready(1, "ready"), IDLE)).toEqual({ tone: "ready", text: "Ready" });
+    expect(barState(ready(1, "ready"), { ...IDLE, loading: true }).text).toBe("Loading the voice…");
+    expect(barState(ready(1, "ready"), { ...IDLE, playing: true })).toEqual({
+      tone: "playing",
+      text: "Playing",
     });
   });
 
-  it("shows the text while the voice is on its way", () => {
-    const view = briefCardView(ready(1, "pending"));
-    expect(view.kindLabel).toBe("Needs you");
-    expect(view.text).toBe("Portals wants to run the tests.");
-    expect(view.language).toBe("English");
-    expect(view.note).toEqual({ tone: "muted", text: "Voice on its way…" });
-    expect(view.audioReady).toBe(false);
-    expect(view.voiceComing).toBe(true);
-  });
-
-  it("is playable once the audio is ready, with no note", () => {
-    const view = briefCardView(ready(1, "ready"));
-    expect(view.note).toBeNull();
-    expect(view.audioReady).toBe(true);
-    expect(view.voiceComing).toBe(false);
-  });
-
-  it("notes the voice is unavailable, with main's reason", () => {
-    const view = briefCardView(ready(1, "unavailable", "no speech server set"));
-    expect(view.text).toBe("Portals wants to run the tests.");
-    expect(view.note).toEqual({
+  it("says the voice is unavailable, with main's reason", () => {
+    expect(barState(ready(1, "unavailable", "no speech server set"), IDLE)).toEqual({
       tone: "warn",
       text: "Voice unavailable",
       detail: "no speech server set",
     });
-    expect(view.audioReady).toBe(false);
-    expect(view.voiceComing).toBe(false);
   });
 
-  it("says in one line that no brief could be written, with the reason", () => {
-    expect(briefCardView(failed(1))).toEqual({
-      kindLabel: "Finished",
-      text: null,
-      language: null,
-      note: { tone: "warn", text: "No brief could be written", detail: "timed out after 60 s" },
-      audioReady: false,
-      voiceComing: false,
+  it("says no brief could be written, with the reason", () => {
+    expect(barState(failed(1), IDLE)).toEqual({
+      tone: "warn",
+      text: "No brief could be written",
+      detail: "timed out after 60 s",
     });
+  });
+
+  it("says when the voice couldn't play, or the brief went out of date", () => {
+    expect(barState(ready(1, "ready"), { ...IDLE, failed: true })).toEqual({
+      tone: "warn",
+      text: "Couldn't play the voice",
+    });
+    expect(barState(ready(1, "ready"), { ...IDLE, stale: true }).text).toBe("This brief is out of date");
+  });
+});
+
+describe("barControls", () => {
+  const finished = (state: SecretaryBriefState): SecretaryBriefState => ({ ...state, kind: "finished" });
+
+  it("offers Play only once the audio is ready, and not at all with no voice", () => {
+    expect(barControls(ready(1, "ready"), IDLE)).toMatchObject({ playShown: true, canPlay: true });
+    expect(barControls(ready(1, "pending"), IDLE)).toMatchObject({ playShown: true, canPlay: false });
+    expect(barControls(preparing(1), IDLE)).toMatchObject({ playShown: true, canPlay: false });
+    expect(barControls(ready(1, "unavailable"), IDLE)).toMatchObject({ playShown: false, canPlay: false });
+    expect(barControls(failed(1), IDLE)).toMatchObject({ playShown: false, canPlay: false });
+    expect(barControls(null, IDLE)).toMatchObject({ playShown: false, canPlay: false });
+  });
+
+  it("doesn't play a brief main no longer has audio for", () => {
+    expect(barControls(ready(1, "ready"), { ...IDLE, stale: true }).canPlay).toBe(false);
+  });
+
+  it("stops while the brief plays or its audio is on the way", () => {
+    expect(barControls(ready(1, "ready"), IDLE).canStop).toBe(false);
+    expect(barControls(ready(1, "ready"), { ...IDLE, playing: true }).canStop).toBe(true);
+    expect(barControls(ready(1, "ready"), { ...IDLE, loading: true }).canStop).toBe(true);
+  });
+
+  it("offers Got it on a Finished brief that still waits, never on a Needs you", () => {
+    expect(barControls(finished(ready(1, "ready")), IDLE).canDismiss).toBe(true);
+    expect(barControls(preparing(1), IDLE).canDismiss).toBe(true);
+    expect(barControls(failed(1), IDLE).canDismiss).toBe(true);
+    expect(barControls(ready(1, "ready"), IDLE).canDismiss).toBe(false);
+    expect(barControls({ ...finished(ready(1, "ready")), seen: true }, IDLE).canDismiss).toBe(false);
+    expect(barControls(handled(finished(ready(1, "ready"))), IDLE).canDismiss).toBe(false);
+  });
+});
+
+describe("queueLabel", () => {
+  it("gives the place and the count", () => {
+    expect(queueLabel({ index: 2, count: 3 })).toBe("2 / 3");
+  });
+
+  it("has no place for a brief that no longer waits", () => {
+    expect(queueLabel({ index: 0, count: 2 })).toBe("– / 2");
+  });
+
+  it("is nothing with an empty queue", () => {
+    expect(queueLabel({ index: 0, count: 0 })).toBeNull();
+  });
+});
+
+describe("readsOnEnd", () => {
+  it("reads the session of a Finished brief, never a Needs you's", () => {
+    expect(readsOnEnd(preparing(1))).toBe(true);
+    expect(readsOnEnd(ready(1, "ready"))).toBe(false);
+    expect(readsOnEnd(null)).toBe(false);
+  });
+});
+
+describe("isReadableBrief", () => {
+  it("reads the Finished brief the bar named", () => {
+    expect(isReadableBrief({ a: preparing(1) }, "a", 1)).toBe(true);
+    // Seen or handled since: still that brief, and reading it again is harmless.
+    expect(isReadableBrief({ a: handled(preparing(1)) }, "a", 1)).toBe(true);
+  });
+
+  it("reads nothing once a newer event replaced it, before Got it or the end of its audio", () => {
+    expect(isReadableBrief({ a: preparing(2) }, "a", 1)).toBe(false);
+    expect(isReadableBrief({ a: ready(2, "pending") }, "a", 1)).toBe(false);
+    expect(isReadableBrief({}, "a", 1)).toBe(false);
+  });
+
+  it("reads nothing for a Needs you", () => {
+    expect(isReadableBrief({ a: ready(1, "ready") }, "a", 1)).toBe(false);
+  });
+});
+
+describe("drafts", () => {
+  const a = briefKey("a", 1);
+  const b = briefKey("b", 2);
+
+  it("keeps each brief's draft while stepping between them", () => {
+    let drafts: Drafts = {};
+    drafts = editDraft(drafts, a, "allow it, but only");
+    // Stepped to b and typed there; then back to a.
+    drafts = editDraft(drafts, b, "no, run the tests first");
+    expect(drafts[a]).toBe("allow it, but only");
+    expect(drafts[b]).toBe("no, run the tests first");
+    drafts = editDraft(drafts, a, "allow it, but only this once");
+    expect(drafts).toEqual({ [a]: "allow it, but only this once", [b]: "no, run the tests first" });
+  });
+
+  it("drops a draft once sent or emptied", () => {
+    const drafts = { [a]: "yes", [b]: "no" };
+    expect(editDraft(drafts, a, "")).toEqual({ [b]: "no" });
+    const none: Drafts = {};
+    expect(editDraft(none, a, "")).toBe(none);
+  });
+
+  it("drops the draft of a brief that was replaced or dropped, and keeps the rest", () => {
+    const drafts = { [a]: "yes", [b]: "no" };
+    const briefs = { a: ready(1, "ready"), b: ready(2, "ready") };
+    expect(keepDrafts(drafts, briefs)).toBe(drafts);
+    expect(keepDrafts(drafts, { a: ready(3, "ready"), b: ready(2, "ready") })).toEqual({ [b]: "no" });
+    expect(keepDrafts(drafts, { b: ready(2, "ready") })).toEqual({ [b]: "no" });
   });
 });
 

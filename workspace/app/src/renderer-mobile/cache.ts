@@ -1,10 +1,11 @@
 // The offline cache: the last list and each opened session's last transcript and
 // dialog, in localStorage, so the app opens to what the Mac last said (with its
 // age) when the Mac can't be reached (PRD Story 1). The service worker (sw.ts)
-// keeps the page itself; this keeps the content.
+// keeps the page itself; this keeps the content. The secretary's briefs are kept as
+// text, as the chat is, never their audio paths (epic secretary-bar, Privacy).
 
-import type { RemoteInstance } from "../shared/remote-protocol";
-import { EMPTY_SESSION, type AppState, type Session } from "./state";
+import type { RemoteBrief, RemoteInstance } from "../shared/remote-protocol";
+import { EMPTY_SESSION, type AppState, type SecretaryView, type Session } from "./state";
 
 const STORAGE_KEY = "multicode.cache";
 const VERSION = 1;
@@ -27,9 +28,14 @@ interface Cached {
   instancesAt: number | null;
   lastSeenAt: number | null;
   sessions: Record<string, CachedSession>;
+  // Absent in a cache from before the epic.
+  secretary?: SecretaryView | null;
+  secretaryAt?: number | null;
 }
 
-export type CachedState = Pick<AppState, "instances" | "instancesAt" | "sessions"> & { lastSeenAt: number | null };
+export type CachedState = Pick<AppState, "instances" | "instancesAt" | "sessions" | "secretary" | "secretaryAt"> & {
+  lastSeenAt: number | null;
+};
 
 export function saveCache(storage: Storage, state: AppState, lastSeenAt: number | null) {
   const kept = Object.entries(state.sessions)
@@ -44,6 +50,8 @@ export function saveCache(storage: Storage, state: AppState, lastSeenAt: number 
       instancesAt: state.instancesAt,
       lastSeenAt,
       sessions: Object.fromEntries(kept.slice(0, count).map(([id, s]) => [id, trimSession(s)])),
+      secretary: textOnly(state.secretary),
+      secretaryAt: state.secretaryAt,
     };
     const json = JSON.stringify(cached);
     if (json.length > MAX_CHARS && count > 0) continue;
@@ -68,6 +76,18 @@ function trimSession(s: Session): CachedSession {
   };
 }
 
+// The briefs without the paths their audio played from.
+function textOnly(secretary: SecretaryView | null): SecretaryView | null {
+  if (!secretary) return null;
+  const briefs: Record<string, RemoteBrief> = {};
+  for (const [id, brief] of Object.entries(secretary.briefs)) {
+    const kept = { ...brief };
+    delete kept.audioUrl;
+    briefs[id] = kept;
+  }
+  return { ...secretary, briefs };
+}
+
 export function loadCache(storage: Storage): CachedState | null {
   try {
     const raw = storage.getItem(STORAGE_KEY);
@@ -83,6 +103,8 @@ export function loadCache(storage: Storage): CachedState | null {
       instancesAt: cached.instancesAt ?? null,
       lastSeenAt: cached.lastSeenAt ?? null,
       sessions,
+      secretary: secretaryOf(cached.secretary),
+      secretaryAt: cached.secretaryAt ?? null,
     };
   } catch {
     return null;
@@ -91,4 +113,10 @@ export function loadCache(storage: Storage): CachedState | null {
 
 export function clearCache(storage: Storage) {
   storage.removeItem(STORAGE_KEY);
+}
+
+function secretaryOf(value: unknown): SecretaryView | null {
+  const s = value as SecretaryView | null | undefined;
+  if (!s || typeof s !== "object" || typeof s.on !== "boolean" || typeof s.briefs !== "object" || !s.briefs) return null;
+  return textOnly({ on: s.on, claudeFound: s.claudeFound === true, briefs: s.briefs });
 }

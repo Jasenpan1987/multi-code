@@ -34,7 +34,8 @@
 //
 // The renderer hears every change on `secretary-brief` (instanceId, state | null)
 // and the mode it acts on, saved and found, on `secretary-mode`; it fetches a ready
-// wav by instance and seq, so the audio never rides an update.
+// wav by instance and seq, so the audio never rides an update. The phone link hears
+// the same changes through `onBrief` and `onMode` (epic secretary-bar).
 //
 // A Needs-you brief whose dialog can be answered in words takes replies (T-509,
 // PRD Story 6): each one is read by the reply interpreter, held to the dialog by
@@ -48,7 +49,8 @@ import { BrowserWindow } from "electron";
 import { processManager } from "../process-manager";
 import type { SecretaryEvent, SecretaryEventListener } from "../process-manager";
 import { findClaudeCli } from "../backends/claude";
-import { loadSpeechServer } from "../settings-store";
+import { loadSpeechServer, setSecretaryMode } from "../settings-store";
+import type { SavedSecretarySettings } from "../settings-store";
 import { synthesize } from "./speech";
 import { normalizeLoudness } from "./loudness";
 import type { SpeechOptions, SpeechServer, SynthesizeResult } from "./speech";
@@ -70,6 +72,8 @@ export interface SecretaryDeps {
   // there. Asked each time, never cached.
   claudeFound(): boolean;
   onSecretaryEvent(listener: SecretaryEventListener): () => void;
+  // The builder read an instance, at the desk or on a phone (epic secretary-bar).
+  onInstanceRead(listener: (instanceId: string) => void): () => void;
   liveSecretaryEvents(): { instanceId: string; event: SecretaryEvent }[];
   writeBriefFor(
     instanceId: string,
@@ -113,11 +117,28 @@ export interface Secretary {
   // The wav of the instance's brief for event `seq`, or null when that is no
   // longer its brief or its audio isn't ready.
   audioFor(instanceId: string, seq: number): Buffer | null;
-  // Drop the instance's brief, when the instance is removed.
+  // Drop the instance's brief and its read mark, when the instance is removed.
   forget(instanceId: string): void;
+  // The instance's session was read: its Finished brief stops waiting (`seen`).
+  // Called from onInstanceRead; a Needs you is unaffected. Read while the secretary
+  // is off, the live Finished event is remembered as read, so turning it on again
+  // doesn't bring it back as waiting.
+  markSeen(instanceId: string): void;
+  // The secretary bar read the instance's Finished brief for event `seq` ("Got it",
+  // or played to the end). True, and the brief is seen, only while `seq` is still
+  // that instance's brief and a Finished: a read of a brief main has replaced since
+  // must not mark its replacement. The caller tells the phone only on true.
+  markSeenAt(instanceId: string, seq: number): boolean;
   // The builder's reply on the card of the instance's brief for event `seq`.
   // Resolves when the secretary has acted, asked back or answered; never throws.
   reply(instanceId: string, seq: number, text: string): Promise<void>;
+  // Told every change the renderer is told, after it: a brief's new state (null when
+  // it goes), and the mode the secretary acts on, with whether `claude` was found when
+  // last looked for (null: not looked for yet). The mode listeners also hear a change
+  // of that finding alone, so a phone's switch never offers what main would refuse.
+  // For the phone link. Returns the unsubscribe.
+  onBrief(listener: (instanceId: string, state: SecretaryBriefState | null) => void): () => void;
+  onMode(listener: (on: boolean, claudeFound: boolean | null) => void): () => void;
   // Unsubscribe and abort everything in flight. At quit.
   stop(): void;
 }
@@ -133,6 +154,8 @@ interface Job {
   abort: AbortController;
   wav?: Buffer;
   handled?: boolean;
+  // A Finished brief whose session was read since (epic secretary-bar, Story 4).
+  seen?: boolean;
   dialog: Dialog | null;
   exchanges: SecretaryExchange[];
   // A wider choice the secretary has asked the builder to confirm, with what it will
@@ -227,25 +250,62 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
   // found.
   let saved = false;
   let on = false;
+  // Whether `claude` was there when last looked for; null until then.
+  let found: boolean | null = null;
   let unsubscribe: (() => void) | null = null;
   const jobs = new Map<string, Job>();
+  // Per instance, the seq of the latest Finished event read, whether or not it had
+  // a brief then. Kept apart from the jobs, which go with the mode: a brief written
+  // again for an event already read starts out seen.
+  const readUpTo = new Map<string, number>();
+  const briefListeners = new Set<(instanceId: string, state: SecretaryBriefState | null) => void>();
+  const modeListeners = new Set<(on: boolean, claudeFound: boolean | null) => void>();
+
+  // To the renderer, then to every listener; one that throws doesn't stop the others.
+  const sendBrief = (instanceId: string, state: SecretaryBriefState | null) => {
+    deps.send(BRIEF_CHANNEL, instanceId, state);
+    for (const listener of briefListeners) {
+      try {
+        listener(instanceId, state);
+      } catch {
+        // See above.
+      }
+    }
+  };
+  const tellMode = () => {
+    for (const listener of modeListeners) {
+      try {
+        listener(on, found);
+      } catch {
+        // See sendBrief.
+      }
+    }
+  };
+  const sendMode = (next: boolean) => {
+    deps.send(MODE_CHANNEL, next);
+    tellMode();
+  };
 
   const isCurrent = (instanceId: string, job: Job) => jobs.get(instanceId) === job;
 
-  // Every state carries the job's own marks, whichever step it comes from:
-  // `handled` after a clear, `replyable` and the exchanges for a dialog.
+  // Every state carries the job's own marks, whichever step it comes from: the
+  // event's time, `handled` after a clear, `seen` once read, `replyable` and the
+  // exchanges for a dialog.
   const publish = (instanceId: string, job: Job, state: SecretaryBriefState) => {
     const step = { ...state };
     delete step.handled;
+    delete step.seen;
     delete step.replyable;
     delete step.exchanges;
     job.state = {
       ...step,
+      at: job.event.at,
       ...(job.handled ? { handled: true } : {}),
+      ...(job.seen ? { seen: true } : {}),
       ...(job.dialog ? { replyable: true } : {}),
       ...(job.exchanges.length ? { exchanges: job.exchanges.map((e) => ({ ...e })) } : {}),
     } as SecretaryBriefState;
-    deps.send(BRIEF_CHANNEL, instanceId, job.state);
+    sendBrief(instanceId, job.state);
   };
 
   const markHandled = (instanceId: string) => {
@@ -255,12 +315,41 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
     publish(instanceId, job, job.state);
   };
 
+  const noteReadUpTo = (instanceId: string, seq: number) => {
+    if ((readUpTo.get(instanceId) ?? -Infinity) < seq) readUpTo.set(instanceId, seq);
+  };
+
+  const seeJob = (instanceId: string, job: Job) => {
+    noteReadUpTo(instanceId, job.event.seq);
+    if (job.seen) return;
+    job.seen = true;
+    publish(instanceId, job, job.state);
+  };
+
+  const markSeen = (instanceId: string) => {
+    const job = jobs.get(instanceId);
+    if (job) {
+      if (job.event.kind === "finished") seeJob(instanceId, job);
+      return;
+    }
+    // No brief (the secretary is off): the live event is what was read.
+    const live = deps.liveSecretaryEvents().find((e) => e.instanceId === instanceId)?.event;
+    if (live?.kind === "finished") noteReadUpTo(instanceId, live.seq);
+  };
+
+  const markSeenAt = (instanceId: string, seq: number): boolean => {
+    const job = jobs.get(instanceId);
+    if (!job || job.event.seq !== seq || job.event.kind !== "finished") return false;
+    seeJob(instanceId, job);
+    return true;
+  };
+
   const drop = (instanceId: string) => {
     const job = jobs.get(instanceId);
     if (!job) return;
     jobs.delete(instanceId);
     job.abort.abort();
-    deps.send(BRIEF_CHANNEL, instanceId, null);
+    sendBrief(instanceId, null);
   };
 
   const prepare = (instanceId: string, event: SecretaryEvent) => {
@@ -273,9 +362,13 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
     const job: Job = {
       event,
       abort: new AbortController(),
-      state: { seq: event.seq, kind: event.kind, status: "preparing" },
+      state: { seq: event.seq, kind: event.kind, status: "preparing", at: event.at },
       dialog: event.kind === "needs-you" ? deps.dialogFor(instanceId, event) : null,
       exchanges: [],
+      // Read already: before the mode went off, or while it was off.
+      ...(event.kind === "finished" && (readUpTo.get(instanceId) ?? -Infinity) >= event.seq
+        ? { seen: true }
+        : {}),
     };
     jobs.set(instanceId, job);
     publish(instanceId, job, job.state);
@@ -290,7 +383,7 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
   };
 
   async function run(instanceId: string, job: Job) {
-    const { seq, kind } = job.event;
+    const { seq, kind, at } = job.event;
     const { signal } = job.abort;
 
     let brief: Brief;
@@ -301,12 +394,12 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
     }
     if (!isCurrent(instanceId, job)) return;
     if (!brief.ok) {
-      publish(instanceId, job, { seq, kind, status: "failed", reason: brief.reason });
+      publish(instanceId, job, { seq, kind, at, status: "failed", reason: brief.reason });
       return;
     }
 
     const { text, language } = brief;
-    const ready = { seq, kind, status: "ready", text, language } as const;
+    const ready = { seq, kind, at, status: "ready", text, language } as const;
     const server = deps.loadSpeechServer();
     if (!server.url.trim()) {
       publish(instanceId, job, { ...ready, audio: "unavailable", voiceReason: NO_SERVER_REASON });
@@ -430,7 +523,7 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
   const apply = (next: boolean) => {
     if (next === on) return;
     on = next;
-    deps.send(MODE_CHANNEL, on);
+    sendMode(on);
     if (on) {
       for (const { instanceId, event } of deps.liveSecretaryEvents()) {
         prepare(instanceId, event);
@@ -441,9 +534,14 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
   };
 
   function checkClaude(): boolean {
-    const found = deps.claudeFound();
-    apply(saved && found);
-    return found;
+    const was = found;
+    const before = on;
+    const now = deps.claudeFound();
+    found = now;
+    apply(saved && now);
+    // The mode stayed, but what a phone's switch may offer changed.
+    if (on === before && now !== was) tellMode();
+    return now;
   }
 
   const onEvent: SecretaryEventListener = (instanceId, event) => {
@@ -467,7 +565,12 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
   return {
     start(enabled) {
       if (unsubscribe) return;
-      unsubscribe = deps.onSecretaryEvent(onEvent);
+      const offEvent = deps.onSecretaryEvent(onEvent);
+      const offRead = deps.onInstanceRead(markSeen);
+      unsubscribe = () => {
+        offEvent();
+        offRead();
+      };
       setMode(enabled);
     },
     setMode,
@@ -483,12 +586,29 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
       if (!job || job.event.seq !== seq) return null;
       return job.wav ?? null;
     },
-    forget: drop,
+    forget(instanceId) {
+      drop(instanceId);
+      readUpTo.delete(instanceId);
+    },
+    markSeen,
+    markSeenAt,
     reply: (instanceId, seq, text) =>
       reply(instanceId, seq, text).catch(() => {
         // reply() catches the interpreter and the key writer itself; nothing else
         // in it throws. A reply must never reject into the IPC handler.
       }),
+    onBrief(listener) {
+      briefListeners.add(listener);
+      return () => {
+        briefListeners.delete(listener);
+      };
+    },
+    onMode(listener) {
+      modeListeners.add(listener);
+      return () => {
+        modeListeners.delete(listener);
+      };
+    },
     stop() {
       unsubscribe?.();
       unsubscribe = null;
@@ -514,6 +634,7 @@ function sendToRenderer(channel: string, ...args: unknown[]) {
 export const secretary = createSecretary({
   claudeFound: () => findClaudeCli() !== null,
   onSecretaryEvent: (listener) => processManager.onSecretaryEvent(listener),
+  onInstanceRead: (listener) => processManager.onInstanceRead(listener),
   liveSecretaryEvents: () => processManager.liveSecretaryEvents(),
   writeBriefFor,
   loadSpeechServer,
@@ -525,3 +646,14 @@ export const secretary = createSecretary({
   answerDialog: (instanceId, seq, plan, signal) =>
     processManager.answerDialog(instanceId, seq, plan, signal),
 });
+
+// Secretary Mode switched, from the toolbox or a phone (epic secretary-bar, Story 5):
+// saved first, so a save that throws leaves the secretary as it was, then applied.
+// Turning it on prepares the live events; off drops them all. Saved as asked even
+// without `claude`: the secretary stays off until it is found. The renderer hears a
+// change of what the secretary does on `secretary-mode`.
+export function switchMode(enabled: boolean): SavedSecretarySettings {
+  const next = setSecretaryMode(enabled);
+  secretary.setMode(next.secretaryMode);
+  return next;
+}

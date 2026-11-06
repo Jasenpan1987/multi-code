@@ -82,6 +82,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("secretary:get-audio", instanceId, seq),
   replyToSecretary: (instanceId: string, seq: number, text: string) =>
     ipcRenderer.invoke("secretary:reply", instanceId, seq, text),
+  secretarySeen: (instanceId: string, seq: number) =>
+    ipcRenderer.invoke("secretary:seen", instanceId, seq),
 
   // File drop
   getDropFolder: (instanceId: string) =>

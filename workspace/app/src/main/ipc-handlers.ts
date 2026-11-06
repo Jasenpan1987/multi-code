@@ -26,12 +26,11 @@ import {
   loadSpeechServer,
   saveSettings,
   setDropFolder,
-  setSecretaryMode,
   setSpeechServer,
 } from "./settings-store";
 import type { SavedSecretarySettings, ThemeName } from "./settings-store";
 import { testServer } from "./secretary/speech";
-import { secretary } from "./secretary";
+import { secretary, switchMode } from "./secretary";
 import { copyIntoFolder, describePath, displayPath, dropStillWaiting } from "./file-drop";
 import { debugTrace } from "./debug-trace";
 import { cancelClone, checkFolder, cloneRepo, lastClonedInto, resolveTypedPath } from "./new-project";
@@ -430,7 +429,9 @@ export function registerIpcHandlers() {
   // The builder acknowledged an instance that had unread alerts (markRead in
   // useNotifications.ts): it stops being Finished on the phone too.
   ipcMain.on("instance-acknowledged", (_event, id: unknown) => {
-    if (typeof id === "string") acknowledgeInstance(id);
+    if (typeof id !== "string") return;
+    acknowledgeInstance(id);
+    processManager.noteRead(id);
   });
 
   ipcMain.on("pty-input", (_event, id: string, data: string) => {
@@ -672,14 +673,9 @@ export function registerIpcHandlers() {
 
   ipcMain.handle("secretary:get-settings", () => withClaude(loadSecretarySettings()));
 
-  // Saved first: if the save throws, the call rejects and the secretary keeps
-  // the mode it had. Turning it on prepares the live events; off drops them all.
-  // Saved as asked even without `claude`: the secretary stays off until it is found.
-  ipcMain.handle("secretary:set-mode", (_event, enabled: boolean) => {
-    const next = setSecretaryMode(enabled === true);
-    secretary.setMode(next.secretaryMode);
-    return withClaude(next);
-  });
+  // As a phone's switch does it (switchMode): saved first, so if the save throws the
+  // call rejects and the secretary keeps the mode it had.
+  ipcMain.handle("secretary:set-mode", (_event, enabled: boolean) => withClaude(switchMode(enabled === true)));
 
   // Live updates arrive on "secretary-brief"; this is for a renderer that just
   // mounted or reloaded.
@@ -702,6 +698,18 @@ export function registerIpcHandlers() {
         ? secretary.reply(instanceId, seq, text)
         : undefined
   );
+
+  // The secretary bar read a Finished brief ("Got it", or played to the end; epic
+  // secretary-bar, Story 4). Only while `seq` is still the instance's brief: main
+  // may have replaced it before this arrived, and the newer one wasn't read. Then
+  // the phone stops showing Finished too. True when it was marked; the renderer
+  // clears its red dot only then.
+  ipcMain.handle("secretary:seen", (_event, instanceId: unknown, seq: unknown) => {
+    if (typeof instanceId !== "string" || typeof seq !== "number") return false;
+    if (!secretary.markSeenAt(instanceId, seq)) return false;
+    acknowledgeInstance(instanceId);
+    return true;
+  });
 
   ipcMain.handle(
     "secretary:set-server",

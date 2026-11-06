@@ -9,16 +9,13 @@ import {
   showReplyOnFinish,
 } from "./components/TerminalView";
 import { ComposeBox } from "./components/ComposeBox";
-import { SecretaryCard } from "./components/SecretaryCard";
+import { SecretaryBar } from "./components/SecretaryBar";
 import {
   applyBriefUpdate,
-  cardOnArrival,
-  cardOnSelect,
-  cardToReopen,
+  isReadableBrief,
   mergeBriefSnapshot,
-  openCardBrief,
 } from "./components/secretaryBrief";
-import type { BriefMap, OpenCard } from "./components/secretaryBrief";
+import type { BriefMap } from "./components/secretaryBrief";
 import { DiffWindow } from "./components/DiffWindow";
 import { DropMessage } from "./components/DropMessage";
 import { DropOverlay } from "./components/DropOverlay";
@@ -107,12 +104,10 @@ export function App() {
     nonce: number;
   } | null>(null);
 
-  // Voice secretary (epic voice-secretary). The mode and every live brief as main
-  // pushes them, and the card open over the terminal, if any. See secretaryBrief.ts
-  // for when a card opens and closes.
+  // Voice secretary (epics voice-secretary, secretary-bar). The mode and every live
+  // brief as main pushes them; the bar at the top shows them one at a time.
   const [secretaryMode, setSecretaryMode] = useState(false);
   const [briefs, setBriefs] = useState<BriefMap>({});
-  const [card, setCard] = useState<OpenCard | null>(null);
   // File drop (epic file-drop). What the last few drops came to, for the message at
   // the bottom of the window: the copy running, its outcomes, or why nothing was
   // copied.
@@ -132,7 +127,7 @@ export function App() {
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
 
-  const { notify, markRead, readOnPhone } = useNotifications();
+  const { notify, markRead, readFromBar, readOnPhone } = useNotifications();
   // Per-instance timestamp of the last audible alert, for the
   // burst-collapse cooldown. Only real alerts record here, so a
   // suppressed-while-watching event doesn't eat cooldown. Lifted out of the
@@ -202,19 +197,15 @@ export function App() {
 
   // Subscribed before the initial values are fetched, so a push in between isn't
   // lost; for an instance a push has already touched, the push wins over the
-  // snapshot. A new event on the shown instance opens its card here (T-526).
+  // snapshot. Nothing plays on arrival: only the bar's Play does (secretary-bar
+  // Story 3).
   useEffect(() => {
     let live = true;
     let modePushed = false;
     const touched = new Set<string>();
-    // The last seq seen per instance, so only a new event's first push opens a card.
-    const seenSeq = new Map<string, number>();
     const offBrief = window.electronAPI.onSecretaryBrief((id, state) => {
       touched.add(id);
       setBriefs((prev) => applyBriefUpdate(prev, id, state));
-      const opened = cardOnArrival(id, state, selectedIdRef.current, seenSeq.get(id));
-      if (state) seenSeq.set(id, state.seq);
-      if (opened) setCard(opened);
     });
     const offMode = window.electronAPI.onSecretaryMode((enabled) => {
       modePushed = true;
@@ -225,11 +216,7 @@ export function App() {
       if (live && !modePushed) setSecretaryMode(settings.secretaryMode && settings.claudeFound);
     });
     void window.electronAPI.getSecretaryBriefs().then((snapshot) => {
-      if (!live) return;
-      for (const [id, state] of Object.entries(snapshot)) {
-        if (!seenSeq.has(id)) seenSeq.set(id, state.seq);
-      }
-      setBriefs((prev) => mergeBriefSnapshot(prev, snapshot, touched));
+      if (live) setBriefs((prev) => mergeBriefSnapshot(prev, snapshot, touched));
     });
     return () => {
       live = false;
@@ -237,17 +224,6 @@ export function App() {
       offMode();
     };
   }, []);
-
-  // The card belongs to one brief of the shown contact. Switching contacts, the
-  // mode going off, or the brief replaced by a newer event's or dropped: each
-  // closes it, and closing it stops its audio. Once closed, the header's Secretary
-  // button brings the shown contact's latest brief back.
-  const secretaryView = { modeOn: secretaryMode, selectedId, briefs };
-  const cardBrief = openCardBrief(card, secretaryView);
-  const reopenCard = cardToReopen(card, secretaryView);
-  useEffect(() => {
-    if (card && !cardBrief) setCard(null);
-  }, [card, cardBrief]);
 
   // Listen for unread updates
   useEffect(() => {
@@ -472,22 +448,49 @@ export function App() {
     setFoldedPane((p) => (p === "content" ? null : p));
   }, []);
 
-  // Selecting a contact acknowledges that contact, never the one being left. With
-  // Secretary Mode on, a contact that showed a red dot at the moment of the click
-  // and has a live brief also opens its card, which plays the brief. Read from
-  // refs, as rendered, before markRead clears the dot.
-  const secretaryRef = useRef({ modeOn: secretaryMode, unreadCounts, briefs });
-  secretaryRef.current = { modeOn: secretaryMode, unreadCounts, briefs };
+  // Selecting a contact acknowledges that contact, never the one being left. It
+  // plays nothing, red dot or not: briefs play from the secretary bar's Play.
   const handleSelect = useCallback(
     (id: string) => {
-      const { modeOn, unreadCounts: unread, briefs: live } = secretaryRef.current;
-      const opened = cardOnSelect(id, modeOn, unread, live);
       setSelectedId(id);
       stopMessageSound(id);
       markRead(id);
-      if (opened) setCard(opened);
     },
     [markRead]
+  );
+
+  // The bar's title: show that session, as a click on its contact does. The bar's
+  // buttons leave focus where it was, which may be the hidden terminal of the session
+  // being left, so the shown one takes it once React has drawn it.
+  const handleOpenFromBar = useCallback(
+    (id: string) => {
+      handleSelect(id);
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      requestAnimationFrame(() => getTerminal(id)?.focus());
+    },
+    [handleSelect]
+  );
+
+  // The bar's "Got it", or a Finished brief played to the end on it (secretary-bar
+  // Story 4): main marks that brief seen, red dot or not, and tells the phone; then
+  // its session is read here as a click on it would read it. Only for the brief
+  // read, by its seq: main or this window may have a newer one for the session by
+  // then, and that one wasn't read.
+  const briefsRef = useRef(briefs);
+  briefsRef.current = briefs;
+  const handleBriefRead = useCallback(
+    (id: string, seq: number) => {
+      if (!isReadableBrief(briefsRef.current, id, seq)) return;
+      void window.electronAPI
+        .secretarySeen(id, seq)
+        .then((read) => {
+          if (!read || !isReadableBrief(briefsRef.current, id, seq)) return;
+          stopMessageSound(id);
+          readFromBar(id);
+        })
+        .catch(() => {});
+    },
+    [readFromBar]
   );
 
   const handleNewInstance = useCallback(
@@ -863,10 +866,10 @@ export function App() {
   const folded = selectedInstance ? foldedPane : null;
 
   // Folding or unfolding a pane resizes the others, and terminals only refit
-  // when told to.
+  // when told to. So does the secretary bar coming or going with the mode.
   useEffect(() => {
     window.dispatchEvent(new Event("layout-resize"));
-  }, [sidebarFolded, folded]);
+  }, [sidebarFolded, folded, secretaryMode]);
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme }}>
@@ -877,305 +880,293 @@ export function App() {
     >
       <VersionBadge dev={isDev} />
       <ThemeToggle />
-      <ContactList
-        instances={instances}
-        selectedId={selectedId}
-        unreadCounts={unreadCounts}
-        onSelect={handleSelect}
-        onNew={() => setDialogOpen(true)}
-        onMove={handleMove}
-        onStart={handleStart}
-        onRestart={handleRestart}
-        onRemove={handleRemove}
-        onDuplicate={handleDuplicate}
-        onRename={handleRename}
-        folded={sidebarFolded}
-        onToggleFolded={() => setSidebarFolded((f) => !f)}
-      />
-      {/* Hidden rather than unmounted: its terminals keep their scrollback. */}
-      <main className="content" hidden={folded === "content"}>
-        {selectedInstance && (
-          <div className="content-header">
-            <span className="content-header-name">
-              {selectedInstance.name || ""}
-            </span>
-            <span
-              className="content-header-backend"
-              data-backend={selectedInstance.backend}
-            >
-              {selectedInstance.backend === "opencode"
-                ? "OpenCode"
-                : "Claude Code"}
-            </span>
-            {reopenCard ? (
-              <button
-                type="button"
-                className="content-header-brief"
-                // Keeps focus in the terminal, like the card's own buttons.
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setCard(reopenCard)}
-                title="Show the secretary's latest brief for this session"
+      {secretaryMode ? (
+        <SecretaryBar
+          briefs={briefs}
+          instances={instances}
+          onOpenSession={handleOpenFromBar}
+          onRead={handleBriefRead}
+        />
+      ) : null}
+      <div className="app-body">
+        <ContactList
+          instances={instances}
+          selectedId={selectedId}
+          unreadCounts={unreadCounts}
+          onSelect={handleSelect}
+          onNew={() => setDialogOpen(true)}
+          onMove={handleMove}
+          onStart={handleStart}
+          onRestart={handleRestart}
+          onRemove={handleRemove}
+          onDuplicate={handleDuplicate}
+          onRename={handleRename}
+          folded={sidebarFolded}
+          onToggleFolded={() => setSidebarFolded((f) => !f)}
+        />
+        {/* Hidden rather than unmounted: its terminals keep their scrollback. */}
+        <main className="content" hidden={folded === "content"}>
+          {selectedInstance && (
+            <div className="content-header">
+              <span className="content-header-name">
+                {selectedInstance.name || ""}
+              </span>
+              <span
+                className="content-header-backend"
+                data-backend={selectedInstance.backend}
               >
-                Secretary
-              </button>
-            ) : null}
-            <span className="content-header-status">
-              {selectedInstance.status === "running" ? "Online" : "Offline"}
-            </span>
-          </div>
-        )}
-        {selectedInstance?.status === "running" && selectedInstance.alertsDegraded && (
-          // PRD Story 6: say so rather than go quiet. No fallback guesses at the
-          // state instead; see docs/specs/attention-alerts/prd.md. OpenCode has two
-          // ways to fail (opencode-v2 Story 9). Keyed on the backend first: a reason
-          // left out arrives as "hooks", which is never OpenCode's.
-          selectedInstance.backend === "opencode" ? (
-            selectedInstance.alertsDegradedReason === "service" ? (
-              <div
-                className="alerts-degraded-bar"
-                title={
-                  "OpenCode 2 runs sessions in one background service shared by every " +
-                  "opencode, and Multi-Code listens to it to hear when a session finishes or " +
-                  "needs you. Likely causes: the service was stopped or is restarting, or it " +
-                  "was started with a different setup. This bar goes away by itself once " +
-                  "Multi-Code reaches it again."
-                }
-              >
-                Multi-Code can&apos;t reach OpenCode&apos;s background service, so it can&apos;t
-                tell you when this session finishes or needs you. Check on it yourself.
-              </div>
+                {selectedInstance.backend === "opencode"
+                  ? "OpenCode"
+                  : "Claude Code"}
+              </span>
+              <span className="content-header-status">
+                {selectedInstance.status === "running" ? "Online" : "Offline"}
+              </span>
+            </div>
+          )}
+          {selectedInstance?.status === "running" && selectedInstance.alertsDegraded && (
+            // PRD Story 6: say so rather than go quiet. No fallback guesses at the
+            // state instead; see docs/specs/attention-alerts/prd.md. OpenCode has two
+            // ways to fail (opencode-v2 Story 9). Keyed on the backend first: a reason
+            // left out arrives as "hooks", which is never OpenCode's.
+            selectedInstance.backend === "opencode" ? (
+              selectedInstance.alertsDegradedReason === "service" ? (
+                <div
+                  className="alerts-degraded-bar"
+                  title={
+                    "OpenCode 2 runs sessions in one background service shared by every " +
+                    "opencode, and Multi-Code listens to it to hear when a session finishes or " +
+                    "needs you. Likely causes: the service was stopped or is restarting, or it " +
+                    "was started with a different setup. This bar goes away by itself once " +
+                    "Multi-Code reaches it again."
+                  }
+                >
+                  Multi-Code can&apos;t reach OpenCode&apos;s background service, so it can&apos;t
+                  tell you when this session finishes or needs you. Check on it yourself.
+                </div>
+              ) : (
+                <div
+                  className="alerts-degraded-bar"
+                  title={
+                    "Multi-Code loads a report-only plugin into the opencode terminals it starts, " +
+                    "and that plugin tells it which session the terminal shows. This one never " +
+                    "reported. Likely causes: an OPENCODE_CLI_CONFIG_CONTENT in Multi-Code's " +
+                    "environment, or a cli.json Multi-Code couldn't read."
+                  }
+                >
+                  Multi-Code&apos;s terminal plugin didn&apos;t load in this OpenCode, so Multi-Code
+                  can&apos;t follow which session it shows. Check on it yourself.
+                </div>
+              )
             ) : (
               <div
                 className="alerts-degraded-bar"
                 title={
-                  "Multi-Code loads a report-only plugin into the opencode terminals it starts, " +
-                  "and that plugin tells it which session the terminal shows. This one never " +
-                  "reported. Likely causes: an OPENCODE_CLI_CONFIG_CONTENT in Multi-Code's " +
-                  "environment, or a cli.json Multi-Code couldn't read."
+                  "Multi-Code hears when a session finishes or needs you through hooks it passes " +
+                  "to claude at launch, and none have arrived from this one. Likely causes: " +
+                  '"disableAllHooks": true in your Claude settings, or a managed policy that ' +
+                  "allows only managed hooks."
                 }
               >
-                Multi-Code&apos;s terminal plugin didn&apos;t load in this OpenCode, so Multi-Code
-                can&apos;t follow which session it shows. Check on it yourself.
+                Hooks aren&apos;t running in this session, so Multi-Code can&apos;t tell you when it
+                finishes or needs you. Check on it yourself.
               </div>
             )
-          ) : (
-            <div
-              className="alerts-degraded-bar"
-              title={
-                "Multi-Code hears when a session finishes or needs you through hooks it passes " +
-                "to claude at launch, and none have arrived from this one. Likely causes: " +
-                '"disableAllHooks": true in your Claude settings, or a managed policy that ' +
-                "allows only managed hooks."
-              }
-            >
-              Hooks aren&apos;t running in this session, so Multi-Code can&apos;t tell you when it
-              finishes or needs you. Check on it yourself.
-            </div>
-          )
-        )}
-        <div className="content-terminal">
-          {instances.filter((i) => i.status === "running").length > 0 ? (
-            instances
-              .filter((i) => i.status === "running")
-              .map((inst) => (
-                <TerminalView
-                  key={inst.id}
-                  instanceId={inst.id}
-                  active={inst.id === selectedId}
-                />
-              ))
-          ) : (
-            <div className="content-placeholder">
-              Click &quot;+ New&quot; to create a Claude Code instance
-            </div>
           )}
-          {(() => {
-            if (!selectedInstance) return null;
-            if (selectedInstance.status === "stopped") {
-              return (
-                <div className="content-offline-overlay">
-                  <div className="content-offline-text">Offline</div>
-                  {selectedInstance.startError ? (
-                    // Why the last start launched nothing (OpenCode 1.x), with the
-                    // fix in it. Selectable, so the upgrade command can be copied.
-                    <div className="content-offline-error">
-                      {selectedInstance.startError}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            }
-            if (
-              selectedInstance.status === "running" &&
-              !hasOutput.has(selectedInstance.id)
-            ) {
-              const label =
-                selectedInstance.backend === "opencode"
-                  ? "OpenCode"
-                  : "Claude Code";
-              return (
-                <div className="content-starting-overlay">
-                  <div className="content-spinner" />
-                  <div className="content-starting-text">
-                    Starting {label}…
+          <div className="content-terminal">
+            {instances.filter((i) => i.status === "running").length > 0 ? (
+              instances
+                .filter((i) => i.status === "running")
+                .map((inst) => (
+                  <TerminalView
+                    key={inst.id}
+                    instanceId={inst.id}
+                    active={inst.id === selectedId}
+                  />
+                ))
+            ) : (
+              <div className="content-placeholder">
+                Click &quot;+ New&quot; to create a Claude Code instance
+              </div>
+            )}
+            {(() => {
+              if (!selectedInstance) return null;
+              if (selectedInstance.status === "stopped") {
+                return (
+                  <div className="content-offline-overlay">
+                    <div className="content-offline-text">Offline</div>
+                    {selectedInstance.startError ? (
+                      // Why the last start launched nothing (OpenCode 1.x), with the
+                      // fix in it. Selectable, so the upgrade command can be copied.
+                      <div className="content-offline-error">
+                        {selectedInstance.startError}
+                      </div>
+                    ) : null}
                   </div>
-                </div>
-              );
-            }
-            return null;
-          })()}
-          {selectedInstance && card && cardBrief ? (
-            <SecretaryCard
-              key={`${card.instanceId}#${card.seq}`}
-              instanceId={card.instanceId}
-              name={selectedInstance.name}
-              brief={cardBrief}
-              autoplay={card.play}
-              onClose={() => setCard(null)}
-            />
-          ) : null}
-          {(() => {
-            if (
-              !composeOpen ||
-              !selectedInstance ||
-              selectedInstance.status !== "running"
-            ) {
+                );
+              }
+              if (
+                selectedInstance.status === "running" &&
+                !hasOutput.has(selectedInstance.id)
+              ) {
+                const label =
+                  selectedInstance.backend === "opencode"
+                    ? "OpenCode"
+                    : "Claude Code";
+                return (
+                  <div className="content-starting-overlay">
+                    <div className="content-spinner" />
+                    <div className="content-starting-text">
+                      Starting {label}…
+                    </div>
+                  </div>
+                );
+              }
               return null;
-            }
-            return (
-              <ComposeBox
-                key={selectedInstance.id}
-                instanceId={selectedInstance.id}
-                onClose={closeCompose}
-                seed={composeSeed}
-              />
-            );
-          })()}
-        </div>
-      </main>
-      {folded === "content" && (
-        <button
-          type="button"
-          className="fold-strip"
-          onClick={() => setFoldedPane(null)}
-          title="Show the terminal"
-          aria-label="Show the terminal"
-        >
-          ›
-        </button>
-      )}
+            })()}
+            {(() => {
+              if (
+                !composeOpen ||
+                !selectedInstance ||
+                selectedInstance.status !== "running"
+              ) {
+                return null;
+              }
+              return (
+                <ComposeBox
+                  key={selectedInstance.id}
+                  instanceId={selectedInstance.id}
+                  onClose={closeCompose}
+                  seed={composeSeed}
+                />
+              );
+            })()}
+          </div>
+        </main>
+        {folded === "content" && (
+          <button
+            type="button"
+            className="fold-strip"
+            onClick={() => setFoldedPane(null)}
+            title="Show the terminal"
+            aria-label="Show the terminal"
+          >
+            ›
+          </button>
+        )}
 
-      {(() => {
-        if (!selectedInstance) return null;
-        const isOffline = selectedInstance.status === "stopped";
-        return (
-          <>
-            {folded === null && (
-              <div
-                className="resizer"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  const startX = e.clientX;
-                  const startWidth = toolboxWidth;
-                  let raf = 0;
-                  const dispatchLayoutResize = () => {
-                    if (raf) return;
-                    raf = requestAnimationFrame(() => {
-                      raf = 0;
+        {(() => {
+          if (!selectedInstance) return null;
+          const isOffline = selectedInstance.status === "stopped";
+          return (
+            <>
+              {folded === null && (
+                <div
+                  className="resizer"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    const startX = e.clientX;
+                    const startWidth = toolboxWidth;
+                    let raf = 0;
+                    const dispatchLayoutResize = () => {
+                      if (raf) return;
+                      raf = requestAnimationFrame(() => {
+                        raf = 0;
+                        window.dispatchEvent(new Event("layout-resize"));
+                      });
+                    };
+                    // The sidebar is narrower when folded, which leaves the toolbox
+                    // more room to grow into.
+                    const sidebarWidth =
+                      document.querySelector(".sidebar")?.getBoundingClientRect()
+                        .width ?? 0;
+                    const onMove = (ev: MouseEvent) => {
+                      const delta = startX - ev.clientX;
+                      const next = Math.max(
+                        280,
+                        Math.min(
+                          window.innerWidth - 280 - sidebarWidth,
+                          startWidth + delta
+                        )
+                      );
+                      setToolboxWidth(next);
+                      dispatchLayoutResize();
+                    };
+                    const onUp = () => {
+                      document.removeEventListener("mousemove", onMove);
+                      document.removeEventListener("mouseup", onUp);
+                      document.body.style.cursor = "";
+                      document.body.style.userSelect = "";
+                      if (raf) cancelAnimationFrame(raf);
+                      // Final fit after resize finishes
                       window.dispatchEvent(new Event("layout-resize"));
-                    });
-                  };
-                  // The sidebar is narrower when folded, which leaves the toolbox
-                  // more room to grow into.
-                  const sidebarWidth =
-                    document.querySelector(".sidebar")?.getBoundingClientRect()
-                      .width ?? 0;
-                  const onMove = (ev: MouseEvent) => {
-                    const delta = startX - ev.clientX;
-                    const next = Math.max(
-                      280,
-                      Math.min(
-                        window.innerWidth - 280 - sidebarWidth,
-                        startWidth + delta
-                      )
-                    );
-                    setToolboxWidth(next);
-                    dispatchLayoutResize();
-                  };
-                  const onUp = () => {
-                    document.removeEventListener("mousemove", onMove);
-                    document.removeEventListener("mouseup", onUp);
-                    document.body.style.cursor = "";
-                    document.body.style.userSelect = "";
-                    if (raf) cancelAnimationFrame(raf);
-                    // Final fit after resize finishes
-                    window.dispatchEvent(new Event("layout-resize"));
-                  };
-                  document.addEventListener("mousemove", onMove);
-                  document.addEventListener("mouseup", onUp);
-                  document.body.style.cursor = "col-resize";
-                  document.body.style.userSelect = "none";
-                }}
-              >
-                {/* Each tab sits on the edge of the pane it folds and points the
-                    way that pane goes. */}
+                    };
+                    document.addEventListener("mousemove", onMove);
+                    document.addEventListener("mouseup", onUp);
+                    document.body.style.cursor = "col-resize";
+                    document.body.style.userSelect = "none";
+                  }}
+                >
+                  {/* Each tab sits on the edge of the pane it folds and points the
+                      way that pane goes. */}
+                  <button
+                    type="button"
+                    className="fold-tab"
+                    data-edge="content"
+                    // Not the start of a drag.
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={() => setFoldedPane("content")}
+                    title="Hide the terminal, the toolbox takes its room"
+                    aria-label="Hide the terminal"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    className="fold-tab"
+                    data-edge="toolbox"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={() => setFoldedPane("toolbox")}
+                    title="Hide the toolbox"
+                    aria-label="Hide the toolbox"
+                  >
+                    ›
+                  </button>
+                </div>
+              )}
+              {folded === "toolbox" && (
                 <button
                   type="button"
-                  className="fold-tab"
-                  data-edge="content"
-                  // Not the start of a drag.
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={() => setFoldedPane("content")}
-                  title="Hide the terminal, the toolbox takes its room"
-                  aria-label="Hide the terminal"
+                  className="fold-strip"
+                  data-pane="toolbox"
+                  onClick={() => setFoldedPane(null)}
+                  title="Show the toolbox"
+                  aria-label="Show the toolbox"
                 >
                   ‹
                 </button>
-                <button
-                  type="button"
-                  className="fold-tab"
-                  data-edge="toolbox"
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={() => setFoldedPane("toolbox")}
-                  title="Hide the toolbox"
-                  aria-label="Hide the toolbox"
-                >
-                  ›
-                </button>
-              </div>
-            )}
-            {folded === "toolbox" && (
-              <button
-                type="button"
-                className="fold-strip"
-                data-pane="toolbox"
-                onClick={() => setFoldedPane(null)}
-                title="Show the toolbox"
-                aria-label="Show the toolbox"
-              >
-                ‹
-              </button>
-            )}
-            <Toolbox
-              instance={selectedInstance}
-              expandedSection={
-                isOffline
-                  ? ""
-                  : (expandedByInstance.get(selectedInstance.id) ??
-                    DEFAULT_EXPANDED_SECTION)
-              }
-              onExpandSection={isOffline ? () => {} : handleExpandSection}
-              openPath={openPathByInstance.get(selectedInstance.id) ?? ""}
-              onOpenPath={isOffline ? () => {} : handleOpenPath}
-              onPreviewInView={isOffline ? () => {} : handlePreviewInView}
-              onViewDiff={handleViewDiff}
-              // With the terminal folded, the toolbox fills the window.
-              width={folded === "content" ? null : toolboxWidth}
-              hidden={folded === "toolbox"}
-            />
-          </>
-        );
-      })()}
+              )}
+              <Toolbox
+                instance={selectedInstance}
+                expandedSection={
+                  isOffline
+                    ? ""
+                    : (expandedByInstance.get(selectedInstance.id) ??
+                      DEFAULT_EXPANDED_SECTION)
+                }
+                onExpandSection={isOffline ? () => {} : handleExpandSection}
+                openPath={openPathByInstance.get(selectedInstance.id) ?? ""}
+                onOpenPath={isOffline ? () => {} : handleOpenPath}
+                onPreviewInView={isOffline ? () => {} : handlePreviewInView}
+                onViewDiff={handleViewDiff}
+                // With the terminal folded, the toolbox fills the window.
+                width={folded === "content" ? null : toolboxWidth}
+                hidden={folded === "toolbox"}
+              />
+            </>
+          );
+        })()}
+      </div>
 
       <NewInstanceDialog
         open={dialogOpen}

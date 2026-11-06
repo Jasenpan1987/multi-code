@@ -1,8 +1,8 @@
 # PRD: Voice Secretary
 
-**Version:** 2.1
-**Last Updated:** 2026-11-04
-**Status:** approved
+**Version:** 2.2
+**Last Updated:** 2026-11-06
+**Status:** approved; where the brief is shown and when it plays is now `docs/specs/secretary-bar/prd.md`
 **Owner:** Jasen
 
 ## Overview
@@ -277,3 +277,4 @@ and 20 s limits, nothing on disk) were confirmed by the builder on 2026-10-07.
 | 1.9 | 2026-10-10 | The secretary was hard to follow. Briefs and card answers take the speech-friendly parts of the STE80 output style: each term explained the first time, a Finished brief's order (result, before and now, why it matters, what to do), its looser sentence limits, and no fact dropped to be short (Stories 4 and 6). Builder's request; measured in the brief-writer spike record's T-532 addendum |
 | 2.0 | 2026-11-04 | The brief writer names no model: `claude -p` runs on the builder's own default model and login, so any account works. The pinned `global.anthropic.claude-sonnet-5-5` exists only on Bedrock, and the app is about to be released publicly, where it would fail for everyone logged in another way. No setting, alias or provider check. Supersedes v1.1's choice (G-002). Builder's decision; on the builder's Mac the secretary now runs on Opus 5.5, their default, which they accepted |
 | 2.1 | 2026-11-04 | Without the Claude Code CLI the secretary is off: no brief is written and no reply is read, the Secretary Mode switch shows OFF and can't be pressed, and the Secretary section says the CLI is needed, even for OpenCode sessions. The saved mode is kept, so installing it brings the secretary back without a restart. No `opencode run` fallback: it leaves the brief's transcript in the builder's OpenCode database even after the session is deleted (`docs/timeline/2026-11-04_secretary-opencode-run-spike.md`). Builder's decision (`docs/knowledge/decisions.md`, 2026-11-04) |
+| 2.2 | 2026-11-06 | Superseded in part by `docs/specs/secretary-bar/prd.md`: one secretary bar at the top of the app (desktop and phone) replaces the per-session card, the header's Secretary button and the red-dot click; nothing plays without a click, so Story 3's "the session on screen speaks by itself" goes. Stories 2, 4, 6, 7 and 8 stand, with "the card" read as the bar |

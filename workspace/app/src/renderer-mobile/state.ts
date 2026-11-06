@@ -9,10 +9,13 @@
 
 import type {
   PromptStateFrame,
+  RemoteBrief,
   RemoteInstance,
   ServerFrame,
   TranscriptEntry,
 } from "../shared/remote-protocol";
+import type { BriefRef } from "../shared/secretaryQueue";
+import { settleBar } from "./bar";
 import {
   applyAck,
   cancel,
@@ -74,6 +77,42 @@ export interface Session {
   refreshedAt: number | null;
 }
 
+// The secretary as the Mac last said (SecretaryFrame), its audio paths aside when it
+// comes from the cache.
+export interface SecretaryView {
+  on: boolean;
+  claudeFound: boolean;
+  briefs: Record<string, RemoteBrief>;
+}
+
+// The secretary bar (epic secretary-bar): the brief it shows, which this phone moves
+// through on its own (bar.ts keeps it to the shared queue's rules), and whether its
+// panel is open.
+export interface Bar {
+  shown: BriefRef | null;
+  open: boolean;
+}
+
+// A brief's reply box (bar.ts `refKey`): what is typed in it, and the reply last sent
+// from it, kept here rather than in the box so that folding the panel or changing
+// screens loses neither (epic secretary-bar, Story 7). `sentText` is what the box
+// held when it was sent: its ack empties the box only while it still holds that.
+export interface ReplyDraft {
+  text: string;
+  // Its outbox item says how it went, until another is sent from the box.
+  sentId: string | null;
+  sentText: string | null;
+}
+
+export const EMPTY_REPLY: ReplyDraft = Object.freeze({ text: "", sentId: null, sentText: null }) as ReplyDraft;
+
+// The one brief this phone plays (player.ts): starting, playing, or why it couldn't.
+export interface Player {
+  ref: BriefRef | null;
+  status: "idle" | "loading" | "playing" | "error";
+  error?: string;
+}
+
 export interface AppState {
   pairing: StoredPairing | null;
   connection: Connection;
@@ -91,6 +130,19 @@ export interface AppState {
   // By instance id: the transcript entries that delivered one of its outbox prompts
   // (outbox.ts `settleDelivered`), so none delivers another. Kept with the outbox.
   delivered: Record<string, readonly string[]>;
+  // Null until the Mac says (one from before the epic never does) or the cache has it.
+  secretary: SecretaryView | null;
+  secretaryAt: number | null;
+  // A `secretary` frame has come on this connection. Until one has, the secretary's
+  // controls wait: a cached one may be from a newer Mac than the one answering, which
+  // would never ack them. Its text still shows.
+  secretaryLive: boolean;
+  bar: Bar;
+  replies: Record<string, ReplyDraft>;
+  player: Player;
+  // The briefs that have started playing on this phone (`<id>:<seq>`), so their
+  // button says Replay. Not kept across launches.
+  played: readonly string[];
 }
 
 export type Action =
@@ -107,7 +159,14 @@ export type Action =
   | { type: "outbox-cancel"; clientMsgId: string }
   | { type: "outbox-dismiss"; clientMsgId: string }
   // Paired again with the same Mac under a new token (outbox.ts `newDevice`).
-  | { type: "outbox-new-device"; at: number };
+  | { type: "outbox-new-device"; at: number }
+  // The builder opened or folded the bar's panel, or moved it to another brief.
+  | { type: "bar"; open?: boolean; shown?: BriefRef | null }
+  // What the player is doing now.
+  | { type: "player"; player: Player }
+  // The builder typed in a brief's reply box, or sent what it holds.
+  | { type: "reply-edit"; key: string; text: string }
+  | { type: "reply-sent"; key: string; clientMsgId: string; text: string };
 
 export const EMPTY_SESSION: Session = Object.freeze({
   transcript: null,
@@ -121,13 +180,18 @@ export const EMPTY_SESSION: Session = Object.freeze({
   refreshedAt: null,
 }) as Session;
 
+export const IDLE_PLAYER: Player = Object.freeze({ ref: null, status: "idle" }) as Player;
+const FOLDED: Bar = Object.freeze({ shown: null, open: false }) as Bar;
+
 export function initialState(
   pairing: StoredPairing | null,
-  saved: Partial<Pick<AppState, "instances" | "instancesAt" | "sessions" | "outbox" | "delivered">> & {
+  saved: Partial<
+    Pick<AppState, "instances" | "instancesAt" | "sessions" | "outbox" | "delivered" | "secretary" | "secretaryAt">
+  > & {
     lastSeenAt?: number | null;
   } = {}
 ): AppState {
-  return {
+  const state: AppState = {
     pairing,
     connection: {
       state: pairing ? "connecting" : "unpaired",
@@ -141,14 +205,28 @@ export function initialState(
     openId: null,
     outbox: saved.outbox ?? [],
     delivered: saved.delivered ?? {},
+    secretary: saved.secretary ?? null,
+    secretaryAt: saved.secretaryAt ?? null,
+    secretaryLive: false,
+    bar: FOLDED,
+    replies: {},
+    player: IDLE_PLAYER,
+    played: [],
   };
+  // A cached secretary puts its brief on the bar at once.
+  return state.secretary ? settleBar({ ...state, secretary: null }, state) : state;
 }
 
 export function sessionOf(state: AppState, id: string): Session {
   return state.sessions[id] ?? EMPTY_SESSION;
 }
 
+// Every change, then the bar kept to its rules (bar.ts).
 export function reduce(state: AppState, action: Action): AppState {
+  return settleBar(state, reduceAction(state, action));
+}
+
+function reduceAction(state: AppState, action: Action): AppState {
   switch (action.type) {
     case "paired":
       return {
@@ -187,6 +265,31 @@ export function reduce(state: AppState, action: Action): AppState {
       return withOutbox(state, dismiss(state.outbox, action.clientMsgId));
     case "outbox-new-device":
       return withOutbox(state, newDevice(state.outbox, action.at));
+    case "bar":
+      return {
+        ...state,
+        bar: {
+          shown: action.shown !== undefined ? action.shown : state.bar.shown,
+          open: action.open ?? state.bar.open,
+        },
+      };
+    case "reply-edit": {
+      const draft = state.replies[action.key] ?? EMPTY_REPLY;
+      return { ...state, replies: { ...state.replies, [action.key]: { ...draft, text: action.text } } };
+    }
+    case "reply-sent": {
+      const draft = state.replies[action.key] ?? EMPTY_REPLY;
+      return {
+        ...state,
+        replies: { ...state.replies, [action.key]: { ...draft, sentId: action.clientMsgId, sentText: action.text } },
+      };
+    }
+    case "player": {
+      const { player } = action;
+      const key = player.ref && player.status === "playing" ? `${player.ref.instanceId}:${player.ref.seq}` : null;
+      const played = key && !state.played.includes(key) ? [...state.played, key] : state.played;
+      return { ...state, player, played };
+    }
   }
 }
 
@@ -202,6 +305,7 @@ function reduceLink(state: AppState, status: LinkStatus, at: number, lastSeenAt:
       ...next,
       outbox: socketLost(next.outbox, at),
       instancesAt: next.instances ? liveUntil : next.instancesAt,
+      secretaryAt: next.secretary ? liveUntil : next.secretaryAt,
       sessions: next.openId ? patch(next.sessions, next.openId, { refreshedAt: liveUntil }) : next.sessions,
     };
   }
@@ -210,13 +314,20 @@ function reduceLink(state: AppState, status: LinkStatus, at: number, lastSeenAt:
   switch (status.state) {
     case "connected":
       connection = { state: "connected", hostName: status.authOk.hostName, lastSeenAt: at };
-      next = { ...next, push: { vapidPublicKey: status.authOk.vapidPublicKey, enabled: status.authOk.pushEnabled } };
+      next = {
+        ...next,
+        push: { vapidPublicKey: status.authOk.vapidPublicKey, enabled: status.authOk.pushEnabled },
+        // A new connection: its own `secretary` frame says what this Mac has.
+        secretaryLive: false,
+      };
       break;
     case "connecting":
     case "paused":
       connection = { state: "connecting", hostName: was.hostName, lastSeenAt: lastSeenAt ?? was.lastSeenAt };
+      next = next.secretaryLive ? { ...next, secretaryLive: false } : next;
       break;
     case "offline":
+      next = next.secretaryLive ? { ...next, secretaryLive: false } : next;
       connection = {
         state: "offline",
         offline: status.reason,
@@ -226,6 +337,7 @@ function reduceLink(state: AppState, status: LinkStatus, at: number, lastSeenAt:
       };
       break;
     case "refused":
+      next = next.secretaryLive ? { ...next, secretaryLive: false } : next;
       connection = {
         state: "refused",
         refused: status.reason,
@@ -319,11 +431,36 @@ function reduceFrame(state: AppState, frame: ServerFrame, at: number): AppState 
         const shown = sessionOf(state, item.frame.instanceId).transcript;
         if (shown) next = { ...next, ...settle(next, acked, item.frame.instanceId, shown) };
       }
+      // A reply the secretary took: its box empties, unless the builder has typed in it
+      // since (Story 7).
+      if (item?.frame.type === "secretary-reply" && frame.ok) {
+        const entry = Object.entries(next.replies).find(([, d]) => d.sentId === frame.clientMsgId);
+        if (entry) {
+          const [key, draft] = entry;
+          const text = draft.text === draft.sentText ? "" : draft.text;
+          next = { ...next, replies: { ...next.replies, [key]: { ...draft, text, sentText: null } } };
+        }
+      }
       // The desktop now holds (or has dropped) this phone's push subscription.
       if (item?.frame.type === "push-subscribe" && frame.ok && next.push) {
         return { ...next, push: { ...next.push, enabled: item.frame.subscription !== null } };
       }
       return next;
+    }
+    case "secretary": {
+      // The reply boxes of briefs that went, go.
+      const replies = Object.fromEntries(
+        Object.entries(state.replies).filter(([key]) =>
+          Object.entries(frame.briefs).some(([id, brief]) => key === `${id}:${brief.seq}`)
+        )
+      );
+      return {
+        ...state,
+        secretary: { on: frame.on, claudeFound: frame.claudeFound, briefs: frame.briefs },
+        secretaryAt: at,
+        secretaryLive: true,
+        replies,
+      };
     }
     // `output` goes to the terminal sink only; `auth-ok`, `auth-failed` and `pong`
     // are the link's (transport.ts); `error` is only logged.

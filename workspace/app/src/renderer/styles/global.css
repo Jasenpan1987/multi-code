@@ -41,7 +41,7 @@
   --diff-ruler-del: #e5534b;
   --diff-ruler-view: rgba(45, 90, 138, 0.16);
   --diff-ruler-view-edge: rgba(45, 90, 138, 0.45);
-  /* Secretary card: its own accent, so the brief reads as the secretary's and
+  /* Secretary bar: its own accent, so the brief reads as the secretary's and
      not as terminal output or the compose box. */
   --secretary-accent: #6a4c9c;
   --secretary-quote-border: #c3b3e0;
@@ -235,6 +235,8 @@ body,
 
 .app-container {
   display: flex;
+  /* The secretary bar, when there is one, over the row of panes. */
+  flex-direction: column;
   height: 100%;
   border: 1px solid #7b9cc7;
   padding-top: 28px;
@@ -262,6 +264,13 @@ body,
   );
   border-bottom: 1px solid rgba(45, 90, 138, 0.3);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+/* Sidebar, terminal and toolbox, side by side. */
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
 }
 
 /* Sidebar — blue panel */
@@ -757,27 +766,6 @@ body,
   text-shadow: 0 1px 1px rgba(30, 74, 122, 0.5);
 }
 
-/* Brings back the shown session's latest secretary brief once its card is closed
-   (voice-secretary T-527). A pill like the backend badge, but a button. */
-.content-header-brief {
-  margin-right: 10px;
-  font-size: 10px;
-  font-weight: bold;
-  letter-spacing: 0.3px;
-  padding: 2px 8px;
-  border-radius: 9px;
-  color: #fff;
-  background: rgba(255, 255, 255, 0.22);
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  text-shadow: 0 1px 1px rgba(30, 74, 122, 0.5);
-  cursor: pointer;
-}
-
-.content-header-brief:hover {
-  background: rgba(255, 255, 255, 0.36);
-  border-color: rgba(255, 255, 255, 0.75);
-}
-
 .content-terminal {
   flex: 1;
   position: relative;
@@ -862,6 +850,10 @@ body,
 }
 
 /* Terminal */
+/* Sized by its insets, in content-box: xterm's FitAddon takes this element's
+   computed height as the room the rows have, and a border-box height of 100%
+   included the padding, so at some heights the last row came out up to 4px taller
+   than the pane and was cut off. */
 .terminal-container {
   position: absolute;
   top: 0;
@@ -869,6 +861,7 @@ body,
   right: 0;
   bottom: 0;
   padding: 2px;
+  box-sizing: content-box;
 }
 
 .terminal-container .xterm {
@@ -1398,103 +1391,136 @@ body,
   user-select: none;
 }
 
-/* Secretary card — the brief for a red-dot contact, over the top right of the
-   terminal area so the terminal's prompt and any dialog at the bottom stay in
-   view. Below the compose box if the two ever meet. */
-.secretary-card {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 40;
-  width: min(560px, calc(100% - 16px));
-  max-height: 45%;
+/* Secretary bar (epic secretary-bar): across the full width of the window, above the
+   sidebar and the terminal, while Secretary Mode is on. Its own accent, so its words
+   read as the secretary's and not as an agent's. Folded, its height doesn't depend
+   on which brief it shows: a head row over three lines of the brief. */
+.secretary-bar {
+  flex: none;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 6px 8px 7px 9px;
+  gap: 3px;
+  padding: 4px 10px 5px 9px;
   background: var(--compose-bg);
   color: var(--compose-fg);
-  border: 1px solid var(--compose-border);
+  border-bottom: 1px solid var(--compose-border);
   border-left: 3px solid var(--secretary-accent);
-  border-radius: 6px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
   font-size: 12px;
+  min-width: 0;
 }
 
-.secretary-card-head {
+.secretary-bar-head {
   flex: none;
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
+  height: 20px;
 }
 
-.secretary-card-badge {
-  flex: none;
-  padding: 1px 6px;
-  border-radius: 8px;
-  background: var(--secretary-accent);
-  color: #fff;
-  font-size: 10px;
-  font-weight: bold;
-  letter-spacing: 0.3px;
-}
-
-.secretary-card-name {
+.secretary-bar-title {
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 40%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
   font-weight: bold;
+  text-align: left;
 }
 
-.secretary-card-kind,
-.secretary-card-playing {
+button.secretary-bar-title {
+  cursor: pointer;
+}
+
+button.secretary-bar-title:hover .secretary-bar-name {
+  text-decoration: underline;
+}
+
+.secretary-bar-role {
+  color: var(--secretary-accent);
+}
+
+.secretary-bar-kind,
+.secretary-bar-handled {
   flex: none;
   font-size: 10px;
   white-space: nowrap;
   color: var(--secretary-muted-fg);
 }
 
-.secretary-card-kind[data-kind="needs-you"] {
+.secretary-bar-kind[data-kind="needs-you"] {
   color: var(--secretary-warn-fg);
   font-weight: bold;
 }
 
-.secretary-card-playing {
+.secretary-bar-handled {
+  padding: 0 5px;
+  border: 1px solid var(--compose-chip-border);
+  border-radius: 7px;
+}
+
+.secretary-bar-state {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--secretary-muted-fg);
+}
+
+.secretary-bar-state[data-tone="ready"],
+.secretary-bar-state[data-tone="playing"] {
   color: var(--secretary-accent);
+}
+
+.secretary-bar-state[data-tone="playing"] {
   font-weight: bold;
 }
 
-.secretary-card-spacer {
+.secretary-bar-state[data-tone="warn"] {
+  color: var(--secretary-warn-fg);
+}
+
+.secretary-bar-detail {
+  margin-left: 6px;
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.secretary-bar-detail::before {
+  content: "· ";
+}
+
+.secretary-bar-spacer {
   flex: 1;
 }
 
-.secretary-card-btn {
+.secretary-bar-queue {
   flex: none;
-  padding: 2px 7px;
-  background: var(--compose-chip-bg);
-  color: var(--compose-chip-fg);
-  border: 1px solid var(--compose-chip-border);
-  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 4px;
+}
+
+.secretary-bar-place {
+  min-width: 38px;
+  text-align: center;
   font-size: 11px;
-  white-space: nowrap;
-  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  color: var(--secretary-muted-fg);
 }
 
-.secretary-card-btn:hover:not(:disabled) {
-  border-color: var(--compose-focus-border);
-}
-
-.secretary-card-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.secretary-card-close {
-  flex: none;
-  width: 20px;
-  height: 20px;
+.secretary-bar-step {
+  width: 18px;
+  height: 18px;
   padding: 0;
   background: transparent;
   color: var(--compose-fg);
@@ -1505,42 +1531,106 @@ body,
   cursor: pointer;
 }
 
-.secretary-card-close:hover {
-  background: rgba(204, 51, 51, 0.12);
-  border-color: #c66;
-  color: #c33;
+.secretary-bar-step:hover:not(:disabled) {
+  border-color: var(--compose-chip-border);
 }
 
-.secretary-card-text {
-  min-height: 0;
-  overflow-y: auto;
-  padding: 1px 0 1px 8px;
-  border-left: 2px solid var(--secretary-quote-border);
-  line-height: 1.5;
-  white-space: pre-wrap;
+.secretary-bar-step:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.secretary-bar-btn {
+  flex: none;
+  padding: 1px 7px;
+  background: var(--compose-chip-bg);
+  color: var(--compose-chip-fg);
+  border: 1px solid var(--compose-chip-border);
+  border-radius: 3px;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.secretary-bar-btn:hover:not(:disabled) {
+  border-color: var(--compose-focus-border);
+}
+
+.secretary-bar-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Three lines of the brief, folded: the same height for any brief, so the terminal
+   isn't resized when one arrives. Paragraph breaks fold into the run of text. */
+.secretary-bar-body {
+  height: 51px;
+  overflow: hidden;
+  line-height: 17px;
   user-select: text;
 }
 
-/* The builder's replies and the secretary's answers (T-510), between the brief and
-   the reply box. Scrolls on its own so the box stays in view. */
-.secretary-card-exchanges {
-  min-height: 0;
+/* With no brief at all, one line says what the bar is for. */
+.secretary-bar[data-empty] .secretary-bar-body {
+  height: 17px;
+}
+
+.secretary-bar-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.secretary-bar-placeholder {
+  color: var(--secretary-muted-fg);
+  font-style: italic;
+}
+
+.secretary-bar-placeholder[data-tone="warn"] {
+  color: var(--secretary-warn-fg);
+  font-style: normal;
+}
+
+/* Open: the whole brief, its paragraphs, the exchanges and the reply box. The text
+   and the exchanges scroll on their own so the box stays in view. */
+.secretary-bar[data-open] .secretary-bar-body {
+  height: auto;
+  /* Never shorter than folded: opening a short brief mustn't shrink the bar. */
+  min-height: 51px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.secretary-bar[data-open] .secretary-bar-text {
+  display: block;
+  max-height: min(26vh, 220px);
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+/* The builder's replies and the secretary's answers (voice-secretary T-510). Not
+   the full width of the window, so a reply stays near its answer. */
+.secretary-bar-exchanges {
+  max-width: 760px;
+  max-height: min(20vh, 170px);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
   padding-left: 8px;
+  border-left: 2px solid var(--secretary-quote-border);
 }
 
-.secretary-card-exchange {
+.secretary-bar-exchange {
   display: flex;
   flex-direction: column;
   gap: 1px;
   line-height: 1.45;
-  user-select: text;
 }
 
-.secretary-card-reply {
+.secretary-bar-reply {
   align-self: flex-end;
   max-width: 85%;
   padding: 1px 6px;
@@ -1549,28 +1639,28 @@ body,
   white-space: pre-wrap;
 }
 
-.secretary-card-response {
+.secretary-bar-response {
   white-space: pre-wrap;
 }
 
-.secretary-card-response[data-outcome="pending"] {
+.secretary-bar-response[data-outcome="pending"] {
   color: var(--secretary-muted-fg);
   font-style: italic;
 }
 
-.secretary-card-response[data-outcome="refused"],
-.secretary-card-response[data-outcome="failed"] {
+.secretary-bar-response[data-outcome="refused"],
+.secretary-bar-response[data-outcome="failed"] {
   color: var(--secretary-warn-fg);
 }
 
-.secretary-card-replybox {
+.secretary-bar-replybox {
   flex: none;
   display: flex;
   align-items: flex-end;
   gap: 5px;
 }
 
-.secretary-card-input {
+.secretary-bar-input {
   flex: 1;
   min-width: 0;
   max-height: 72px;
@@ -1584,32 +1674,9 @@ body,
   line-height: 1.4;
 }
 
-.secretary-card-input:focus {
+.secretary-bar-input:focus {
   outline: none;
   border-color: var(--compose-focus-border);
-}
-
-.secretary-card-note {
-  flex: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  color: var(--secretary-muted-fg);
-}
-
-.secretary-card-note[data-tone="warn"] {
-  color: var(--secretary-warn-fg);
-}
-
-.secretary-card-detail {
-  margin-left: 6px;
-  font-size: 10px;
-  opacity: 0.85;
-}
-
-.secretary-card-detail::before {
-  content: "· ";
 }
 
 .dialog-warning {
@@ -2244,8 +2311,7 @@ body,
 }
 .app-container[data-backend="opencode"] .content-header-name,
 .app-container[data-backend="opencode"] .content-header-status,
-.app-container[data-backend="opencode"] .content-header-backend,
-.app-container[data-backend="opencode"] .content-header-brief {
+.app-container[data-backend="opencode"] .content-header-backend {
   text-shadow: 0 1px 2px rgba(20, 90, 45, 0.6);
 }
 

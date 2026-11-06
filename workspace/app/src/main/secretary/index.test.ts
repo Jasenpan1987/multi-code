@@ -66,6 +66,7 @@ vi.mock("../backends/claude", () => ({
 }));
 
 import { createSecretary, NO_SERVER_REASON } from "./index";
+import { createRemoteHost, type HostProcessManager } from "../remote/remote-host";
 import { TARGET_DBFS } from "./loudness";
 import type { SecretaryDeps } from "./index";
 
@@ -117,6 +118,7 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 function harness() {
   let listener: SecretaryEventListener | null = null;
+  let readListener: ((instanceId: string) => void) | null = null;
   const live: { instanceId: string; event: SecretaryEvent }[] = [];
   const writes: WriteCall[] = [];
   const speaks: SpeakCall[] = [];
@@ -143,6 +145,12 @@ function harness() {
       listener = l;
       return () => {
         listener = null;
+      };
+    }),
+    onInstanceRead: vi.fn((l: (instanceId: string) => void) => {
+      readListener = l;
+      return () => {
+        readListener = null;
       };
     }),
     liveSecretaryEvents: vi.fn(() => live),
@@ -188,6 +196,8 @@ function harness() {
     // As process-manager fires it: a new event, or null when it clears.
     fire: (instanceId: string, event: SecretaryEvent | null) => listener?.(instanceId, event),
     subscribed: () => listener !== null,
+    // As process-manager fires it when the builder reads the instance.
+    read: (instanceId: string) => readListener?.(instanceId),
     // Every secretary-brief push for the instance, in order.
     pushes: (instanceId: string) =>
       sent
@@ -230,7 +240,7 @@ describe("one event", () => {
     h.secretary.start(true);
     h.fire("a", ev(7, "needs-you"));
 
-    expect(h.pushes("a")).toEqual([{ seq: 7, kind: "needs-you", status: "preparing" }]);
+    expect(h.pushes("a")).toEqual([{ seq: 7, at: 1007, kind: "needs-you", status: "preparing" }]);
     expect(h.writes).toHaveLength(1);
     expect(h.writes[0].instanceId).toBe("a");
     expect(h.writes[0].event).toEqual(ev(7, "needs-you"));
@@ -239,6 +249,7 @@ describe("one event", () => {
     await flush();
     const ready = {
       seq: 7,
+      at: 1007,
       kind: "needs-you",
       status: "ready",
       text: "Shop 要跑一个删除脚本，问你行不行。",
@@ -259,7 +270,7 @@ describe("one event", () => {
     h.speaks[0].settle({ ok: true, wav: WAV });
     await flush();
     expect(h.pushes("a")).toEqual([
-      { seq: 7, kind: "needs-you", status: "preparing" },
+      { seq: 7, at: 1007, kind: "needs-you", status: "preparing" },
       { ...ready, audio: "pending" },
       { ...ready, audio: "ready" },
     ]);
@@ -315,6 +326,7 @@ describe("one event", () => {
 
     expect(h.pushes("a").at(-1)).toEqual({
       seq: 1,
+      at: 1001,
       kind: "finished",
       status: "ready",
       text: "Shop finished the migration.",
@@ -336,9 +348,10 @@ describe("one event", () => {
     await flush();
 
     expect(h.pushes("a")).toEqual([
-      { seq: 1, kind: "finished", status: "preparing" },
+      { seq: 1, at: 1001, kind: "finished", status: "preparing" },
       {
         seq: 1,
+        at: 1001,
         kind: "finished",
         status: "ready",
         text: "Shop 做完了。",
@@ -377,6 +390,7 @@ describe("one event", () => {
 
     expect(h.pushes("a").at(-1)).toEqual({
       seq: 3,
+      at: 1003,
       kind: "needs-you",
       status: "failed",
       reason: "the CLI exited with code 1",
@@ -393,6 +407,7 @@ describe("one event", () => {
     await flush();
     expect(h.pushes("a").at(-1)).toEqual({
       seq: 1,
+      at: 1001,
       kind: "finished",
       status: "failed",
       reason: "spawn ENOENT",
@@ -413,8 +428,8 @@ describe("a newer event", () => {
     expect(h.writes[1].event.seq).toBe(2);
     // Straight from one brief to the next: no null in between.
     expect(h.pushes("a")).toEqual([
-      { seq: 1, kind: "finished", status: "preparing" },
-      { seq: 2, kind: "needs-you", status: "preparing" },
+      { seq: 1, at: 1001, kind: "finished", status: "preparing" },
+      { seq: 2, at: 1002, kind: "needs-you", status: "preparing" },
     ]);
 
     // A writer that answers anyway is ignored.
@@ -442,7 +457,165 @@ describe("a newer event", () => {
     await flush();
     expect(h.secretary.audioFor("a", 1)).toBeNull();
     expect(h.secretary.audioFor("a", 2)).toBeNull();
-    expect(h.secretary.briefs().a).toEqual({ seq: 2, kind: "finished", status: "preparing" });
+    expect(h.secretary.briefs().a).toEqual({ seq: 2, at: 1002, kind: "finished", status: "preparing" });
+  });
+});
+
+describe("a read (epic secretary-bar)", () => {
+  it("marks a Finished brief seen, once, and keeps its other marks", async () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.writes[0].settle(brief("Shop 做完了。"));
+    await flush();
+    const before = h.pushes("a").length;
+
+    h.read("a");
+    expect(h.secretary.briefs().a).toMatchObject({ seq: 1, at: 1_001, status: "ready", seen: true });
+    expect(h.pushes("a")).toHaveLength(before + 1);
+    h.read("a");
+    h.secretary.markSeen("a");
+    expect(h.pushes("a")).toHaveLength(before + 1);
+
+    // The mark goes with the brief: a newer event's brief waits again.
+    h.fire("a", ev(2));
+    expect(h.secretary.briefs().a).toEqual({ seq: 2, at: 1_002, kind: "finished", status: "preparing" });
+  });
+
+  it("leaves a Needs you waiting: reading a session doesn't answer its dialog", () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1, "needs-you"));
+    h.read("a");
+    h.secretary.markSeen("a");
+    expect(h.secretary.briefs().a.seen).toBeUndefined();
+  });
+
+  it("marks the Finished brief a bar read names, and nothing else", async () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.writes[0].settle(brief("Shop 做完了。"));
+    await flush();
+
+    expect(h.secretary.markSeenAt("a", 0)).toBe(false);
+    expect(h.secretary.markSeenAt("b", 1)).toBe(false);
+    expect(h.secretary.briefs().a.seen).toBeUndefined();
+    expect(h.secretary.markSeenAt("a", 1)).toBe(true);
+    expect(h.secretary.briefs().a).toMatchObject({ seq: 1, status: "ready", seen: true });
+    // Read again, it still names the brief: the phone is told again, harmlessly.
+    expect(h.secretary.markSeenAt("a", 1)).toBe(true);
+
+    h.fire("a", ev(2, "needs-you"));
+    expect(h.secretary.markSeenAt("a", 2)).toBe(false);
+    expect(h.secretary.briefs().a.seen).toBeUndefined();
+  });
+
+  it("marks nothing for a Got it on a brief main replaced before the read arrived", () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    // The bar still shows seq 1 when seq 2 lands in main.
+    h.fire("a", ev(2));
+
+    expect(h.secretary.markSeenAt("a", 1)).toBe(false);
+    expect(h.secretary.briefs().a).toEqual({ seq: 2, at: 1_002, kind: "finished", status: "preparing" });
+  });
+
+  it("marks nothing for a brief that played to the end after main replaced it", async () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.writes[0].settle(brief("Shop 做完了。"));
+    await flush();
+    h.speaks[0].settle({ ok: true, wav: WAV });
+    await flush();
+    expect(h.secretary.briefs().a).toMatchObject({ seq: 1, audio: "ready" });
+    // Its audio was still playing on the desk when the next turn finished.
+    h.fire("a", ev(2));
+    h.writes[1].settle(brief("Shop 又做完了。"));
+    await flush();
+
+    expect(h.secretary.markSeenAt("a", 1)).toBe(false);
+    expect(h.secretary.briefs().a).toMatchObject({ seq: 2, status: "ready" });
+    expect(h.secretary.briefs().a.seen).toBeUndefined();
+  });
+
+  it("stops listening for reads when it stops", () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.secretary.stop();
+    expect(() => h.read("a")).not.toThrow();
+    expect(h.secretary.briefs()).toEqual({});
+  });
+});
+
+describe("the phone link's listeners (epic secretary-bar)", () => {
+  it("hear every brief and mode change the renderer does, after it, until unsubscribed", async () => {
+    const h = harness();
+    const briefs: [string, SecretaryBriefState | null][] = [];
+    const modes: boolean[] = [];
+    const offBrief = h.secretary.onBrief((id, state) => briefs.push([id, state]));
+    const offMode = h.secretary.onMode((on) => modes.push(on));
+    // One that throws doesn't keep the others from hearing.
+    h.secretary.onBrief(() => {
+      throw new Error("broken listener");
+    });
+
+    h.secretary.start(true);
+    h.fire("a", ev(3));
+    h.writes[0].settle(brief("Shop is done."));
+    await flush();
+    h.fire("a", null);
+    h.secretary.setMode(false);
+
+    expect(modes).toEqual(h.modePushes());
+    expect(modes).toEqual([true, false]);
+    expect(briefs.map(([, state]) => state)).toEqual(h.pushes("a"));
+    expect(briefs.at(-1)).toEqual(["a", null]);
+
+    offBrief();
+    offMode();
+    h.secretary.setMode(true);
+    h.fire("a", ev(4));
+    expect(modes).toEqual([true, false]);
+    expect(briefs.at(-1)).toEqual(["a", null]);
+  });
+});
+
+describe("the phone link hears claude go (epic secretary-bar)", () => {
+  it("tells phones the CLI is missing when the secretary finds it gone, whether it was on or off", () => {
+    const h = harness();
+    const pm = { onSecretaryEvent: () => () => {} } as unknown as HostProcessManager;
+    const told: unknown[] = [];
+    const push = {
+      isRunning: () => false,
+      broadcastInstances: () => {},
+      broadcastPromptState: () => {},
+      broadcastPromptCleared: () => {},
+      broadcastTranscript: () => {},
+      broadcastSecretary: () => told.push(host.secretary(false)),
+      pushSession: () => {},
+    };
+    const host = createRemoteHost(pm, push, { ...h.secretary, switchMode: (enabled) => h.secretary.setMode(enabled) });
+    h.secretary.start(true);
+    expect(host.secretary(false)).toMatchObject({ on: true, claudeFound: true });
+
+    // Gone while on: the secretary goes off, and phones are told why.
+    h.claude.found = false;
+    expect(h.secretary.checkClaude()).toBe(false);
+    expect(host.secretary(false)).toEqual({ on: false, claudeFound: false, briefs: {} });
+    expect(told.at(-1)).toEqual({ on: false, claudeFound: false, briefs: {} });
+
+    // Back and gone again with the mode saved off: nothing changes mode, phones hear it.
+    h.secretary.setMode(false);
+    h.claude.found = true;
+    h.secretary.checkClaude();
+    expect(told.at(-1)).toMatchObject({ on: false, claudeFound: true });
+    h.claude.found = false;
+    h.secretary.checkClaude();
+    expect(told.at(-1)).toMatchObject({ on: false, claudeFound: false });
+    host.dispose();
   });
 });
 
@@ -457,6 +630,7 @@ describe("a clear", () => {
     expect(write.signal.aborted).toBe(false);
     expect(h.pushes("a").at(-1)).toEqual({
       seq: 4,
+      at: 1004,
       kind: "needs-you",
       status: "preparing",
       handled: true,
@@ -468,6 +642,7 @@ describe("a clear", () => {
     await flush();
     expect(h.pushes("a").at(-1)).toEqual({
       seq: 4,
+      at: 1004,
       kind: "needs-you",
       status: "ready",
       text: "answered already",
@@ -519,7 +694,55 @@ describe("a clear", () => {
     h.fire("a", null);
     h.fire("a", ev(2));
     expect(h.writes[0].signal.aborted).toBe(true);
-    expect(h.pushes("a").at(-1)).toEqual({ seq: 2, kind: "finished", status: "preparing" });
+    expect(h.pushes("a").at(-1)).toEqual({ seq: 2, at: 1002, kind: "finished", status: "preparing" });
+  });
+});
+
+describe("the read mark across the mode (epic secretary-bar)", () => {
+  it("keeps a brief read before the mode went off seen when it comes back on", () => {
+    const h = harness();
+    h.live.push({ instanceId: "a", event: ev(1) }, { instanceId: "b", event: ev(2) });
+    h.secretary.start(true);
+    h.read("a");
+    expect(h.secretary.markSeenAt("b", 2)).toBe(true);
+
+    h.secretary.setMode(false);
+    h.secretary.setMode(true);
+
+    expect(h.secretary.briefs().a).toMatchObject({ seq: 1, status: "preparing", seen: true });
+    expect(h.secretary.briefs().b).toMatchObject({ seq: 2, status: "preparing", seen: true });
+  });
+
+  it("keeps a session read while the mode was off seen when it comes on", () => {
+    const h = harness();
+    h.live.push({ instanceId: "a", event: ev(1) }, { instanceId: "b", event: ev(2, "needs-you") });
+    h.secretary.start(false);
+    h.read("a");
+    h.read("b");
+
+    h.secretary.setMode(true);
+
+    expect(h.secretary.briefs().a.seen).toBe(true);
+    // Reading a session doesn't answer its dialog.
+    expect(h.secretary.briefs().b.seen).toBeUndefined();
+  });
+
+  it("leaves a newer event waiting, and a removed instance's mark goes with it", () => {
+    const h = harness();
+    h.live.push({ instanceId: "a", event: ev(1) }, { instanceId: "b", event: ev(3) });
+    h.secretary.start(true);
+    h.read("a");
+    h.read("b");
+    h.secretary.setMode(false);
+    h.live.splice(0, 1, { instanceId: "a", event: ev(2) });
+
+    h.secretary.setMode(true);
+    expect(h.secretary.briefs().a).toMatchObject({ seq: 2, status: "preparing" });
+    expect(h.secretary.briefs().a.seen).toBeUndefined();
+
+    h.secretary.forget("b");
+    h.fire("b", ev(3));
+    expect(h.secretary.briefs().b.seen).toBeUndefined();
   });
 });
 
@@ -549,8 +772,8 @@ describe("turning the mode on", () => {
       ["b", 6],
     ]);
     expect(h.secretary.briefs()).toEqual({
-      a: { seq: 5, kind: "finished", status: "preparing" },
-      b: { seq: 6, kind: "needs-you", status: "preparing" },
+      a: { seq: 5, at: 1005, kind: "finished", status: "preparing" },
+      b: { seq: 6, at: 1006, kind: "needs-you", status: "preparing" },
     });
   });
 

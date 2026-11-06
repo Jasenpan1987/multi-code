@@ -63,6 +63,17 @@ export function useNotifications() {
     [clear]
   );
 
+  // Read from the secretary bar: "Got it", or a Finished brief played to the end
+  // (epic secretary-bar, Story 4), once main has marked that very brief seen
+  // (`secretarySeen`), which tells the phone too. So, like readOnPhone, nothing more
+  // goes back to main.
+  const readFromBar = useCallback(
+    (instanceId: string) => {
+      clear(instanceId);
+    },
+    [clear]
+  );
+
   // Read on a paired phone (main's `instance-read-on-phone`). The phone has settled
   // its own side, so nothing goes back to main: an acknowledgement would only echo
   // the phone's read back to it.
@@ -73,5 +84,5 @@ export function useNotifications() {
     [clear]
   );
 
-  return { notify, markRead, readOnPhone, unread: unreadRef.current };
+  return { notify, markRead, readFromBar, readOnPhone, unread: unreadRef.current };
 }

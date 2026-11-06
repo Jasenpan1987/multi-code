@@ -5,6 +5,7 @@
 
 import { app, BrowserWindow } from "electron";
 import { processManager } from "../process-manager";
+import { secretary, switchMode } from "../secretary";
 import { loadSettings, saveSettings } from "../settings-store";
 import { devOverrides } from "./dev-overrides";
 import { createRemoteHost } from "./remote-host";
@@ -28,8 +29,9 @@ function emitStatus() {
 }
 
 export function initRemote() {
-  // What the phone sees and may do, from process-manager's own state.
-  host = createRemoteHost(processManager, remoteServer);
+  // What the phone sees and may do, from process-manager's own state, and the
+  // secretary's, with its switch as the toolbox has it (epic secretary-bar).
+  host = createRemoteHost(processManager, remoteServer, { ...secretary, switchMode });
   remoteServer.setHost(host);
 
   remoteServer.setStatusListener(emitStatus);

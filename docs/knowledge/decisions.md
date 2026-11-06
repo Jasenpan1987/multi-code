@@ -4,6 +4,19 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-11-06 — One secretary for the whole app, in a bar at the top
+
+**Decision:** The secretary moves out of the sessions into one bar across the top of the app, on the desktop and the phone, shown while Secretary Mode is on. It shows one brief at a time, named by its session, with its state, its text and Play. Waiting briefs form a queue, Needs you first and oldest first, moved through with ‹ ›. Nothing plays without a tap, on either side. The desktop's card over the terminal and the session header's Secretary button go. The phone gets no secretary of its own: it shows and plays the briefs the Mac already wrote, under the same Secretary Mode, which it can turn on and off. With the secretary on, a push waits for its brief's text (up to 30 s, assumed) and carries the brief's first sentence. Replies in words work from the bar on both sides, and the phone's dialog buttons stay.
+
+**Why:** The builder doesn't want to switch between projects to hear them: "整个 UI 里只有一个小助手……这样我就不用来回来去切每一个项目了". One brief per event keeps the cost where it is and keeps desk and phone saying the same thing. iOS plays the system sound only for a push and needs a tap before a page plays audio; the builder chose tap to listen.
+
+**Consequences:** Replaces "The shown session's secretary speaks on its own" (2026-10-09) and the red-dot click that played a brief (2026-10-07). A Finished brief played to the end, or dismissed with "Got it", marks its session read (assumed, G-806). Pushes arrive up to 30 s later while the secretary is on. The phone link protocol grows the briefs, their audio, the switch and replies.
+
+**Source:** builder, 2026-11-06, `docs/timeline/2026-11-06_secretary-bar-ideation.md`
+**Affects:** `docs/specs/secretary-bar/prd.md`; `renderer/App.tsx`, `renderer/components/SecretaryCard.tsx`, `secretaryBrief.ts`; the phone link (`shared/remote-protocol.ts`, `main/remote/`), the push (`remote-host.ts`, `pushEvent`), `renderer-mobile/`, `main/secretary/index.ts`
+
+---
+
 ## 2026-11-04 — The secretary needs Claude Code, with no OpenCode fallback
 
 **Decision:** The secretary always runs the `claude` CLI, for OpenCode sessions too. When Multi-Code can't find it, the secretary is off: no brief is written and no reply is read, the Secretary Mode switch shows OFF and can't be pressed, and the Secretary section says the Claude Code CLI is needed, even for OpenCode sessions. Found means what spawning `claude` would find (`backends/claude.ts`, `findClaudeCli`): the install location picked at launch, else `claude` on the spawn's PATH. It is looked for when the section reads its settings, when the window comes back to the front while it is missing, and before each brief and each reading of a reply. The saved Secretary Mode is never changed for it, so installing Claude Code brings the secretary back without a restart.

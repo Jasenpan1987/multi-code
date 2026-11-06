@@ -27,6 +27,10 @@ describe("acknowledgesShownInstance", () => {
     expect(acknowledgesShownInstance(elementInside(".dialog-overlay"))).toBe(false);
   });
 
+  it("does not count input to the secretary bar, whose brief may be another session's", () => {
+    expect(acknowledgesShownInstance(elementInside(".secretary-bar"))).toBe(false);
+  });
+
   it("counts a target with nowhere to look, such as the window", () => {
     expect(acknowledgesShownInstance(null)).toBe(true);
     expect(acknowledgesShownInstance({})).toBe(true);
