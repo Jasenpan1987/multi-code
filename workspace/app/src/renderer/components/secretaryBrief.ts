@@ -1,89 +1,16 @@
-// The secretary card's rules (epic voice-secretary, PRD Stories 3 and 7), kept out
-// of App and SecretaryCard so they are plain functions with tests.
-//
-// A card belongs to one brief: one contact and one event `seq`. While Secretary Mode
-// is on it opens three ways: on its own when a new event arrives for the contact on
-// screen (T-526); from a click on a contact that showed a red dot at that moment and
-// has a live brief; or from the header's Secretary button, which brings back the
-// shown contact's latest brief, live or handled (T-527). The first two play the
-// brief once the voice is ready; the button doesn't. So only the shown contact ever
-// speaks unasked, and two sessions never talk over each other.
-//
-// It stays open while that is still the shown contact's brief, handled or not: the
-// builder typing in the terminal keeps it. Switching contacts, the mode going off,
-// or a newer event replacing the brief close it; for the shown contact the newer
-// event opens its own card.
+// The secretary bar's view rules (epic secretary-bar, PRD Stories 1-4 and 7), kept
+// out of App and SecretaryBar so they are plain functions with tests. Which brief the
+// bar shows, and the queue, are shared/secretaryQueue.ts's, so desk and phone agree.
 
+import { isWaiting } from "../../shared/secretaryQueue";
+import type { BriefMap } from "../../shared/secretaryQueue";
 import type {
   BriefLanguage,
   SecretaryBriefState,
   SecretaryExchange,
 } from "../../shared/types";
 
-export type BriefMap = Record<string, SecretaryBriefState>;
-
-export interface OpenCard {
-  instanceId: string;
-  seq: number;
-  // Play the brief once its voice is ready.
-  play: boolean;
-}
-
-export interface SecretaryView {
-  modeOn: boolean;
-  selectedId: string | null;
-  briefs: BriefMap;
-}
-
-// The card a click on `instanceId` opens, or null. `unreadIds` must be read before
-// the click clears the contact's red dot. A red dot with no brief, or only a handled
-// one, opens nothing: the event was already dealt with, or the contact's backend
-// keeps no secretary events.
-export function cardOnSelect(
-  instanceId: string,
-  modeOn: boolean,
-  // The set of contacts with a red dot, or their unread counts.
-  unreadIds: { has(id: string): boolean },
-  briefs: BriefMap
-): OpenCard | null {
-  if (!modeOn || !unreadIds.has(instanceId)) return null;
-  const brief = briefs[instanceId];
-  return brief && !brief.handled ? { instanceId, seq: brief.seq, play: true } : null;
-}
-
-// The card a push from main opens on its own, or null: a new event's brief for the
-// contact on screen. New means a `seq` this contact hasn't had before
-// (`previousSeq`, the last one seen for it), so a later push for the same event (its
-// text, its voice, a reply on its card) never reopens a card the builder closed.
-// Main pushes briefs only while Secretary Mode is on.
-export function cardOnArrival(
-  instanceId: string,
-  state: SecretaryBriefState | null,
-  selectedId: string | null,
-  previousSeq: number | undefined
-): OpenCard | null {
-  if (instanceId !== selectedId || !state || state.seq === previousSeq) return null;
-  if (state.status !== "preparing" || state.handled) return null;
-  return { instanceId, seq: state.seq, play: true };
-}
-
-// What the header's Secretary button opens, or null when it has nothing to show:
-// the shown contact's latest brief, when no card is open over it.
-export function cardToReopen(card: OpenCard | null, view: SecretaryView): OpenCard | null {
-  if (!view.modeOn || !view.selectedId || openCardBrief(card, view)) return null;
-  const brief = view.briefs[view.selectedId];
-  return brief ? { instanceId: view.selectedId, seq: brief.seq, play: false } : null;
-}
-
-// The brief an open card shows, or null when the card should be closed.
-export function openCardBrief(
-  card: OpenCard | null,
-  view: SecretaryView
-): SecretaryBriefState | null {
-  if (!card || !view.modeOn || view.selectedId !== card.instanceId) return null;
-  const brief = view.briefs[card.instanceId];
-  return brief && brief.seq === card.seq ? brief : null;
-}
+export type { BriefMap } from "../../shared/secretaryQueue";
 
 // One push from main: a new or changed brief, or null when it was dropped.
 export function applyBriefUpdate(
@@ -119,70 +46,95 @@ export function mergeBriefSnapshot(
   return merged;
 }
 
-export type CardNoteTone = "muted" | "warn";
+// The shown brief's audio, as the bar knows it.
+export interface Playback {
+  playing: boolean;
+  // Fetching the wav after a click on Play.
+  loading: boolean;
+  // The audio element couldn't play it.
+  failed: boolean;
+  // Main had no audio for this seq any more: the brief was replaced or dropped, and
+  // its update is on the way.
+  stale: boolean;
+}
 
-export interface CardNote {
-  tone: CardNoteTone;
+export const IDLE: Playback = { playing: false, loading: false, failed: false, stale: false };
+
+// muted: on its way, or nothing to say; ready: can be played; playing; warn: something
+// failed, with main's reason.
+export type BarTone = "muted" | "ready" | "playing" | "warn";
+
+export interface BarState {
+  tone: BarTone;
   text: string;
-  // Main's reason, shown small beside the note and in full on hover.
+  // Main's reason, shown small beside the state and in full on hover.
   detail?: string;
 }
 
-export interface BriefCardView {
-  kindLabel: string;
-  // The brief, once it is written.
-  text: string | null;
-  language: BriefLanguage | null;
-  note: CardNote | null;
-  // The wav can be fetched for this brief's seq.
-  audioReady: boolean;
-  // No audio yet, but it may still come: the brief is being written, or written
-  // and with the speech server.
-  voiceComing: boolean;
-}
-
-export function briefCardView(state: SecretaryBriefState): BriefCardView {
-  const kindLabel = state.kind === "finished" ? "Finished" : "Needs you";
-  const none = { kindLabel, text: null, language: null, audioReady: false };
-  switch (state.status) {
+// The secretary's state for the brief on the bar (Story 1), or for no brief at all.
+export function barState(brief: SecretaryBriefState | null, playback: Playback): BarState {
+  if (!brief) return { tone: "muted", text: "Nothing new" };
+  switch (brief.status) {
     case "preparing":
-      return {
-        ...none,
-        note: { tone: "muted", text: "Preparing the brief…" },
-        voiceComing: true,
-      };
+      return { tone: "muted", text: "Writing the brief…" };
     case "failed":
-      return {
-        ...none,
-        note: { tone: "warn", text: "No brief could be written", detail: state.reason },
-        voiceComing: false,
-      };
-    case "ready": {
-      const written = { kindLabel, text: state.text, language: state.language };
-      if (state.audio === "ready") {
-        return { ...written, note: null, audioReady: true, voiceComing: false };
+      return { tone: "warn", text: "No brief could be written", detail: brief.reason };
+    case "ready":
+      if (playback.failed) return { tone: "warn", text: "Couldn't play the voice" };
+      if (playback.stale) return { tone: "muted", text: "This brief is out of date" };
+      if (playback.playing) return { tone: "playing", text: "Playing" };
+      if (playback.loading) return { tone: "muted", text: "Loading the voice…" };
+      if (brief.audio === "pending") return { tone: "muted", text: "Voice on its way…" };
+      if (brief.audio === "unavailable") {
+        return { tone: "warn", text: "Voice unavailable", detail: brief.voiceReason };
       }
-      if (state.audio === "pending") {
-        return {
-          ...written,
-          note: { tone: "muted", text: "Voice on its way…" },
-          audioReady: false,
-          voiceComing: true,
-        };
-      }
-      return {
-        ...written,
-        note: { tone: "warn", text: "Voice unavailable", detail: state.voiceReason },
-        audioReady: false,
-        voiceComing: false,
-      };
-    }
+      return { tone: "ready", text: "Ready" };
   }
 }
 
-// The card's reply box (T-510): on a Needs-you whose dialog the secretary can
-// answer in words, until the dialog is dealt with. Gone once it is handled, by the
-// secretary's own keys or anyone else's; the exchanges stay.
+export interface BarControls {
+  // Play is on the bar: not once the voice is known to be unavailable, or when there
+  // is no brief to speak (Story 3).
+  playShown: boolean;
+  // The wav can be fetched for this brief's seq.
+  canPlay: boolean;
+  canStop: boolean;
+  // "Got it": a Finished brief still waiting for the builder (Story 4). A Needs you
+  // leaves the queue only when its dialog is answered.
+  canDismiss: boolean;
+}
+
+export function barControls(brief: SecretaryBriefState | null, playback: Playback): BarControls {
+  const canStop = playback.playing || playback.loading;
+  if (!brief) return { playShown: false, canPlay: false, canStop, canDismiss: false };
+  const canDismiss = brief.kind === "finished" && isWaiting(brief);
+  if (brief.status === "failed") return { playShown: false, canPlay: false, canStop, canDismiss };
+  if (brief.status === "preparing") return { playShown: true, canPlay: false, canStop, canDismiss };
+  return {
+    playShown: brief.audio !== "unavailable",
+    canPlay: brief.audio === "ready" && !playback.stale,
+    canStop,
+    canDismiss,
+  };
+}
+
+// The bar's place in the queue: "2 / 3", "– / 3" while it shows a brief that no
+// longer waits (held, or the latest when nothing waits), or null with an empty
+// queue, where ‹ › have nowhere to go.
+export function queueLabel(place: { index: number; count: number }): string | null {
+  if (place.count === 0) return null;
+  return `${place.index > 0 ? place.index : "–"} / ${place.count}`;
+}
+
+// Playing to the end, like "Got it", reads a Finished brief's session (Story 4). A
+// Needs you is dealt with only by answering its dialog.
+export function readsOnEnd(brief: SecretaryBriefState | null): boolean {
+  return brief?.kind === "finished";
+}
+
+// The open bar's reply box (voice-secretary T-510): on a Needs-you whose dialog the
+// secretary can answer in words, until the dialog is dealt with. Gone once it is
+// handled, by the secretary's own keys or anyone else's; the exchanges stay.
 export interface ReplyView {
   exchanges: SecretaryExchange[];
   boxShown: boolean;
