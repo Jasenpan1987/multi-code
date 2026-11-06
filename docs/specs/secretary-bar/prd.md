@@ -188,7 +188,9 @@ brief and its audio once; desk and phone show and play what it prepared.
 
 **Acceptance Criteria:**
 - [ ] A replyable Needs-you brief on the bar has a reply box, on the desktop and the phone.
-      Dictation works in it. Only Send sends; Return makes a new line, as in the compose box.
+      Dictation works in it. On the desktop Return sends and Shift+Return makes a new line,
+      as the desktop compose box does; on the phone only Send sends and Return makes a new
+      line, as the phone's compose box does. Nothing is sent while an IME is composing.
 - [ ] The secretary reads the reply by the desktop's rules (voice-secretary Story 6): allow,
       deny, an option or "Other" with the text; a whole question box; a "no" with what to do
       instead; "don't ask again" only after a confirming bare yes; it asks back when the reply
