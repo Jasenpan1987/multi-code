@@ -3,7 +3,7 @@
 // phone screen can be built and screenshotted without the desktop. Electron runs
 // it because ws-server.ts imports electron's `app`; Electron's Node strips the
 // types, so there is no build step of its own. See README.md:
-//   pnpm harness [--scenario <name>] [--paused] [--port <n>] [--control-port <n>]
+//   pnpm harness [--scenario <name>] [--paused] [--secretary] [--port <n>] [--control-port <n>]
 
 import { app } from "electron";
 import fs from "node:fs";
@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { attach } from "./bridge.ts";
 import { startControl } from "./control.ts";
 import { isScenario, SCENARIOS } from "./scenarios.ts";
+import { HarnessSecretary } from "./secretary.ts";
 import { World } from "./world.ts";
 
 const APP_DIR = fileURLToPath(new URL("../..", import.meta.url));
@@ -45,7 +46,12 @@ const temp = path.join(real("/tmp"), "/");
 const isolated = process.argv.some((a) => a.startsWith("--user-data-dir=")) && userData.startsWith(temp);
 
 async function main() {
-  for (const file of ["main/remote/ws-server.js", "main/secretary/dialog.js", "renderer-mobile/index.html"]) {
+  for (const file of [
+    "main/remote/ws-server.js",
+    "main/secretary/dialog.js",
+    "main/secretary/phoneAudio.js",
+    "renderer-mobile/index.html",
+  ]) {
     if (!fs.existsSync(dist(file))) return fail(`dist/${file} is missing: run pnpm build:main && pnpm build:mobile`);
   }
   const scenario = option("scenario") ?? "home";
@@ -54,21 +60,25 @@ async function main() {
   const require = createRequire(import.meta.url);
   const { remoteServer } = require(dist("main/remote/ws-server.js")) as typeof import("../../src/main/remote/ws-server");
   const { checkChoice } = require(dist("main/secretary/dialog.js")) as typeof import("../../src/main/secretary/dialog");
+  const { phoneAudio } = require(dist("main/secretary/phoneAudio.js")) as typeof import("../../src/main/secretary/phoneAudio");
 
   const world = new World(scenario, !process.argv.includes("--paused"));
+  const secretary = new HarnessSecretary(world, process.argv.includes("--secretary"));
   const bridge = attach(remoteServer, world, checkChoice, {
     hostName: option("host-name") ?? "MacBook Air",
     print: (line) => console.log(`  ${line}`),
+    secretary,
+    phoneAudio,
   });
   await bridge.start(Number(option("port") ?? 0));
-  const control = await startControl(world, bridge, Number(option("control-port") ?? 0));
+  const control = await startControl(world, bridge, Number(option("control-port") ?? 0), secretary);
 
   const quit = () => void Promise.all([bridge.stop(), control.close()]).finally(() => app.exit(0));
   process.on("SIGINT", quit);
   process.on("SIGTERM", quit);
 
   console.log(`
-Multi-Code phone harness · scenario ${scenario}${world.live ? "" : " (paused)"} · userData ${userData}
+Multi-Code phone harness · scenario ${scenario}${world.live ? "" : " (paused)"}${secretary.on ? " · secretary on" : ""} · userData ${userData}
   Phone app:   ${bridge.pairingUrl()}
   Control:     ${control.url}   (curl it for the commands)
   Screenshot:  pnpm harness:shot --control ${control.url} --route '#/'

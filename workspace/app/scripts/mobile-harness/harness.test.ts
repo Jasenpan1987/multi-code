@@ -14,6 +14,7 @@ import { startControl } from "./control.ts";
 import { SCENARIOS, type ScenarioName } from "./scenarios.ts";
 import { World } from "./world.ts";
 import { attach, type Bridge } from "./bridge.ts";
+import { HarnessSecretary } from "./secretary.ts";
 import type { RemoteInstance, RemoteSessionState } from "../../src/shared/remote-protocol";
 
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), "mc-harness-test-"));
@@ -27,17 +28,20 @@ vi.mock("electron", () => ({
 
 const { RemoteServer } = await import("../../src/main/remote/ws-server");
 const { checkChoice } = await import("../../src/main/secretary/dialog");
+const { phoneAudio } = await import("../../src/main/secretary/phoneAudio");
 
 let world: World;
 let bridge: Bridge;
+let secretary: HarnessSecretary;
 let control: { url: string; close: () => Promise<void> };
 const clients: HarnessClient[] = [];
 
 beforeAll(async () => {
   world = new World("home", false);
-  bridge = attach(new RemoteServer(), world, checkChoice, { hostName: "MacBook Air" });
+  secretary = new HarnessSecretary(world, false);
+  bridge = attach(new RemoteServer(), world, checkChoice, { hostName: "MacBook Air", secretary, phoneAudio });
   await bridge.start(0);
-  control = await startControl(world, bridge, 0);
+  control = await startControl(world, bridge, 0, secretary);
 });
 
 afterEach(() => {
@@ -453,5 +457,37 @@ describe("phone dev harness", () => {
     }
     expect((await post("online")).ok).toBe(true);
     await connect();
+  });
+});
+
+describe("the secretary in the harness", () => {
+  it("briefs every session that needs the builder or finished once it is on, and plays them as the Mac would", async () => {
+    const client = await connect();
+    await scenario(client, "home");
+    expect((await post("secretary/on")).ok).toBe(true);
+    const frame = await client.next("secretary", (f) => f.on);
+    expect(Object.keys(frame.briefs).sort()).toEqual(["data-pipeline", "infra-terraform", "multi-code"]);
+    expect(frame.briefs["multi-code"]).toMatchObject({ kind: "needs-you", status: "ready", audio: "ready", replyable: true });
+    const origin = new URL(bridge.pairingUrl()).origin;
+    const wav = Buffer.from(await (await fetch(`${origin}${frame.briefs["multi-code"].audioUrl}`)).arrayBuffer());
+    expect(wav.readUInt16LE(20)).toBe(0x11);
+
+    // A reply: read for a moment, then a yes answers the dialog.
+    const seq = frame.briefs["multi-code"].seq;
+    client.send({ type: "secretary-reply", instanceId: "multi-code", seq, text: "yes", clientMsgId: id() });
+    expect(await client.next("ack")).toMatchObject({ ok: true });
+    const pressed = await client.next("secretary", (f) => f.briefs["multi-code"]?.exchanges?.[0]?.outcome === "pressed");
+    expect(pressed.briefs["multi-code"].handled).toBe(true);
+
+    // Dealt with on the phone: read.
+    const done = frame.briefs["infra-terraform"];
+    client.send({ type: "secretary-seen", instanceId: "infra-terraform", seq: done.seq });
+    await client.next("instances", hasState("infra-terraform", "idle"));
+
+    expect((await post("secretary/claude-missing")).ok).toBe(true);
+    expect(await client.next("secretary", (f) => !f.on)).toMatchObject({ claudeFound: false, briefs: {} });
+    client.send({ type: "secretary-mode", enabled: true, clientMsgId: "again" });
+    expect(await client.next("ack")).toMatchObject({ ok: false, reason: "unsupported" });
+    await post("secretary/claude-found");
   });
 });
