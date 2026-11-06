@@ -3,9 +3,10 @@
 // loaded before, so starting one stops any other. Separate from sounds.ts: the chime
 // is Web Audio and keeps its own rules (docs/specs/attention-alerts/prd.md).
 //
-// A brief is loaded under a key (instance and event seq), so a card can only stop,
-// replay or release its own brief, never one that replaced it. The wav comes from
-// main as bytes and plays from a Blob URL, revoked when the brief is unloaded.
+// A brief is loaded under a key (instance and event seq), so the secretary bar can
+// only stop, replay or release the brief it shows, never one that replaced it. The
+// wav comes from main as bytes and plays from a Blob URL, revoked when the brief is
+// unloaded.
 //
 // The element sits in the document, hidden (no `controls`), as
 // `audio.secretary-audio`, so its state can be read over CDP.
@@ -16,6 +17,8 @@ let objectUrl: string | null = null;
 // The loaded brief's audio couldn't be played (the element reported an error).
 let failed = false;
 const listeners = new Set<() => void>();
+// Told the key of a brief that played to the end: not stopped, not replaced.
+const endedListeners = new Set<(key: string) => void>();
 
 function emit() {
   for (const listener of listeners) listener();
@@ -29,6 +32,11 @@ function audio(): HTMLAudioElement {
   for (const type of ["play", "pause", "ended", "emptied"]) {
     element.addEventListener(type, emit);
   }
+  element.addEventListener("ended", () => {
+    const key = loadedKey;
+    if (key === null) return;
+    for (const listener of endedListeners) listener(key);
+  });
   element.addEventListener("error", () => {
     // An error from unloading (src removed) is not about any brief.
     if (loadedKey === null) return;
@@ -84,7 +92,7 @@ export function stopBrief(key: string): void {
   element.currentTime = 0;
 }
 
-// Stop and let go of the audio, when the brief's card closes.
+// Stop and let go of the audio, when the bar stops showing the brief.
 export function releaseBrief(key: string): void {
   if (loadedKey !== key) return;
   unload();
@@ -103,5 +111,14 @@ export function subscribeBriefPlayback(listener: () => void): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
+  };
+}
+
+// A brief that played to the end. Stop, a replay cut short, or another brief
+// loaded never count.
+export function subscribeBriefEnded(listener: (key: string) => void): () => void {
+  endedListeners.add(listener);
+  return () => {
+    endedListeners.delete(listener);
   };
 }

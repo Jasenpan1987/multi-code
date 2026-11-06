@@ -63,6 +63,18 @@ export function useNotifications() {
     [clear]
   );
 
+  // Read from the secretary bar: "Got it", or a Finished brief played to the end
+  // (epic secretary-bar, Story 4). Clears like markRead, but always tells main, red
+  // dot or not: the brief may be the only thing left waiting on the session, and
+  // main marks it seen only when told.
+  const markReadFromBar = useCallback(
+    (instanceId: string) => {
+      clear(instanceId);
+      window.electronAPI.acknowledgeInstance(instanceId);
+    },
+    [clear]
+  );
+
   // Read on a paired phone (main's `instance-read-on-phone`). The phone has settled
   // its own side, so nothing goes back to main: an acknowledgement would only echo
   // the phone's read back to it.
@@ -73,5 +85,5 @@ export function useNotifications() {
     [clear]
   );
 
-  return { notify, markRead, readOnPhone, unread: unreadRef.current };
+  return { notify, markRead, markReadFromBar, readOnPhone, unread: unreadRef.current };
 }
