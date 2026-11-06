@@ -491,3 +491,29 @@ describe("the secretary in the harness", () => {
     await post("secretary/claude-found");
   });
 });
+
+describe("the harness secretary, live", () => {
+  it("settles a reply on its brief when the voice comes while it is being read", () => {
+    vi.useFakeTimers();
+    const live = new World("home", true);
+    const sec = new HarnessSecretary(live, true);
+    try {
+      // Writing, then the text with the voice on its way.
+      vi.advanceTimersByTime(2000);
+      const brief = sec.view().briefs["multi-code"];
+      expect(brief).toMatchObject({ status: "ready", audio: "pending" });
+      sec.reply("multi-code", brief.seq, "What does this command do?");
+      // The voice comes (a new object for the same brief), then the reading ends.
+      vi.advanceTimersByTime(3000);
+      const after = sec.view().briefs["multi-code"];
+      expect(after).toMatchObject({ seq: brief.seq, audio: "ready" });
+      expect(after.exchanges).toEqual([
+        expect.objectContaining({ reply: "What does this command do?", outcome: "answered" }),
+      ]);
+    } finally {
+      sec.stop();
+      live.stop();
+      vi.useRealTimers();
+    }
+  });
+});

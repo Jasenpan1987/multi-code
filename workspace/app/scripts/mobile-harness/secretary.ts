@@ -122,35 +122,43 @@ export class HarnessSecretary {
     return brief?.seq === seq && brief.status === "ready" && brief.audio === "ready" ? TONE : null;
   }
 
-  // A reply in words, from the phone (after the bridge's checks) or the desk.
+  // A reply in words, from the phone (after the bridge's checks) or the desk. Read on
+  // whatever brief the session has under that seq when the reading is done: while the
+  // world is live, its voice may have come meanwhile, which puts a new object in the
+  // map for the same brief.
   reply(id: string, seq: number, text: string) {
     const brief = this.briefs.get(id);
     if (!brief || brief.seq !== seq) return;
-    const exchange: SecretaryExchange = { reply: text.trim() };
-    brief.exchanges = [...(brief.exchanges ?? []), exchange];
+    const index = brief.exchanges?.length ?? 0;
+    brief.exchanges = [...(brief.exchanges ?? []), { reply: text.trim() }];
     this.onChange();
     this.later(READ_MS, () => {
-      if (this.briefs.get(id) !== brief) return;
+      const current = this.briefs.get(id);
+      if (current?.seq !== seq || !current.exchanges?.[index]) return;
       const zh = /[㐀-鿿]/.test(text);
-      if (YES.test(text) && !brief.handled) {
-        exchange.outcome = "pressed";
-        exchange.response = zh ? "已经允许了。它正在跑端到端测试。" : "Done. I allowed it, and it is running now.";
-        brief.exchanges = [...(brief.exchanges ?? [])];
-        this.world.deskAnswer(id);
+      let settled: Pick<SecretaryExchange, "outcome" | "response">;
+      let press = false;
+      if (YES.test(text) && !current.handled) {
+        settled = { outcome: "pressed", response: zh ? "已经允许了。它正在跑端到端测试。" : "Done. I allowed it, and it is running now." };
+        press = true;
       } else if (/[?？]\s*$/.test(text)) {
         // A question: answered, nothing pressed.
-        exchange.outcome = "answered";
-        exchange.response = zh
-          ? "不会。它只读代码，用的是测试数据库，跑完就清掉。要我允许吗？"
-          : "No. It only reads the code, and it uses the test database, which it clears afterwards. Shall I allow it?";
-        brief.exchanges = [...(brief.exchanges ?? [])];
+        settled = {
+          outcome: "answered",
+          response: zh
+            ? "不会。它只读代码，用的是测试数据库，跑完就清掉。要我允许吗？"
+            : "No. It only reads the code, and it uses the test database, which it clears afterwards. Shall I allow it?",
+        };
       } else {
-        exchange.outcome = "asked";
-        exchange.response = zh
-          ? "只允许这一次，还是以后这个命令都不再问你？"
-          : "Allow it just this once, or never ask again for this command?";
-        brief.exchanges = [...(brief.exchanges ?? [])];
+        settled = {
+          outcome: "asked",
+          response: zh
+            ? "只允许这一次，还是以后这个命令都不再问你？"
+            : "Allow it just this once, or never ask again for this command?",
+        };
       }
+      current.exchanges = current.exchanges.map((e, i) => (i === index ? { ...e, ...settled } : e));
+      if (press) this.world.deskAnswer(id);
       this.onChange();
     });
   }
