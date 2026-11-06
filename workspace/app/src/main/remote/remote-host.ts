@@ -12,7 +12,9 @@
 //     API (secretary/dialog.ts). The phone names an effect or option numbers and
 //     never sends a key of its own.
 //   - A push (Story 7) goes out for each of those Finished and Needs you events, with
-//     the same line the list shows, once that line has been read.
+//     the same line the list shows, once that line has been read. With the secretary
+//     on, it waits for the event's brief too, and says its first sentence instead
+//     (epic secretary-bar, Story 6, T-1004).
 //   - The secretary (epic secretary-bar) is the desk's own: its mode, its briefs and
 //     their exchanges, the toolbox's switch (switchMode). A brief's audio goes to the
 //     phone made smaller (secretary/phoneAudio.ts), once per brief and format, in
@@ -34,6 +36,7 @@ import {
   type OptionEffect,
 } from "../secretary/dialog";
 import { replyConclusion } from "../../shared/replyStart";
+import { briefSentence } from "../../shared/briefSentence";
 import type {
   RemoteChoice,
   RemoteDialog,
@@ -100,6 +103,12 @@ const MIN_SENTENCE_CHARS = 24;
 // builder may try again.
 const STOP_SETTLE_MS = 3000;
 
+// How long after its event a push waits for the brief's text while the secretary is
+// on (Story 6). Text is normally ready within 10 s; the builder's default model can
+// take longer (G-803). Past it, the push says what it would have without the
+// secretary.
+export const BRIEF_WAIT_MS = 30_000;
+
 // What the latest turn says, for the list's line: cached per instance and refreshed
 // on each event and on the server's throttled refresh while a turn runs, never
 // read per list call.
@@ -156,6 +165,9 @@ export function createRemoteHost(
   const readAgain = new Map<string, (() => void)[]>();
   // Whether the secretary's `claude` was there when last looked for.
   let claudeFound = false;
+  // Pushes waiting for their brief, each looking again at every change.
+  const waiters = new Set<() => void>();
+  let disposed = false;
   // Each instance's brief audio as the phone gets it, for the brief it was made from.
   const phoneAudios = new Map<string, { seq: number } & Partial<Record<PhoneAudioFormat, Buffer>>>();
 
@@ -214,12 +226,16 @@ export function createRemoteHost(
   // beside an open dialog reports Finished, then restates the dialog at once). One
   // the builder has already dealt with at the desk still gets its push (Story 7:
   // whether or not the builder is at the desk).
-  function pushEvent(id: string, event: SecretaryEvent) {
+  //
+  // With the secretary on, `line` is the first sentence of the event's brief, and
+  // stands for the list's line (Story 6); without it, or when that brief has none,
+  // the push is today's.
+  function pushEvent(id: string, event: SecretaryEvent, line?: string) {
     const info = pm.infoOf(id);
     if (!info) return;
     if ((fresh.get(id) ?? 0) > event.seq) return;
     const state: RemoteSessionState = event.kind === "needs-you" ? "needs-you" : "finished";
-    const body = previewOf(state, event, info, lines.get(id) ?? {});
+    const body = line ?? previewOf(state, event, info, lines.get(id) ?? {});
     // The phone's Needs you count, as its list would show it now.
     const badge = pm
       .listInstances()
@@ -253,7 +269,10 @@ export function createRemoteHost(
         const read = refreshLines(id);
         if (!event.restated) {
           fresh.set(id, event.seq);
-          void read.then(() => pushEvent(id, event)).catch(() => undefined);
+          void read
+            .then(() => briefLine(id, event))
+            .then((line) => pushEvent(id, event, line))
+            .catch(() => undefined);
         }
       } else {
         lines.delete(id);
@@ -262,16 +281,46 @@ export function createRemoteHost(
     push.broadcastInstances();
   });
 
-  // A brief or the mode changed: phones are told, and a phone copy of audio that is
-  // no longer its brief's goes.
+  // The first sentence of the event's brief, once its text is written, for the
+  // event's push (Story 6). Undefined at once while the secretary is off, and, while it
+  // is on, when the brief couldn't be written, the secretary goes off, a newer event
+  // has come (its own push replaces this one), or BRIEF_WAIT_MS after the event. A
+  // restated dialog's brief stands for its first report's: it is the same dialog
+  // under a newer seq, and gets no push of its own.
+  function briefLine(id: string, event: SecretaryEvent): Promise<string | undefined> {
+    const sec = secretary;
+    if (!sec?.isOn()) return Promise.resolve(undefined);
+    return new Promise((resolve) => {
+      const done = (line?: string) => {
+        waiters.delete(check);
+        clearTimeout(timer);
+        resolve(line);
+      };
+      const check = () => {
+        if (disposed || !sec.isOn() || (fresh.get(id) ?? 0) > event.seq) return done();
+        const brief = sec.briefs()[id];
+        if (!brief || brief.seq < event.seq) return;
+        if (brief.status === "ready") return done(briefSentence(brief.text) || undefined);
+        if (brief.status === "failed") return done();
+      };
+      const timer = setTimeout(done, Math.max(0, event.at + BRIEF_WAIT_MS - Date.now()));
+      waiters.add(check);
+      check();
+    });
+  }
+
+  // A brief or the mode changed: phones are told, a push waiting for a brief looks
+  // again, and a phone copy of audio that is no longer its brief's goes.
   const offBrief = secretary?.onBrief((id, state) => {
     const kept = phoneAudios.get(id);
     if (kept && kept.seq !== state?.seq) phoneAudios.delete(id);
+    for (const check of [...waiters]) check();
     push.broadcastSecretary();
   });
   const offMode = secretary?.onMode((on) => {
     if (on) claudeFound = true;
     else phoneAudios.clear();
+    for (const check of [...waiters]) check();
     push.broadcastSecretary();
   });
 
@@ -507,9 +556,12 @@ export function createRemoteHost(
     },
 
     dispose() {
+      disposed = true;
       unsubscribe();
       offBrief?.();
       offMode?.();
+      // Their pushes go out as they would have without the secretary.
+      for (const check of [...waiters]) check();
     },
   };
 }

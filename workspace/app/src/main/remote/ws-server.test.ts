@@ -30,7 +30,7 @@ vi.mock("web-push", async (importOriginal) => {
 });
 
 const { RemoteServer } = await import("./ws-server");
-const { createRemoteHost, firstSentence } = await import("./remote-host");
+const { createRemoteHost, firstSentence, BRIEF_WAIT_MS } = await import("./remote-host");
 const { REMOTE_PROTOCOL_VERSION } = await import("../../shared/remote-protocol");
 const { extractPromptDetail } = await import("./promptExtract");
 const { permissionDetail, permissionToolCall } = await import("../backends/opencodePrompt");
@@ -2693,5 +2693,130 @@ describe("byteRange", () => {
     expect(byteRange(undefined, 10)).toBeNull();
     expect(byteRange("bytes=0-1,4-5", 10)).toBeNull();
     expect(byteRange("items=0-1", 10)).toBeNull();
+  });
+});
+
+// T-1004: with the secretary on, an event's push says the brief's first sentence,
+// waiting for it at most BRIEF_WAIT_MS from the event; otherwise it is today's push.
+describe("a push that waits for the brief", () => {
+  function hostWith(secretary: FakeSecretary | null) {
+    const pm = new FakeProcessManager();
+    pm.add({ id: "inst-1", name: "Shop" });
+    pm.turns.set("inst-1", [{ kind: "assistant", text: "Fixed the login form and its tests." }]);
+    const pushes: { at: number; title: string; body?: string }[] = [];
+    const push = {
+      isRunning: () => true,
+      broadcastInstances: () => {},
+      broadcastPromptState: () => {},
+      broadcastPromptCleared: () => {},
+      broadcastTranscript: () => {},
+      broadcastSecretary: () => {},
+      pushSession: (p: { title: string; body?: string }) => {
+        pushes.push({ at: Date.now(), title: p.title, ...(p.body !== undefined ? { body: p.body } : {}) });
+      },
+    };
+    const host = createRemoteHost(pm, push, secretary);
+    return { pm, host, pushes };
+  }
+
+  const T0 = 1_800_000_000_000;
+  beforeEach(() => {
+    vi.useFakeTimers({ now: T0 });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("waits for the brief's text and says its first sentence, the title unchanged", async () => {
+    const secretary = new FakeSecretary();
+    const { pm, host, pushes } = hostWith(secretary);
+    pm.raise("inst-1", finished(1, T0));
+    secretary.brief("inst-1", { seq: 1, kind: "finished", status: "preparing", at: T0 });
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(pushes).toEqual([]);
+    secretary.brief("inst-1", { ...ready(1, "finished", "Shop 那边，登录修好了。测试全部通过。"), at: T0, audio: "pending" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pushes).toEqual([{ at: T0 + 4000, title: "Shop · Finished", body: "Shop 那边，登录修好了。" }]);
+    host.dispose();
+  });
+
+  it("sends today's body at once when the brief couldn't be written", async () => {
+    const secretary = new FakeSecretary();
+    const { pm, host, pushes } = hostWith(secretary);
+    pm.raise("inst-1", finished(1, T0));
+    await vi.advanceTimersByTimeAsync(2000);
+    secretary.brief("inst-1", { seq: 1, kind: "finished", status: "failed", reason: "claude exited", at: T0 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pushes).toEqual([{ at: T0 + 2000, title: "Shop · Finished", body: "Fixed the login form and its tests." }]);
+    host.dispose();
+  });
+
+  it("sends today's body 30 s after the event when the brief is late, and nothing more when it comes", async () => {
+    const secretary = new FakeSecretary();
+    const { pm, host, pushes } = hostWith(secretary);
+    // The event happened a second before the host heard of it.
+    pm.raise("inst-1", finished(1, T0 - 1000));
+    secretary.brief("inst-1", { seq: 1, kind: "finished", status: "preparing", at: T0 - 1000 });
+    await vi.advanceTimersByTimeAsync(BRIEF_WAIT_MS - 1001);
+    expect(pushes).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(pushes).toEqual([{ at: T0 + BRIEF_WAIT_MS - 1000, title: "Shop · Finished", body: "Fixed the login form and its tests." }]);
+    secretary.brief("inst-1", ready(1, "finished", "Shop finished at last, after a long think."));
+    await vi.advanceTimersByTimeAsync(BRIEF_WAIT_MS);
+    expect(pushes).toHaveLength(1);
+    host.dispose();
+  });
+
+  it("drops an event's push when a newer one replaces it while it waits, and the newer says its own brief", async () => {
+    const secretary = new FakeSecretary();
+    const { pm, host, pushes } = hostWith(secretary);
+    pm.raise("inst-1", finished(1, T0));
+    secretary.brief("inst-1", { seq: 1, kind: "finished", status: "preparing", at: T0 });
+    await vi.advanceTimersByTimeAsync(3000);
+    pm.raise("inst-1", bash(2, T0 + 3000));
+    secretary.brief("inst-1", { seq: 2, kind: "needs-you", status: "preparing", at: T0 + 3000 });
+    await vi.advanceTimersByTimeAsync(2000);
+    secretary.brief("inst-1", { ...ready(2, "needs-you", "Shop wants to run the end-to-end tests. Allow it?"), at: T0 + 3000 });
+    await vi.advanceTimersByTimeAsync(BRIEF_WAIT_MS);
+    expect(pushes).toEqual([{ at: T0 + 5000, title: "Shop · Needs you", body: "Shop wants to run the end-to-end tests." }]);
+    host.dispose();
+  });
+
+  it("takes a restated dialog's brief for the dialog it restates", async () => {
+    const secretary = new FakeSecretary();
+    const { pm, host, pushes } = hostWith(secretary);
+    pm.raise("inst-1", bash(1, T0));
+    await vi.advanceTimersByTimeAsync(1000);
+    pm.raise("inst-1", { ...bash(2, T0 + 1000), restated: true });
+    secretary.brief("inst-1", { ...ready(2, "needs-you", "Shop wants to run the tests again."), at: T0 + 1000 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pushes).toEqual([{ at: T0 + 1000, title: "Shop · Needs you", body: "Shop wants to run the tests again." }]);
+    host.dispose();
+  });
+
+  it("is today's push, at once, with the secretary off, and when it goes off while a push waits", async () => {
+    const off = new FakeSecretary();
+    off.on = false;
+    const first = hostWith(off);
+    first.pm.raise("inst-1", bash(1, T0));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(first.pushes).toEqual([{ at: T0, title: "Shop · Needs you", body: "Bash: pnpm test:e2e" }]);
+    first.host.dispose();
+
+    const none = hostWith(null);
+    none.pm.raise("inst-1", bash(1, T0));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(none.pushes).toEqual([{ at: T0, title: "Shop · Needs you", body: "Bash: pnpm test:e2e" }]);
+    none.host.dispose();
+
+    const secretary = new FakeSecretary();
+    const going = hostWith(secretary);
+    going.pm.raise("inst-1", bash(1, T0));
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(going.pushes).toEqual([]);
+    secretary.setOn(false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(going.pushes).toEqual([{ at: T0 + 5000, title: "Shop · Needs you", body: "Bash: pnpm test:e2e" }]);
+    going.host.dispose();
   });
 });
