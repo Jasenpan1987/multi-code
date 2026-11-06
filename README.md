@@ -391,7 +391,8 @@ The app's first screen shows which of the three steps is done and which is next.
   and reading it at the desk makes it Idle on the phone. The desk still chimes
 - When a session needs you, the dialog takes the compose box's place: the CLI's
   own options as buttons, a field for a reason on No (OpenCode: Reject), every
-  question of a question box with **Submit answers**, the whole plan. "Always
+  question of a question box with **Submit answers** (a question drawn beside
+  previews takes its options only, as in the CLI), the whole plan. "Always
   allow", "don't ask again" and auto-accept edits ask "Are you sure?" first. If
   the dialog was answered at the desk meanwhile, the phone says so and presses
   nothing. Dialogs can't be answered offline
