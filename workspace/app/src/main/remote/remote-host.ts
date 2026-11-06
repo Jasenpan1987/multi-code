@@ -329,9 +329,10 @@ export function createRemoteHost(
     for (const check of waiters) check();
     push.broadcastSecretary();
   });
-  const offMode = secretary?.onMode((on) => {
-    if (on) claudeFound = true;
-    else phoneAudios.clear();
+  const offMode = secretary?.onMode((on, found) => {
+    if (found !== null) claudeFound = found;
+    else if (on) claudeFound = true;
+    if (!on) phoneAudios.clear();
     for (const check of waiters) check();
     push.broadcastSecretary();
   });

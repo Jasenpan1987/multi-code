@@ -66,6 +66,7 @@ vi.mock("../backends/claude", () => ({
 }));
 
 import { createSecretary, NO_SERVER_REASON } from "./index";
+import { createRemoteHost, type HostProcessManager } from "../remote/remote-host";
 import { TARGET_DBFS } from "./loudness";
 import type { SecretaryDeps } from "./index";
 
@@ -529,6 +530,42 @@ describe("the phone link's listeners (epic secretary-bar)", () => {
     h.fire("a", ev(4));
     expect(modes).toEqual([true, false]);
     expect(briefs.at(-1)).toEqual(["a", null]);
+  });
+});
+
+describe("the phone link hears claude go (epic secretary-bar)", () => {
+  it("tells phones the CLI is missing when the secretary finds it gone, whether it was on or off", () => {
+    const h = harness();
+    const pm = { onSecretaryEvent: () => () => {} } as unknown as HostProcessManager;
+    const told: unknown[] = [];
+    const push = {
+      isRunning: () => false,
+      broadcastInstances: () => {},
+      broadcastPromptState: () => {},
+      broadcastPromptCleared: () => {},
+      broadcastTranscript: () => {},
+      broadcastSecretary: () => told.push(host.secretary(false)),
+      pushSession: () => {},
+    };
+    const host = createRemoteHost(pm, push, { ...h.secretary, switchMode: (enabled) => h.secretary.setMode(enabled) });
+    h.secretary.start(true);
+    expect(host.secretary(false)).toMatchObject({ on: true, claudeFound: true });
+
+    // Gone while on: the secretary goes off, and phones are told why.
+    h.claude.found = false;
+    expect(h.secretary.checkClaude()).toBe(false);
+    expect(host.secretary(false)).toEqual({ on: false, claudeFound: false, briefs: {} });
+    expect(told.at(-1)).toEqual({ on: false, claudeFound: false, briefs: {} });
+
+    // Back and gone again with the mode saved off: nothing changes mode, phones hear it.
+    h.secretary.setMode(false);
+    h.claude.found = true;
+    h.secretary.checkClaude();
+    expect(told.at(-1)).toMatchObject({ on: false, claudeFound: true });
+    h.claude.found = false;
+    h.secretary.checkClaude();
+    expect(told.at(-1)).toMatchObject({ on: false, claudeFound: false });
+    host.dispose();
   });
 });
 

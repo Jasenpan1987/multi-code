@@ -126,10 +126,12 @@ export interface Secretary {
   // Resolves when the secretary has acted, asked back or answered; never throws.
   reply(instanceId: string, seq: number, text: string): Promise<void>;
   // Told every change the renderer is told, after it: a brief's new state (null when
-  // it goes), and the mode the secretary acts on. For the phone link. Returns the
-  // unsubscribe.
+  // it goes), and the mode the secretary acts on, with whether `claude` was found when
+  // last looked for (null: not looked for yet). The mode listeners also hear a change
+  // of that finding alone, so a phone's switch never offers what main would refuse.
+  // For the phone link. Returns the unsubscribe.
   onBrief(listener: (instanceId: string, state: SecretaryBriefState | null) => void): () => void;
-  onMode(listener: (on: boolean) => void): () => void;
+  onMode(listener: (on: boolean, claudeFound: boolean | null) => void): () => void;
   // Unsubscribe and abort everything in flight. At quit.
   stop(): void;
 }
@@ -241,10 +243,12 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
   // found.
   let saved = false;
   let on = false;
+  // Whether `claude` was there when last looked for; null until then.
+  let found: boolean | null = null;
   let unsubscribe: (() => void) | null = null;
   const jobs = new Map<string, Job>();
   const briefListeners = new Set<(instanceId: string, state: SecretaryBriefState | null) => void>();
-  const modeListeners = new Set<(on: boolean) => void>();
+  const modeListeners = new Set<(on: boolean, claudeFound: boolean | null) => void>();
 
   // To the renderer, then to every listener; one that throws doesn't stop the others.
   const sendBrief = (instanceId: string, state: SecretaryBriefState | null) => {
@@ -257,15 +261,18 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
       }
     }
   };
-  const sendMode = (next: boolean) => {
-    deps.send(MODE_CHANNEL, next);
+  const tellMode = () => {
     for (const listener of modeListeners) {
       try {
-        listener(next);
+        listener(on, found);
       } catch {
         // See sendBrief.
       }
     }
+  };
+  const sendMode = (next: boolean) => {
+    deps.send(MODE_CHANNEL, next);
+    tellMode();
   };
 
   const isCurrent = (instanceId: string, job: Job) => jobs.get(instanceId) === job;
@@ -490,9 +497,14 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
   };
 
   function checkClaude(): boolean {
-    const found = deps.claudeFound();
-    apply(saved && found);
-    return found;
+    const was = found;
+    const before = on;
+    const now = deps.claudeFound();
+    found = now;
+    apply(saved && now);
+    // The mode stayed, but what a phone's switch may offer changed.
+    if (on === before && now !== was) tellMode();
+    return now;
   }
 
   const onEvent: SecretaryEventListener = (instanceId, event) => {

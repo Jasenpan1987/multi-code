@@ -347,7 +347,7 @@ class FakeSecretary implements HostSecretary {
   replies: { id: string; seq: number; text: string }[] = [];
   looks = 0;
   private briefListeners = new Set<(id: string, state: SecretaryBriefState | null) => void>();
-  private modeListeners = new Set<(on: boolean) => void>();
+  private modeListeners = new Set<(on: boolean, found: boolean | null) => void>();
 
   isOn() {
     return this.on;
@@ -372,7 +372,7 @@ class FakeSecretary implements HostSecretary {
       this.briefListeners.delete(listener);
     };
   }
-  onMode(listener: (on: boolean) => void) {
+  onMode(listener: (on: boolean, found: boolean | null) => void) {
     this.modeListeners.add(listener);
     return () => {
       this.modeListeners.delete(listener);
@@ -387,7 +387,7 @@ class FakeSecretary implements HostSecretary {
     if (on === this.on) return;
     this.on = on;
     if (!on) this.state = {};
-    for (const listener of this.modeListeners) listener(on);
+    for (const listener of this.modeListeners) listener(on, this.found);
   }
   brief(id: string, state: SecretaryBriefState | null) {
     if (state) this.state[id] = state;
