@@ -2,7 +2,7 @@
 
 **Version:** 1.1
 **Last Updated:** 2026-11-06
-**Status:** approved (builder, 2026-11-06: "就先这么做吧……你赶紧做吧", with the one-bar redesign)
+**Status:** released in 0.10.8 (2026-11-06); approved by the builder 2026-11-06 ("就先这么做吧……你赶紧做吧", with the one-bar redesign). iPhone checks G-801, G-802, G-804 open
 **Owner:** Jasen
 
 ## Overview
