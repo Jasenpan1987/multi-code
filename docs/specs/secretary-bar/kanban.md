@@ -37,7 +37,7 @@ graph LR
 - **Acceptance:** unit tests for the bar's view rules; the real app driven over CDP with its
   own `--user-data-dir` shows the bar, plays, moves on, and the terminal stays fully visible.
 
-## T-1003: Phone link and phone bar
+## T-1003: Phone link and phone bar (done, merged 8d07e82; GPT review: 7 findings, fixed)
 
 - **Requirement:** PRD Stories 1, 2, 3, 4, 5 and 7, phone side
 - **Code:** `shared/remote-protocol.ts`, `main/remote/remote-host.ts`, `ws-server.ts`,
@@ -51,7 +51,7 @@ graph LR
 - **Acceptance:** protocol and host unit tests; the mobile harness (`pnpm harness`,
   `pnpm harness:shot`) shows the bar folded and open on the list and a session.
 
-## T-1004: Push waits for the brief
+## T-1004: Push waits for the brief (done, merged 8d07e82)
 
 - **Requirement:** PRD Story 6
 - **Code:** `main/remote/remote-host.ts` (`pushEvent`), `main/remote/push.ts`
@@ -60,7 +60,13 @@ graph LR
   late: today's body. Mode off: unchanged.
 - **Acceptance:** unit tests with fake timers for ready, failed, late, replaced and mode off.
 
-## T-1005: QA
+## T-1005: QA (automated part done 1588077; iPhone test open)
+
+- **Done:** review loop over the epic, three rounds by area (Mac, desktop, phone): Mac and
+  desktop clean in round 2; the phone's last fix (the compose box while typing) came from
+  round 3 and was checked by `scripts/mobile-harness/layout-check.ts`, not by the reviewer.
+  Full suite 1894 passed, types and lint clean.
+- **Open:** the builder's iPhone: G-801, G-802, G-804, Play within 2 s on cellular.
 
 - **Acceptance:** full suite, lint and types green; a cross-model review per ticket and a
   review loop over the epic; an iPhone test plan for G-801 and G-802 (silent switch, lock);
