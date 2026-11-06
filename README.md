@@ -60,10 +60,12 @@ When working with multiple coding-agent sessions across different projects simul
 
 ### Voice Secretary
 - **A brief, not a readout** — When a session finishes or needs you, a secretary retells what happened in its own words: what was asked, what was done, whether it worked. For a dialog, it says what the operation does and why, then asks the question
-- **Hear it without looking** — With Secretary Mode on, the session on screen plays its brief the moment it has news. Any other session plays its brief when you click its red dot, so two sessions never talk over each other
-- **Answer in words** — A card for a dialog has its own reply box. Type or dictate "yes", "no, do X instead" or "always", and the secretary presses the right option. A reply it can't read for sure gets a question back, and nothing is pressed
+- **One secretary for every session** — With Secretary Mode on, a bar across the top of the window shows one brief at a time, named by its session ("Shop · Secretary"). Briefs that need you come first, then finished ones, oldest first; ‹ › moves through them. You never switch projects to hear them
+- **Plays when you press Play** — Nothing speaks on its own. A finished brief that plays to the end, or that you dismiss with **Got it**, counts as read, and the bar moves on to the next
+- **Answer in words** — A brief for a dialog has its own reply box. Type or dictate "yes", "no, do X instead" or "always", and the secretary presses the right option. A reply it can't read for sure gets a question back, and nothing is pressed
+- **On the phone too** — The same bar sits at the top of the phone app, with the same briefs, the same replies and the Secretary Mode switch. While the secretary is on, a notification waits for its brief and says its first sentence
 - **Your language** — Each brief follows the language of your latest message in that session: English, or Chinese with English technical terms kept as they are
-- **Voice optional** — The voice comes from a speech server you point it at. With none, or one that is down, the card shows the brief as text and nothing else changes
+- **Voice optional** — The voice comes from a speech server you point it at. With none, or one that is down, the bar shows the brief as text and nothing else changes
 - **Both backends** — Claude Code and OpenCode sessions both get a secretary
 
 ### Visual / UX
@@ -402,8 +404,12 @@ The app's first screen shows which of the three steps is done and which is next.
 - The terminal button in a session's header opens its real terminal, for what the
   chat can't show (an MCP form, say)
 - Notifications read "<session> · Finished" with the first sentence of the
-  conclusion, or "<session> · Needs you" with what the dialog asks. Each phone's
-  **Send test** in the Mac's Phone panel sends one to check
+  conclusion, or "<session> · Needs you" with what the dialog asks. While the
+  secretary is on, a notification waits for its brief (at most 30 s) and says the
+  brief's first sentence instead. Each phone's **Send test** in the Mac's Phone
+  panel sends one to check
+- With Secretary Mode on, the secretary's bar sits at the top of every screen
+  (see [Voice Secretary](#voice-secretary-1)). The switch is under the list's header
 
 Answers reach the CLI the way the secretary's do: Claude Code's as the keys of its
 own dialogs, through the secretary's tested key flows, and only while that same
@@ -440,9 +446,11 @@ icon and pair it again; the Phone panel says so too.
 
 ### Voice Secretary
 
-For when you step away from the screen. Each session gets a secretary that briefs
-you out loud when the session finishes or needs you, the way a secretary briefs a
-boss: a retold account with the details, not the screen read aloud.
+For when you step away from the screen. When a session finishes or needs you, the
+secretary writes a brief and reads it out when you press Play, the way a secretary
+briefs a boss: a retold account with the details, not the screen read aloud. There
+is one secretary for the whole app, in a bar at the top of the window and of the
+phone app.
 
 **What it needs:**
 
@@ -482,21 +490,26 @@ boss: a retold account with the details, not the screen read aloud.
 
 - Chimes, red badges and the Dock count work exactly as before. The secretary only
   adds a brief at the same moments
-- The session on screen opens its card and plays its brief on its own, once the
-  voice is ready
-- Any other session waits for you: click its red dot and its card opens and plays.
-  Clicking a contact with no red dot plays nothing
-- Only one brief plays at a time. The card has **▶ Replay**, **■ Stop** and **×**
-  to close
-- The card stays after you type in the session or answer the dialog. Once closed,
-  the **Secretary** button in the session header brings the latest brief back,
-  silent until you press Replay
-- Turning Secretary Mode off stops the audio and closes the card
+- While Secretary Mode is on, the bar across the top shows one brief: its session's
+  name, what the secretary is doing (writing the brief, the voice on its way, ready,
+  playing) and the first three lines. **More** opens the whole brief
+- Briefs that wait for you form a queue: the ones that need you first, then the
+  finished ones, the oldest first. **‹ n / N ›** moves through it. A new brief joins
+  the queue; it never replaces the one you are reading or hearing
+- Nothing plays until you press **▶ Play**. Only one brief plays at a time, and
+  moving to another brief stops it
+- A finished brief that plays to the end, or that you dismiss with **Got it**,
+  counts as reading its session: its red dot, the Dock count and the phone's
+  Finished clear. A brief that needs you leaves the queue when its dialog is answered
+- Click the session's name on the bar to open that session. It plays nothing
+- With nothing waiting, the bar keeps the latest brief, so you can still replay it
+- Turning Secretary Mode off stops the audio and removes the bar
 
 **Answering a dialog in words:**
 
-A card for a permission prompt, a question or a plan approval has a reply box. It is
-not the Compose Box: nothing you type there goes into the terminal as text.
+A brief for a permission prompt, a question or a plan approval has a reply box when
+you open it on the bar (**Reply**). It is not the Compose Box: nothing you type there
+goes into the terminal as text. Return sends, Shift+Return makes a new line.
 
 - Say "yes", "no", pick an option by name or number, or give your own answer for
   "Other"
@@ -510,20 +523,40 @@ not the Compose Box: nothing you type there goes into the terminal as text.
   yes
 - A reply that could mean two things gets a question back. A question ("what does
   this script delete?") gets an answer. Neither presses anything
-- After acting, the card shows one line saying what it did
+- After acting, the bar shows one line saying what it did
 - If the dialog has gone or changed by the time you reply, or someone types in the
   terminal while its keys go in, it stops and says so
 - For OpenCode, it answers through OpenCode's own API, by request id, so an answer
   can't land in a different dialog: the permission prompt (including a Reject with a
   reason, which the agent receives), and question boxes of every shape, your own typed
   answer included
-- A card for a finished turn has no reply box; reply in the terminal as usual
+- A finished brief has no reply box; reply in the terminal as usual
+
+**On the phone:**
+
+- The same bar sits at the top of every screen of the phone app, folded to one
+  line: the session's name, the brief's first sentence and **▶**. Tap it for the
+  whole brief, **‹ ›**, **Got it**, the replies and the reply box (only **Send**
+  sends there; Return makes a new line)
+- It is the same secretary and the same queue as at the desk: a reply sent on the
+  phone shows on the desk and the other way round, and a brief read on one is read
+  on both. Each side moves through the queue on its own
+- **Secretary Mode** under the list's header turns the same switch as the desk's.
+  It can't be turned on when the Mac has no Claude Code, or with no connection
+- Audio plays only when you tap. The Mac sends it compressed, under 1 MB per
+  minute, over the phone link, and the phone keeps none of it afterwards
+- While the secretary is on, a notification waits until its brief is written (at
+  most 30 s from the event) and says the brief's first sentence
 
 **Privacy:**
 
 - Transcript excerpts go only to the model that writes the brief. The brief text
   goes only to your speech server
-- Briefs and audio are kept in memory and never written to disk
+- Briefs and audio are kept in memory and never written to disk, on the Mac or the
+  phone (the phone may keep a brief's text with the chat it caches)
+- A brief's audio reaches a phone only through the phone link, at an address made
+  for that phone and that brief; it stops working when the brief is replaced or the
+  phone is revoked
 - The speech key lives alone in a `0600` file in Multi-Code's data folder. It is
   never shown after you save it, never logged, and never sent to the window
 - With Secretary Mode off, nothing is called and nothing costs anything
@@ -560,7 +593,7 @@ Everything Multi-Code keeps lives in Electron's user-data folder. On macOS that 
 7. Instances persist to `contacts.json` in Electron's user-data folder
 8. The main process runs a small HTTP server on `127.0.0.1` for as long as the app is open (OS-assigned port, bearer-token auth). Its one path, `/alert`, is where the agents' hooks and plugin report their own state
 9. When Phone Link is on, the main process also runs a server on `127.0.0.1:6768` that serves the phone app and a WebSocket carrying the session list, transcripts, dialogs and the same PTY bytes to paired phones. The phone reaches it only through `tailscale serve`, which gives it HTTPS at the Mac's tailnet name; frames are sealed with NaCl box inside that connection. Notifications are Web Push messages the Mac sends straight to Apple's push service, encrypted to each phone, with no relay involved
-10. When Secretary Mode is on, each finished or needs-you event goes to a one-shot `claude -p --bare --no-session-persistence` call that writes the brief, then to the speech server for audio. A reply on the card goes through a second such call, which decides what to press; the keys go in only while that same dialog is still showing
+10. When Secretary Mode is on, each finished or needs-you event goes to a one-shot `claude -p --bare --no-session-persistence` call that writes the brief, then to the speech server for audio. A reply on the secretary's bar, at the desk or on the phone, goes through a second such call, which decides what to press; the keys go in only while that same dialog is still showing
 
 ## License
 

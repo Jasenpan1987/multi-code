@@ -22,7 +22,7 @@ graph LR
   (`instance-acknowledged`)
 - **Acceptance:** unit tests for the queue and the seen mark; full suite green.
 
-## T-1002: Desktop bar
+## T-1002: Desktop bar (done, merged e5527c3; GPT review: no findings)
 
 - **Requirement:** PRD Stories 1, 2, 3, 4 and 7, desktop side
 - **Code:** new `renderer/components/SecretaryBar.tsx` (+ css), `renderer/App.tsx`,
