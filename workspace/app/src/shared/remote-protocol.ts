@@ -11,6 +11,8 @@
 // pinned at pairing time. The frames below describe the *plaintext* inside that
 // seal.
 
+import type { SecretaryBriefState } from "./types";
+
 export const REMOTE_PROTOCOL_VERSION = 3;
 
 export const DEFAULT_REMOTE_PORT = 6768;
@@ -183,6 +185,41 @@ export interface PingFrame {
   at: number;
 }
 
+// Secretary Mode, from the switch on the phone's list (epic secretary-bar, Story 5):
+// saved and applied as the desktop's toolbox switch does it, so the desk shows it at
+// once. Refused (`unsupported`) when turning it on while the Mac can't find the
+// Claude Code CLI; nothing is saved then. Never queued: offline the switch can't move.
+export interface SecretaryModeFrame {
+  type: "secretary-mode";
+  enabled: boolean;
+  clientMsgId: string;
+}
+
+// The builder dealt with a Finished brief on the phone: "Got it", or it played to the
+// end (Story 4). Its session is read, as when a phone opens it: the desk's red dot and
+// the phone's Finished clear, and the brief stops waiting. Only for the brief `seq`
+// names, while it is that session's: a newer event isn't read with it. No ack: the
+// next `secretary` frame shows it seen.
+export interface SecretarySeenFrame {
+  type: "secretary-seen";
+  instanceId: string;
+  seq: number;
+}
+
+// A reply in words on a Needs-you brief's reply box (Story 7), for the secretary to
+// read by the desktop's rules. Acked once the secretary has taken it; what it does with
+// it comes in the brief's `exchanges`. Refused, so the phone keeps the text: `busy`
+// while it still reads a reply (from either side), `gone` when the brief was replaced
+// or its dialog answered, `unsupported` for a brief that takes no reply or a secretary
+// that is off. Never queued, never resent.
+export interface SecretaryReplyFrame {
+  type: "secretary-reply";
+  instanceId: string;
+  seq: number;
+  text: string;
+  clientMsgId: string;
+}
+
 export type ClientFrame =
   | AuthFrame
   | ListInstancesFrame
@@ -193,7 +230,10 @@ export type ClientFrame =
   | AnswerFrame
   | InterruptFrame
   | PushSubscribeFrame
-  | PingFrame;
+  | PingFrame
+  | SecretaryModeFrame
+  | SecretarySeenFrame
+  | SecretaryReplyFrame;
 
 // ---------------------------------------------------------------------------
 // Desktop -> phone (sealed)
@@ -397,7 +437,32 @@ export interface PromptClearedFrame {
   seq?: number;
 }
 
-// Why the desktop refused a `prompt`, `answer`, `interrupt` or `push-subscribe`:
+// The secretary as the desktop's bar has it (epic secretary-bar): sent after `auth-ok`
+// and again whenever the mode or a brief changes, whole each time. A phone app from
+// before the epic ignores it, as it ignores every frame it doesn't know.
+export interface SecretaryFrame {
+  type: "secretary";
+  // The secretary is on: Secretary Mode is saved on and the Mac found the Claude Code
+  // CLI, which writes every brief.
+  on: boolean;
+  // Whether the Mac found that CLI when it last looked. Without it the switch can't
+  // be turned on.
+  claudeFound: boolean;
+  // Every session's latest brief, by instance id, as the desktop's bar gets them.
+  // Empty while the secretary is off.
+  briefs: Record<string, RemoteBrief>;
+}
+
+// A brief as the desk has it (shared/types.ts SecretaryBriefState: the bar's queue
+// orders them by `at`, `handled` and `seen`), and, while its audio is ready, where
+// this phone plays it from: a path on this origin with a key of its own, minted for
+// this phone and this brief. It answers only while this is the session's brief and
+// the phone is paired; the next brief has another. Never written to the phone's
+// storage. `&f=pcm` asks for 16-bit PCM instead of the compact IMA ADPCM WAV.
+export type RemoteBrief = SecretaryBriefState & { audioUrl?: string };
+
+// Why the desktop refused a `prompt`, `answer`, `interrupt`, `push-subscribe`,
+// `secretary-mode` or `secretary-reply`:
 //   dialog-open   — a dialog is open; answer it first
 //   gone          — the dialog the answer names is no longer open
 //   needs-confirm — a widening option without `confirmed`
@@ -405,6 +470,7 @@ export interface PromptClearedFrame {
 //   not-working   — nothing to stop
 //   unsupported   — the desktop can't do this for this dialog or backend
 //   failed        — tried and failed (the CLI couldn't be reached, or refused)
+//   busy          — the secretary is still reading a reply (`secretary-reply`)
 export type AckRefusal =
   | "dialog-open"
   | "gone"
@@ -412,7 +478,8 @@ export type AckRefusal =
   | "not-running"
   | "not-working"
   | "unsupported"
-  | "failed";
+  | "failed"
+  | "busy";
 
 // The desktop's answer to every frame carrying a `clientMsgId`, once it has handled
 // it. A frame resent with an id the desktop already handled gets the same ack again
@@ -444,7 +511,8 @@ export type ServerFrame =
   | PromptClearedFrame
   | AckFrame
   | PongFrame
-  | ErrorFrame;
+  | ErrorFrame
+  | SecretaryFrame;
 
 // ---------------------------------------------------------------------------
 // Desktop-side state surfaced to the renderer (Toolbox "Phone" section)

@@ -13,11 +13,17 @@
 //     never sends a key of its own.
 //   - A push (Story 7) goes out for each of those Finished and Needs you events, with
 //     the same line the list shows, once that line has been read.
+//   - The secretary (epic secretary-bar) is the desk's own: its mode, its briefs and
+//     their exchanges, the toolbox's switch (switchMode). A brief's audio goes to the
+//     phone made smaller (secretary/phoneAudio.ts), once per brief and format, in
+//     memory only.
 //
 // Kept apart from remote/index.ts, which wires it to the real process manager, so
 // tests drive it with a fake one.
 
 import type { AnswerOutcome, InstanceInfo, ProcessManager, SecretaryEvent } from "../process-manager";
+import type { Secretary } from "../secretary";
+import { phoneAudio, type PhoneAudioFormat } from "../secretary/phoneAudio";
 import {
   checkChoice,
   dialogOf,
@@ -54,7 +60,19 @@ export type HostProcessManager = Pick<
   | "canInterrupt"
   | "readRecentTurns"
   | "ptySizeOf"
+  | "readOnPhone"
 >;
+
+// What this needs from the secretary (secretary/index.ts), and its switch: the
+// app's secretary and switchMode satisfy it.
+export type HostSecretary = Pick<
+  Secretary,
+  "isOn" | "checkClaude" | "briefs" | "audioFor" | "reply" | "onBrief" | "onMode"
+> & {
+  // Secretary Mode saved and applied as the toolbox switch does it. May throw (the
+  // save failed), leaving the mode as it was.
+  switchMode(enabled: boolean): void;
+};
 
 // The server's broadcasts and pushes this drives.
 export type HostPush = Pick<
@@ -64,6 +82,7 @@ export type HostPush = Pick<
   | "broadcastPromptState"
   | "broadcastPromptCleared"
   | "broadcastTranscript"
+  | "broadcastSecretary"
   | "pushSession"
 >;
 
@@ -110,7 +129,11 @@ const refuse = (reason: Extract<HostAck, { ok: false }>["reason"], message: stri
 
 const OK: HostAck = { ok: true };
 
-export function createRemoteHost(pm: HostProcessManager, push: HostPush): RemoteHost & {
+export function createRemoteHost(
+  pm: HostProcessManager,
+  push: HostPush,
+  secretary: HostSecretary | null = null
+): RemoteHost & {
   dispose(): void;
 } {
   const lines = new Map<string, Lines>();
@@ -131,6 +154,10 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
   const reading = new Set<string>();
   // Per instance being read, who asked for a read meanwhile: they get the next one.
   const readAgain = new Map<string, (() => void)[]>();
+  // Whether the secretary's `claude` was there when last looked for.
+  let claudeFound = false;
+  // Each instance's brief audio as the phone gets it, for the brief it was made from.
+  const phoneAudios = new Map<string, { seq: number } & Partial<Record<PhoneAudioFormat, Buffer>>>();
 
   // Read the latest turn, from the end of the session (the phone's own reader), and
   // update the instance's lines. Never inside the call that asked for it, which may
@@ -235,6 +262,27 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
     push.broadcastInstances();
   });
 
+  // A brief or the mode changed: phones are told, and a phone copy of audio that is
+  // no longer its brief's goes.
+  const offBrief = secretary?.onBrief((id, state) => {
+    const kept = phoneAudios.get(id);
+    if (kept && kept.seq !== state?.seq) phoneAudios.delete(id);
+    push.broadcastSecretary();
+  });
+  const offMode = secretary?.onMode((on) => {
+    if (on) claudeFound = true;
+    else phoneAudios.clear();
+    push.broadcastSecretary();
+  });
+
+  // Finished becomes Idle on the phones.
+  const markSeen = (id: string) => {
+    const event = pm.secretaryEventOf(id);
+    if (event?.kind !== "finished" || seen.get(id) === event.seq) return;
+    seen.set(id, event.seq);
+    push.broadcastInstances();
+  };
+
   const phoneable = (id: string): InstanceInfo | null => {
     const info = pm.infoOf(id);
     return info && info.status === "running" ? info : null;
@@ -299,12 +347,7 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
       };
     },
 
-    markSeen(id) {
-      const event = pm.secretaryEventOf(id);
-      if (event?.kind !== "finished" || seen.get(id) === event.seq) return;
-      seen.set(id, event.seq);
-      push.broadcastInstances();
-    },
+    markSeen,
 
     readTranscript: (id, turns) => pm.readRecentTurns(id, turns),
 
@@ -400,7 +443,74 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
       return refuse("failed", "Couldn't stop it; check the terminal");
     },
 
-    dispose: unsubscribe,
+    secretary(fresh) {
+      if (!secretary) return null;
+      if (fresh) claudeFound = secretary.checkClaude();
+      const on = secretary.isOn();
+      return { on, claudeFound: on || claudeFound, briefs: secretary.briefs() };
+    },
+
+    async setSecretaryMode(enabled) {
+      if (!secretary) return refuse("unsupported", "This Mac has no secretary");
+      if (enabled) {
+        claudeFound = secretary.checkClaude();
+        if (!claudeFound) {
+          push.broadcastSecretary();
+          return refuse("unsupported", "Your Mac needs Claude Code for the secretary");
+        }
+      }
+      try {
+        secretary.switchMode(enabled);
+      } catch {
+        return refuse("failed", "Your Mac couldn't save the switch");
+      }
+      // The mode the secretary acts on may not have changed (on, with `claude` gone
+      // since), and then nothing else tells the phones.
+      push.broadcastSecretary();
+      return OK;
+    },
+
+    // Only the brief `seq` names, and only a Finished: what a phone opening the
+    // session does, so the desk's red dot goes out and the brief stops waiting.
+    secretarySeen(id, seq) {
+      const brief = secretary?.briefs()[id];
+      if (!brief || brief.seq !== seq || brief.kind !== "finished") return;
+      markSeen(id);
+      pm.readOnPhone(id);
+    },
+
+    // Checked here, before the secretary takes it, so a refusal reaches the phone as
+    // an ack and the phone keeps the text. The secretary reads it behind the ack; its
+    // exchanges arrive in the brief.
+    async secretaryReply(id, seq, text) {
+      if (!secretary?.isOn()) return refuse("unsupported", "The secretary is off");
+      const brief = secretary.briefs()[id];
+      if (!brief || brief.seq !== seq) return refuse("gone", "This brief has been replaced");
+      if (brief.kind !== "needs-you" || !brief.replyable) {
+        return refuse("unsupported", "The secretary can't answer this one; use the buttons or the terminal");
+      }
+      if (brief.handled) return refuse("gone", "This dialog was already answered");
+      if (brief.exchanges?.some((e) => !e.outcome)) {
+        return refuse("busy", "The secretary is still reading your last reply");
+      }
+      if (!text.trim()) return refuse("failed", "Nothing to send");
+      void secretary.reply(id, seq, text);
+      return OK;
+    },
+
+    secretaryAudio(id, seq, format) {
+      const wav = secretary?.audioFor(id, seq);
+      if (!wav) return null;
+      let kept = phoneAudios.get(id);
+      if (kept?.seq !== seq) phoneAudios.set(id, (kept = { seq }));
+      return (kept[format] ??= phoneAudio(wav, format));
+    },
+
+    dispose() {
+      unsubscribe();
+      offBrief?.();
+      offMode?.();
+    },
   };
 }
 

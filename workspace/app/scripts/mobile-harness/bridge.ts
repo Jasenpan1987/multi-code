@@ -101,6 +101,12 @@ export function attach(
     // The world says what each session is doing itself.
     refreshPreview: () => {},
     writeToInstance: (id, data) => world.input(id, data),
+    // No secretary yet.
+    secretary: () => null,
+    setSecretaryMode: async () => refuse("unsupported", "No secretary in the harness"),
+    secretarySeen: () => {},
+    secretaryReply: async () => refuse("unsupported", "No secretary in the harness"),
+    secretaryAudio: () => null,
 
     async sendPrompt(id, text) {
       const session = world.stateOf(id);

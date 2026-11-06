@@ -499,6 +499,39 @@ describe("a read (epic secretary-bar)", () => {
   });
 });
 
+describe("the phone link's listeners (epic secretary-bar)", () => {
+  it("hear every brief and mode change the renderer does, after it, until unsubscribed", async () => {
+    const h = harness();
+    const briefs: [string, SecretaryBriefState | null][] = [];
+    const modes: boolean[] = [];
+    const offBrief = h.secretary.onBrief((id, state) => briefs.push([id, state]));
+    const offMode = h.secretary.onMode((on) => modes.push(on));
+    // One that throws doesn't keep the others from hearing.
+    h.secretary.onBrief(() => {
+      throw new Error("broken listener");
+    });
+
+    h.secretary.start(true);
+    h.fire("a", ev(3));
+    h.writes[0].settle(brief("Shop is done."));
+    await flush();
+    h.fire("a", null);
+    h.secretary.setMode(false);
+
+    expect(modes).toEqual(h.modePushes());
+    expect(modes).toEqual([true, false]);
+    expect(briefs.map(([, state]) => state)).toEqual(h.pushes("a"));
+    expect(briefs.at(-1)).toEqual(["a", null]);
+
+    offBrief();
+    offMode();
+    h.secretary.setMode(true);
+    h.fire("a", ev(4));
+    expect(modes).toEqual([true, false]);
+    expect(briefs.at(-1)).toEqual(["a", null]);
+  });
+});
+
 describe("a clear", () => {
   it("keeps the brief, marked handled, and lets the work in flight finish", async () => {
     const h = harness();

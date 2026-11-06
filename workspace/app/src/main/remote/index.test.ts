@@ -28,6 +28,7 @@ vi.mock("../settings-store", () => ({
   loadSettings: () => ({ remoteEnabled: false }),
   saveSettings: () => undefined,
 }));
+vi.mock("../secretary", () => ({ secretary: {}, switchMode: () => undefined }));
 vi.mock("./remote-host", () => ({ createRemoteHost: () => ({ markSeen: fakes.markSeen }) }));
 vi.mock("./ws-server", () => ({
   remoteServer: {
