@@ -46,6 +46,11 @@ export interface DialogQuestion {
   header?: string;
   multiSelect: boolean;
   options: { label: string; description?: string }[];
+  // Claude draws a single-select question whose options carry a `preview` beside its
+  // preview pane. That layout takes no digits and has no "Type something" row: an
+  // option is picked with ↓ and Enter (2.1.318, measured 2026-11-06). The other
+  // questions of the same box still take digits.
+  preview?: true;
 }
 
 export type Dialog =
@@ -146,18 +151,23 @@ function questionsOf(toolInput: unknown): DialogQuestion[] | null {
     const question = str(q?.question) ?? str(q?.header);
     if (!q || !question) return null;
     const options: DialogQuestion["options"] = [];
+    let preview = false;
     for (const o of Array.isArray(q.options) ? q.options : []) {
       const label = str(asRecord(o)?.label);
       if (!label) return null;
       options.push({ label, description: str(asRecord(o)?.description) });
+      if (str(asRecord(o)?.preview)) preview = true;
     }
     if (options.length === 0 || options.length > 8) return null;
+    // OpenCode names it `multiple`.
+    const multiSelect = q.multiSelect === true || q.multiple === true;
     questions.push({
       question,
       header: str(q.header),
-      // OpenCode names it `multiple`.
-      multiSelect: q.multiSelect === true || q.multiple === true,
+      multiSelect,
       options,
+      // Claude shows previews for single-select questions only.
+      ...(preview && !multiSelect ? { preview: true as const } : {}),
     });
   }
   return questions;
@@ -319,6 +329,8 @@ function checkAnswers(
     const chosen = unique.length + (text ? 1 : 0);
     if (chosen === 0) return { ok: false, ask: "unanswered" };
     if (!questions[q].multiSelect && chosen !== 1) return { ok: false, refuse: "bad-choice" };
+    // A preview question has no "Type something" row.
+    if (questions[q].preview && text) return { ok: false, refuse: "bad-choice" };
     resolved.push({ picks: unique, text });
   }
 
@@ -345,7 +357,11 @@ function checkAnswers(
   questions.forEach((question, q) => {
     const { picks, text } = resolved[q];
     const count = question.options.length;
-    if (!question.multiSelect) {
+    if (question.preview) {
+      // The cursor starts on row 1; Enter picks the row and moves on (or submits a
+      // box of one question), as a digit does elsewhere.
+      keys.push(...Array<string>(picks[0] - 1).fill(DOWN), ENTER);
+    } else if (!question.multiSelect) {
       if (text) keys.push(digit(count), text, ENTER);
       else keys.push(digit(picks[0] - 1));
     } else {

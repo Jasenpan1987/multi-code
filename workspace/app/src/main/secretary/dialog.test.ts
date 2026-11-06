@@ -202,6 +202,59 @@ describe("a question box", () => {
     expect(planned.expect).toEqual({ "Which pets?": "Cat, Hamster", "Which city?": "Rome" });
   });
 
+  // Options with a `preview` put the question beside a preview pane, which takes no
+  // digits (three "1"s left the box untouched on 2.1.318, 2026-11-06).
+  const withPreview = (question: string, labels: string[]) => ({
+    ...q(question, labels),
+    options: labels.map((label) => ({ label, description: `${label} option`, preview: `[ ${label} ]` })),
+  });
+
+  it("reads a preview only on a single-select question", () => {
+    const box = claudeDialog("AskUserQuestion", {
+      questions: [
+        withPreview("Which layout?", ["A", "B"]),
+        { ...withPreview("Which panes?", ["Left", "Right"]), multiSelect: true },
+        q("Which color?", ["Red", "Blue"]),
+      ],
+    });
+    if (box.kind !== "questions") throw new Error(box.kind);
+    expect(box.questions.map((x) => x.preview)).toEqual([true, undefined, undefined]);
+  });
+
+  it("one preview question: down to the option, Enter, no review page (run: Which layout? → C)", () => {
+    const box = claudeDialog("AskUserQuestion", { questions: [withPreview("Which layout?", ["A", "B", "C"])] });
+    expect(keysOf(box, { answers: [{ question: 1, picks: [3] }] })).toEqual({
+      keys: [DOWN, DOWN, "\r"],
+      expect: { "Which layout?": "C" },
+    });
+    expect(keysOf(box, { answers: [{ question: 1, picks: [1] }] }).keys).toEqual(["\r"]);
+  });
+
+  it("a preview question beside a plain one: Enter there, the digit here, then Submit (run: card, autoplay)", () => {
+    const box = claudeDialog("AskUserQuestion", {
+      questions: [withPreview("Where does the card go?", ["Top bar", "In the chat"]), q("Auto-play?", ["Always tap", "Open one plays"])],
+    });
+    expect(
+      keysOf(box, {
+        answers: [
+          { question: 1, picks: [2] },
+          { question: 2, picks: [1] },
+        ],
+      })
+    ).toEqual({
+      keys: [DOWN, "\r", "1", "1"],
+      expect: { "Where does the card go?": "In the chat", "Auto-play?": "Always tap" },
+    });
+  });
+
+  it("a preview question has no Type something row", () => {
+    const box = claudeDialog("AskUserQuestion", { questions: [withPreview("Which layout?", ["A", "B"])] });
+    expect(checkChoice(box, { answers: [{ question: 1, picks: [], text: "Something else" }] })).toEqual({
+      ok: false,
+      refuse: "bad-choice",
+    });
+  });
+
   it("asks for the questions not yet answered, and refuses what the box can't take", () => {
     const box = claudeDialog("AskUserQuestion", {
       questions: [q("Which db?", ["Postgres", "SQLite"]), q("Which extras?", ["Cache", "Queue"], true)],
