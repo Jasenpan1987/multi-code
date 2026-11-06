@@ -11,8 +11,10 @@
 // What is left to decide is which input counts as acknowledging the shown
 // instance: a key press, or a click anywhere in its page (terminal, compose box,
 // toolbox). Not a click in the contact list, which selects (and so acknowledges)
-// the contact clicked rather than the one being left, and not input to a dialog
-// layered over the page, which is about something else. Not Cmd plus a digit, or
+// the contact clicked rather than the one being left, not input to a dialog
+// layered over the page, which is about something else, and not input to the
+// secretary bar, whose brief may be another session's: the bar reads its own
+// session when it means to (epic secretary-bar, Story 4). Not Cmd plus a digit, or
 // Option+Shift+Up/Down either: those are the list's switch keys
 // (components/contactHotkeys), so they count like a click in the list. Nor a
 // modifier on its own: Cmd, Option and Shift come down before the key they go with,
@@ -20,7 +22,7 @@
 
 import { hotkeyDigit, unreadStep } from "../components/contactHotkeys";
 
-const NOT_THE_PAGE = ".sidebar, .dialog-overlay";
+const NOT_THE_PAGE = ".sidebar, .dialog-overlay, .secretary-bar";
 
 const MODIFIER_KEYS = new Set(["Meta", "Alt", "Shift", "Control"]);
 

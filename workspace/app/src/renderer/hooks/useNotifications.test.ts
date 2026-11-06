@@ -1,6 +1,8 @@
 // markRead tells main only when it cleared something (G-304): the alert counted, or
 // one still inside the debounce. A key press on an instance with nothing unread sends
-// nothing. readOnPhone clears the same way and tells main nothing: the phone read it.
+// nothing. markReadFromBar clears the same way and always tells main: the secretary
+// bar's brief must stop waiting. readOnPhone clears the same way and tells main
+// nothing: the phone read it.
 // React's hooks are stood in for, so the hook runs as a plain function.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -63,6 +65,40 @@ describe("markRead", () => {
     markRead("a");
 
     expect(acknowledgeInstance).not.toHaveBeenCalled();
+  });
+});
+
+describe("markReadFromBar", () => {
+  it("clears a counted alert and acknowledges it once", () => {
+    const { notify, markReadFromBar, unread } = useNotifications();
+    notify("a", "alpha");
+    vi.advanceTimersByTime(500);
+
+    markReadFromBar("a");
+
+    expect(unread.has("a")).toBe(false);
+    expect(published()).toEqual(new Map());
+    expect(acknowledgeInstance).toHaveBeenCalledTimes(1);
+    expect(acknowledgeInstance).toHaveBeenCalledWith("a");
+  });
+
+  it("acknowledges an instance with no red dot, so main marks its brief seen", () => {
+    const { markReadFromBar } = useNotifications();
+
+    markReadFromBar("a");
+
+    expect(acknowledgeInstance).toHaveBeenCalledWith("a");
+    expect(dispatchEvent).not.toHaveBeenCalled();
+  });
+
+  it("drops an alert still inside the debounce, which then never counts", () => {
+    const { notify, markReadFromBar, unread } = useNotifications();
+    notify("a", "alpha");
+    markReadFromBar("a");
+    vi.advanceTimersByTime(500);
+
+    expect(unread.has("a")).toBe(false);
+    expect(acknowledgeInstance).toHaveBeenCalledTimes(1);
   });
 });
 
