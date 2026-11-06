@@ -20,7 +20,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import type { RemoteSessionState } from "../../shared/remote-protocol";
 import { ConnectionBanner } from "../components/Connection";
 import { SecretaryBar } from "../components/SecretaryBar";
-import { useKeyboardFrame } from "../keyboard";
+import { useKeyboardFrame, useTyping } from "../keyboard";
 import { navigate } from "../routes";
 import { useActions, useApp } from "../store";
 import { sessionOf } from "../state";
@@ -40,8 +40,10 @@ export function TerminalScreen({ id, hidden = false }: { id: string; hidden?: bo
   const session = useApp((s) => sessionOf(s, id));
   const connected = useApp((s) => s.connection.state === "connected");
   const [text, setText] = useState("");
-  const [typing, setTyping] = useState(false);
   const screenRef = useRef<HTMLDivElement>(null);
+  // Any text field of the screen, as the chat's (SessionScreen.tsx): the input line,
+  // and the secretary bar's reply box, which focus moves to with the keyboard up.
+  const typing = useTyping(screenRef);
   const inputRef = useRef<HTMLInputElement>(null);
   // Marked text of an IME (pinyin before it becomes characters) isn't sent, and
   // the line isn't cleared under it (WebKit 255857).
@@ -124,8 +126,6 @@ export function TerminalScreen({ id, hidden = false }: { id: string; hidden?: bo
             autoComplete="off"
             spellCheck={false}
             onChange={(e) => setText(e.target.value)}
-            onFocus={() => setTyping(true)}
-            onBlur={() => setTyping(false)}
             onCompositionStart={() => (composing.current = true)}
             onCompositionEnd={() => (composing.current = false)}
           />

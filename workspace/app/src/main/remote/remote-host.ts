@@ -231,15 +231,15 @@ export function createRemoteHost(
   // the builder has already dealt with at the desk still gets its push (Story 7:
   // whether or not the builder is at the desk).
   //
-  // With the secretary on, `line` is the first sentence of the event's brief, and
-  // stands for the list's line (Story 6); without it, or when that brief has none,
-  // the push is today's.
-  function pushEvent(id: string, event: SecretaryEvent, line?: string) {
+  // `body` is the event's own line: with the secretary on, the first sentence of its
+  // brief (Story 6); else, or when that brief has none, the list's line as it was read
+  // for this event (todayLine), never as it is when a wait for the brief ends: a turn
+  // started meanwhile has its own.
+  function pushEvent(id: string, event: SecretaryEvent, body: string | undefined) {
     const info = pm.infoOf(id);
     if (!info) return;
     if ((fresh.get(id) ?? 0) > event.seq) return;
     const state: RemoteSessionState = event.kind === "needs-you" ? "needs-you" : "finished";
-    const body = line ?? previewOf(state, event, info, lines.get(id) ?? {});
     // The phone's Needs you count, as its list would show it now.
     const badge = pm
       .listInstances()
@@ -279,8 +279,11 @@ export function createRemoteHost(
           freshEvents.set(id, event);
           restatements.set(id, new Set());
           void read
-            .then(() => briefLine(id, event))
-            .then((line) => pushEvent(id, event, line))
+            .then(() => {
+              // Taken now, before any wait for the brief.
+              const today = todayLine(id, event);
+              return briefLine(id, event).then((line) => pushEvent(id, event, line ?? today));
+            })
             .catch(() => undefined);
         }
       } else {
@@ -289,6 +292,14 @@ export function createRemoteHost(
     }
     push.broadcastInstances();
   });
+
+  // The push's line without the secretary: what the list shows for the event, read
+  // after it (refreshLines).
+  function todayLine(id: string, event: SecretaryEvent): string | undefined {
+    const info = pm.infoOf(id);
+    if (!info) return undefined;
+    return previewOf(event.kind === "needs-you" ? "needs-you" : "finished", event, info, lines.get(id) ?? {});
+  }
 
   // The first sentence of the event's brief, once its text is written, for the
   // event's push (Story 6). Undefined at once while the secretary is off, and, while it

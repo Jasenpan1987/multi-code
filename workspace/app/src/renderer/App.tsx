@@ -10,7 +10,11 @@ import {
 } from "./components/TerminalView";
 import { ComposeBox } from "./components/ComposeBox";
 import { SecretaryBar } from "./components/SecretaryBar";
-import { applyBriefUpdate, mergeBriefSnapshot } from "./components/secretaryBrief";
+import {
+  applyBriefUpdate,
+  isReadableBrief,
+  mergeBriefSnapshot,
+} from "./components/secretaryBrief";
 import type { BriefMap } from "./components/secretaryBrief";
 import { DiffWindow } from "./components/DiffWindow";
 import { DropMessage } from "./components/DropMessage";
@@ -123,7 +127,7 @@ export function App() {
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
 
-  const { notify, markRead, markReadFromBar, readOnPhone } = useNotifications();
+  const { notify, markRead, readFromBar, readOnPhone } = useNotifications();
   // Per-instance timestamp of the last audible alert, for the
   // burst-collapse cooldown. Only real alerts record here, so a
   // suppressed-while-watching event doesn't eat cooldown. Lifted out of the
@@ -468,14 +472,25 @@ export function App() {
   );
 
   // The bar's "Got it", or a Finished brief played to the end on it (secretary-bar
-  // Story 4): read that session as a click on it would, and always tell main, even
-  // with no red dot left, so the brief stops waiting here and on the phone.
+  // Story 4): main marks that brief seen, red dot or not, and tells the phone; then
+  // its session is read here as a click on it would read it. Only for the brief
+  // read, by its seq: main or this window may have a newer one for the session by
+  // then, and that one wasn't read.
+  const briefsRef = useRef(briefs);
+  briefsRef.current = briefs;
   const handleBriefRead = useCallback(
-    (id: string) => {
-      stopMessageSound(id);
-      markReadFromBar(id);
+    (id: string, seq: number) => {
+      if (!isReadableBrief(briefsRef.current, id, seq)) return;
+      void window.electronAPI
+        .secretarySeen(id, seq)
+        .then((read) => {
+          if (!read || !isReadableBrief(briefsRef.current, id, seq)) return;
+          stopMessageSound(id);
+          readFromBar(id);
+        })
+        .catch(() => {});
     },
-    [markReadFromBar]
+    [readFromBar]
   );
 
   const handleNewInstance = useCallback(

@@ -169,6 +169,12 @@ pairs, authenticates and prints the sessions of every scenario. `HarnessClient`
   bracket access so `pnpm type` checks every name.
 - `world.ts`: the sessions as they change. `scenarios.ts`: what they start as.
 - `control.ts`, `screenshot.ts`, `client.ts`, `harness.test.ts`.
+- `layout-check.ts`: the secretary bar's layout in WebKit, where the component tests
+  (markup only) can't look: on a phone on its side the folded bar keeps its height
+  above a permission card whose answers stay reachable, and on the terminal screen the
+  keyboard frame follows the focus to the bar's reply box. `node
+  scripts/mobile-harness/layout-check.ts --control $C [--shots <dir>]`; exits 1 on a
+  failed check.
 - `push-check.ts`: notifications and the Home Screen hand-off (T-811) in WebKit or
   Chrome, with the Home Screen, permission, PushManager and clipboard stubbed; its
   header says how to run it.

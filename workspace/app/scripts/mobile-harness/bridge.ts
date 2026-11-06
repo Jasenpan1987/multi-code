@@ -271,7 +271,8 @@ export function attach(
         shownSeq.delete(id);
       }
     }
-    secretary.sync();
+    if (reset) secretary.reset();
+    else secretary.sync();
     server.broadcastInstances();
     server.broadcastSecretary();
   }

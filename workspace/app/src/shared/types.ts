@@ -447,6 +447,10 @@ export interface ElectronAPI {
   // A reply typed or dictated on the card of that brief. What the secretary makes of
   // it arrives on "secretary-brief", in the brief's `exchanges`.
   replyToSecretary: (instanceId: string, seq: number, text: string) => Promise<void>;
+  // The secretary bar read that instance's Finished brief for event `seq` ("Got it",
+  // or it played to the end). True when main marked it seen and told the phones;
+  // false when `seq` is no longer the instance's brief, or it isn't a Finished.
+  secretarySeen: (instanceId: string, seq: number) => Promise<boolean>;
 
   // File drop. The ones taking an instance id act on that contact's project
   // directory, as stored, which keys its default folder: contacts on one project

@@ -188,7 +188,7 @@ export function SessionScreen({ id }: { id: string }) {
           ))}
         </div>
       </div>
-      <div className="session-foot">
+      <div className={foot === "dialog" ? "session-foot has-dialog" : "session-foot"}>
         {foot === "dialog" ? (
           <DialogSlot id={id} dialog={session.dialog} summary={session.dialog?.summary ?? instance?.preview ?? ""} />
         ) : foot === "answering" ? (

@@ -12,7 +12,8 @@
 // unmounts) stops it.
 //
 // "Got it" on a waiting Finished brief, and a Finished brief that played to the end,
-// read its session (`onRead`): main marks the brief seen and the bar moves on. A
+// read its session (`onRead`, with the brief's seq, so a read of a brief replaced
+// meanwhile marks nothing): main marks the brief seen and the bar moves on. A
 // Needs you leaves the queue only when its dialog is answered.
 //
 // Folded, the bar is one row of title, state and controls over three lines of the
@@ -42,27 +43,31 @@ import {
 import {
   barControls,
   barState,
+  briefKey,
   briefLang,
+  editDraft,
+  keepDrafts,
   queueLabel,
   readsOnEnd,
   replyView,
 } from "./secretaryBrief";
-import type { BriefMap } from "./secretaryBrief";
+import type { BriefMap, Drafts } from "./secretaryBrief";
 
 interface SecretaryBarProps {
   briefs: BriefMap;
   instances: Instance[];
   // The title: select that contact. Plays nothing.
   onOpenSession: (instanceId: string) => void;
-  // "Got it", or a Finished brief played to the end: read its session.
-  onRead: (instanceId: string) => void;
+  // "Got it", or a Finished brief played to the end: read its session, for the
+  // brief of event `seq`.
+  onRead: (instanceId: string, seq: number) => void;
 }
 
 // Buttons act on mouse up; swallowing mouse down keeps focus where it was, so a click
 // on the bar never pulls focus out of the terminal.
 const keepFocus = (e: MouseEvent) => e.preventDefault();
 
-const keyOf = (ref: BriefRef) => `${ref.instanceId}#${ref.seq}`;
+const keyOf = (ref: BriefRef) => briefKey(ref.instanceId, ref.seq);
 
 const sameRef = (a: BriefRef | null, b: BriefRef | null) =>
   a === b || (!!a && !!b && a.instanceId === b.instanceId && a.seq === b.seq);
@@ -71,8 +76,9 @@ export function SecretaryBar({ briefs, instances, onOpenSession, onRead }: Secre
   const [shown, setShown] = useState<BriefRef | null>(null);
   const [open, setOpen] = useState(false);
   // Per brief, by key: a draft, a send or an audio fetch belongs to the brief it
-  // started on, and reads as nothing on any other.
-  const [draft, setDraft] = useState({ key: "", text: "" });
+  // started on, and reads as nothing on any other. Every brief keeps its own draft
+  // until it is sent or the brief goes.
+  const [drafts, setDrafts] = useState<Drafts>({});
   const [sendingKey, setSendingKey] = useState<string | null>(null);
   const [loading, setLoading] = useState<{ key: string; request: number } | null>(null);
   const [staleKey, setStaleKey] = useState<string | null>(null);
@@ -110,16 +116,23 @@ export function SecretaryBar({ briefs, instances, onOpenSession, onRead }: Secre
   );
 
   const instanceId = shown?.instanceId ?? null;
-  const latest = useRef({ key, brief, instanceId, onRead });
-  latest.current = { key, brief, instanceId, onRead };
+  const latest = useRef({ key, brief, shown, onRead });
+  latest.current = { key, brief, shown, onRead };
   useEffect(
     () =>
       subscribeBriefEnded((ended) => {
         const now = latest.current;
-        if (ended === now.key && now.instanceId && readsOnEnd(now.brief)) now.onRead(now.instanceId);
+        if (ended === now.key && now.shown && readsOnEnd(now.brief)) {
+          now.onRead(now.shown.instanceId, now.shown.seq);
+        }
       }),
     []
   );
+
+  // A replaced or dropped brief's draft goes with it.
+  useEffect(() => {
+    setDrafts((current) => keepDrafts(current, briefs));
+  }, [briefs]);
 
   // The terminal (and the toolbox's shell) refit only when told, and the bar's
   // height is the room they lose. Told at once when it opens, folds or gets its
@@ -191,11 +204,11 @@ export function SecretaryBar({ briefs, instances, onOpenSession, onRead }: Secre
   };
 
   const gotIt = () => {
-    if (!instanceId) return;
+    if (!shown) return;
     stop();
     // Folded, so nothing holds it: the bar moves on once main marks it seen.
     setOpen(false);
-    onRead(instanceId);
+    onRead(shown.instanceId, shown.seq);
   };
 
   const step = (delta: 1 | -1) => {
@@ -203,13 +216,13 @@ export function SecretaryBar({ briefs, instances, onOpenSession, onRead }: Secre
     if (to) setShown(to);
   };
 
-  const draftText = key !== null && draft.key === key ? draft.text : "";
+  const draftText = key !== null ? (drafts[key] ?? "") : "";
   const send = (e?: FormEvent) => {
     e?.preventDefault();
     const text = draftText.trim();
     if (!shown || !key || !text || busy) return;
     const sent = key;
-    setDraft({ key: sent, text: "" });
+    setDrafts((current) => editDraft(current, sent, ""));
     setSendingKey(sent);
     void window.electronAPI
       .replyToSecretary(shown.instanceId, shown.seq, text)
@@ -415,7 +428,10 @@ export function SecretaryBar({ briefs, instances, onOpenSession, onRead }: Secre
             className="secretary-bar-input"
             rows={1}
             value={draftText}
-            onChange={(e) => key && setDraft({ key, text: e.target.value })}
+            onChange={(e) => {
+              const text = e.target.value;
+              if (key) setDrafts((current) => editDraft(current, key, text));
+            }}
             onKeyDown={onReplyKey}
             placeholder={chinese ? "回复秘书：可以、不行、以后都可以……" : "Reply to the secretary: yes, no, always…"}
             aria-label="Reply to the secretary"

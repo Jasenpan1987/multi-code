@@ -492,6 +492,24 @@ describe("the secretary in the harness", () => {
   });
 });
 
+describe("the harness secretary across scenarios", () => {
+  it("starts a scenario's briefs over, a read one waiting again, with the mode kept", async () => {
+    const client = await connect();
+    await scenario(client, "home");
+    expect((await post("secretary/on")).ok).toBe(true);
+    const before = (await client.next("secretary", (f) => f.on && !!f.briefs["infra-terraform"])).briefs["infra-terraform"];
+    client.send({ type: "secretary-seen", instanceId: "infra-terraform", seq: before.seq });
+    await client.next("secretary", (f) => f.briefs["infra-terraform"]?.seen === true);
+
+    await post("scenario/home?live=0");
+    const after = await client.next("secretary", (f) => !f.briefs["infra-terraform"]?.seen);
+    expect(after.on).toBe(true);
+    expect(after.briefs["infra-terraform"]).toMatchObject({ kind: "finished", status: "ready" });
+    expect(after.briefs["infra-terraform"].seen).toBeUndefined();
+    await post("secretary/off");
+  });
+});
+
 describe("the harness secretary, live", () => {
   it("settles a reply on its brief when the voice comes while it is being read", () => {
     vi.useFakeTimers();

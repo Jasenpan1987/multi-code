@@ -64,13 +64,12 @@ export function useNotifications() {
   );
 
   // Read from the secretary bar: "Got it", or a Finished brief played to the end
-  // (epic secretary-bar, Story 4). Clears like markRead, but always tells main, red
-  // dot or not: the brief may be the only thing left waiting on the session, and
-  // main marks it seen only when told.
-  const markReadFromBar = useCallback(
+  // (epic secretary-bar, Story 4), once main has marked that very brief seen
+  // (`secretarySeen`), which tells the phone too. So, like readOnPhone, nothing more
+  // goes back to main.
+  const readFromBar = useCallback(
     (instanceId: string) => {
       clear(instanceId);
-      window.electronAPI.acknowledgeInstance(instanceId);
     },
     [clear]
   );
@@ -85,5 +84,5 @@ export function useNotifications() {
     [clear]
   );
 
-  return { notify, markRead, markReadFromBar, readOnPhone, unread: unreadRef.current };
+  return { notify, markRead, readFromBar, readOnPhone, unread: unreadRef.current };
 }

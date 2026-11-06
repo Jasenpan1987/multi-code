@@ -132,6 +132,41 @@ export function readsOnEnd(brief: SecretaryBriefState | null): boolean {
   return brief?.kind === "finished";
 }
 
+// A read from the bar names its brief by seq, and counts only while that is still
+// the instance's brief here, and a Finished: a newer event may have replaced it
+// since, and the newer brief wasn't read. Main checks the same against its own.
+export function isReadableBrief(briefs: BriefMap, instanceId: string, seq: number): boolean {
+  const brief = briefs[instanceId];
+  return brief?.seq === seq && brief.kind === "finished";
+}
+
+// One brief: its instance and its event's seq.
+export const briefKey = (instanceId: string, seq: number) => `${instanceId}#${seq}`;
+
+// The bar's unsent replies, one per brief (by briefKey), so stepping to another brief
+// and back keeps what was typed or dictated on each.
+export type Drafts = Readonly<Record<string, string>>;
+
+export function editDraft(drafts: Drafts, key: string, text: string): Drafts {
+  if (text) return { ...drafts, [key]: text };
+  if (!(key in drafts)) return drafts;
+  const next = { ...drafts };
+  delete next[key];
+  return next;
+}
+
+// Only the drafts whose brief is still there: a replaced or dropped brief's reply has
+// nothing left to answer. The same object when nothing goes.
+export function keepDrafts(drafts: Drafts, briefs: BriefMap): Drafts {
+  const gone = Object.keys(drafts).filter(
+    (key) => !Object.entries(briefs).some(([id, brief]) => briefKey(id, brief.seq) === key)
+  );
+  if (!gone.length) return drafts;
+  const next = { ...drafts };
+  for (const key of gone) delete next[key];
+  return next;
+}
+
 // The open bar's reply box (voice-secretary T-510): on a Needs-you whose dialog the
 // secretary can answer in words, until the dialog is dealt with. Gone once it is
 // handled, by the secretary's own keys or anyone else's; the exchanges stay.

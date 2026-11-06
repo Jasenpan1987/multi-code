@@ -491,6 +491,56 @@ describe("a read (epic secretary-bar)", () => {
     expect(h.secretary.briefs().a.seen).toBeUndefined();
   });
 
+  it("marks the Finished brief a bar read names, and nothing else", async () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.writes[0].settle(brief("Shop 做完了。"));
+    await flush();
+
+    expect(h.secretary.markSeenAt("a", 0)).toBe(false);
+    expect(h.secretary.markSeenAt("b", 1)).toBe(false);
+    expect(h.secretary.briefs().a.seen).toBeUndefined();
+    expect(h.secretary.markSeenAt("a", 1)).toBe(true);
+    expect(h.secretary.briefs().a).toMatchObject({ seq: 1, status: "ready", seen: true });
+    // Read again, it still names the brief: the phone is told again, harmlessly.
+    expect(h.secretary.markSeenAt("a", 1)).toBe(true);
+
+    h.fire("a", ev(2, "needs-you"));
+    expect(h.secretary.markSeenAt("a", 2)).toBe(false);
+    expect(h.secretary.briefs().a.seen).toBeUndefined();
+  });
+
+  it("marks nothing for a Got it on a brief main replaced before the read arrived", () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    // The bar still shows seq 1 when seq 2 lands in main.
+    h.fire("a", ev(2));
+
+    expect(h.secretary.markSeenAt("a", 1)).toBe(false);
+    expect(h.secretary.briefs().a).toEqual({ seq: 2, at: 1_002, kind: "finished", status: "preparing" });
+  });
+
+  it("marks nothing for a brief that played to the end after main replaced it", async () => {
+    const h = harness();
+    h.secretary.start(true);
+    h.fire("a", ev(1));
+    h.writes[0].settle(brief("Shop 做完了。"));
+    await flush();
+    h.speaks[0].settle({ ok: true, wav: WAV });
+    await flush();
+    expect(h.secretary.briefs().a).toMatchObject({ seq: 1, audio: "ready" });
+    // Its audio was still playing on the desk when the next turn finished.
+    h.fire("a", ev(2));
+    h.writes[1].settle(brief("Shop 又做完了。"));
+    await flush();
+
+    expect(h.secretary.markSeenAt("a", 1)).toBe(false);
+    expect(h.secretary.briefs().a).toMatchObject({ seq: 2, status: "ready" });
+    expect(h.secretary.briefs().a.seen).toBeUndefined();
+  });
+
   it("stops listening for reads when it stops", () => {
     const h = harness();
     h.secretary.start(true);
@@ -645,6 +695,54 @@ describe("a clear", () => {
     h.fire("a", ev(2));
     expect(h.writes[0].signal.aborted).toBe(true);
     expect(h.pushes("a").at(-1)).toEqual({ seq: 2, at: 1002, kind: "finished", status: "preparing" });
+  });
+});
+
+describe("the read mark across the mode (epic secretary-bar)", () => {
+  it("keeps a brief read before the mode went off seen when it comes back on", () => {
+    const h = harness();
+    h.live.push({ instanceId: "a", event: ev(1) }, { instanceId: "b", event: ev(2) });
+    h.secretary.start(true);
+    h.read("a");
+    expect(h.secretary.markSeenAt("b", 2)).toBe(true);
+
+    h.secretary.setMode(false);
+    h.secretary.setMode(true);
+
+    expect(h.secretary.briefs().a).toMatchObject({ seq: 1, status: "preparing", seen: true });
+    expect(h.secretary.briefs().b).toMatchObject({ seq: 2, status: "preparing", seen: true });
+  });
+
+  it("keeps a session read while the mode was off seen when it comes on", () => {
+    const h = harness();
+    h.live.push({ instanceId: "a", event: ev(1) }, { instanceId: "b", event: ev(2, "needs-you") });
+    h.secretary.start(false);
+    h.read("a");
+    h.read("b");
+
+    h.secretary.setMode(true);
+
+    expect(h.secretary.briefs().a.seen).toBe(true);
+    // Reading a session doesn't answer its dialog.
+    expect(h.secretary.briefs().b.seen).toBeUndefined();
+  });
+
+  it("leaves a newer event waiting, and a removed instance's mark goes with it", () => {
+    const h = harness();
+    h.live.push({ instanceId: "a", event: ev(1) }, { instanceId: "b", event: ev(3) });
+    h.secretary.start(true);
+    h.read("a");
+    h.read("b");
+    h.secretary.setMode(false);
+    h.live.splice(0, 1, { instanceId: "a", event: ev(2) });
+
+    h.secretary.setMode(true);
+    expect(h.secretary.briefs().a).toMatchObject({ seq: 2, status: "preparing" });
+    expect(h.secretary.briefs().a.seen).toBeUndefined();
+
+    h.secretary.forget("b");
+    h.fire("b", ev(3));
+    expect(h.secretary.briefs().b.seen).toBeUndefined();
   });
 });
 

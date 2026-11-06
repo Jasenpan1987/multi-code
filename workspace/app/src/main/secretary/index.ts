@@ -117,11 +117,18 @@ export interface Secretary {
   // The wav of the instance's brief for event `seq`, or null when that is no
   // longer its brief or its audio isn't ready.
   audioFor(instanceId: string, seq: number): Buffer | null;
-  // Drop the instance's brief, when the instance is removed.
+  // Drop the instance's brief and its read mark, when the instance is removed.
   forget(instanceId: string): void;
   // The instance's session was read: its Finished brief stops waiting (`seen`).
-  // Called from onInstanceRead; a Needs you is unaffected.
+  // Called from onInstanceRead; a Needs you is unaffected. Read while the secretary
+  // is off, the live Finished event is remembered as read, so turning it on again
+  // doesn't bring it back as waiting.
   markSeen(instanceId: string): void;
+  // The secretary bar read the instance's Finished brief for event `seq` ("Got it",
+  // or played to the end). True, and the brief is seen, only while `seq` is still
+  // that instance's brief and a Finished: a read of a brief main has replaced since
+  // must not mark its replacement. The caller tells the phone only on true.
+  markSeenAt(instanceId: string, seq: number): boolean;
   // The builder's reply on the card of the instance's brief for event `seq`.
   // Resolves when the secretary has acted, asked back or answered; never throws.
   reply(instanceId: string, seq: number, text: string): Promise<void>;
@@ -247,6 +254,10 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
   let found: boolean | null = null;
   let unsubscribe: (() => void) | null = null;
   const jobs = new Map<string, Job>();
+  // Per instance, the seq of the latest Finished event read, whether or not it had
+  // a brief then. Kept apart from the jobs, which go with the mode: a brief written
+  // again for an event already read starts out seen.
+  const readUpTo = new Map<string, number>();
   const briefListeners = new Set<(instanceId: string, state: SecretaryBriefState | null) => void>();
   const modeListeners = new Set<(on: boolean, claudeFound: boolean | null) => void>();
 
@@ -304,11 +315,33 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
     publish(instanceId, job, job.state);
   };
 
-  const markSeen = (instanceId: string) => {
-    const job = jobs.get(instanceId);
-    if (!job || job.seen || job.event.kind !== "finished") return;
+  const noteReadUpTo = (instanceId: string, seq: number) => {
+    if ((readUpTo.get(instanceId) ?? -Infinity) < seq) readUpTo.set(instanceId, seq);
+  };
+
+  const seeJob = (instanceId: string, job: Job) => {
+    noteReadUpTo(instanceId, job.event.seq);
+    if (job.seen) return;
     job.seen = true;
     publish(instanceId, job, job.state);
+  };
+
+  const markSeen = (instanceId: string) => {
+    const job = jobs.get(instanceId);
+    if (job) {
+      if (job.event.kind === "finished") seeJob(instanceId, job);
+      return;
+    }
+    // No brief (the secretary is off): the live event is what was read.
+    const live = deps.liveSecretaryEvents().find((e) => e.instanceId === instanceId)?.event;
+    if (live?.kind === "finished") noteReadUpTo(instanceId, live.seq);
+  };
+
+  const markSeenAt = (instanceId: string, seq: number): boolean => {
+    const job = jobs.get(instanceId);
+    if (!job || job.event.seq !== seq || job.event.kind !== "finished") return false;
+    seeJob(instanceId, job);
+    return true;
   };
 
   const drop = (instanceId: string) => {
@@ -332,6 +365,10 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
       state: { seq: event.seq, kind: event.kind, status: "preparing", at: event.at },
       dialog: event.kind === "needs-you" ? deps.dialogFor(instanceId, event) : null,
       exchanges: [],
+      // Read already: before the mode went off, or while it was off.
+      ...(event.kind === "finished" && (readUpTo.get(instanceId) ?? -Infinity) >= event.seq
+        ? { seen: true }
+        : {}),
     };
     jobs.set(instanceId, job);
     publish(instanceId, job, job.state);
@@ -549,8 +586,12 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
       if (!job || job.event.seq !== seq) return null;
       return job.wav ?? null;
     },
-    forget: drop,
+    forget(instanceId) {
+      drop(instanceId);
+      readUpTo.delete(instanceId);
+    },
     markSeen,
+    markSeenAt,
     reply: (instanceId, seq, text) =>
       reply(instanceId, seq, text).catch(() => {
         // reply() catches the interpreter and the key writer itself; nothing else

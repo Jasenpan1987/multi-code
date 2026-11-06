@@ -5,12 +5,17 @@ import {
   applyBriefUpdate,
   barControls,
   barState,
+  briefKey,
   briefLang,
+  editDraft,
+  isReadableBrief,
+  keepDrafts,
   mergeBriefSnapshot,
   queueLabel,
   readsOnEnd,
   replyView,
 } from "./secretaryBrief";
+import type { Drafts } from "./secretaryBrief";
 
 const preparing = (seq: number): SecretaryBriefState => ({
   seq,
@@ -181,6 +186,55 @@ describe("readsOnEnd", () => {
     expect(readsOnEnd(preparing(1))).toBe(true);
     expect(readsOnEnd(ready(1, "ready"))).toBe(false);
     expect(readsOnEnd(null)).toBe(false);
+  });
+});
+
+describe("isReadableBrief", () => {
+  it("reads the Finished brief the bar named", () => {
+    expect(isReadableBrief({ a: preparing(1) }, "a", 1)).toBe(true);
+    // Seen or handled since: still that brief, and reading it again is harmless.
+    expect(isReadableBrief({ a: handled(preparing(1)) }, "a", 1)).toBe(true);
+  });
+
+  it("reads nothing once a newer event replaced it, before Got it or the end of its audio", () => {
+    expect(isReadableBrief({ a: preparing(2) }, "a", 1)).toBe(false);
+    expect(isReadableBrief({ a: ready(2, "pending") }, "a", 1)).toBe(false);
+    expect(isReadableBrief({}, "a", 1)).toBe(false);
+  });
+
+  it("reads nothing for a Needs you", () => {
+    expect(isReadableBrief({ a: ready(1, "ready") }, "a", 1)).toBe(false);
+  });
+});
+
+describe("drafts", () => {
+  const a = briefKey("a", 1);
+  const b = briefKey("b", 2);
+
+  it("keeps each brief's draft while stepping between them", () => {
+    let drafts: Drafts = {};
+    drafts = editDraft(drafts, a, "allow it, but only");
+    // Stepped to b and typed there; then back to a.
+    drafts = editDraft(drafts, b, "no, run the tests first");
+    expect(drafts[a]).toBe("allow it, but only");
+    expect(drafts[b]).toBe("no, run the tests first");
+    drafts = editDraft(drafts, a, "allow it, but only this once");
+    expect(drafts).toEqual({ [a]: "allow it, but only this once", [b]: "no, run the tests first" });
+  });
+
+  it("drops a draft once sent or emptied", () => {
+    const drafts = { [a]: "yes", [b]: "no" };
+    expect(editDraft(drafts, a, "")).toEqual({ [b]: "no" });
+    const none: Drafts = {};
+    expect(editDraft(none, a, "")).toBe(none);
+  });
+
+  it("drops the draft of a brief that was replaced or dropped, and keeps the rest", () => {
+    const drafts = { [a]: "yes", [b]: "no" };
+    const briefs = { a: ready(1, "ready"), b: ready(2, "ready") };
+    expect(keepDrafts(drafts, briefs)).toBe(drafts);
+    expect(keepDrafts(drafts, { a: ready(3, "ready"), b: ready(2, "ready") })).toEqual({ [b]: "no" });
+    expect(keepDrafts(drafts, { b: ready(2, "ready") })).toEqual({ [b]: "no" });
   });
 });
 

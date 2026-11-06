@@ -2848,6 +2848,39 @@ describe("a push that waits for the brief", () => {
     host.dispose();
   });
 
+  it("says the event's own turn, not one that started while it waited, however the wait ends", async () => {
+    const ways = {
+      failed: (s: FakeSecretary) => s.brief("inst-1", { seq: 1, kind: "finished", status: "failed", reason: "claude exited", at: T0 }),
+      late: async () => {
+        await vi.advanceTimersByTimeAsync(BRIEF_WAIT_MS);
+      },
+      "mode off": (s: FakeSecretary) => s.setOn(false),
+    };
+    for (const [way, end] of Object.entries(ways)) {
+      vi.setSystemTime(T0);
+      const secretary = new FakeSecretary();
+      const { pm, host, pushes } = hostWith(secretary);
+      pm.raise("inst-1", finished(1, T0));
+      secretary.brief("inst-1", { seq: 1, kind: "finished", status: "preparing", at: T0 });
+      await vi.advanceTimersByTimeAsync(2000);
+      // The builder starts the next turn at the desk; the list's line follows it.
+      pm.setWorking("inst-1", true);
+      pm.turns.set("inst-1", [
+        { kind: "user", text: "now the billing bug" },
+        { kind: "assistant", text: "I am looking into the unrelated billing issue." },
+      ]);
+      host.refreshPreview("inst-1");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(host.listInstances()[0].preview).toBe("I am looking into the unrelated billing issue.");
+      await end(secretary);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(pushes, way).toEqual([
+        expect.objectContaining({ title: "Shop · Finished", body: "Fixed the login form and its tests." }),
+      ]);
+      host.dispose();
+    }
+  });
+
   it("is today's push, at once, with the secretary off, and when it goes off while a push waits", async () => {
     const off = new FakeSecretary();
     off.on = false;

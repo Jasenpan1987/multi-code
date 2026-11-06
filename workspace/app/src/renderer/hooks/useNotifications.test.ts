@@ -1,8 +1,7 @@
 // markRead tells main only when it cleared something (G-304): the alert counted, or
 // one still inside the debounce. A key press on an instance with nothing unread sends
-// nothing. markReadFromBar clears the same way and always tells main: the secretary
-// bar's brief must stop waiting. readOnPhone clears the same way and tells main
-// nothing: the phone read it.
+// nothing. readFromBar and readOnPhone clear the same way and tell main nothing:
+// main marked the bar's brief seen itself (`secretarySeen`), or the phone read it.
 // React's hooks are stood in for, so the hook runs as a plain function.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -68,37 +67,27 @@ describe("markRead", () => {
   });
 });
 
-describe("markReadFromBar", () => {
-  it("clears a counted alert and acknowledges it once", () => {
-    const { notify, markReadFromBar, unread } = useNotifications();
+describe("readFromBar", () => {
+  it("clears a counted alert and tells main nothing: main marked the brief seen itself", () => {
+    const { notify, readFromBar, unread } = useNotifications();
     notify("a", "alpha");
     vi.advanceTimersByTime(500);
 
-    markReadFromBar("a");
+    readFromBar("a");
 
     expect(unread.has("a")).toBe(false);
     expect(published()).toEqual(new Map());
-    expect(acknowledgeInstance).toHaveBeenCalledTimes(1);
-    expect(acknowledgeInstance).toHaveBeenCalledWith("a");
-  });
-
-  it("acknowledges an instance with no red dot, so main marks its brief seen", () => {
-    const { markReadFromBar } = useNotifications();
-
-    markReadFromBar("a");
-
-    expect(acknowledgeInstance).toHaveBeenCalledWith("a");
-    expect(dispatchEvent).not.toHaveBeenCalled();
+    expect(acknowledgeInstance).not.toHaveBeenCalled();
   });
 
   it("drops an alert still inside the debounce, which then never counts", () => {
-    const { notify, markReadFromBar, unread } = useNotifications();
+    const { notify, readFromBar, unread } = useNotifications();
     notify("a", "alpha");
-    markReadFromBar("a");
+    readFromBar("a");
     vi.advanceTimersByTime(500);
 
     expect(unread.has("a")).toBe(false);
-    expect(acknowledgeInstance).toHaveBeenCalledTimes(1);
+    expect(acknowledgeInstance).not.toHaveBeenCalled();
   });
 });
 

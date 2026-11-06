@@ -699,6 +699,18 @@ export function registerIpcHandlers() {
         : undefined
   );
 
+  // The secretary bar read a Finished brief ("Got it", or played to the end; epic
+  // secretary-bar, Story 4). Only while `seq` is still the instance's brief: main
+  // may have replaced it before this arrived, and the newer one wasn't read. Then
+  // the phone stops showing Finished too. True when it was marked; the renderer
+  // clears its red dot only then.
+  ipcMain.handle("secretary:seen", (_event, instanceId: unknown, seq: unknown) => {
+    if (typeof instanceId !== "string" || typeof seq !== "number") return false;
+    if (!secretary.markSeenAt(instanceId, seq)) return false;
+    acknowledgeInstance(instanceId);
+    return true;
+  });
+
   ipcMain.handle(
     "secretary:set-server",
     (_event, url: string, key: SpeechKeyChange) => withClaude(setSpeechServer(url, key))

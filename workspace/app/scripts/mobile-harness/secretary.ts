@@ -85,6 +85,14 @@ export class HarnessSecretary {
     this.onChange();
   }
 
+  // A new scenario: its sessions start over, and so do their briefs, whatever was
+  // read or answered in the one before. The mode stays, as the desk's switch does.
+  reset() {
+    this.stop();
+    this.briefs.clear();
+    this.sync();
+  }
+
   // The world changed: a session that needs the builder or finished gets a brief,
   // and a brief whose moment has passed is marked as the desk's would be.
   sync() {
