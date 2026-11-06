@@ -22,6 +22,9 @@
 .session-screen .topbar .back { margin-right: -20px; position: relative; z-index: 1; }
 .session-screen .topbar .pill { margin-left: -2px; }
 
+/* The secretary's folded bar (components/secretary-bar.css): a sheet stops below it. */
+.session-screen.has-sbar { --sbar-h: 47px; }
+
 .session-screen .chat {
   flex: none;
   margin-top: auto;
@@ -341,5 +344,5 @@
   overflow-y: auto;
 }
 .session-screen.typing .dialog-slot.sheet {
-  max-height: calc(100% - 50px - env(safe-area-inset-top));
+  max-height: calc(100% - 50px - env(safe-area-inset-top) - var(--sbar-h, 0px));
 }

@@ -11,6 +11,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type R
 import type { RemoteSessionState, TranscriptEntry } from "../../shared/remote-protocol";
 import { Compose } from "../components/Compose";
 import { ConnectionBanner } from "../components/Connection";
+import { SecretaryBar } from "../components/SecretaryBar";
 import { lastAnswer } from "../answers";
 import { AnswerOutcome, DialogSlot } from "../components/DialogSlot";
 import { Markdown } from "../components/Markdown";
@@ -73,6 +74,8 @@ export function SessionScreen({ id }: { id: string }) {
   const screenRef = useRef<HTMLDivElement>(null);
   const typing = useTyping(screenRef);
   useKeyboardFrame(screenRef, typing);
+  // The secretary's bar under the top bar (epic secretary-bar): a sheet stops below it.
+  const secretary = useApp((s) => s.secretary?.on === true);
 
   const name = instance?.name ?? id;
   const working = instance?.state === "working";
@@ -116,7 +119,7 @@ export function SessionScreen({ id }: { id: string }) {
   const loadingEarlier = earlierFrom !== undefined && earlierFrom === session.transcript;
 
   return (
-    <div ref={screenRef} className={`screen session-screen${typing ? " typing" : ""}`}>
+    <div ref={screenRef} className={`screen session-screen${typing ? " typing" : ""}${secretary ? " has-sbar" : ""}`}>
       <div className="topbar">
         <a className="tap back" href="#/" aria-label="Back">
           ‹
@@ -130,6 +133,7 @@ export function SessionScreen({ id }: { id: string }) {
           <span className="mono-icon">&gt;_</span>
         </button>
       </div>
+      <SecretaryBar />
       <ConnectionBanner since={session.refreshedAt} />
       <div className="screen-body" ref={scroll.ref} {...scroll.handlers}>
         <div className="chat">

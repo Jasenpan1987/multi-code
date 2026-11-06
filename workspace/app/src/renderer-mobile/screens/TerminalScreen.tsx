@@ -19,6 +19,7 @@ import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { RemoteSessionState } from "../../shared/remote-protocol";
 import { ConnectionBanner } from "../components/Connection";
+import { SecretaryBar } from "../components/SecretaryBar";
 import { useKeyboardFrame } from "../keyboard";
 import { navigate } from "../routes";
 import { useActions, useApp } from "../store";
@@ -85,6 +86,7 @@ export function TerminalScreen({ id, hidden = false }: { id: string; hidden?: bo
           ☰
         </button>
       </div>
+      <SecretaryBar />
       <ConnectionBanner since={session.refreshedAt} />
       <TerminalView id={id} input={inputRef} />
       <div className="screen-foot term-foot">

@@ -9,10 +9,13 @@
 
 import type {
   PromptStateFrame,
+  RemoteBrief,
   RemoteInstance,
   ServerFrame,
   TranscriptEntry,
 } from "../shared/remote-protocol";
+import type { BriefRef } from "../shared/secretaryQueue";
+import { settleBar } from "./bar";
 import {
   applyAck,
   cancel,
@@ -74,6 +77,29 @@ export interface Session {
   refreshedAt: number | null;
 }
 
+// The secretary as the Mac last said (SecretaryFrame), its audio paths aside when it
+// comes from the cache.
+export interface SecretaryView {
+  on: boolean;
+  claudeFound: boolean;
+  briefs: Record<string, RemoteBrief>;
+}
+
+// The secretary bar (epic secretary-bar): the brief it shows, which this phone moves
+// through on its own (bar.ts keeps it to the shared queue's rules), and whether its
+// panel is open.
+export interface Bar {
+  shown: BriefRef | null;
+  open: boolean;
+}
+
+// The one brief this phone plays (player.ts): starting, playing, or why it couldn't.
+export interface Player {
+  ref: BriefRef | null;
+  status: "idle" | "loading" | "playing" | "error";
+  error?: string;
+}
+
 export interface AppState {
   pairing: StoredPairing | null;
   connection: Connection;
@@ -91,6 +117,14 @@ export interface AppState {
   // By instance id: the transcript entries that delivered one of its outbox prompts
   // (outbox.ts `settleDelivered`), so none delivers another. Kept with the outbox.
   delivered: Record<string, readonly string[]>;
+  // Null until the Mac says (one from before the epic never does) or the cache has it.
+  secretary: SecretaryView | null;
+  secretaryAt: number | null;
+  bar: Bar;
+  player: Player;
+  // The briefs that have started playing on this phone (`<id>:<seq>`), so their
+  // button says Replay. Not kept across launches.
+  played: readonly string[];
 }
 
 export type Action =
@@ -107,7 +141,11 @@ export type Action =
   | { type: "outbox-cancel"; clientMsgId: string }
   | { type: "outbox-dismiss"; clientMsgId: string }
   // Paired again with the same Mac under a new token (outbox.ts `newDevice`).
-  | { type: "outbox-new-device"; at: number };
+  | { type: "outbox-new-device"; at: number }
+  // The builder opened or folded the bar's panel, or moved it to another brief.
+  | { type: "bar"; open?: boolean; shown?: BriefRef | null }
+  // What the player is doing now.
+  | { type: "player"; player: Player };
 
 export const EMPTY_SESSION: Session = Object.freeze({
   transcript: null,
@@ -121,13 +159,18 @@ export const EMPTY_SESSION: Session = Object.freeze({
   refreshedAt: null,
 }) as Session;
 
+export const IDLE_PLAYER: Player = Object.freeze({ ref: null, status: "idle" }) as Player;
+const FOLDED: Bar = Object.freeze({ shown: null, open: false }) as Bar;
+
 export function initialState(
   pairing: StoredPairing | null,
-  saved: Partial<Pick<AppState, "instances" | "instancesAt" | "sessions" | "outbox" | "delivered">> & {
+  saved: Partial<
+    Pick<AppState, "instances" | "instancesAt" | "sessions" | "outbox" | "delivered" | "secretary" | "secretaryAt">
+  > & {
     lastSeenAt?: number | null;
   } = {}
 ): AppState {
-  return {
+  const state: AppState = {
     pairing,
     connection: {
       state: pairing ? "connecting" : "unpaired",
@@ -141,14 +184,26 @@ export function initialState(
     openId: null,
     outbox: saved.outbox ?? [],
     delivered: saved.delivered ?? {},
+    secretary: saved.secretary ?? null,
+    secretaryAt: saved.secretaryAt ?? null,
+    bar: FOLDED,
+    player: IDLE_PLAYER,
+    played: [],
   };
+  // A cached secretary puts its brief on the bar at once.
+  return state.secretary ? settleBar({ ...state, secretary: null }, state) : state;
 }
 
 export function sessionOf(state: AppState, id: string): Session {
   return state.sessions[id] ?? EMPTY_SESSION;
 }
 
+// Every change, then the bar kept to its rules (bar.ts).
 export function reduce(state: AppState, action: Action): AppState {
+  return settleBar(state, reduceAction(state, action));
+}
+
+function reduceAction(state: AppState, action: Action): AppState {
   switch (action.type) {
     case "paired":
       return {
@@ -187,6 +242,20 @@ export function reduce(state: AppState, action: Action): AppState {
       return withOutbox(state, dismiss(state.outbox, action.clientMsgId));
     case "outbox-new-device":
       return withOutbox(state, newDevice(state.outbox, action.at));
+    case "bar":
+      return {
+        ...state,
+        bar: {
+          shown: action.shown !== undefined ? action.shown : state.bar.shown,
+          open: action.open ?? state.bar.open,
+        },
+      };
+    case "player": {
+      const { player } = action;
+      const key = player.ref && player.status === "playing" ? `${player.ref.instanceId}:${player.ref.seq}` : null;
+      const played = key && !state.played.includes(key) ? [...state.played, key] : state.played;
+      return { ...state, player, played };
+    }
   }
 }
 
@@ -202,6 +271,7 @@ function reduceLink(state: AppState, status: LinkStatus, at: number, lastSeenAt:
       ...next,
       outbox: socketLost(next.outbox, at),
       instancesAt: next.instances ? liveUntil : next.instancesAt,
+      secretaryAt: next.secretary ? liveUntil : next.secretaryAt,
       sessions: next.openId ? patch(next.sessions, next.openId, { refreshedAt: liveUntil }) : next.sessions,
     };
   }
@@ -325,6 +395,8 @@ function reduceFrame(state: AppState, frame: ServerFrame, at: number): AppState 
       }
       return next;
     }
+    case "secretary":
+      return { ...state, secretary: { on: frame.on, claudeFound: frame.claudeFound, briefs: frame.briefs }, secretaryAt: at };
     // `output` goes to the terminal sink only; `auth-ok`, `auth-failed` and `pong`
     // are the link's (transport.ts); `error` is only logged.
     default:

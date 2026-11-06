@@ -19,12 +19,19 @@
 //                                  this phone's Web Push subscription (T-811)
 //   dismiss(clientMsgId)           forget a settled outbox item
 //   attachTerminal(id, sink)       stream the session's PTY to a terminal
+//   setSecretaryMode(enabled)      the secretary's switch; null when offline
+//   secretarySeen(id, seq)         a Finished brief dealt with; false when offline
+//   secretaryReply(id, seq, text)  a reply in words; null when offline
+//   openBar(open)                  open or fold the secretary bar's panel
+//   showBrief(ref)                 put another brief on the bar (‹ ›)
+//   play(ref) / stopPlaying()      the bar's brief, from the tap itself (player.ts)
 //
 // Rules the actions keep: a prompt or push-subscribe goes out at once when the
 // link is up and otherwise waits (outbox.ts), and everything still waiting is
 // written, oldest first, right after every connect, once the open session has
 // been subscribed again. An answer, interrupt or input is written only on an open
-// link, never later.
+// link, never later, and so are the secretary's switch and replies. A brief that plays
+// stops when it leaves the bar, is replaced, or the secretary goes off.
 
 import { createContext, useContext, useRef, useSyncExternalStore } from "react";
 import type {
@@ -47,8 +54,11 @@ import {
   type OutboxItem,
 } from "./outbox";
 import { clearPairing, loadPairing, savePairing, storedPairing, type StoredPairing } from "./pairing";
-import { initialState, reduce, sessionOf, type Action, type AppState, type Session } from "./state";
+import { briefOf, isPlaying, sameRef } from "./bar";
+import { BriefPlayer, browserPlayerEnv, type PlayerEnv, type PlayerEvents } from "./player";
+import { IDLE_PLAYER, initialState, reduce, sessionOf, type Action, type AppState, type Session } from "./state";
 import type { LinkStatus } from "./transport";
+import { isWaiting, type BriefRef } from "../shared/secretaryQueue";
 
 // What the terminal screen (T-809) gives `attachTerminal`. `snapshot` replaces the
 // screen: on attach (the session's buffer so far), and on every resubscribe.
@@ -73,6 +83,8 @@ export interface StoreDeps {
     pairing: StoredPairing,
     handlers: { onStatus: (status: LinkStatus) => void; onFrame: (frame: ServerFrame) => void }
   ) => LinkLike;
+  // The audio element briefs play in; the browser's by default.
+  player?: PlayerEnv;
 }
 
 export interface Actions {
@@ -89,6 +101,14 @@ export interface Actions {
   pushSubscribe(subscription: RemotePushSubscription | null): OutboxItem;
   dismiss(clientMsgId: string): void;
   attachTerminal(id: string, sink: TerminalSink): () => void;
+  setSecretaryMode(enabled: boolean): OutboxItem | null;
+  secretarySeen(id: string, seq: number): boolean;
+  secretaryReply(id: string, seq: number, text: string): OutboxItem | null;
+  openBar(open: boolean): void;
+  showBrief(ref: BriefRef): void;
+  // True when it started; only the brief on the bar, with its audio ready, online.
+  play(ref: BriefRef): boolean;
+  stopPlaying(): void;
 }
 
 export interface Store {
@@ -122,16 +142,47 @@ export function createStore(deps: StoreDeps): Store {
   const listeners = new Set<() => void>();
   const terminals = new Map<string, { data: string; cols: number; rows: number }>();
   const sinks = new Map<string, Set<TerminalSink>>();
+  let player: BriefPlayer | null = null;
 
   function dispatch(action: Action) {
     const prev = state;
     state = reduce(state, action);
     if (state === prev) return;
+    // The brief playing has left the bar, been replaced, or the secretary is off.
+    const { player: playing } = state;
+    if (isPlaying(playing, playing.ref) && (!briefOf(state, playing.ref) || !sameRef(playing.ref, state.bar.shown))) {
+      player?.stop();
+      state = reduce(state, { type: "player", player: IDLE_PLAYER });
+    }
     if (state.outbox !== prev.outbox) persistOutbox();
     if (state.delivered !== prev.delivered) saveDelivered(storage, state.delivered);
-    if (state.instances !== prev.instances || state.sessions !== prev.sessions) scheduleCache();
+    if (state.instances !== prev.instances || state.sessions !== prev.sessions || state.secretary !== prev.secretary) {
+      scheduleCache();
+    }
     for (const listener of listeners) listener();
   }
+
+  // What the audio element reports, about the brief the state says it plays.
+  const playerEvents: PlayerEvents = {
+    playing() {
+      const ref = state.player.ref;
+      if (ref) dispatch({ type: "player", player: { ref, status: "playing" } });
+    },
+    // Played to the end: a Finished brief has been heard, which reads its session
+    // (Story 4).
+    ended() {
+      const ref = state.player.ref;
+      dispatch({ type: "player", player: IDLE_PLAYER });
+      const brief = briefOf(state, ref);
+      if (ref && brief?.kind === "finished" && isWaiting(brief)) actions.secretarySeen(ref.instanceId, ref.seq);
+    },
+    stopped() {
+      dispatch({ type: "player", player: IDLE_PLAYER });
+    },
+    failed(error) {
+      dispatch({ type: "player", player: { ref: state.player.ref, status: "error", error } });
+    },
+  };
 
   // The outbox and the cache share the origin's localStorage. The cache is the
   // expendable one: when the outbox doesn't fit, the cache goes (it is written
@@ -272,6 +323,7 @@ export function createStore(deps: StoreDeps): Store {
     },
 
     unpair() {
+      player?.stop();
       stopLink();
       clearPairing(storage);
       clearCache(storage);
@@ -332,6 +384,43 @@ export function createStore(deps: StoreDeps): Store {
 
     dismiss(clientMsgId) {
       dispatch({ type: "outbox-dismiss", clientMsgId });
+    },
+
+    setSecretaryMode(enabled) {
+      return sendNow({ type: "secretary-mode", enabled, clientMsgId: newClientMsgId() });
+    },
+
+    secretarySeen(id, seq) {
+      return connected() && send({ type: "secretary-seen", instanceId: id, seq });
+    },
+
+    secretaryReply(id, seq, text) {
+      return sendNow({ type: "secretary-reply", instanceId: id, seq, text, clientMsgId: newClientMsgId() });
+    },
+
+    openBar(open) {
+      dispatch({ type: "bar", open });
+    },
+
+    showBrief(ref) {
+      dispatch({ type: "bar", shown: ref });
+    },
+
+    // Synchronous from the tap to the element's play() (player.ts).
+    play(ref) {
+      const brief = briefOf(state, ref);
+      if (!connected() || !sameRef(ref, state.bar.shown)) return false;
+      if (brief?.status !== "ready" || brief.audio !== "ready" || !brief.audioUrl) return false;
+      const name = state.instances?.find((i) => i.id === ref.instanceId)?.name;
+      player ??= new BriefPlayer(deps.player ?? browserPlayerEnv(), playerEvents);
+      player.play(brief.audioUrl, name ? `${name} · Secretary` : "Secretary");
+      dispatch({ type: "player", player: { ref, status: "loading" } });
+      return true;
+    },
+
+    stopPlaying() {
+      player?.stop();
+      dispatch({ type: "player", player: IDLE_PLAYER });
     },
 
     attachTerminal(id, sink) {
