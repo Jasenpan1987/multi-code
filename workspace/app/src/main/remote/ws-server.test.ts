@@ -2794,6 +2794,34 @@ describe("a push that waits for the brief", () => {
     host.dispose();
   });
 
+  it("doesn't take another dialog's brief for a Finished: OpenCode restates another root's dialog right after one", async () => {
+    const secretary = new FakeSecretary();
+    const { pm, host, pushes } = hostWith(secretary);
+    pm.raise("inst-1", finished(1, T0));
+    secretary.brief("inst-1", { seq: 1, kind: "finished", status: "preparing", at: T0 });
+    pm.raise("inst-1", { ...ocPermission(2), at: T0, restated: true });
+    secretary.brief("inst-1", { seq: 2, kind: "needs-you", status: "preparing", at: T0 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pushes).toEqual([{ at: T0, title: "Shop · Finished", body: "Fixed the login form and its tests." }]);
+    secretary.brief("inst-1", { ...ready(2, "needs-you", "Shop wants to delete the build folder."), at: T0 });
+    await vi.advanceTimersByTimeAsync(BRIEF_WAIT_MS);
+    expect(pushes).toHaveLength(1);
+    host.dispose();
+  });
+
+  it("doesn't take a restatement of another dialog's brief for a Needs you", async () => {
+    const secretary = new FakeSecretary();
+    const { pm, host, pushes } = hostWith(secretary);
+    pm.raise("inst-1", bash(1, T0));
+    await vi.advanceTimersByTimeAsync(1000);
+    // The Bash dialog closed and another one, reported before, is restated.
+    pm.raise("inst-1", { ...questions(2), at: T0 + 1000, restated: true });
+    secretary.brief("inst-1", { ...ready(2, "needs-you", "Shop asks which database to use."), at: T0 + 1000 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pushes).toEqual([{ at: T0 + 1000, title: "Shop · Needs you", body: "Bash: pnpm test:e2e" }]);
+    host.dispose();
+  });
+
   it("is today's push, at once, with the secretary off, and when it goes off while a push waits", async () => {
     const off = new FakeSecretary();
     off.on = false;

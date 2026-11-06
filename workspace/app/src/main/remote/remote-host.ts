@@ -160,6 +160,10 @@ export function createRemoteHost(
   // The seq of each instance's latest event that wasn't a restatement: the latest
   // one that gets a push.
   const fresh = new Map<string, number>();
+  // That latest event, and the seqs of the events that restated its very dialog since:
+  // their briefs stand for its own (briefLine).
+  const freshEvents = new Map<string, SecretaryEvent>();
+  const restatements = new Map<string, Set<number>>();
   const reading = new Set<string>();
   // Per instance being read, who asked for a read meanwhile: they get the next one.
   const readAgain = new Map<string, (() => void)[]>();
@@ -267,8 +271,13 @@ export function createRemoteHost(
       // dialog was pushed when it was first reported.
       if (push.isRunning()) {
         const read = refreshLines(id);
-        if (!event.restated) {
+        if (event.restated) {
+          const first = freshEvents.get(id);
+          if (first && sameDialog(first, event)) restatements.get(id)?.add(event.seq);
+        } else {
           fresh.set(id, event.seq);
+          freshEvents.set(id, event);
+          restatements.set(id, new Set());
           void read
             .then(() => briefLine(id, event))
             .then((line) => pushEvent(id, event, line))
@@ -285,8 +294,10 @@ export function createRemoteHost(
   // event's push (Story 6). Undefined at once while the secretary is off, and, while it
   // is on, when the brief couldn't be written, the secretary goes off, a newer event
   // has come (its own push replaces this one), or BRIEF_WAIT_MS after the event. A
-  // restated dialog's brief stands for its first report's: it is the same dialog
-  // under a newer seq, and gets no push of its own.
+  // restatement of the event's own dialog has a brief that stands for the event's: it
+  // is the same dialog under a newer seq, and gets no push of its own. Any other
+  // newer brief has replaced the event's (OpenCode restates another root's dialog
+  // right after a Finished), and the push says what it would have without one.
   function briefLine(id: string, event: SecretaryEvent): Promise<string | undefined> {
     const sec = secretary;
     if (!sec?.isOn()) return Promise.resolve(undefined);
@@ -300,6 +311,7 @@ export function createRemoteHost(
         if (disposed || !sec.isOn() || (fresh.get(id) ?? 0) > event.seq) return done();
         const brief = sec.briefs()[id];
         if (!brief || brief.seq < event.seq) return;
+        if (brief.seq !== event.seq && !restatements.get(id)?.has(brief.seq)) return done();
         if (brief.status === "ready") return done(briefSentence(brief.text) || undefined);
         if (brief.status === "failed") return done();
       };
@@ -346,7 +358,7 @@ export function createRemoteHost(
     listInstances(): RemoteInstance[] {
       const infos = pm.listInstances();
       const ids = new Set(infos.map((i) => i.id));
-      for (const map of [lines, linesSession, seen, stopping, listed, fresh]) {
+      for (const map of [lines, linesSession, seen, stopping, listed, fresh, freshEvents, restatements]) {
         for (const id of map.keys()) if (!ids.has(id)) map.delete(id);
       }
       return infos.map((info) => {
@@ -619,6 +631,15 @@ function linesOf(turn: TranscriptEntry[]): Lines {
     said: said ? firstSentence(said) : undefined,
     tool: tool ? oneLine(tool.text ? `${tool.tool ?? "Tool"}: ${tool.text}` : (tool.tool ?? "Tool")) : undefined,
   };
+}
+
+// Whether two needs-you events are about the same dialog: the same OpenCode request,
+// or for Claude the same tool call. A Finished is no dialog.
+function sameDialog(a: SecretaryEvent, b: SecretaryEvent): boolean {
+  if (a.kind !== "needs-you" || b.kind !== "needs-you" || !a.prompt || !b.prompt) return false;
+  const [ra, rb] = [a.prompt.dialog, b.prompt.dialog];
+  if (ra || rb) return !!ra && !!rb && ra.sessionId === rb.sessionId && ra.requestId === rb.requestId;
+  return a.prompt.toolName === b.prompt.toolName && JSON.stringify(a.prompt.toolInput) === JSON.stringify(b.prompt.toolInput);
 }
 
 // One line of a needs-you event: what the dialog asks, as the list row and
