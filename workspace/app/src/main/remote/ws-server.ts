@@ -933,7 +933,7 @@ export class RemoteServer {
     const entry = this.audioKeys.get(url.searchParams.get("k") ?? "");
     const paired = entry !== undefined && this.devices.some((d) => d.id === entry.deviceId);
     const format: PhoneAudioFormat = url.searchParams.get("f") === "pcm" ? "pcm" : "adpcm";
-    let data: Buffer | null = null;
+    let data: Buffer | null;
     try {
       data = paired && this.host ? this.host.secretaryAudio(entry.instanceId, entry.seq, format) : null;
     } catch {

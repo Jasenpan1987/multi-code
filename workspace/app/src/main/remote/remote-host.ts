@@ -314,13 +314,13 @@ export function createRemoteHost(
   const offBrief = secretary?.onBrief((id, state) => {
     const kept = phoneAudios.get(id);
     if (kept && kept.seq !== state?.seq) phoneAudios.delete(id);
-    for (const check of [...waiters]) check();
+    for (const check of waiters) check();
     push.broadcastSecretary();
   });
   const offMode = secretary?.onMode((on) => {
     if (on) claudeFound = true;
     else phoneAudios.clear();
-    for (const check of [...waiters]) check();
+    for (const check of waiters) check();
     push.broadcastSecretary();
   });
 
@@ -561,7 +561,7 @@ export function createRemoteHost(
       offBrief?.();
       offMode?.();
       // Their pushes go out as they would have without the secretary.
-      for (const check of [...waiters]) check();
+      for (const check of waiters) check();
     },
   };
 }
