@@ -111,8 +111,8 @@ const PCM_SUBFORMAT = Buffer.from("0100000000001000800000aa00389b71", "hex");
 
 // The data chunk of a 16-bit PCM WAV, or null for anything else. Walks the chunks
 // rather than assuming a 44-byte header, and trusts no size past the buffer's end
-// (a streamed WAV can carry a placeholder data size).
-function findPcm16(wav: Buffer) {
+// (a streamed WAV can carry a placeholder data size). Also read by phoneAudio.ts.
+export function findPcm16(wav: Buffer) {
   if (wav.length < 12) return null;
   if (wav.toString("latin1", 0, 4) !== "RIFF" || wav.toString("latin1", 8, 12) !== "WAVE") {
     return null;

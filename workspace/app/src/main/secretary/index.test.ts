@@ -66,6 +66,7 @@ vi.mock("../backends/claude", () => ({
 }));
 
 import { createSecretary, NO_SERVER_REASON } from "./index";
+import { createRemoteHost, type HostProcessManager } from "../remote/remote-host";
 import { TARGET_DBFS } from "./loudness";
 import type { SecretaryDeps } from "./index";
 
@@ -496,6 +497,75 @@ describe("a read (epic secretary-bar)", () => {
     h.secretary.stop();
     expect(() => h.read("a")).not.toThrow();
     expect(h.secretary.briefs()).toEqual({});
+  });
+});
+
+describe("the phone link's listeners (epic secretary-bar)", () => {
+  it("hear every brief and mode change the renderer does, after it, until unsubscribed", async () => {
+    const h = harness();
+    const briefs: [string, SecretaryBriefState | null][] = [];
+    const modes: boolean[] = [];
+    const offBrief = h.secretary.onBrief((id, state) => briefs.push([id, state]));
+    const offMode = h.secretary.onMode((on) => modes.push(on));
+    // One that throws doesn't keep the others from hearing.
+    h.secretary.onBrief(() => {
+      throw new Error("broken listener");
+    });
+
+    h.secretary.start(true);
+    h.fire("a", ev(3));
+    h.writes[0].settle(brief("Shop is done."));
+    await flush();
+    h.fire("a", null);
+    h.secretary.setMode(false);
+
+    expect(modes).toEqual(h.modePushes());
+    expect(modes).toEqual([true, false]);
+    expect(briefs.map(([, state]) => state)).toEqual(h.pushes("a"));
+    expect(briefs.at(-1)).toEqual(["a", null]);
+
+    offBrief();
+    offMode();
+    h.secretary.setMode(true);
+    h.fire("a", ev(4));
+    expect(modes).toEqual([true, false]);
+    expect(briefs.at(-1)).toEqual(["a", null]);
+  });
+});
+
+describe("the phone link hears claude go (epic secretary-bar)", () => {
+  it("tells phones the CLI is missing when the secretary finds it gone, whether it was on or off", () => {
+    const h = harness();
+    const pm = { onSecretaryEvent: () => () => {} } as unknown as HostProcessManager;
+    const told: unknown[] = [];
+    const push = {
+      isRunning: () => false,
+      broadcastInstances: () => {},
+      broadcastPromptState: () => {},
+      broadcastPromptCleared: () => {},
+      broadcastTranscript: () => {},
+      broadcastSecretary: () => told.push(host.secretary(false)),
+      pushSession: () => {},
+    };
+    const host = createRemoteHost(pm, push, { ...h.secretary, switchMode: (enabled) => h.secretary.setMode(enabled) });
+    h.secretary.start(true);
+    expect(host.secretary(false)).toMatchObject({ on: true, claudeFound: true });
+
+    // Gone while on: the secretary goes off, and phones are told why.
+    h.claude.found = false;
+    expect(h.secretary.checkClaude()).toBe(false);
+    expect(host.secretary(false)).toEqual({ on: false, claudeFound: false, briefs: {} });
+    expect(told.at(-1)).toEqual({ on: false, claudeFound: false, briefs: {} });
+
+    // Back and gone again with the mode saved off: nothing changes mode, phones hear it.
+    h.secretary.setMode(false);
+    h.claude.found = true;
+    h.secretary.checkClaude();
+    expect(told.at(-1)).toMatchObject({ on: false, claudeFound: true });
+    h.claude.found = false;
+    h.secretary.checkClaude();
+    expect(told.at(-1)).toMatchObject({ on: false, claudeFound: false });
+    host.dispose();
   });
 });
 

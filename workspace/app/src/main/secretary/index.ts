@@ -34,7 +34,8 @@
 //
 // The renderer hears every change on `secretary-brief` (instanceId, state | null)
 // and the mode it acts on, saved and found, on `secretary-mode`; it fetches a ready
-// wav by instance and seq, so the audio never rides an update.
+// wav by instance and seq, so the audio never rides an update. The phone link hears
+// the same changes through `onBrief` and `onMode` (epic secretary-bar).
 //
 // A Needs-you brief whose dialog can be answered in words takes replies (T-509,
 // PRD Story 6): each one is read by the reply interpreter, held to the dialog by
@@ -48,7 +49,8 @@ import { BrowserWindow } from "electron";
 import { processManager } from "../process-manager";
 import type { SecretaryEvent, SecretaryEventListener } from "../process-manager";
 import { findClaudeCli } from "../backends/claude";
-import { loadSpeechServer } from "../settings-store";
+import { loadSpeechServer, setSecretaryMode } from "../settings-store";
+import type { SavedSecretarySettings } from "../settings-store";
 import { synthesize } from "./speech";
 import { normalizeLoudness } from "./loudness";
 import type { SpeechOptions, SpeechServer, SynthesizeResult } from "./speech";
@@ -123,6 +125,13 @@ export interface Secretary {
   // The builder's reply on the card of the instance's brief for event `seq`.
   // Resolves when the secretary has acted, asked back or answered; never throws.
   reply(instanceId: string, seq: number, text: string): Promise<void>;
+  // Told every change the renderer is told, after it: a brief's new state (null when
+  // it goes), and the mode the secretary acts on, with whether `claude` was found when
+  // last looked for (null: not looked for yet). The mode listeners also hear a change
+  // of that finding alone, so a phone's switch never offers what main would refuse.
+  // For the phone link. Returns the unsubscribe.
+  onBrief(listener: (instanceId: string, state: SecretaryBriefState | null) => void): () => void;
+  onMode(listener: (on: boolean, claudeFound: boolean | null) => void): () => void;
   // Unsubscribe and abort everything in flight. At quit.
   stop(): void;
 }
@@ -234,8 +243,37 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
   // found.
   let saved = false;
   let on = false;
+  // Whether `claude` was there when last looked for; null until then.
+  let found: boolean | null = null;
   let unsubscribe: (() => void) | null = null;
   const jobs = new Map<string, Job>();
+  const briefListeners = new Set<(instanceId: string, state: SecretaryBriefState | null) => void>();
+  const modeListeners = new Set<(on: boolean, claudeFound: boolean | null) => void>();
+
+  // To the renderer, then to every listener; one that throws doesn't stop the others.
+  const sendBrief = (instanceId: string, state: SecretaryBriefState | null) => {
+    deps.send(BRIEF_CHANNEL, instanceId, state);
+    for (const listener of briefListeners) {
+      try {
+        listener(instanceId, state);
+      } catch {
+        // See above.
+      }
+    }
+  };
+  const tellMode = () => {
+    for (const listener of modeListeners) {
+      try {
+        listener(on, found);
+      } catch {
+        // See sendBrief.
+      }
+    }
+  };
+  const sendMode = (next: boolean) => {
+    deps.send(MODE_CHANNEL, next);
+    tellMode();
+  };
 
   const isCurrent = (instanceId: string, job: Job) => jobs.get(instanceId) === job;
 
@@ -256,7 +294,7 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
       ...(job.dialog ? { replyable: true } : {}),
       ...(job.exchanges.length ? { exchanges: job.exchanges.map((e) => ({ ...e })) } : {}),
     } as SecretaryBriefState;
-    deps.send(BRIEF_CHANNEL, instanceId, job.state);
+    sendBrief(instanceId, job.state);
   };
 
   const markHandled = (instanceId: string) => {
@@ -278,7 +316,7 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
     if (!job) return;
     jobs.delete(instanceId);
     job.abort.abort();
-    deps.send(BRIEF_CHANNEL, instanceId, null);
+    sendBrief(instanceId, null);
   };
 
   const prepare = (instanceId: string, event: SecretaryEvent) => {
@@ -448,7 +486,7 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
   const apply = (next: boolean) => {
     if (next === on) return;
     on = next;
-    deps.send(MODE_CHANNEL, on);
+    sendMode(on);
     if (on) {
       for (const { instanceId, event } of deps.liveSecretaryEvents()) {
         prepare(instanceId, event);
@@ -459,9 +497,14 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
   };
 
   function checkClaude(): boolean {
-    const found = deps.claudeFound();
-    apply(saved && found);
-    return found;
+    const was = found;
+    const before = on;
+    const now = deps.claudeFound();
+    found = now;
+    apply(saved && now);
+    // The mode stayed, but what a phone's switch may offer changed.
+    if (on === before && now !== was) tellMode();
+    return now;
   }
 
   const onEvent: SecretaryEventListener = (instanceId, event) => {
@@ -513,6 +556,18 @@ export function createSecretary(deps: SecretaryDeps): Secretary {
         // reply() catches the interpreter and the key writer itself; nothing else
         // in it throws. A reply must never reject into the IPC handler.
       }),
+    onBrief(listener) {
+      briefListeners.add(listener);
+      return () => {
+        briefListeners.delete(listener);
+      };
+    },
+    onMode(listener) {
+      modeListeners.add(listener);
+      return () => {
+        modeListeners.delete(listener);
+      };
+    },
     stop() {
       unsubscribe?.();
       unsubscribe = null;
@@ -550,3 +605,14 @@ export const secretary = createSecretary({
   answerDialog: (instanceId, seq, plan, signal) =>
     processManager.answerDialog(instanceId, seq, plan, signal),
 });
+
+// Secretary Mode switched, from the toolbox or a phone (epic secretary-bar, Story 5):
+// saved first, so a save that throws leaves the secretary as it was, then applied.
+// Turning it on prepares the live events; off drops them all. Saved as asked even
+// without `claude`: the secretary stays off until it is found. The renderer hears a
+// change of what the secretary does on `secretary-mode`.
+export function switchMode(enabled: boolean): SavedSecretarySettings {
+  const next = setSecretaryMode(enabled);
+  secretary.setMode(next.secretaryMode);
+  return next;
+}

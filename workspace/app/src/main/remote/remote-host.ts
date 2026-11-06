@@ -12,12 +12,20 @@
 //     API (secretary/dialog.ts). The phone names an effect or option numbers and
 //     never sends a key of its own.
 //   - A push (Story 7) goes out for each of those Finished and Needs you events, with
-//     the same line the list shows, once that line has been read.
+//     the same line the list shows, once that line has been read. With the secretary
+//     on, it waits for the event's brief too, and says its first sentence instead
+//     (epic secretary-bar, Story 6, T-1004).
+//   - The secretary (epic secretary-bar) is the desk's own: its mode, its briefs and
+//     their exchanges, the toolbox's switch (switchMode). A brief's audio goes to the
+//     phone made smaller (secretary/phoneAudio.ts), once per brief and format, in
+//     memory only.
 //
 // Kept apart from remote/index.ts, which wires it to the real process manager, so
 // tests drive it with a fake one.
 
 import type { AnswerOutcome, InstanceInfo, ProcessManager, SecretaryEvent } from "../process-manager";
+import type { Secretary } from "../secretary";
+import { phoneAudio, type PhoneAudioFormat } from "../secretary/phoneAudio";
 import {
   checkChoice,
   dialogOf,
@@ -28,6 +36,7 @@ import {
   type OptionEffect,
 } from "../secretary/dialog";
 import { replyConclusion } from "../../shared/replyStart";
+import { briefSentence } from "../../shared/briefSentence";
 import type {
   RemoteChoice,
   RemoteDialog,
@@ -54,7 +63,19 @@ export type HostProcessManager = Pick<
   | "canInterrupt"
   | "readRecentTurns"
   | "ptySizeOf"
+  | "readOnPhone"
 >;
+
+// What this needs from the secretary (secretary/index.ts), and its switch: the
+// app's secretary and switchMode satisfy it.
+export type HostSecretary = Pick<
+  Secretary,
+  "isOn" | "checkClaude" | "briefs" | "audioFor" | "reply" | "onBrief" | "onMode"
+> & {
+  // Secretary Mode saved and applied as the toolbox switch does it. May throw (the
+  // save failed), leaving the mode as it was.
+  switchMode(enabled: boolean): void;
+};
 
 // The server's broadcasts and pushes this drives.
 export type HostPush = Pick<
@@ -64,6 +85,7 @@ export type HostPush = Pick<
   | "broadcastPromptState"
   | "broadcastPromptCleared"
   | "broadcastTranscript"
+  | "broadcastSecretary"
   | "pushSession"
 >;
 
@@ -80,6 +102,12 @@ const MIN_SENTENCE_CHARS = 24;
 // next message would land. After this, a turn still running really is, and the
 // builder may try again.
 const STOP_SETTLE_MS = 3000;
+
+// How long after its event a push waits for the brief's text while the secretary is
+// on (Story 6). Text is normally ready within 10 s; the builder's default model can
+// take longer (G-803). Past it, the push says what it would have without the
+// secretary.
+export const BRIEF_WAIT_MS = 30_000;
 
 // What the latest turn says, for the list's line: cached per instance and refreshed
 // on each event and on the server's throttled refresh while a turn runs, never
@@ -110,7 +138,11 @@ const refuse = (reason: Extract<HostAck, { ok: false }>["reason"], message: stri
 
 const OK: HostAck = { ok: true };
 
-export function createRemoteHost(pm: HostProcessManager, push: HostPush): RemoteHost & {
+export function createRemoteHost(
+  pm: HostProcessManager,
+  push: HostPush,
+  secretary: HostSecretary | null = null
+): RemoteHost & {
   dispose(): void;
 } {
   const lines = new Map<string, Lines>();
@@ -128,9 +160,20 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
   // The seq of each instance's latest event that wasn't a restatement: the latest
   // one that gets a push.
   const fresh = new Map<string, number>();
+  // That latest event, and the seqs of the events that restated its very dialog since:
+  // their briefs stand for its own (briefLine).
+  const freshEvents = new Map<string, SecretaryEvent>();
+  const restatements = new Map<string, Set<number>>();
   const reading = new Set<string>();
   // Per instance being read, who asked for a read meanwhile: they get the next one.
   const readAgain = new Map<string, (() => void)[]>();
+  // Whether the secretary's `claude` was there when last looked for.
+  let claudeFound = false;
+  // Pushes waiting for their brief, each looking again at every change.
+  const waiters = new Set<() => void>();
+  let disposed = false;
+  // Each instance's brief audio as the phone gets it, for the brief it was made from.
+  const phoneAudios = new Map<string, { seq: number } & Partial<Record<PhoneAudioFormat, Buffer>>>();
 
   // Read the latest turn, from the end of the session (the phone's own reader), and
   // update the instance's lines. Never inside the call that asked for it, which may
@@ -187,12 +230,16 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
   // beside an open dialog reports Finished, then restates the dialog at once). One
   // the builder has already dealt with at the desk still gets its push (Story 7:
   // whether or not the builder is at the desk).
-  function pushEvent(id: string, event: SecretaryEvent) {
+  //
+  // With the secretary on, `line` is the first sentence of the event's brief, and
+  // stands for the list's line (Story 6); without it, or when that brief has none,
+  // the push is today's.
+  function pushEvent(id: string, event: SecretaryEvent, line?: string) {
     const info = pm.infoOf(id);
     if (!info) return;
     if ((fresh.get(id) ?? 0) > event.seq) return;
     const state: RemoteSessionState = event.kind === "needs-you" ? "needs-you" : "finished";
-    const body = previewOf(state, event, info, lines.get(id) ?? {});
+    const body = line ?? previewOf(state, event, info, lines.get(id) ?? {});
     // The phone's Needs you count, as its list would show it now.
     const badge = pm
       .listInstances()
@@ -224,9 +271,17 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
       // dialog was pushed when it was first reported.
       if (push.isRunning()) {
         const read = refreshLines(id);
-        if (!event.restated) {
+        if (event.restated) {
+          const first = freshEvents.get(id);
+          if (first && sameDialog(first, event)) restatements.get(id)?.add(event.seq);
+        } else {
           fresh.set(id, event.seq);
-          void read.then(() => pushEvent(id, event)).catch(() => undefined);
+          freshEvents.set(id, event);
+          restatements.set(id, new Set());
+          void read
+            .then(() => briefLine(id, event))
+            .then((line) => pushEvent(id, event, line))
+            .catch(() => undefined);
         }
       } else {
         lines.delete(id);
@@ -234,6 +289,61 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
     }
     push.broadcastInstances();
   });
+
+  // The first sentence of the event's brief, once its text is written, for the
+  // event's push (Story 6). Undefined at once while the secretary is off, and, while it
+  // is on, when the brief couldn't be written, the secretary goes off, a newer event
+  // has come (its own push replaces this one), or BRIEF_WAIT_MS after the event. A
+  // restatement of the event's own dialog has a brief that stands for the event's: it
+  // is the same dialog under a newer seq, and gets no push of its own. Any other
+  // newer brief has replaced the event's (OpenCode restates another root's dialog
+  // right after a Finished), and the push says what it would have without one.
+  function briefLine(id: string, event: SecretaryEvent): Promise<string | undefined> {
+    const sec = secretary;
+    if (!sec?.isOn()) return Promise.resolve(undefined);
+    return new Promise((resolve) => {
+      const done = (line?: string) => {
+        waiters.delete(check);
+        clearTimeout(timer);
+        resolve(line);
+      };
+      const check = () => {
+        if (disposed || !sec.isOn() || (fresh.get(id) ?? 0) > event.seq) return done();
+        const brief = sec.briefs()[id];
+        if (!brief || brief.seq < event.seq) return;
+        if (brief.seq !== event.seq && !restatements.get(id)?.has(brief.seq)) return done();
+        if (brief.status === "ready") return done(briefSentence(brief.text) || undefined);
+        if (brief.status === "failed") return done();
+      };
+      const timer = setTimeout(done, Math.max(0, event.at + BRIEF_WAIT_MS - Date.now()));
+      waiters.add(check);
+      check();
+    });
+  }
+
+  // A brief or the mode changed: phones are told, a push waiting for a brief looks
+  // again, and a phone copy of audio that is no longer its brief's goes.
+  const offBrief = secretary?.onBrief((id, state) => {
+    const kept = phoneAudios.get(id);
+    if (kept && kept.seq !== state?.seq) phoneAudios.delete(id);
+    for (const check of waiters) check();
+    push.broadcastSecretary();
+  });
+  const offMode = secretary?.onMode((on, found) => {
+    if (found !== null) claudeFound = found;
+    else if (on) claudeFound = true;
+    if (!on) phoneAudios.clear();
+    for (const check of waiters) check();
+    push.broadcastSecretary();
+  });
+
+  // Finished becomes Idle on the phones.
+  const markSeen = (id: string) => {
+    const event = pm.secretaryEventOf(id);
+    if (event?.kind !== "finished" || seen.get(id) === event.seq) return;
+    seen.set(id, event.seq);
+    push.broadcastInstances();
+  };
 
   const phoneable = (id: string): InstanceInfo | null => {
     const info = pm.infoOf(id);
@@ -249,7 +359,7 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
     listInstances(): RemoteInstance[] {
       const infos = pm.listInstances();
       const ids = new Set(infos.map((i) => i.id));
-      for (const map of [lines, linesSession, seen, stopping, listed, fresh]) {
+      for (const map of [lines, linesSession, seen, stopping, listed, fresh, freshEvents, restatements]) {
         for (const id of map.keys()) if (!ids.has(id)) map.delete(id);
       }
       return infos.map((info) => {
@@ -299,12 +409,7 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
       };
     },
 
-    markSeen(id) {
-      const event = pm.secretaryEventOf(id);
-      if (event?.kind !== "finished" || seen.get(id) === event.seq) return;
-      seen.set(id, event.seq);
-      push.broadcastInstances();
-    },
+    markSeen,
 
     readTranscript: (id, turns) => pm.readRecentTurns(id, turns),
 
@@ -400,7 +505,77 @@ export function createRemoteHost(pm: HostProcessManager, push: HostPush): Remote
       return refuse("failed", "Couldn't stop it; check the terminal");
     },
 
-    dispose: unsubscribe,
+    secretary(fresh) {
+      if (!secretary) return null;
+      if (fresh) claudeFound = secretary.checkClaude();
+      const on = secretary.isOn();
+      return { on, claudeFound: on || claudeFound, briefs: secretary.briefs() };
+    },
+
+    async setSecretaryMode(enabled) {
+      if (!secretary) return refuse("unsupported", "This Mac has no secretary");
+      if (enabled) {
+        claudeFound = secretary.checkClaude();
+        if (!claudeFound) {
+          push.broadcastSecretary();
+          return refuse("unsupported", "Your Mac needs Claude Code for the secretary");
+        }
+      }
+      try {
+        secretary.switchMode(enabled);
+      } catch {
+        return refuse("failed", "Your Mac couldn't save the switch");
+      }
+      // The mode the secretary acts on may not have changed (on, with `claude` gone
+      // since), and then nothing else tells the phones.
+      push.broadcastSecretary();
+      return OK;
+    },
+
+    // Only the brief `seq` names, and only a Finished: what a phone opening the
+    // session does, so the desk's red dot goes out and the brief stops waiting.
+    secretarySeen(id, seq) {
+      const brief = secretary?.briefs()[id];
+      if (!brief || brief.seq !== seq || brief.kind !== "finished") return;
+      markSeen(id);
+      pm.readOnPhone(id);
+    },
+
+    // Checked here, before the secretary takes it, so a refusal reaches the phone as
+    // an ack and the phone keeps the text. The secretary reads it behind the ack; its
+    // exchanges arrive in the brief.
+    async secretaryReply(id, seq, text) {
+      if (!secretary?.isOn()) return refuse("unsupported", "The secretary is off");
+      const brief = secretary.briefs()[id];
+      if (!brief || brief.seq !== seq) return refuse("gone", "This brief has been replaced");
+      if (brief.kind !== "needs-you" || !brief.replyable) {
+        return refuse("unsupported", "The secretary can't answer this one; use the buttons or the terminal");
+      }
+      if (brief.handled) return refuse("gone", "This dialog was already answered");
+      if (brief.exchanges?.some((e) => !e.outcome)) {
+        return refuse("busy", "The secretary is still reading your last reply");
+      }
+      if (!text.trim()) return refuse("failed", "Nothing to send");
+      void secretary.reply(id, seq, text);
+      return OK;
+    },
+
+    secretaryAudio(id, seq, format) {
+      const wav = secretary?.audioFor(id, seq);
+      if (!wav) return null;
+      let kept = phoneAudios.get(id);
+      if (kept?.seq !== seq) phoneAudios.set(id, (kept = { seq }));
+      return (kept[format] ??= phoneAudio(wav, format));
+    },
+
+    dispose() {
+      disposed = true;
+      unsubscribe();
+      offBrief?.();
+      offMode?.();
+      // Their pushes go out as they would have without the secretary.
+      for (const check of waiters) check();
+    },
   };
 }
 
@@ -457,6 +632,15 @@ function linesOf(turn: TranscriptEntry[]): Lines {
     said: said ? firstSentence(said) : undefined,
     tool: tool ? oneLine(tool.text ? `${tool.tool ?? "Tool"}: ${tool.text}` : (tool.tool ?? "Tool")) : undefined,
   };
+}
+
+// Whether two needs-you events are about the same dialog: the same OpenCode request,
+// or for Claude the same tool call. A Finished is no dialog.
+function sameDialog(a: SecretaryEvent, b: SecretaryEvent): boolean {
+  if (a.kind !== "needs-you" || b.kind !== "needs-you" || !a.prompt || !b.prompt) return false;
+  const [ra, rb] = [a.prompt.dialog, b.prompt.dialog];
+  if (ra || rb) return !!ra && !!rb && ra.sessionId === rb.sessionId && ra.requestId === rb.requestId;
+  return a.prompt.toolName === b.prompt.toolName && JSON.stringify(a.prompt.toolInput) === JSON.stringify(b.prompt.toolInput);
 }
 
 // One line of a needs-you event: what the dialog asks, as the list row and

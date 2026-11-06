@@ -5,6 +5,7 @@
 import http from "node:http";
 import type { Bridge } from "./bridge.ts";
 import { SCENARIOS, isScenario } from "./scenarios.ts";
+import type { HarnessSecretary } from "./secretary.ts";
 import type { World } from "./world.ts";
 
 // A terminal the harness can paint: room for its boxes, and no bigger than a
@@ -36,9 +37,16 @@ const HELP = `Multi-Code phone harness, control channel
   POST /drop                   cut every socket, as a lost network does
   POST /half-open              the open sockets go quiet, pings included
   POST /offline | /online      stop / restart the server, on the same port
+  POST /secretary/on | /secretary/off
+                               Secretary Mode switched at the desk
+  POST /secretary/claude-missing | /secretary/claude-found
+                               the Mac loses / finds the Claude Code CLI
+  POST /secretary/reply/<id>?text=
+                               the builder replies in words at the desk
+  GET  /secretary              the mode and every brief (JSON)
 `;
 
-export function startControl(world: World, bridge: Bridge, port: number) {
+export function startControl(world: World, bridge: Bridge, port: number, secretary: HarnessSecretary) {
   const server = http.createServer((req, res) => {
     const reply = (status: number, body: unknown) => {
       const text = typeof body === "string" ? body : `${JSON.stringify(body, null, 2)}\n`;
@@ -77,6 +85,7 @@ export function startControl(world: World, bridge: Bridge, port: number) {
         return reply(200, { url: pairUrl, origin: new URL(pairUrl).origin });
       }
       if (command === "log") return reply(200, bridge.log);
+      if (command === "secretary") return reply(200, secretary.view());
       return reply(404, { ok: false, error: `no GET /${command}; GET / lists the commands` });
     }
     if (req.method !== "POST") return reply(405, { ok: false, error: "GET or POST" });
@@ -128,6 +137,25 @@ export function startControl(world: World, bridge: Bridge, port: number) {
         return done({ dropped: bridge.drop() });
       case "half-open":
         return done({ silenced: bridge.halfOpen() });
+      case "secretary": {
+        const [, , what = "", id = ""] = url.pathname.split("/");
+        if (what === "on" || what === "off") {
+          secretary.setMode(what === "on");
+          return secretary.on === (what === "on") ? done({ on: secretary.on }) : reply(409, { ok: false, error: "claude is missing" });
+        }
+        if (what === "claude-missing" || what === "claude-found") {
+          secretary.setClaude(what === "claude-found");
+          return done({ claudeFound: secretary.claudeFound });
+        }
+        if (what === "reply") {
+          const brief = secretary.view().briefs[id];
+          const text = url.searchParams.get("text") ?? "";
+          if (!brief || !text.trim()) return reply(404, { ok: false, error: `no brief for ${id}, or no ?text=` });
+          secretary.reply(id, brief.seq, text);
+          return done();
+        }
+        break;
+      }
       case "offline":
         return void bridge.offline().then(() => done(), failed);
       case "online":

@@ -26,12 +26,11 @@ import {
   loadSpeechServer,
   saveSettings,
   setDropFolder,
-  setSecretaryMode,
   setSpeechServer,
 } from "./settings-store";
 import type { SavedSecretarySettings, ThemeName } from "./settings-store";
 import { testServer } from "./secretary/speech";
-import { secretary } from "./secretary";
+import { secretary, switchMode } from "./secretary";
 import { copyIntoFolder, describePath, displayPath, dropStillWaiting } from "./file-drop";
 import { debugTrace } from "./debug-trace";
 import { cancelClone, checkFolder, cloneRepo, lastClonedInto, resolveTypedPath } from "./new-project";
@@ -674,14 +673,9 @@ export function registerIpcHandlers() {
 
   ipcMain.handle("secretary:get-settings", () => withClaude(loadSecretarySettings()));
 
-  // Saved first: if the save throws, the call rejects and the secretary keeps
-  // the mode it had. Turning it on prepares the live events; off drops them all.
-  // Saved as asked even without `claude`: the secretary stays off until it is found.
-  ipcMain.handle("secretary:set-mode", (_event, enabled: boolean) => {
-    const next = setSecretaryMode(enabled === true);
-    secretary.setMode(next.secretaryMode);
-    return withClaude(next);
-  });
+  // As a phone's switch does it (switchMode): saved first, so if the save throws the
+  // call rejects and the secretary keeps the mode it had.
+  ipcMain.handle("secretary:set-mode", (_event, enabled: boolean) => withClaude(switchMode(enabled === true)));
 
   // Live updates arrive on "secretary-brief"; this is for a renderer that just
   // mounted or reloaded.

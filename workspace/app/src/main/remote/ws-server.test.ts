@@ -30,7 +30,7 @@ vi.mock("web-push", async (importOriginal) => {
 });
 
 const { RemoteServer } = await import("./ws-server");
-const { createRemoteHost, firstSentence } = await import("./remote-host");
+const { createRemoteHost, firstSentence, BRIEF_WAIT_MS } = await import("./remote-host");
 const { REMOTE_PROTOCOL_VERSION } = await import("../../shared/remote-protocol");
 const { extractPromptDetail } = await import("./promptExtract");
 const { permissionDetail, permissionToolCall } = await import("../backends/opencodePrompt");
@@ -44,6 +44,8 @@ type SecretaryEvent = import("../process-manager").SecretaryEvent;
 type SecretaryEventListener = import("../process-manager").SecretaryEventListener;
 type AnswerOutcome = import("../process-manager").AnswerOutcome;
 type AnswerPlan = import("../secretary/dialog").AnswerPlan;
+type HostSecretary = import("./remote-host").HostSecretary;
+type SecretaryBriefState = import("../../shared/types").SecretaryBriefState;
 
 type AnyRecord = Record<string, unknown>;
 
@@ -239,6 +241,8 @@ class FakeProcessManager implements HostProcessManager {
   prompts: { id: string; text: string }[] = [];
   writes: { id: string; data: string }[] = [];
   interrupts: string[] = [];
+  // Sessions read on a phone (process-manager's readOnPhone).
+  readsOnPhone: string[] = [];
   turnReads = 0;
   transcriptReads = 0;
   private listeners = new Set<SecretaryEventListener>();
@@ -325,6 +329,70 @@ class FakeProcessManager implements HostProcessManager {
   ptySizeOf(id: string) {
     if (this.instances.get(id)?.status !== "running") return null;
     return this.sizes.get(id) ?? { cols: 120, rows: 30 };
+  }
+  readOnPhone(id: string) {
+    this.readsOnPhone.push(id);
+  }
+}
+
+// The desk's secretary as the host sees it: briefs set by the test, a switch that
+// saves, `claude` there or not.
+class FakeSecretary implements HostSecretary {
+  on = true;
+  found = true;
+  saved: boolean[] = [];
+  saveFails = false;
+  state: Record<string, SecretaryBriefState> = {};
+  wavs = new Map<string, Buffer>();
+  replies: { id: string; seq: number; text: string }[] = [];
+  looks = 0;
+  private briefListeners = new Set<(id: string, state: SecretaryBriefState | null) => void>();
+  private modeListeners = new Set<(on: boolean, found: boolean | null) => void>();
+
+  isOn() {
+    return this.on;
+  }
+  checkClaude() {
+    this.looks++;
+    return this.found;
+  }
+  briefs() {
+    return { ...this.state };
+  }
+  audioFor(id: string, seq: number) {
+    const brief = this.state[id];
+    return brief?.seq === seq && brief.status === "ready" && brief.audio === "ready" ? (this.wavs.get(id) ?? null) : null;
+  }
+  async reply(id: string, seq: number, text: string) {
+    this.replies.push({ id, seq, text });
+  }
+  onBrief(listener: (id: string, state: SecretaryBriefState | null) => void) {
+    this.briefListeners.add(listener);
+    return () => {
+      this.briefListeners.delete(listener);
+    };
+  }
+  onMode(listener: (on: boolean, found: boolean | null) => void) {
+    this.modeListeners.add(listener);
+    return () => {
+      this.modeListeners.delete(listener);
+    };
+  }
+  switchMode(enabled: boolean) {
+    if (this.saveFails) throw new Error("the disk is full");
+    this.saved.push(enabled);
+    this.setOn(enabled && this.found);
+  }
+  setOn(on: boolean) {
+    if (on === this.on) return;
+    this.on = on;
+    if (!on) this.state = {};
+    for (const listener of this.modeListeners) listener(on, this.found);
+  }
+  brief(id: string, state: SecretaryBriefState | null) {
+    if (state) this.state[id] = state;
+    else delete this.state[id];
+    for (const listener of this.briefListeners) listener(id, state);
   }
 }
 
@@ -425,8 +493,10 @@ interface Fixture {
 
 const fixtures: Fixture[] = [];
 
-async function startServer(options: { heartbeatTimeoutMs?: number } = {}): Promise<Fixture> {
-  const server = new RemoteServer(options);
+async function startServer(
+  options: { heartbeatTimeoutMs?: number; secretary?: FakeSecretary } = {}
+): Promise<Fixture> {
+  const server = new RemoteServer({ heartbeatTimeoutMs: options.heartbeatTimeoutMs });
   // HTTPS ready, so pairing offers are made (ws-server.https.test.ts covers the gate).
   server.setChecker({
     check: async () => ({
@@ -439,7 +509,7 @@ async function startServer(options: { heartbeatTimeoutMs?: number } = {}): Promi
   });
   const pm = new FakeProcessManager();
   pm.add({ id: "inst-1", name: "demo" });
-  server.setHost(createRemoteHost(pm, server));
+  server.setHost(createRemoteHost(pm, server, options.secretary ?? null));
 
   // Port 0 = OS-assigned, so parallel test files never collide.
   const status = await server.start(0);
@@ -1087,6 +1157,7 @@ describe("instance states and previews", () => {
       broadcastPromptState: () => {},
       broadcastPromptCleared: () => {},
       broadcastTranscript: () => {},
+      broadcastSecretary: () => {},
       pushSession: () => {},
     };
     const host = createRemoteHost(pm, push);
@@ -2383,5 +2454,423 @@ describe("RemoteServer static file serving", () => {
     } finally {
       readFile.mockRestore();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The secretary on the phone (epic secretary-bar, T-1003)
+// ---------------------------------------------------------------------------
+
+// A brief as the secretary publishes it.
+const ready = (seq: number, kind: "finished" | "needs-you", text: string, extra: Partial<AnyRecord> = {}) =>
+  ({ seq, kind, status: "ready", text, language: "English", audio: "ready", at: 1000 + seq, ...extra }) as Extract<
+    SecretaryBriefState,
+    { status: "ready" }
+  >;
+
+// 16-bit PCM WAV, mono, 24 kHz: `seconds` of a quiet tone.
+function toneWav(seconds: number): Buffer {
+  const frames = 24000 * seconds;
+  const data = Buffer.alloc(frames * 2);
+  for (let i = 0; i < frames; i++) data.writeInt16LE(Math.round(Math.sin(i / 8) * 3000), i * 2);
+  const h = Buffer.alloc(44);
+  h.write("RIFF", 0, "latin1");
+  h.writeUInt32LE(36 + data.length, 4);
+  h.write("WAVE", 8, "latin1");
+  h.write("fmt ", 12, "latin1");
+  h.writeUInt32LE(16, 16);
+  h.writeUInt16LE(1, 20);
+  h.writeUInt16LE(1, 22);
+  h.writeUInt32LE(24000, 24);
+  h.writeUInt32LE(48000, 28);
+  h.writeUInt16LE(2, 32);
+  h.writeUInt16LE(16, 34);
+  h.write("data", 36, "latin1");
+  h.writeUInt32LE(data.length, 40);
+  return Buffer.concat([h, data]);
+}
+
+describe("the secretary on the phone", () => {
+  const http = (fx: Fixture) => fx.url.replace(/^ws:/, "http:");
+  const briefsOf = (frame: AnyRecord) => frame.briefs as Record<string, AnyRecord>;
+
+  it("sends the mode and every brief after auth-ok, looking for claude again, and an audio path only for ready audio", async () => {
+    const secretary = new FakeSecretary();
+    secretary.state["inst-1"] = ready(3, "finished", "Demo finished the login fix. All tests pass.");
+    secretary.state["inst-2"] = { seq: 4, kind: "needs-you", status: "preparing", at: 1004 };
+    const fx = await startServer({ secretary });
+    const client = await connected(fx);
+    const frame = await client.waitFor("secretary");
+    expect(secretary.looks).toBe(1);
+    expect(frame).toMatchObject({ on: true, claudeFound: true });
+    const briefs = briefsOf(frame);
+    expect(briefs["inst-1"]).toMatchObject({ seq: 3, text: "Demo finished the login fix. All tests pass." });
+    expect(String(briefs["inst-1"].audioUrl)).toMatch(/^\/secretary-audio\?k=[A-Za-z0-9_-]{43}$/);
+    expect(briefs["inst-2"]).toEqual({ seq: 4, kind: "needs-you", status: "preparing", at: 1004 });
+    client.close();
+  });
+
+  it("tells every phone each change, gives each phone its own audio key, and sends nothing unchanged", async () => {
+    const secretary = new FakeSecretary();
+    const fx = await startServer({ secretary });
+    const second = fx.server.createPairingOffer()!.offer;
+    const a = await connected(fx);
+    const b = await connected(fx, second.deviceToken);
+    await a.waitFor("secretary");
+    await b.waitFor("secretary");
+
+    secretary.brief("inst-1", ready(5, "finished", "Demo is done."));
+    const [fa, fb] = await Promise.all([a.waitFor("secretary"), b.waitFor("secretary")]);
+    const urlA = briefsOf(fa)["inst-1"].audioUrl;
+    const urlB = briefsOf(fb)["inst-1"].audioUrl;
+    expect(urlA).toBeTruthy();
+    expect(urlB).toBeTruthy();
+    expect(urlA).not.toBe(urlB);
+
+    // The same state again: no frame.
+    fx.server.broadcastSecretary();
+    expect((await a.drain()).filter((f) => f.type === "secretary")).toHaveLength(0);
+
+    // A reconnect keeps the key: the brief is the same.
+    a.close();
+    const again = await connected(fx);
+    expect(briefsOf(await again.waitFor("secretary"))["inst-1"].audioUrl).toBe(urlA);
+
+    secretary.setOn(false);
+    expect(await again.waitFor("secretary")).toMatchObject({ on: false, briefs: {} });
+    again.close();
+    b.close();
+  });
+
+  it("serves a brief's audio to its phone as compact WAV with byte ranges, and never for another brief or a revoked phone", async () => {
+    const secretary = new FakeSecretary();
+    secretary.state["inst-1"] = ready(7, "needs-you", "Demo needs you.");
+    secretary.wavs.set("inst-1", toneWav(2));
+    const fx = await startServer({ secretary });
+    const client = await connected(fx);
+    const path7 = String(briefsOf(await client.waitFor("secretary"))["inst-1"].audioUrl);
+
+    const probe = await fetch(`${http(fx)}${path7}`, { headers: { range: "bytes=0-1" } });
+    expect(probe.status).toBe(206);
+    expect(probe.headers.get("content-type")).toBe("audio/wav");
+    expect(probe.headers.get("cache-control")).toBe("no-store");
+    expect(probe.headers.get("accept-ranges")).toBe("bytes");
+    const total = Number(probe.headers.get("content-range")!.split("/")[1]);
+    expect(Buffer.from(await probe.arrayBuffer()).toString("latin1")).toBe("RI");
+
+    const whole = Buffer.from(await (await fetch(`${http(fx)}${path7}`)).arrayBuffer());
+    expect(whole.length).toBe(total);
+    expect(whole.readUInt16LE(20)).toBe(0x11);
+    // Two seconds at 24 kHz, 4 bits a sample.
+    expect(whole.length).toBeLessThan(25_000);
+    const tail = await fetch(`${http(fx)}${path7}`, { headers: { range: "bytes=100-" } });
+    expect(tail.headers.get("content-range")).toBe(`bytes 100-${total - 1}/${total}`);
+    expect((await fetch(`${http(fx)}${path7}`, { headers: { range: `bytes=${total}-` } })).status).toBe(416);
+
+    const pcm = Buffer.from(await (await fetch(`${http(fx)}${path7}&f=pcm`)).arrayBuffer());
+    expect(pcm.readUInt16LE(20)).toBe(1);
+    expect(pcm.length).toBe(44 + 24000 * 2 * 2);
+
+    expect((await fetch(`${http(fx)}/secretary-audio?k=not-a-key`)).status).toBe(404);
+    expect((await fetch(`${http(fx)}/secretary-audio`)).status).toBe(404);
+
+    // Replaced: the old path answers nothing, the new brief has a path of its own.
+    secretary.brief("inst-1", ready(8, "needs-you", "Demo needs you again."));
+    const path8 = String(briefsOf(await client.waitFor("secretary"))["inst-1"].audioUrl);
+    expect(path8).not.toBe(path7);
+    expect((await fetch(`${http(fx)}${path7}`)).status).toBe(404);
+    expect((await fetch(`${http(fx)}${path8}`)).status).toBe(200);
+
+    fx.server.revokeDevice(fx.server.getStatus().devices[0].id);
+    expect((await fetch(`${http(fx)}${path8}`)).status).toBe(404);
+  });
+
+  it("never lets an old audio key answer again after the mode goes off and on with no phone connected", async () => {
+    const secretary = new FakeSecretary();
+    secretary.state["inst-1"] = ready(7, "finished", "Demo is done.");
+    secretary.wavs.set("inst-1", toneWav(1));
+    const fx = await startServer({ secretary });
+    const client = await connected(fx);
+    const old = String(briefsOf(await client.waitFor("secretary"))["inst-1"].audioUrl);
+    expect((await fetch(`${http(fx)}${old}`)).status).toBe(200);
+    client.close();
+    await vi.waitFor(() => expect(fx.server.getStatus().devices[0].connected).toBe(false));
+
+    // Off and on again while away: the same live event is prepared again, same seq.
+    secretary.setOn(false);
+    expect((await fetch(`${http(fx)}${old}`)).status).toBe(404);
+    secretary.setOn(true);
+    secretary.brief("inst-1", ready(7, "finished", "Demo is done."));
+    expect((await fetch(`${http(fx)}${old}`)).status).toBe(404);
+
+    const back = await connected(fx);
+    const fresh = String(briefsOf(await back.waitFor("secretary"))["inst-1"].audioUrl);
+    expect(fresh).not.toBe(old);
+    expect((await fetch(`${http(fx)}${fresh}`)).status).toBe(200);
+    expect((await fetch(`${http(fx)}${old}`)).status).toBe(404);
+    back.close();
+  });
+
+  it("turns Secretary Mode on and off from a phone as the toolbox does, and refuses on without claude", async () => {
+    const secretary = new FakeSecretary();
+    secretary.on = false;
+    const fx = await startServer({ secretary });
+    const client = await connected(fx);
+    expect(await client.waitFor("secretary")).toMatchObject({ on: false, claudeFound: true });
+
+    client.send({ type: "secretary-mode", enabled: true, clientMsgId: "on" });
+    expect(await client.waitFor("secretary")).toMatchObject({ on: true });
+    expect(await client.ack("on")).toEqual({ type: "ack", clientMsgId: "on", ok: true });
+    expect(secretary.saved).toEqual([true]);
+
+    client.send({ type: "secretary-mode", enabled: false, clientMsgId: "off" });
+    expect(await client.ack("off")).toMatchObject({ ok: true });
+    expect(secretary.saved).toEqual([true, false]);
+
+    // Without claude: nothing saved, and the phone learns it is missing.
+    secretary.found = false;
+    client.send({ type: "secretary-mode", enabled: true, clientMsgId: "no-claude" });
+    expect(await client.waitFor("secretary")).toMatchObject({ on: false, claudeFound: false });
+    expect(await client.ack("no-claude")).toMatchObject({ ok: false, reason: "unsupported" });
+    expect(secretary.saved).toEqual([true, false]);
+
+    secretary.found = true;
+    secretary.saveFails = true;
+    client.send({ type: "secretary-mode", enabled: true, clientMsgId: "full" });
+    expect(await client.ack("full")).toMatchObject({ ok: false, reason: "failed" });
+    client.send({ type: "secretary-mode", enabled: "yes", clientMsgId: "bad" });
+    expect(await client.ack("bad")).toMatchObject({ ok: false, reason: "failed", message: "Malformed frame" });
+    client.close();
+  });
+
+  it("reads a Finished brief's session when the phone has dealt with it, and only that brief's", async () => {
+    const secretary = new FakeSecretary();
+    const fx = await startServer({ secretary });
+    fx.pm.raise("inst-1", finished(9));
+    secretary.brief("inst-1", ready(9, "finished", "Demo is done."));
+    const client = await connected(fx);
+
+    client.send({ type: "secretary-seen", instanceId: "inst-1", seq: 8 });
+    client.send({ type: "secretary-seen", instanceId: "inst-2", seq: 9 });
+    await client.drain();
+    expect(fx.pm.readsOnPhone).toEqual([]);
+
+    client.send({ type: "secretary-seen", instanceId: "inst-1", seq: 9 });
+    await client.instance("inst-1", (r) => r.state === "idle");
+    expect(fx.pm.readsOnPhone).toEqual(["inst-1"]);
+
+    // A Needs you isn't answered by reading it.
+    fx.pm.raise("inst-1", bash(10));
+    secretary.brief("inst-1", ready(10, "needs-you", "Demo needs you."));
+    client.send({ type: "secretary-seen", instanceId: "inst-1", seq: 10 });
+    await client.drain();
+    expect(fx.pm.readsOnPhone).toEqual(["inst-1"]);
+    client.close();
+  });
+
+  it("hands a reply to the secretary, and refuses one it can't take so the phone keeps the text", async () => {
+    const secretary = new FakeSecretary();
+    secretary.state["inst-1"] = ready(11, "needs-you", "Demo needs you.", { replyable: true });
+    secretary.state["inst-2"] = ready(12, "finished", "Other is done.");
+    const fx = await startServer({ secretary });
+    const client = await connected(fx);
+    const send = (clientMsgId: string, instanceId: string, seq: number, text = "yes") =>
+      client.send({ type: "secretary-reply", instanceId, seq, text, clientMsgId });
+
+    send("r1", "inst-1", 11, "是的");
+    expect(await client.ack("r1")).toEqual({ type: "ack", clientMsgId: "r1", ok: true });
+    expect(secretary.replies).toEqual([{ id: "inst-1", seq: 11, text: "是的" }]);
+
+    secretary.brief("inst-1", ready(11, "needs-you", "Demo needs you.", { replyable: true, exchanges: [{ reply: "是的" }] }));
+    send("r2", "inst-1", 11);
+    expect(await client.ack("r2")).toMatchObject({ ok: false, reason: "busy" });
+    send("r3", "inst-1", 10);
+    expect(await client.ack("r3")).toMatchObject({ ok: false, reason: "gone" });
+    send("r4", "inst-2", 12);
+    expect(await client.ack("r4")).toMatchObject({ ok: false, reason: "unsupported" });
+    secretary.brief("inst-1", ready(11, "needs-you", "Demo needs you.", { replyable: true, handled: true }));
+    send("r5", "inst-1", 11);
+    expect(await client.ack("r5")).toMatchObject({ ok: false, reason: "gone" });
+    secretary.setOn(false);
+    send("r6", "inst-1", 11);
+    expect(await client.ack("r6")).toMatchObject({ ok: false, reason: "unsupported" });
+    expect(secretary.replies).toHaveLength(1);
+    client.close();
+  });
+
+  it("sends no secretary frame from a desktop without one", async () => {
+    const fx = await startServer();
+    const client = await connected(fx);
+    expect((await client.drain()).map((f) => f.type)).not.toContain("secretary");
+    client.close();
+  });
+});
+
+describe("byteRange", () => {
+  it("reads one range, clipped to the body, and leaves anything else to the whole body", async () => {
+    const { byteRange } = await import("./ws-server");
+    expect(byteRange("bytes=0-1", 10)).toEqual([0, 1]);
+    expect(byteRange("bytes=4-", 10)).toEqual([4, 9]);
+    expect(byteRange("bytes=2-99", 10)).toEqual([2, 9]);
+    expect(byteRange("bytes=-3", 10)).toEqual([7, 9]);
+    expect(byteRange("bytes=-30", 10)).toEqual([0, 9]);
+    expect(byteRange("bytes=10-", 10)).toBe("unsatisfiable");
+    expect(byteRange("bytes=5-2", 10)).toBe("unsatisfiable");
+    expect(byteRange(undefined, 10)).toBeNull();
+    expect(byteRange("bytes=0-1,4-5", 10)).toBeNull();
+    expect(byteRange("items=0-1", 10)).toBeNull();
+  });
+});
+
+// T-1004: with the secretary on, an event's push says the brief's first sentence,
+// waiting for it at most BRIEF_WAIT_MS from the event; otherwise it is today's push.
+describe("a push that waits for the brief", () => {
+  function hostWith(secretary: FakeSecretary | null) {
+    const pm = new FakeProcessManager();
+    pm.add({ id: "inst-1", name: "Shop" });
+    pm.turns.set("inst-1", [{ kind: "assistant", text: "Fixed the login form and its tests." }]);
+    const pushes: { at: number; title: string; body?: string }[] = [];
+    const push = {
+      isRunning: () => true,
+      broadcastInstances: () => {},
+      broadcastPromptState: () => {},
+      broadcastPromptCleared: () => {},
+      broadcastTranscript: () => {},
+      broadcastSecretary: () => {},
+      pushSession: (p: { title: string; body?: string }) => {
+        pushes.push({ at: Date.now(), title: p.title, ...(p.body !== undefined ? { body: p.body } : {}) });
+      },
+    };
+    const host = createRemoteHost(pm, push, secretary);
+    return { pm, host, pushes };
+  }
+
+  const T0 = 1_800_000_000_000;
+  beforeEach(() => {
+    vi.useFakeTimers({ now: T0 });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("waits for the brief's text and says its first sentence, the title unchanged", async () => {
+    const secretary = new FakeSecretary();
+    const { pm, host, pushes } = hostWith(secretary);
+    pm.raise("inst-1", finished(1, T0));
+    secretary.brief("inst-1", { seq: 1, kind: "finished", status: "preparing", at: T0 });
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(pushes).toEqual([]);
+    secretary.brief("inst-1", { ...ready(1, "finished", "Shop 那边，登录修好了。测试全部通过。"), at: T0, audio: "pending" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pushes).toEqual([{ at: T0 + 4000, title: "Shop · Finished", body: "Shop 那边，登录修好了。" }]);
+    host.dispose();
+  });
+
+  it("sends today's body at once when the brief couldn't be written", async () => {
+    const secretary = new FakeSecretary();
+    const { pm, host, pushes } = hostWith(secretary);
+    pm.raise("inst-1", finished(1, T0));
+    await vi.advanceTimersByTimeAsync(2000);
+    secretary.brief("inst-1", { seq: 1, kind: "finished", status: "failed", reason: "claude exited", at: T0 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pushes).toEqual([{ at: T0 + 2000, title: "Shop · Finished", body: "Fixed the login form and its tests." }]);
+    host.dispose();
+  });
+
+  it("sends today's body 30 s after the event when the brief is late, and nothing more when it comes", async () => {
+    const secretary = new FakeSecretary();
+    const { pm, host, pushes } = hostWith(secretary);
+    // The event happened a second before the host heard of it.
+    pm.raise("inst-1", finished(1, T0 - 1000));
+    secretary.brief("inst-1", { seq: 1, kind: "finished", status: "preparing", at: T0 - 1000 });
+    await vi.advanceTimersByTimeAsync(BRIEF_WAIT_MS - 1001);
+    expect(pushes).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(pushes).toEqual([{ at: T0 + BRIEF_WAIT_MS - 1000, title: "Shop · Finished", body: "Fixed the login form and its tests." }]);
+    secretary.brief("inst-1", ready(1, "finished", "Shop finished at last, after a long think."));
+    await vi.advanceTimersByTimeAsync(BRIEF_WAIT_MS);
+    expect(pushes).toHaveLength(1);
+    host.dispose();
+  });
+
+  it("drops an event's push when a newer one replaces it while it waits, and the newer says its own brief", async () => {
+    const secretary = new FakeSecretary();
+    const { pm, host, pushes } = hostWith(secretary);
+    pm.raise("inst-1", finished(1, T0));
+    secretary.brief("inst-1", { seq: 1, kind: "finished", status: "preparing", at: T0 });
+    await vi.advanceTimersByTimeAsync(3000);
+    pm.raise("inst-1", bash(2, T0 + 3000));
+    secretary.brief("inst-1", { seq: 2, kind: "needs-you", status: "preparing", at: T0 + 3000 });
+    await vi.advanceTimersByTimeAsync(2000);
+    secretary.brief("inst-1", { ...ready(2, "needs-you", "Shop wants to run the end-to-end tests. Allow it?"), at: T0 + 3000 });
+    await vi.advanceTimersByTimeAsync(BRIEF_WAIT_MS);
+    expect(pushes).toEqual([{ at: T0 + 5000, title: "Shop · Needs you", body: "Shop wants to run the end-to-end tests." }]);
+    host.dispose();
+  });
+
+  it("takes a restated dialog's brief for the dialog it restates", async () => {
+    const secretary = new FakeSecretary();
+    const { pm, host, pushes } = hostWith(secretary);
+    pm.raise("inst-1", bash(1, T0));
+    await vi.advanceTimersByTimeAsync(1000);
+    pm.raise("inst-1", { ...bash(2, T0 + 1000), restated: true });
+    secretary.brief("inst-1", { ...ready(2, "needs-you", "Shop wants to run the tests again."), at: T0 + 1000 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pushes).toEqual([{ at: T0 + 1000, title: "Shop · Needs you", body: "Shop wants to run the tests again." }]);
+    host.dispose();
+  });
+
+  it("doesn't take another dialog's brief for a Finished: OpenCode restates another root's dialog right after one", async () => {
+    const secretary = new FakeSecretary();
+    const { pm, host, pushes } = hostWith(secretary);
+    pm.raise("inst-1", finished(1, T0));
+    secretary.brief("inst-1", { seq: 1, kind: "finished", status: "preparing", at: T0 });
+    pm.raise("inst-1", { ...ocPermission(2), at: T0, restated: true });
+    secretary.brief("inst-1", { seq: 2, kind: "needs-you", status: "preparing", at: T0 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pushes).toEqual([{ at: T0, title: "Shop · Finished", body: "Fixed the login form and its tests." }]);
+    secretary.brief("inst-1", { ...ready(2, "needs-you", "Shop wants to delete the build folder."), at: T0 });
+    await vi.advanceTimersByTimeAsync(BRIEF_WAIT_MS);
+    expect(pushes).toHaveLength(1);
+    host.dispose();
+  });
+
+  it("doesn't take a restatement of another dialog's brief for a Needs you", async () => {
+    const secretary = new FakeSecretary();
+    const { pm, host, pushes } = hostWith(secretary);
+    pm.raise("inst-1", bash(1, T0));
+    await vi.advanceTimersByTimeAsync(1000);
+    // The Bash dialog closed and another one, reported before, is restated.
+    pm.raise("inst-1", { ...questions(2), at: T0 + 1000, restated: true });
+    secretary.brief("inst-1", { ...ready(2, "needs-you", "Shop asks which database to use."), at: T0 + 1000 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pushes).toEqual([{ at: T0 + 1000, title: "Shop · Needs you", body: "Bash: pnpm test:e2e" }]);
+    host.dispose();
+  });
+
+  it("is today's push, at once, with the secretary off, and when it goes off while a push waits", async () => {
+    const off = new FakeSecretary();
+    off.on = false;
+    const first = hostWith(off);
+    first.pm.raise("inst-1", bash(1, T0));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(first.pushes).toEqual([{ at: T0, title: "Shop · Needs you", body: "Bash: pnpm test:e2e" }]);
+    first.host.dispose();
+
+    const none = hostWith(null);
+    none.pm.raise("inst-1", bash(1, T0));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(none.pushes).toEqual([{ at: T0, title: "Shop · Needs you", body: "Bash: pnpm test:e2e" }]);
+    none.host.dispose();
+
+    const secretary = new FakeSecretary();
+    const going = hostWith(secretary);
+    going.pm.raise("inst-1", bash(1, T0));
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(going.pushes).toEqual([]);
+    secretary.setOn(false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(going.pushes).toEqual([{ at: T0 + 5000, title: "Shop · Needs you", body: "Bash: pnpm test:e2e" }]);
+    going.host.dispose();
   });
 });

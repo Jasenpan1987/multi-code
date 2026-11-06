@@ -11,6 +11,10 @@
 // here pushes: the host below never asks the server to, and with the harness's
 // plain-http origin as the VAPID subject web-push would refuse to sign one anyway.
 //
+// The secretary (epic secretary-bar) is secretary.ts's: the host below serves its
+// mode and briefs, gates replies as the desktop's host does, and plays its tone through
+// the real phoneAudio, so the phone gets the WAV it would get from the Mac.
+//
 // What is still grafted onto the server's private members, by bracket access (which
 // TypeScript still checks, so `pnpm type` fails here when the server reshapes them):
 //   - the log of what phones sent, with each ack and whether it was a resend;
@@ -20,6 +24,8 @@
 import type { TailnetChecks } from "../../src/main/remote/tailscale";
 import type { HostAck, RemoteServer } from "../../src/main/remote/ws-server";
 import type { Dialog, checkChoice as CheckChoice } from "../../src/main/secretary/dialog";
+import type { phoneAudio as PhoneAudio } from "../../src/main/secretary/phoneAudio";
+import type { HarnessSecretary } from "./secretary.ts";
 import type { AckFrame, ClientFrame, RemoteChoice, RemoteDialog } from "../../src/shared/remote-protocol";
 import type { World } from "./world.ts";
 
@@ -52,8 +58,14 @@ export function attach(
   server: RemoteServer,
   world: World,
   checkChoice: typeof CheckChoice,
-  options: { hostName: string; print?: (line: string) => void }
+  options: {
+    hostName: string;
+    print?: (line: string) => void;
+    secretary: HarnessSecretary;
+    phoneAudio: typeof PhoneAudio;
+  }
 ) {
+  const { secretary } = options;
   const print = options.print ?? (() => {});
   let port = 0;
   let offerUrl = "";
@@ -101,6 +113,32 @@ export function attach(
     // The world says what each session is doing itself.
     refreshPreview: () => {},
     writeToInstance: (id, data) => world.input(id, data),
+    secretary: () => secretary.view(),
+    async setSecretaryMode(enabled) {
+      if (enabled && !secretary.claudeFound) return refuse("unsupported", "Your Mac needs Claude Code for the secretary");
+      secretary.setMode(enabled);
+      return { ok: true };
+    },
+    secretarySeen: (id, seq) => secretary.seen(id, seq),
+    // As the desktop's host (remote-host.ts) gates it.
+    async secretaryReply(id, seq, text) {
+      const view = secretary.view();
+      if (!view.on) return refuse("unsupported", "The secretary is off");
+      const brief = view.briefs[id];
+      if (!brief || brief.seq !== seq) return refuse("gone", "This brief has been replaced");
+      if (brief.kind !== "needs-you" || !brief.replyable) {
+        return refuse("unsupported", "The secretary can't answer this one; use the buttons or the terminal");
+      }
+      if (brief.handled) return refuse("gone", "This dialog was already answered");
+      if (brief.exchanges?.some((e) => !e.outcome)) return refuse("busy", "The secretary is still reading your last reply");
+      if (!text.trim()) return refuse("failed", "Nothing to send");
+      secretary.reply(id, seq, text);
+      return { ok: true };
+    },
+    secretaryAudio(id, seq, format) {
+      const wav = secretary.audio(id, seq);
+      return wav ? options.phoneAudio(wav, format) : null;
+    },
 
     async sendPrompt(id, text) {
       const session = world.stateOf(id);
@@ -178,6 +216,9 @@ export function attach(
       case "answer":
       case "interrupt":
       case "input":
+      case "secretary-mode":
+      case "secretary-seen":
+      case "secretary-reply":
         record(conn, frame);
         return handle(conn, frame);
       default:
@@ -192,6 +233,8 @@ export function attach(
     for (const { id } of world.list()) server.broadcastOutput(id, world.repaint(id) ?? CLEAR_SCREEN);
   };
   repaintAll();
+
+  secretary.onChange = () => server.broadcastSecretary();
 
   world.onChange = (ids, reset) => {
     if (!held) return changed(ids, reset);
@@ -221,13 +264,16 @@ export function attach(
       }
       repaintAll();
       // Sessions the new scenario doesn't have take their dialogs with them.
+      // (Their briefs go in the sync below.)
       for (const [id, seq] of shownSeq) {
         if (world.has(id)) continue;
         server.broadcastPromptCleared(id, seq);
         shownSeq.delete(id);
       }
     }
+    secretary.sync();
     server.broadcastInstances();
+    server.broadcastSecretary();
   }
 
   function record(conn: Conn, frame: ClientFrame) {
@@ -276,6 +322,7 @@ export function attach(
 
     async stop() {
       world.stop();
+      secretary.stop();
       await server.stop();
     },
 

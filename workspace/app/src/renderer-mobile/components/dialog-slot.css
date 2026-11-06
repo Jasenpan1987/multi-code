@@ -200,9 +200,10 @@
   padding: 0 16px max(14px, env(safe-area-inset-bottom));
   box-shadow: 0 -14px 40px rgba(0, 0, 0, 0.35);
 }
-/* As tall as the mockups draw them: the chat's last lines show above. */
-.dialog-slot.sheet[data-kind="questions"] { height: calc(100dvh - env(safe-area-inset-top) - 150px); }
-.dialog-slot.sheet[data-kind="plan"] { height: calc(100dvh - env(safe-area-inset-top) - 90px); }
+/* As tall as the mockups draw them: the chat's last lines show above. Below the
+   secretary's folded bar when it is there (`--sbar-h`, session.css). */
+.dialog-slot.sheet[data-kind="questions"] { height: calc(100dvh - env(safe-area-inset-top) - 150px - var(--sbar-h, 0px)); }
+.dialog-slot.sheet[data-kind="plan"] { height: calc(100dvh - env(safe-area-inset-top) - 90px - var(--sbar-h, 0px)); }
 
 /* The handle and the title under it: a tap or a pull moves the sheet. */
 .dialog-slot .grab {
