@@ -530,7 +530,9 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
     <div
       ref={containerRef}
       className="terminal-container"
-      style={{ display: active ? "block" : "none", width: "100%", height: "100%" }}
+      // Sized by its insets (global.css), so FitAddon measures the room inside the
+      // padding.
+      style={{ display: active ? "block" : "none" }}
       onClick={handleClick}
     />
   );

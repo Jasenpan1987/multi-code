@@ -862,6 +862,10 @@ body,
 }
 
 /* Terminal */
+/* Sized by its insets, in content-box: xterm's FitAddon takes this element's
+   computed height as the room the rows have, and a border-box height of 100%
+   included the padding, so at some heights the last row came out up to 4px taller
+   than the pane and was cut off. */
 .terminal-container {
   position: absolute;
   top: 0;
@@ -869,6 +873,7 @@ body,
   right: 0;
   bottom: 0;
   padding: 2px;
+  box-sizing: content-box;
 }
 
 .terminal-container .xterm {
