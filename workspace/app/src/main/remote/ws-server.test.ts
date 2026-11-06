@@ -2585,6 +2585,32 @@ describe("the secretary on the phone", () => {
     expect((await fetch(`${http(fx)}${path8}`)).status).toBe(404);
   });
 
+  it("never lets an old audio key answer again after the mode goes off and on with no phone connected", async () => {
+    const secretary = new FakeSecretary();
+    secretary.state["inst-1"] = ready(7, "finished", "Demo is done.");
+    secretary.wavs.set("inst-1", toneWav(1));
+    const fx = await startServer({ secretary });
+    const client = await connected(fx);
+    const old = String(briefsOf(await client.waitFor("secretary"))["inst-1"].audioUrl);
+    expect((await fetch(`${http(fx)}${old}`)).status).toBe(200);
+    client.close();
+    await vi.waitFor(() => expect(fx.server.getStatus().devices[0].connected).toBe(false));
+
+    // Off and on again while away: the same live event is prepared again, same seq.
+    secretary.setOn(false);
+    expect((await fetch(`${http(fx)}${old}`)).status).toBe(404);
+    secretary.setOn(true);
+    secretary.brief("inst-1", ready(7, "finished", "Demo is done."));
+    expect((await fetch(`${http(fx)}${old}`)).status).toBe(404);
+
+    const back = await connected(fx);
+    const fresh = String(briefsOf(await back.waitFor("secretary"))["inst-1"].audioUrl);
+    expect(fresh).not.toBe(old);
+    expect((await fetch(`${http(fx)}${fresh}`)).status).toBe(200);
+    expect((await fetch(`${http(fx)}${old}`)).status).toBe(404);
+    back.close();
+  });
+
   it("turns Secretary Mode on and off from a phone as the toolbox does, and refuses on without claude", async () => {
     const secretary = new FakeSecretary();
     secretary.on = false;

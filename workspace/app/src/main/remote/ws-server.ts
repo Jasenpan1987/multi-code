@@ -750,12 +750,16 @@ export class RemoteServer {
     }
   }
 
-  // The secretary changed (its mode, a brief): every phone gets it whole.
+  // The secretary changed (its mode, a brief): every phone gets it whole. The audio
+  // keys of briefs that went are dropped first, phones or not: turned off and on
+  // again, the secretary prepares the same live event under the same seq, and a key
+  // kept from before would answer for its new audio.
   broadcastSecretary() {
-    if (!this.host || !this.hasPhones()) return;
+    if (!this.host) return;
     const state = this.host.secretary(false);
     if (!state) return;
     this.pruneAudioKeys(state.briefs);
+    if (!this.hasPhones()) return;
     for (const conn of this.connections) {
       if (conn.authed) this.sendSecretary(conn, state);
     }
