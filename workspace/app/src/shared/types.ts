@@ -68,6 +68,12 @@ export type SpeechTestResult =
 // `replyable`: a Needs-you whose dialog the secretary can answer in words (T-509);
 // the card offers its reply box until the brief is handled. `exchanges`: what the
 // builder said on the card and what the secretary did, oldest first.
+//
+// `at`: when the event happened (ms), which orders the secretary bar's queue
+// (shared/secretaryQueue.ts). `seen`: a Finished brief whose session was read since,
+// at the desk, on a phone, or from the bar (epic secretary-bar, Story 4); it no
+// longer waits for the builder. Never set on a Needs you: reading a session doesn't
+// answer its dialog.
 export type SecretaryBriefState = (
   | { seq: number; kind: SecretaryEventKind; status: "preparing" }
   | {
@@ -80,7 +86,13 @@ export type SecretaryBriefState = (
       voiceReason?: string;
     }
   | { seq: number; kind: SecretaryEventKind; status: "failed"; reason: string }
-) & { handled?: true; replyable?: true; exchanges?: SecretaryExchange[] };
+) & {
+  at: number;
+  handled?: true;
+  seen?: true;
+  replyable?: true;
+  exchanges?: SecretaryExchange[];
+};
 
 // One reply on a Needs-you card. `response` and `outcome` are absent while the
 // secretary works on it. pressed: it answered the dialog; asked: it asked back;

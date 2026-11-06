@@ -430,7 +430,9 @@ export function registerIpcHandlers() {
   // The builder acknowledged an instance that had unread alerts (markRead in
   // useNotifications.ts): it stops being Finished on the phone too.
   ipcMain.on("instance-acknowledged", (_event, id: unknown) => {
-    if (typeof id === "string") acknowledgeInstance(id);
+    if (typeof id !== "string") return;
+    acknowledgeInstance(id);
+    processManager.noteRead(id);
   });
 
   ipcMain.on("pty-input", (_event, id: string, data: string) => {

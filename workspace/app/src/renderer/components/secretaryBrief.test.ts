@@ -15,6 +15,7 @@ import type { BriefMap } from "./secretaryBrief";
 
 const preparing = (seq: number): SecretaryBriefState => ({
   seq,
+  at: seq,
   kind: "finished",
   status: "preparing",
 });
@@ -25,6 +26,7 @@ const ready = (
   voiceReason?: string
 ): SecretaryBriefState => ({
   seq,
+  at: seq,
   kind: "needs-you",
   status: "ready",
   text: "Portals wants to run the tests.",
@@ -40,6 +42,7 @@ const handled = (state: SecretaryBriefState): SecretaryBriefState => ({
 
 const failed = (seq: number): SecretaryBriefState => ({
   seq,
+  at: seq,
   kind: "finished",
   status: "failed",
   reason: "timed out after 60 s",

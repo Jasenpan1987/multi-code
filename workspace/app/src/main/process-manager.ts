@@ -270,6 +270,7 @@ export class ProcessManager {
   private instances = new Map<string, ManagedInstance>();
   private mainWindow: BrowserWindow | null = null;
   private secretaryListeners = new Set<SecretaryEventListener>();
+  private readListeners = new Set<(id: string) => void>();
   // One counter for every instance's secretary events. A per-record one would
   // restart at zero when start or restart builds a fresh record, and an old
   // event's seq could then outrank the new spawn's. Each seq is at least the clock
@@ -383,6 +384,26 @@ export class ProcessManager {
     return () => {
       this.secretaryListeners.delete(listener);
     };
+  }
+
+  // Subscribe to the builder reading an instance: acknowledged at the desk
+  // (`instance-acknowledged`), or read on a paired phone (readOnPhone). The secretary
+  // stops counting its Finished brief as waiting (epic secretary-bar, Story 4).
+  onInstanceRead(listener: (id: string) => void): () => void {
+    this.readListeners.add(listener);
+    return () => {
+      this.readListeners.delete(listener);
+    };
+  }
+
+  noteRead(id: string) {
+    for (const listener of this.readListeners) {
+      try {
+        listener(id);
+      } catch {
+        // One broken consumer must not break the others.
+      }
+    }
   }
 
   // The instance's live secretary event, if it has one.
@@ -1093,6 +1114,7 @@ export class ProcessManager {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send("instance-read-on-phone", id);
     }
+    this.noteRead(id);
   }
 
   private setAlertsDegraded(
