@@ -3,6 +3,8 @@
 // and the store and player behind Play, "Got it", the switch and replies: what goes on
 // the wire, when the audio element plays and stops, and what the cache keeps.
 
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AuthOkFrame,
@@ -17,7 +19,8 @@ import { foldedLine, playOffer, stateLine } from "./bar";
 import { loadCache, saveCache } from "./cache";
 import type { AudioLike } from "./player";
 import { IDLE_PLAYER, initialState, reduce, type Action, type AppState } from "./state";
-import { createStore, type LinkLike, type Store } from "./store";
+import { createStore, StoreContext, type LinkLike, type Store } from "./store";
+import { SecretaryBar, SecretarySwitch } from "./components/SecretaryBar";
 import { MemoryStorage } from "./test-storage";
 import type { LinkStatus } from "./transport";
 
@@ -117,10 +120,11 @@ describe("which brief the bar shows", () => {
 });
 
 describe("what the bar says", () => {
-  const view = (connection: AppState["connection"]["state"] = "connected", played: string[] = []) => ({
+  const view = (connection: AppState["connection"]["state"] = "connected", played: string[] = [], secretaryLive = true) => ({
     player: IDLE_PLAYER,
     played,
     connection: { state: connection, hostName: "", lastSeenAt: null },
+    secretaryLive,
   });
   const ref = { instanceId: "shop", seq: 1 };
 
@@ -148,6 +152,8 @@ describe("what the bar says", () => {
     expect(playOffer(finished(1, 10), view("connected", ["shop:1"]), ref)).toBe("replay");
     expect(playOffer(finished(1, 10), { ...view(), player: { ref, status: "loading" } }, ref)).toBe("stop");
     expect(playOffer(finished(1, 10), view("offline"), ref)).toBe("offline");
+    // Connected, to a Mac that hasn't said it has a secretary.
+    expect(playOffer(finished(1, 10), view("connected", [], false), ref)).toBe("offline");
     expect(playOffer(finished(1, 10, undefined, { audio: "pending", audioUrl: undefined }), view(), ref)).toBe("wait");
     expect(playOffer(finished(1, 10, undefined, { audio: "unavailable", audioUrl: undefined }), view(), ref)).toBe("none");
     expect(playOffer(null, view(), null)).toBe("none");
@@ -359,6 +365,7 @@ describe("Play", () => {
 describe("the switch, Got it and replies", () => {
   it("sends the switch on an open link only, and never queues it", () => {
     const store = make();
+    link.frame(secretary({}, false));
     expect(store.actions.setSecretaryMode(true)).toMatchObject({ status: "sent" });
     expect(link.sent.at(-1)).toMatchObject({ type: "secretary-mode", enabled: true });
     link.down();
@@ -369,6 +376,7 @@ describe("the switch, Got it and replies", () => {
 
   it("sends Got it on an open link only", () => {
     const store = make();
+    link.frame(secretary({ shop: finished(1, 10) }));
     expect(store.actions.secretarySeen("shop", 1)).toBe(true);
     link.down();
     expect(store.actions.secretarySeen("shop", 1)).toBe(false);
@@ -377,19 +385,110 @@ describe("the switch, Got it and replies", () => {
   it("sends a reply on an open link only, and keeps a refusal on the item", () => {
     const store = make();
     link.frame(secretary({ billing: needsYou(2, 20) }));
-    const item = store.actions.secretaryReply("billing", 2, "可以，跑吧");
+    const ref = { instanceId: "billing", seq: 2 };
+    store.actions.editReply(ref, "可以，跑吧");
+    const item = store.actions.sendReply(ref);
     expect(link.sent.at(-1)).toMatchObject({ type: "secretary-reply", instanceId: "billing", seq: 2, text: "可以，跑吧" });
-    // On its way, it holds the bar.
+    // On its way, it holds the bar, and a second can't go after it.
+    expect(store.actions.sendReply(ref)).toBeNull();
     link.frame(secretary({ billing: needsYou(2, 20), shop: finished(1, 10, undefined, {}) }));
     link.frame({ type: "ack", clientMsgId: item!.frame.clientMsgId, ok: false, reason: "busy", message: "The secretary is still reading your last reply" });
     expect(store.getState().outbox.find((i) => i.frame.clientMsgId === item!.frame.clientMsgId)).toMatchObject({
       status: "refused",
       refusal: { reason: "busy" },
     });
+    expect(store.getState().replies["billing:2"].text).toBe("可以，跑吧");
     link.down();
-    expect(store.actions.secretaryReply("billing", 2, "yes")).toBeNull();
+    expect(store.actions.sendReply(ref)).toBeNull();
     link.up();
     expect(sentTypes().filter((t) => t === "secretary-reply")).toHaveLength(1);
+  });
+});
+
+// The bar as React draws it, rendered to markup: every render is a fresh mount, as the
+// panel folding and opening again, or another screen's bar, is.
+const markup = (store: Store, component: () => ReturnType<typeof SecretaryBar> = SecretaryBar) =>
+  renderToStaticMarkup(createElement(StoreContext.Provider, { value: store }, createElement(component)));
+
+function replyBox(html: string) {
+  const textarea = /<textarea[^>]*aria-label="Reply to the secretary"[^>]*>([^<]*)<\/textarea>/.exec(html);
+  const send = /<button[^>]*aria-label="Send to the secretary"[^>]*>/.exec(html);
+  return {
+    text: textarea ? textarea[1] : null,
+    sendDisabled: send ? send[0].includes("disabled") : null,
+    hint: /<div class="hint[^"]*">([^<]*)<\/div>/.exec(html)?.[1] ?? null,
+  };
+}
+
+describe("the reply box", () => {
+  const ref = { instanceId: "billing", seq: 2 };
+  const ackOf = (store: Store) => store.getState().replies["billing:2"].sentId!;
+
+  function opened() {
+    const store = make();
+    link.frame(instances("billing"));
+    link.frame(secretary({ billing: needsYou(2, 20) }));
+    store.actions.openBar(true);
+    return store;
+  }
+
+  it("keeps what was typed after Send when the ack comes", () => {
+    const store = opened();
+    store.actions.editReply(ref, "allow it");
+    store.actions.sendReply(ref);
+    store.actions.editReply(ref, "allow it, and also run the linter");
+    link.frame({ type: "ack", clientMsgId: ackOf(store), ok: true });
+    expect(replyBox(markup(store)).text).toBe("allow it, and also run the linter");
+  });
+
+  it("empties once the reply is taken, even folded meanwhile, and never offers it again", () => {
+    const store = opened();
+    store.actions.editReply(ref, "allow it");
+    expect(replyBox(markup(store)).text).toBe("allow it");
+    store.actions.sendReply(ref);
+    store.actions.openBar(false);
+    expect(replyBox(markup(store)).text).toBeNull();
+    store.actions.openBar(true);
+    expect(replyBox(markup(store))).toEqual({ text: "allow it", sendDisabled: true, hint: "Sending…" });
+    store.actions.openBar(false);
+    link.frame({ type: "ack", clientMsgId: ackOf(store), ok: true });
+    store.actions.openBar(true);
+    expect(replyBox(markup(store))).toEqual({ text: "", sendDisabled: true, hint: null });
+  });
+
+  it("still says a refusal, with the text kept, on another screen", () => {
+    const store = opened();
+    store.actions.editReply(ref, "allow it");
+    store.actions.sendReply(ref);
+    store.actions.open("billing");
+    link.frame({ type: "ack", clientMsgId: ackOf(store), ok: false, reason: "busy", message: "The secretary is still reading your last reply" });
+    expect(replyBox(markup(store))).toEqual({
+      text: "allow it",
+      sendDisabled: false,
+      hint: "The secretary is still reading your last reply. Your text is kept.",
+    });
+  });
+
+  it("still says it may not have arrived when the link dropped before the ack", () => {
+    const store = opened();
+    store.actions.editReply(ref, "allow it");
+    store.actions.sendReply(ref);
+    store.actions.openBar(false);
+    link.down();
+    link.up();
+    link.frame(secretary({ billing: needsYou(2, 20) }));
+    store.actions.openBar(true);
+    expect(replyBox(markup(store))).toMatchObject({
+      text: "allow it",
+      hint: "It may not have reached your Mac. Look at the exchanges before sending again.",
+    });
+  });
+
+  it("forgets the box of a brief that went", () => {
+    const store = opened();
+    store.actions.editReply(ref, "allow it");
+    link.frame(secretary({ billing: needsYou(3, 30) }));
+    expect(store.getState().replies).toEqual({});
   });
 });
 
@@ -406,6 +505,34 @@ describe("offline", () => {
     const launched = run(initialState(pairing, cached), { type: "link", status: { state: "offline", reason: "mac-unreachable", retrying: false }, at: 400, lastSeenAt: null });
     expect(shown(launched)).toBe("shop:1");
     expect(playOffer(launched.secretary!.briefs.shop, launched, launched.bar.shown)).toBe("offline");
+  });
+
+  it("waits for this connection's secretary frame before offering its controls: an older Mac never sends one", () => {
+    // Last seen on a Mac with a secretary...
+    saveCache(storage, run(online(), frame(secretary({ shop: finished(1, 10) }), 300)), 300);
+    // ...then connected to one from before it: auth and the list, no `secretary`.
+    const store = make();
+    link.frame(instances("shop"));
+    expect(shown(store.getState())).toBe("shop:1");
+    expect(store.getState().secretaryLive).toBe(false);
+    expect(store.actions.setSecretaryMode(false)).toBeNull();
+    expect(store.actions.secretarySeen("shop", 1)).toBe(false);
+    store.actions.editReply({ instanceId: "shop", seq: 1 }, "yes");
+    expect(store.actions.sendReply({ instanceId: "shop", seq: 1 })).toBeNull();
+    expect(link.sent.filter((f) => f.type.startsWith("secretary"))).toEqual([]);
+    const html = markup(store, SecretarySwitch);
+    expect(/<button[^>]*aria-label="Secretary Mode"[^>]*>/.exec(html)![0]).toContain("disabled");
+    expect(html).toContain("Waiting for your Mac…");
+    // The cached text still shows, with Play waiting.
+    expect(markup(store)).toContain('aria-label="Play needs your Mac"');
+
+    // A Mac that has one says so on this connection, and they work.
+    link.frame(secretary({ shop: finished(1, 10) }));
+    expect(store.actions.setSecretaryMode(false)).toMatchObject({ status: "sent" });
+    // A new connection asks again.
+    link.down();
+    link.up();
+    expect(store.getState().secretaryLive).toBe(false);
   });
 
   it("reads a cache from before the epic as no secretary", () => {

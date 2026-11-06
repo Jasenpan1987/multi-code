@@ -21,7 +21,8 @@
 //   attachTerminal(id, sink)       stream the session's PTY to a terminal
 //   setSecretaryMode(enabled)      the secretary's switch; null when offline
 //   secretarySeen(id, seq)         a Finished brief dealt with; false when offline
-//   secretaryReply(id, seq, text)  a reply in words; null when offline
+//   editReply(ref, text)           type in a brief's reply box
+//   sendReply(ref)                 send what it holds, in words; null when offline
 //   openBar(open)                  open or fold the secretary bar's panel
 //   showBrief(ref)                 put another brief on the bar (‹ ›)
 //   play(ref) / stopPlaying()      the bar's brief, from the tap itself (player.ts)
@@ -30,7 +31,8 @@
 // link is up and otherwise waits (outbox.ts), and everything still waiting is
 // written, oldest first, right after every connect, once the open session has
 // been subscribed again. An answer, interrupt or input is written only on an open
-// link, never later, and so are the secretary's switch and replies. A brief that plays
+// link, never later, and so are the secretary's switch and replies, and only once this
+// connection's Mac has said it has a secretary (`secretaryLive`). A brief that plays
 // stops when it leaves the bar, is replaced, or the secretary goes off.
 
 import { createContext, useContext, useRef, useSyncExternalStore } from "react";
@@ -54,9 +56,18 @@ import {
   type OutboxItem,
 } from "./outbox";
 import { clearPairing, loadPairing, savePairing, storedPairing, type StoredPairing } from "./pairing";
-import { briefOf, isPlaying, sameRef } from "./bar";
+import { briefOf, isPlaying, refKey, sameRef } from "./bar";
 import { BriefPlayer, browserPlayerEnv, type PlayerEnv, type PlayerEvents } from "./player";
-import { IDLE_PLAYER, initialState, reduce, sessionOf, type Action, type AppState, type Session } from "./state";
+import {
+  EMPTY_REPLY,
+  IDLE_PLAYER,
+  initialState,
+  reduce,
+  sessionOf,
+  type Action,
+  type AppState,
+  type Session,
+} from "./state";
 import type { LinkStatus } from "./transport";
 import { isWaiting, type BriefRef } from "../shared/secretaryQueue";
 
@@ -103,7 +114,8 @@ export interface Actions {
   attachTerminal(id: string, sink: TerminalSink): () => void;
   setSecretaryMode(enabled: boolean): OutboxItem | null;
   secretarySeen(id: string, seq: number): boolean;
-  secretaryReply(id: string, seq: number, text: string): OutboxItem | null;
+  editReply(ref: BriefRef, text: string): void;
+  sendReply(ref: BriefRef): OutboxItem | null;
   openBar(open: boolean): void;
   showBrief(ref: BriefRef): void;
   // True when it started; only the brief on the bar, with its audio ready, online.
@@ -209,6 +221,8 @@ export function createStore(deps: StoreDeps): Store {
 
   const send = (frame: ClientFrame) => link?.send(frame) ?? false;
   const connected = () => state.connection.state === "connected";
+  // The Mac on this connection has a secretary, and says so.
+  const ready = () => connected() && state.secretaryLive;
 
   function subscribeOpen() {
     const id = state.openId;
@@ -387,15 +401,30 @@ export function createStore(deps: StoreDeps): Store {
     },
 
     setSecretaryMode(enabled) {
+      if (!ready()) return null;
       return sendNow({ type: "secretary-mode", enabled, clientMsgId: newClientMsgId() });
     },
 
     secretarySeen(id, seq) {
-      return connected() && send({ type: "secretary-seen", instanceId: id, seq });
+      return ready() && send({ type: "secretary-seen", instanceId: id, seq });
     },
 
-    secretaryReply(id, seq, text) {
-      return sendNow({ type: "secretary-reply", instanceId: id, seq, text, clientMsgId: newClientMsgId() });
+    editReply(ref, text) {
+      dispatch({ type: "reply-edit", key: refKey(ref), text });
+    },
+
+    // What the box holds, trimmed at the end. The reply it last sent goes from the
+    // outbox once settled; one still on its way stops another.
+    sendReply(ref) {
+      const key = refKey(ref);
+      const draft = state.replies[key] ?? EMPTY_REPLY;
+      const text = draft.text.replace(/\s+$/, "");
+      const last = draft.sentId ? state.outbox.find((i) => idOf(i) === draft.sentId) : undefined;
+      if (!text || !ready() || last?.status === "sent") return null;
+      if (last) actions.dismiss(idOf(last));
+      const item = sendNow({ type: "secretary-reply", instanceId: ref.instanceId, seq: ref.seq, text, clientMsgId: newClientMsgId() });
+      if (item) dispatch({ type: "reply-sent", key, clientMsgId: idOf(item), text: draft.text });
+      return item;
     },
 
     openBar(open) {
@@ -409,7 +438,7 @@ export function createStore(deps: StoreDeps): Store {
     // Synchronous from the tap to the element's play() (player.ts).
     play(ref) {
       const brief = briefOf(state, ref);
-      if (!connected() || !sameRef(ref, state.bar.shown)) return false;
+      if (!ready() || !sameRef(ref, state.bar.shown)) return false;
       if (brief?.status !== "ready" || brief.audio !== "ready" || !brief.audioUrl) return false;
       const name = state.instances?.find((i) => i.id === ref.instanceId)?.name;
       player ??= new BriefPlayer(deps.player ?? browserPlayerEnv(), playerEvents);
@@ -482,7 +511,8 @@ export function useApp<T>(select: (state: AppState) => T, equal: (a: T, b: T) =>
     last.current = { state: current, select, value: kept };
     return kept;
   };
-  return useSyncExternalStore(store.subscribe, read);
+  // `read` serves a render on the server too (the component tests render to markup).
+  return useSyncExternalStore(store.subscribe, read, read);
 }
 
 export function shallowEqual<T>(a: readonly T[], b: readonly T[]): boolean {

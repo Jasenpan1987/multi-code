@@ -12,7 +12,7 @@
 //
 // Also here: the Secretary Mode switch on the list (Story 5), the desktop's own.
 
-import { useEffect, useState, type MouseEvent } from "react";
+import { useState, type MouseEvent } from "react";
 import type { RemoteBrief } from "../../shared/remote-protocol";
 import type { SecretaryExchange } from "../../shared/types";
 import { isWaiting, queuePlace, stepBrief, type BriefRef } from "../../shared/secretaryQueue";
@@ -20,6 +20,7 @@ import { briefOf, foldedLine, playOffer, refKey, stateLine, type PlayOffer } fro
 import { shortAge, useNow } from "../format";
 import { idOf } from "../outbox";
 import { navigate } from "../routes";
+import { EMPTY_REPLY } from "../state";
 import { useActions, useApp } from "../store";
 import "./compose.css";
 import "./secretary-bar.css";
@@ -37,10 +38,11 @@ export function SecretaryBar() {
   const player = useApp((s) => s.player);
   const played = useApp((s) => s.played);
   const connection = useApp((s) => s.connection);
+  const secretaryLive = useApp((s) => s.secretaryLive);
   if (!on || !briefs) return null;
 
   const ref = bar.shown;
-  const offer = playOffer(brief, { player, played, connection }, ref);
+  const offer = playOffer(brief, { player, played, connection, secretaryLive }, ref);
   const waiting = brief ? isWaiting(brief) : false;
   const title = ref ? (name ?? "Session") : null;
   const openSession = () => {
@@ -93,7 +95,8 @@ export function SecretaryBar() {
 function Panel({ brief, ref_, offer, waiting }: { brief: RemoteBrief; ref_: BriefRef; offer: PlayOffer; waiting: boolean }) {
   const actions = useActions();
   const player = useApp((s) => s.player);
-  const online = useApp((s) => s.connection.state === "connected");
+  // Connected, to a Mac that has said it has a secretary.
+  const online = useApp((s) => s.connection.state === "connected" && s.secretaryLive);
   const now = useNow(30_000);
   const gotIt = () => {
     if (!actions.secretarySeen(ref_.instanceId, ref_.seq)) return;
@@ -214,52 +217,27 @@ function Exchanges({ list }: { list: SecretaryExchange[] }) {
   );
 }
 
-// What was typed in each brief's reply box and not sent, for this run: the text
-// stays across screens, and after a refusal.
-const drafts = new Map<string, string>();
-
 // The textarea keeps the focus, and the keyboard stays up, when Send is tapped.
 const keepFocus = (e: MouseEvent) => e.preventDefault();
 
 // The reply box (Story 7): as the compose box, only Send sends and Return is a new
 // line, so dictation and a Chinese IME's Return never send half a reply. It needs the
-// Mac: offline nothing is queued, and the text stays.
-function ReplyBox({ ref_ }: { ref_: BriefRef }) {
+// Mac: offline nothing is queued, and the text stays. What it holds and the reply it
+// sent live in the store (state.ts `ReplyDraft`), so the panel folding or another
+// screen showing it changes neither: an accepted reply never comes back as a draft,
+// and a refusal is still said.
+export function ReplyBox({ ref_ }: { ref_: BriefRef }) {
   const actions = useActions();
   const key = refKey(ref_);
-  const online = useApp((s) => s.connection.state === "connected");
-  const [text, setText] = useState(() => drafts.get(key) ?? "");
-  const [sentId, setSentId] = useState<string | null>(null);
-  const [offline, setOffline] = useState(false);
-  const item = useApp((s) => (sentId ? s.outbox.find((i) => idOf(i) === sentId) : undefined));
+  const online = useApp((s) => s.connection.state === "connected" && s.secretaryLive);
+  const draft = useApp((s) => s.replies[key] ?? EMPTY_REPLY);
+  const item = useApp((s) => (draft.sentId ? s.outbox.find((i) => idOf(i) === draft.sentId) : undefined));
   const reading = useApp((s) => briefOf(s, ref_)?.exchanges?.some((e) => !e.outcome) === true);
-
-  const edit = (next: string) => {
-    setText(next);
-    setOffline(false);
-    if (next) drafts.set(key, next);
-    else drafts.delete(key);
-  };
-  // Taken: the box empties, once.
-  const acked = item?.status === "acked";
-  useEffect(() => {
-    if (!acked) return;
-    setText("");
-    drafts.delete(key);
-  }, [acked, key]);
+  const { text } = draft;
 
   const sending = item?.status === "sent";
-  const send = () => {
-    const said = text.replace(/\s+$/, "");
-    if (!said) return;
-    if (item) actions.dismiss(idOf(item));
-    const sent = actions.secretaryReply(ref_.instanceId, ref_.seq, said);
-    setSentId(sent ? idOf(sent) : null);
-    setOffline(!sent);
-  };
-  const note = offline
-    ? "Replies need your Mac. Your text is kept."
-    : item?.status === "refused"
+  const note =
+    item?.status === "refused"
       ? `${item.refusal?.message ?? "Your Mac didn't take it"}. Your text is kept.`
       : item?.status === "unknown"
         ? "It may not have reached your Mac. Look at the exchanges before sending again."
@@ -273,7 +251,7 @@ function ReplyBox({ ref_ }: { ref_: BriefRef }) {
 
   return (
     <div className="sbar-reply">
-      {note && <div className={item?.status === "refused" || offline ? "hint err" : "hint"}>{note}</div>}
+      {note && <div className={item?.status === "refused" ? "hint err" : "hint"}>{note}</div>}
       <div className="compose">
         <div className="grow" data-value={text}>
           <textarea
@@ -283,7 +261,7 @@ function ReplyBox({ ref_ }: { ref_: BriefRef }) {
             aria-label="Reply to the secretary"
             enterKeyHint="enter"
             autoCapitalize="sentences"
-            onChange={(e) => edit(e.target.value)}
+            onChange={(e) => actions.editReply(ref_, e.target.value)}
           />
         </div>
         <button
@@ -291,7 +269,7 @@ function ReplyBox({ ref_ }: { ref_: BriefRef }) {
           aria-label="Send to the secretary"
           disabled={text.trim() === "" || sending || !online || reading}
           onMouseDown={keepFocus}
-          onClick={send}
+          onClick={() => actions.sendReply(ref_)}
         >
           <span>↑</span>
         </button>
@@ -322,6 +300,9 @@ export function SecretarySwitch() {
   const actions = useActions();
   const secretary = useApp((s) => s.secretary);
   const online = useApp((s) => s.connection.state === "connected");
+  // This connection's Mac has said what its secretary is: a cached state may be from
+  // another version of it.
+  const live = useApp((s) => s.secretaryLive);
   const [sentId, setSentId] = useState<string | null>(null);
   const item = useApp((s) => (sentId ? s.outbox.find((i) => idOf(i) === sentId) : undefined));
   if (!secretary) return null;
@@ -331,7 +312,9 @@ export function SecretarySwitch() {
   const noClaude = !secretary.on && !secretary.claudeFound;
   const why = !online
     ? "Needs your Mac."
-    : noClaude
+    : !live
+      ? "Waiting for your Mac…"
+      : noClaude
       ? "Your Mac needs Claude Code for the secretary."
       : item?.status === "refused"
         ? `${item.refusal?.message ?? "Your Mac didn't take it"}.`
@@ -355,7 +338,7 @@ export function SecretarySwitch() {
         role="switch"
         aria-checked={on}
         aria-label="Secretary Mode"
-        disabled={!online || pending || noClaude}
+        disabled={!online || !live || pending || noClaude}
         onClick={flip}
       >
         <i />

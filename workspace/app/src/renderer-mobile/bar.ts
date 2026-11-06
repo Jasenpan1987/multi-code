@@ -121,7 +121,7 @@ export type PlayOffer = "play" | "replay" | "stop" | "wait" | "offline" | "none"
 
 export function playOffer(
   brief: RemoteBrief | null,
-  state: Pick<AppState, "player" | "played" | "connection">,
+  state: Pick<AppState, "player" | "played" | "connection" | "secretaryLive">,
   ref: BriefRef | null
 ): PlayOffer {
   if (!brief || !ref) return "none";
@@ -129,6 +129,6 @@ export function playOffer(
   if (brief.status === "preparing") return "wait";
   if (brief.status !== "ready" || brief.audio === "unavailable") return "none";
   if (brief.audio === "pending") return "wait";
-  if (state.connection.state !== "connected" || !brief.audioUrl) return "offline";
+  if (state.connection.state !== "connected" || !state.secretaryLive || !brief.audioUrl) return "offline";
   return state.played.includes(refKey(ref)) ? "replay" : "play";
 }
