@@ -83,8 +83,8 @@ describe("synthesize", () => {
 
   it("speaks an underscore as a space on this server too", async () => {
     const f = fakeFetch({ "/v1/audio/speech": audio });
-    await synthesize(server, "Run MEMBER_SYNC first.", "English", { fetch: f });
-    expect(JSON.parse(String(f.mock.calls[0][1]?.body)).input).toBe("Run MEMBER SYNC first.");
+    await synthesize(server, "Run USER_SYNC first.", "English", { fetch: f });
+    expect(JSON.parse(String(f.mock.calls[0][1]?.body)).input).toBe("Run USER SYNC first.");
   });
 
   it("uses the English tone for an English brief, and leaves the language to the server", async () => {
@@ -453,9 +453,9 @@ describe("Cloudflare MeloTTS", () => {
 
   it("never sends an underscore, which MeloTTS refuses as invalid input", async () => {
     const f = fakeFetch({ [MODEL_PATH]: cfAudio });
-    const res = await synthesize(cf, "先用 GONE_SEARCH 来做，再开 MAIL__CHIMP。", "Chinese", { fetch: f });
+    const res = await synthesize(cf, "先用 ORDER_SYNC 来做，再开 DAILY__REPORT。", "Chinese", { fetch: f });
     expect(res.ok).toBe(true);
-    expect(JSON.parse(String(f.mock.calls[0][1]?.body)).prompt).toBe("先用 GONE SEARCH 来做，再开 MAIL CHIMP。");
+    expect(JSON.parse(String(f.mock.calls[0][1]?.body)).prompt).toBe("先用 ORDER SYNC 来做，再开 DAILY REPORT。");
   });
 
   it("says en for an English brief", async () => {

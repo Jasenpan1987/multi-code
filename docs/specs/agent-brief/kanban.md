@@ -83,7 +83,7 @@ ships first.
 - **Status:** done (2026-11-08; GPT review: no findings)
 - **Story:** Story 5 (briefs at `low`), voice-secretary Story 8
 - **Description:** With Cloudflare MeloTTS as the speech server, a brief holding
-  `GONE_SEARCH` got no voice: MeloTTS answers `HTTP 400: AiError: AiError: Invalid input`
+  `ORDER_SYNC` got no voice: MeloTTS answers `HTTP 400: AiError: AiError: Invalid input`
   to any text with an underscore (of 43 characters probed, only `_`). The prompt bans one
   inside a word, but briefs at `low` and `medium` effort sometimes keep job names like it
   (3 of 51 eval briefs; none of 47 at `high` or `xhigh`). `main/secretary/speech.ts`

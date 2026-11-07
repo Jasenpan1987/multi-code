@@ -151,7 +151,7 @@ function engineOf(base: string): Engine | string {
 //
 // What is spoken is the brief with every underscore made a space (`spokenText`).
 // The brief writer's prompt bans one inside a word, but at `low` and `medium` effort
-// a job name such as GONE_SEARCH sometimes stays (3 of 51 eval briefs, none of 47 at
+// a job name such as ORDER_SYNC sometimes stays (3 of 51 eval briefs, none of 47 at
 // `high` or above), and MeloTTS refuses any text that holds one: "AiError: Invalid
 // input". Of 43 characters probed on 2026-11-08 the underscore was the only one.
 export function spokenText(text: string): string {
