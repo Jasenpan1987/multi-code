@@ -133,6 +133,21 @@ describe("the call", () => {
     expect(args.some((arg) => arg.startsWith("--model="))).toBe(false);
   });
 
+  it("names an effort only when the caller gives one, after every other flag", () => {
+    const plain = secretaryCliArgs("p");
+    expect(plain).not.toContain("--effort");
+    expect(secretaryCliArgs("p", "low")).toEqual([...plain, "--effort", "low"]);
+    expect(secretaryCliArgs("p", "high")).toEqual([...plain, "--effort", "high"]);
+  });
+
+  it("passes the caller's effort to the CLI", async () => {
+    const pending = run({ effort: "high" });
+    const child = children[0];
+    expect(child.args.slice(-2)).toEqual(["--effort", "high"]);
+    child.exit(0, null, envelope('{"a":1}'));
+    await pending;
+  });
+
   it("overrides the builder's awsAuthRefresh with a command that only fails", () => {
     // An expired SSO login must fail the brief, never open a browser login.
     expect(JSON.parse(NO_AUTH_REFRESH_SETTINGS)).toEqual({ awsAuthRefresh: "false" });

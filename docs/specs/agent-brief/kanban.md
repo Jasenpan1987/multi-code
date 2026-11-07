@@ -30,7 +30,7 @@ ships first.
 
 ### T-1101: Today's writer names its effort
 - **Type:** feature
-- **Status:** ready
+- **Status:** done (2026-11-07, branch `agent-brief`; GPT review: no findings). Rerun judged blind: Finished at `low` 4.60 against `xhigh` 4.60, median 6.9 s against 33.2 s; dialogs at `high` 5.00, median 12.0 s. Found: at `low` the version 0.10.8 was misspoken in 3 of 5 briefs (timeline, "After T-1101")
 - **Story:** Story 5
 - **Description:** The brief writer's `claude -p` names no effort, so it inherits the builder's
   `effortLevel: xhigh` and took 28.7 s on a long turn, 90% of it thinking. An eval of 64
@@ -283,3 +283,4 @@ in about 15 s, and today's writer covers everything else.
 - 2026-11-07: Generated from PRD v1.1. T-1101 first, shippable alone; M2 measures G-901 to
   G-904 and G-907 to G-909 before the fork code. Builder at review: the breakdown stands;
   tasks one at a time, not in parallel; T-1101 is shown to the builder before any release.
+- 2026-11-07: T-1101 done. Its rerun found `low` misspeaking multi-part versions.

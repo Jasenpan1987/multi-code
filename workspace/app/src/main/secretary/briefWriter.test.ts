@@ -50,6 +50,7 @@ vi.mock("./cli", async (orig) => ({
 }));
 
 const {
+  BRIEF_EFFORT,
   INPUT_BUDGET_CHARS,
   SYSTEM_PROMPT,
   TEXT_CLIP_CHARS,
@@ -308,6 +309,20 @@ describe("writeBrief", () => {
     expect(brief).toEqual({ ok: true, language: "English", text: "eat-what is done." });
     expect(seen[0].systemPrompt).toBe(SYSTEM_PROMPT);
     expect(seen[0].stdin).toBe(JSON.stringify(input));
+  });
+
+  it("writes a Finished brief at low effort and a Needs-you brief at high", async () => {
+    // Never the builder's own default: xhigh took 28.7 s for one brief.
+    const efforts: (string | undefined)[] = [];
+    const record = async (_p: string, _s: string, options: CliOptions) => {
+      efforts.push(options.effort);
+      return { ok: false as const, reason: "x" };
+    };
+    await writeBrief(input, { run: record });
+    await writeBrief(buildBriefInput(material(bashPermission, [entry(1, 2)])), { run: record });
+    await writeBrief(buildBriefInput(material(elicitation, [entry(1, 2)])), { run: record });
+    expect(efforts).toEqual(["low", "high", "high"]);
+    expect(BRIEF_EFFORT).toEqual({ finished: "low", "needs-you": "high" });
   });
 
   it("hands the signal to the CLI call", async () => {

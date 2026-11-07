@@ -19,7 +19,7 @@ import { getBackend } from "../backends";
 import type { PromptOption, TranscriptEntry } from "../../shared/remote-protocol";
 import type { BriefLanguage } from "../../shared/types";
 import { ABORTED_REASON, runJsonPrompt } from "./cli";
-import type { CliOptions, CliResult } from "./cli";
+import type { CliEffort, CliOptions, CliResult } from "./cli";
 import type { BuilderTurn } from "../backends/types";
 
 export type Brief =
@@ -273,6 +273,17 @@ export interface WriteBriefOptions {
   run?: (systemPrompt: string, stdin: string, options: CliOptions) => Promise<CliResult>;
 }
 
+// The effort each kind of brief is written at, named so the builder's own default
+// (`xhigh` on their Mac, 28.7 s for one brief) never applies. Set by an eval of 64
+// briefs judged blind (docs/timeline/2026-11-07_agent-brief-spike.md, "Effort eval"):
+// no level was more accurate, higher ones only thought longer, but on dialogs `high`
+// made no error where `low` once said a command that only edits files "runs the
+// tests". A wrong dialog brief can lead to a wrong approval.
+export const BRIEF_EFFORT: Record<BriefWriterInput["event"], CliEffort> = {
+  finished: "low",
+  "needs-you": "high",
+};
+
 // The pure core: an input already gathered, one CLI call, one brief. Never throws.
 export async function writeBrief(
   input: BriefWriterInput,
@@ -280,7 +291,10 @@ export async function writeBrief(
 ): Promise<Brief> {
   try {
     const run = options.run ?? runJsonPrompt;
-    const result = await run(SYSTEM_PROMPT, JSON.stringify(input), { signal: options.signal });
+    const result = await run(SYSTEM_PROMPT, JSON.stringify(input), {
+      signal: options.signal,
+      effort: BRIEF_EFFORT[input.event],
+    });
     if (!result.ok) return result;
     return parseBrief(result.output);
   } catch (err) {

@@ -106,6 +106,22 @@ four at a time and are slower than alone: the same `low` call alone took 7.4 s.
   when the command only edits files; the `xhigh` briefs also said that the stash is dropped
   even if the edit fails. On dialogs, high and xhigh scored 5 on all six runs.
 
+### After T-1101
+
+The writer now names its effort (`low` for Finished, `high` for Needs you). The 8 inputs
+rerun twice each, one call at a time, judged blind together with the old `xhigh` runs (and,
+on dialogs, the old `high` runs). Cost: $0.80 for the briefs, $1.18 for the judge.
+
+| Kind | New | Old |
+|---|---|---|
+| Finished (5 inputs) | `low`: 4.60, 1 essential point missed, 4 errors, median 6.9 s | `xhigh`: 4.60, 4 missed, 1 error, median 33.2 s |
+| Needs you (3 inputs) | `high`: 5.00, no error, median 12.0 s | `high` 5.00, `xhigh` 5.00 |
+
+One weakness repeats: at `low`, the multi-part version 0.10.8 came out as "零点十八" or
+"零点八" in 3 of 5 briefs of the release sample; `xhigh` said it right in all 3. The
+prompt's only example of a spoken version has two parts ("零点五版"). No other sample had
+such a version.
+
 ## Decided
 
 - The working agent writes the brief, in a fork (builder, 2026-11-07). The other option, the
