@@ -80,7 +80,7 @@ ships first.
 
 ### T-1113: Speech never sends an underscore
 - **Type:** feature
-- **Status:** done (2026-11-08; GPT review: no findings)
+- **Status:** done, released in 0.10.10 (2026-11-08; GPT review: no findings)
 - **Story:** Story 5 (briefs at `low`), voice-secretary Story 8
 - **Description:** With Cloudflare MeloTTS as the speech server, a brief holding
   `ORDER_SYNC` got no voice: MeloTTS answers `HTTP 400: AiError: AiError: Invalid input`
@@ -321,3 +321,4 @@ in about 15 s, and today's writer covers everything else.
   T-1112 (builder: fix before 0.10.9).
 - 2026-11-08: T-1101 and T-1112 released in 0.10.9. Next: T-1102.
 - 2026-11-08: Added and finished T-1113 after the builder's first MeloTTS brief got no voice.
+- 2026-11-08: T-1113 released in 0.10.10. Next: T-1102.
