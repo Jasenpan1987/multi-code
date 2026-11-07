@@ -122,6 +122,13 @@ One weakness repeats: at `low`, the multi-part version 0.10.8 came out as "零�
 prompt's only example of a spoken version has two parts ("零点五版"). No other sample had
 such a version.
 
+T-1112 (prompt v12) says a version "every part and every dot", with 0.10.8 as the example.
+The release sample at `low` then said "零点十点八版" in 5 of 5 briefs. All 8 inputs again,
+judged blind with the old runs: Finished at `low` 5.00 (9 briefs, no point missed, no
+error, median 6.7 s) against `xhigh` 4.80; dialogs at `high` 4.89 (9 briefs, median 11.9 s),
+the one error an inference not in the material ("keyset" called a paging style). Cost: $0.85
+for the briefs, $1.45 for the judge.
+
 ## Decided
 
 - The working agent writes the brief, in a fork (builder, 2026-11-07). The other option, the

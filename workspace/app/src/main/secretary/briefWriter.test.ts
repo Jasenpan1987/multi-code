@@ -105,13 +105,14 @@ beforeEach(() => {
 });
 
 describe("the prompt", () => {
-  it("is the spike's prompt as of v11 (v10's STE80 template, OpenCode 2's names), byte for byte", () => {
+  it("is the spike's prompt as of v12 (v10's STE80 template, OpenCode 2's names, full versions), byte for byte", () => {
     // docs/timeline/2026-10-08_brief-writer-spike.md, "Final system prompt" (v7), its
     // T-522 addendum (v8), its T-528 addendum (v9) and its T-532 addendum (v10). v11
-    // (opencode-v2 T-607) changes only the note on OpenCode's permission names. A
-    // deliberate change gets a new hash here and a line there.
+    // (opencode-v2 T-607) changes only the note on OpenCode's permission names; v12
+    // (agent-brief T-1112) only the rule for saying a version. A deliberate change gets
+    // a new hash here and a line there.
     expect(crypto.createHash("sha256").update(SYSTEM_PROMPT).digest("hex")).toBe(
-      "8fe7130d3cdd3ea3a3d6d27da0831bb1f36187244d2bc9a3bf04c6bf507292ce"
+      "973c2727ce71e8552d481196d85418de2e72538ba7c473769165cd439a0bc703"
     );
   });
 });

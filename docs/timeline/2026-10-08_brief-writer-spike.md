@@ -544,3 +544,13 @@ instead of 1.x's ("such as bash or edit, with the details in toolInput.metadata"
 else in the prompt moved, and no sample was re-run: the builder is trying v10's STE80 wording
 (2026-10-10) and the change is a fact about OpenCode 2, not a change of style. New hash in
 `briefWriter.test.ts`.
+
+## agent-brief T-1112 addendum: a version said in full (prompt v12, 2026-11-07)
+
+One sentence changed: a version is said "every part and every dot", with 0.10.8 as the
+example ("零点十点八版", never "零点十八" or "零点八") next to the old "零点五版". Since
+T-1101 the writer runs Finished briefs at `--effort low`, and on the release sample `low`
+said 0.10.8 wrong in 3 of 5 briefs. With v12 it said it right in 5 of 5. The 8 eval inputs of
+`docs/timeline/2026-11-07_agent-brief-spike.md`, judged blind with the old `xhigh` runs:
+Finished at `low` 5.00 (9 briefs, no error), dialogs at `high` 4.89 (9 briefs, one inference
+not in the material). New hash in `briefWriter.test.ts`.

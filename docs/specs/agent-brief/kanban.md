@@ -2,7 +2,7 @@
 
 **Generated:** 2026-11-07
 **PRD Version:** 1.1 (`docs/specs/agent-brief/prd.md`)
-**Total Tasks:** 11
+**Total Tasks:** 12
 **Milestones:** M1 Effort fix (ships alone) · M2 Measure the unknowns · M3 Agent brief for Finished · M4 Agent brief for Needs you
 **Evidence:** `docs/timeline/2026-11-07_agent-brief-spike.md`; probe scripts and raw results stay local in `.omt/probes/fork-brief/` (git-ignored: the repo is public, and they hold real session text)
 
@@ -10,7 +10,8 @@
 
 ```mermaid
 graph TD
-    T1101[T-1101: today's writer names its effort] --> R1[0.10.9 patch]
+    T1101[T-1101: today's writer names its effort] --> T1112[T-1112: say a version in full]
+    T1112 --> R1[0.10.9 patch]
     T1102[T-1102: fork on dialogs, residue, hooks] --> T1107
     T1103[T-1103: cache window, big-session cost] --> T1107
     T1103 --> T1108
@@ -59,6 +60,23 @@ ships first.
 - **Parallel with:** T-1102, T-1103, T-1104, T-1105, T-1106
 - **Notes:** The release (version bump, READMEs, DMG) follows CLAUDE.md's release process and
   needs the builder's go-ahead and patch/minor choice.
+
+### T-1112: Say a three-part version in full
+- **Type:** feature
+- **Status:** done (2026-11-07): 5 of 5 right at `low`; Finished 5.00, dialogs 4.89 (one inference not in the material), judged blind
+- **Story:** Story 5 (accuracy at `low`)
+- **Description:** T-1101's rerun found `low` saying 0.10.8 as "零点十八" or "零点八" in 3 of 5
+  briefs of the release sample; `xhigh` said it right. The prompt's only spoken-version
+  example has two parts ("零点五版"). Prompt v12 in `main/secretary/briefWriter.ts`
+  `SYSTEM_PROMPT` says every part and every dot, with 0.10.8 as the example ("零点十点八版",
+  never "零点十八" or "零点八"). Nothing else in the prompt moves.
+- **Acceptance:** the pinned hash and its note in `briefWriter.test.ts` updated; a line in the
+  spike record (`docs/timeline/2026-10-08_brief-writer-spike.md`); the release sample at
+  `low` says the version right in 5 of 5; the 8 eval inputs judged blind with the old `xhigh`
+  runs score no lower than T-1101's rerun.
+- **Blocks:** the 0.10.9 patch
+- **Blocked by:** T-1101
+- **Notes:** Builder, 2026-11-07: fix this before 0.10.9, then show the result.
 
 ## Milestone 2: Measure the unknowns (no app code)
 
@@ -283,4 +301,5 @@ in about 15 s, and today's writer covers everything else.
 - 2026-11-07: Generated from PRD v1.1. T-1101 first, shippable alone; M2 measures G-901 to
   G-904 and G-907 to G-909 before the fork code. Builder at review: the breakdown stands;
   tasks one at a time, not in parallel; T-1101 is shown to the builder before any release.
-- 2026-11-07: T-1101 done. Its rerun found `low` misspeaking multi-part versions.
+- 2026-11-07: T-1101 done. Its rerun found `low` misspeaking multi-part versions; added
+  T-1112 (builder: fix before 0.10.9).
