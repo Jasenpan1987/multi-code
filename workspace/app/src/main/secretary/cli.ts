@@ -16,6 +16,9 @@
 //   any other login. Since 2026-11-04 (the builder's decision, PRD v2.0) the call
 //   names no model: it runs on whatever model and login the builder's own `claude`
 //   defaults to.
+// - **`--effort` when the caller names one.** The brief writer does, per kind of
+//   brief (briefWriter.ts `BRIEF_EFFORT`); without it the builder's own effort
+//   applies, `xhigh` on their Mac (agent-brief, 2026-11-07).
 // - **Stdin, not argv, for the input.** The prompt has no secrets; the input holds a
 //   transcript, and argv is `ps`-visible.
 // - **Parsing.** The CLI explains a failure in its JSON on stdout, exit code or not
@@ -49,7 +52,12 @@ export const NO_AUTH_REFRESH_SETTINGS = JSON.stringify({ awsAuthRefresh: "false"
 
 export const ABORTED_REASON = "aborted";
 
-export function secretaryCliArgs(systemPrompt: string): string[] {
+// The CLI's `--effort` levels. A call that names none runs at the builder's own
+// `effortLevel`, which on the builder's Mac is `xhigh`: a brief there took 28.7 s,
+// 2,564 of its 2,834 output tokens thinking (agent-brief spike, 2026-11-07).
+export type CliEffort = "low" | "medium" | "high" | "xhigh" | "max";
+
+export function secretaryCliArgs(systemPrompt: string, effort?: CliEffort): string[] {
   return [
     "-p",
     "--bare",
@@ -64,6 +72,7 @@ export function secretaryCliArgs(systemPrompt: string): string[] {
     NO_AUTH_REFRESH_SETTINGS,
     "--system-prompt",
     systemPrompt,
+    ...(effort ? ["--effort", effort] : []),
   ];
 }
 
@@ -80,6 +89,8 @@ export type SpawnFn = (
 export interface CliOptions {
   // Aborting kills the CLI and resolves { ok: false, reason: "aborted" }.
   signal?: AbortSignal;
+  // Unset: the builder's own default effort.
+  effort?: CliEffort;
   timeoutMs?: number;
   killGraceMs?: number;
   // For tests. Production spawns the real binary with an instance's env.
@@ -135,7 +146,7 @@ export function runJsonPrompt(
     try {
       const { command, env } = options.command ?? claudeCliCommand();
       const spawnFn = options.spawn ?? nodeSpawn;
-      child = spawnFn(command, secretaryCliArgs(systemPrompt), {
+      child = spawnFn(command, secretaryCliArgs(systemPrompt, options.effort), {
         cwd: os.tmpdir(),
         env,
         stdio: "pipe",

@@ -4,6 +4,19 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-11-07 — The working agent writes its own brief, in a fork, and accuracy comes before speed
+
+**Decision:** A Claude session's brief comes from a fork of that session (`claude -p --resume <id> --fork-session --no-session-persistence`), started the moment the turn ends, on the session's own model, effort and tools, with every tool call blocked by a hook. The agent sums up what it did since the builder's last message. The agent brief is in the first person and 30 to 45 seconds long, as today. Today's outsider writer stays as the fallback: a cold cache, OpenCode sessions, a fork that fails. Its effort is named in its flags and was set by an accuracy eval, not by speed: `low` for Finished briefs, `high` for Needs-you briefs.
+
+**Why:** The builder found the briefs shallow and wants the working agent to report. The outsider sees only the last 60,000 characters; on the release session it left out one of two tasks, the fork named both. The fork leaves the session, its screen and its files untouched, which the other option (a spoken summary at the end of every reply) does not. On speed the builder said 28.7 s is "完全无法接受", and also "我还是需要准确性，慢一点就慢一点". The eval (64 briefs, judged blind) found no effort more accurate overall, only slower; on dialogs `high` and `xhigh` made no error and `low` once said a file edit "runs the tests". A wrong dialog brief can lead to a wrong approval.
+
+**Consequences:** A warm fork costs $0.06 to $0.07 and takes 13 to 16 s (119k to 145k context); a cold one about $2 on 435k, so none runs cold. The fork must match the session's tools, model and effort, read from the session's record, or it loses the cache. Brief text in the agent's own voice. Needs-you by fork and OpenCode forks are not measured yet.
+
+**Source:** builder, 2026-11-07, in session; `docs/timeline/2026-11-07_agent-brief-spike.md`
+**Affects:** `docs/specs/agent-brief/prd.md`; `main/secretary/briefWriter.ts`, `main/secretary/cli.ts`, `main/secretary/index.ts`, `main/backends/claude.ts`
+
+---
+
 ## 2026-11-06 — One secretary for the whole app, in a bar at the top
 
 **Decision:** The secretary moves out of the sessions into one bar across the top of the app, on the desktop and the phone, shown while Secretary Mode is on. It shows one brief at a time, named by its session, with its state, its text and Play. Waiting briefs form a queue, Needs you first and oldest first, moved through with ‹ ›. Nothing plays without a tap, on either side. The desktop's card over the terminal and the session header's Secretary button go. The phone gets no secretary of its own: it shows and plays the briefs the Mac already wrote, under the same Secretary Mode, which it can turn on and off. With the secretary on, a push waits for its brief's text (up to 30 s, assumed) and carries the brief's first sentence. Replies in words work from the bar on both sides, and the phone's dialog buttons stay.

@@ -19,7 +19,7 @@ import { getBackend } from "../backends";
 import type { PromptOption, TranscriptEntry } from "../../shared/remote-protocol";
 import type { BriefLanguage } from "../../shared/types";
 import { ABORTED_REASON, runJsonPrompt } from "./cli";
-import type { CliOptions, CliResult } from "./cli";
+import type { CliEffort, CliOptions, CliResult } from "./cli";
 import type { BuilderTurn } from "../backends/types";
 
 export type Brief =
@@ -59,10 +59,11 @@ export const INPUT_BUDGET_CHARS = 60_000;
 // which is then cut by entries.
 export const TEXT_CLIP_CHARS = 10_000;
 
-// The spike's prompt, now v11 (v10 was T-532, the STE80 template: terms explained, the
+// The spike's prompt, now v12 (v10 was T-532, the STE80 template: terms explained, the
 // report order, looser sentence limits; v11, opencode-v2 T-607, names OpenCode 2's
-// permissions and where their specifics are); the versions and their live runs are in
-// the spike record. briefWriter.test.ts pins its hash.
+// permissions and where their specifics are; v12, agent-brief T-1112, says a version of
+// three parts in full, which `low` effort got wrong); the versions and their live runs
+// are in the spike record. briefWriter.test.ts pins its hash.
 export const SYSTEM_PROMPT = `You are the secretary of one coding-agent session in Multi-Code. The builder you work for is away from the screen. When they come back and click the session, your brief is spoken to them by a text-to-speech voice. Write that brief: a secretary briefing a busy boss in person, not someone reading the screen aloud.
 
 The input is one JSON object about one event:
@@ -101,7 +102,7 @@ Plain spoken sentences only: no markdown, lists, headings, code, tables or emoji
 
 No file paths, URLs, commit hashes, ids, flags or command lines. Mention a file, branch, worktree, function or tool by name only when the builder needs the name, and then say it as words ("the manager agent branch", "the M2 UI worktree", "the NPM config file", "the macOS disk image tool"), never as written ("feat/manager-agent", "m2-ui", ".npmrc", "hdiutil"). No characters such as / \\ _ - . # @ ~ \` * > & | inside a word. The one exception is the session's name: always write it exactly as given.
 
-Write anything said letter by letter in capitals, even a tool normally written in lowercase, in Chinese briefs too (NPM, PNPM, TSX, DMG, PR, UI, CLI: "NPM 配置", never "npm 配置"), but keep names people say as words (React, Vite, JSON, GitHub, esbuild). Write version numbers the way they are said ("version zero point five", "零点五版"), and round other numbers when the exact figure doesn't matter.
+Write anything said letter by letter in capitals, even a tool normally written in lowercase, in Chinese briefs too (NPM, PNPM, TSX, DMG, PR, UI, CLI: "NPM 配置", never "npm 配置"), but keep names people say as words (React, Vite, JSON, GitHub, esbuild). Write version numbers the way they are said, every part and every dot ("0.5" is "version zero point five", "零点五版"; "0.10.8" is "version zero point ten point eight", "零点十点八版", never "零点十八" or "零点八"), and round other numbers when the exact figure doesn't matter.
 
 Simple words, short sentences
 
@@ -273,6 +274,17 @@ export interface WriteBriefOptions {
   run?: (systemPrompt: string, stdin: string, options: CliOptions) => Promise<CliResult>;
 }
 
+// The effort each kind of brief is written at, named so the builder's own default
+// (`xhigh` on their Mac, 28.7 s for one brief) never applies. Set by an eval of 64
+// briefs judged blind (docs/timeline/2026-11-07_agent-brief-spike.md, "Effort eval"):
+// no level was more accurate, higher ones only thought longer, but on dialogs `high`
+// made no error where `low` once said a command that only edits files "runs the
+// tests". A wrong dialog brief can lead to a wrong approval.
+export const BRIEF_EFFORT: Record<BriefWriterInput["event"], CliEffort> = {
+  finished: "low",
+  "needs-you": "high",
+};
+
 // The pure core: an input already gathered, one CLI call, one brief. Never throws.
 export async function writeBrief(
   input: BriefWriterInput,
@@ -280,7 +292,10 @@ export async function writeBrief(
 ): Promise<Brief> {
   try {
     const run = options.run ?? runJsonPrompt;
-    const result = await run(SYSTEM_PROMPT, JSON.stringify(input), { signal: options.signal });
+    const result = await run(SYSTEM_PROMPT, JSON.stringify(input), {
+      signal: options.signal,
+      effort: BRIEF_EFFORT[input.event],
+    });
     if (!result.ok) return result;
     return parseBrief(result.output);
   } catch (err) {
