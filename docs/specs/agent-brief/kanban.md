@@ -31,7 +31,7 @@ ships first.
 
 ### T-1101: Today's writer names its effort
 - **Type:** feature
-- **Status:** done (2026-11-07, branch `agent-brief`; GPT review: no findings). Rerun judged blind: Finished at `low` 4.60 against `xhigh` 4.60, median 6.9 s against 33.2 s; dialogs at `high` 5.00, median 12.0 s. Found: at `low` the version 0.10.8 was misspoken in 3 of 5 briefs (timeline, "After T-1101")
+- **Status:** done, released in 0.10.9 (2026-11-08; GPT review: no findings). Rerun judged blind: Finished at `low` 4.60 against `xhigh` 4.60, median 6.9 s against 33.2 s; dialogs at `high` 5.00, median 12.0 s. Found: at `low` the version 0.10.8 was misspoken in 3 of 5 briefs (timeline, "After T-1101")
 - **Story:** Story 5
 - **Description:** The brief writer's `claude -p` names no effort, so it inherits the builder's
   `effortLevel: xhigh` and took 28.7 s on a long turn, 90% of it thinking. An eval of 64
@@ -63,7 +63,7 @@ ships first.
 
 ### T-1112: Say a three-part version in full
 - **Type:** feature
-- **Status:** done (2026-11-07): 5 of 5 right at `low`; Finished 5.00, dialogs 4.89 (one inference not in the material), judged blind
+- **Status:** done, released in 0.10.9 (2026-11-08): 5 of 5 right at `low`; Finished 5.00, dialogs 4.89 (one inference not in the material), judged blind
 - **Story:** Story 5 (accuracy at `low`)
 - **Description:** T-1101's rerun found `low` saying 0.10.8 as "零点十八" or "零点八" in 3 of 5
   briefs of the release sample; `xhigh` said it right. The prompt's only spoken-version
@@ -303,3 +303,4 @@ in about 15 s, and today's writer covers everything else.
   tasks one at a time, not in parallel; T-1101 is shown to the builder before any release.
 - 2026-11-07: T-1101 done. Its rerun found `low` misspeaking multi-part versions; added
   T-1112 (builder: fix before 0.10.9).
+- 2026-11-08: T-1101 and T-1112 released in 0.10.9. Next: T-1102.
