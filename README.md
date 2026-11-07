@@ -457,8 +457,10 @@ phone app.
 - **For the briefs:** the Claude Code CLI, logged in. The secretary runs the `claude`
   already on your machine with its default model and login, the ones plain `claude`
   uses from your `~/.claude/settings.json`, so any account works and it asks for no
-  keys of its own. It always runs `claude`, so install Claude Code even if your
-  sessions are all OpenCode. Without it the secretary is off: the **Secretary Mode**
+  keys of its own. The effort is its own, not yours: low for a finished session and
+  high for a dialog, so a brief is written in about 7 seconds, or 12 for a dialog,
+  even when your sessions think at xhigh. It always runs `claude`, so install Claude
+  Code even if your sessions are all OpenCode. Without it the secretary is off: the **Secretary Mode**
   switch can't be turned on, and the Secretary section says Claude Code is needed.
   Once you install it, the secretary comes back with no restart, as you left it. Each
   call is one-shot: no tools, and nothing saved to your session history

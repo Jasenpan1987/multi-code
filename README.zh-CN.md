@@ -392,7 +392,7 @@ App 的第一屏会显示三步里哪步做完了、下一步是什么。
 
 **需要什么:**
 
-- **写汇报:** 要装好 Claude Code CLI 并登录。小秘书用的是你电脑上现成的 `claude`,模型和登录方式都用它的默认设置,也就是直接运行 `claude` 时从你的 `~/.claude/settings.json` 读到的那一套,所以什么账号都行,也不需要另外的密钥。小秘书总是调用 `claude`,所以就算你的会话全是 OpenCode,也要装 Claude Code。没装的话小秘书就是关着的:**Secretary Mode** 开关按不了,Secretary 面板里会写明需要 Claude Code。装好以后不用重启,小秘书会按你原来的设置回来。每次都是一次性调用:不带任何工具,也不会存进你的会话历史
+- **写汇报:** 要装好 Claude Code CLI 并登录。小秘书用的是你电脑上现成的 `claude`,模型和登录方式都用它的默认设置,也就是直接运行 `claude` 时从你的 `~/.claude/settings.json` 读到的那一套,所以什么账号都行,也不需要另外的密钥。思考强度(effort)是小秘书自己定的,不跟你的设置走:做完的汇报用 low,确认框用 high。所以就算你的会话开着 xhigh,一条汇报也只要 7 秒左右,确认框 12 秒左右。小秘书总是调用 `claude`,所以就算你的会话全是 OpenCode,也要装 Claude Code。没装的话小秘书就是关着的:**Secretary Mode** 开关按不了,Secretary 面板里会写明需要 Claude Code。装好以后不用重启,小秘书会按你原来的设置回来。每次都是一次性调用:不带任何工具,也不会存进你的会话历史
 - **语音(可选):** 下面两种语音服务器选一种,Multi-Code 按地址分辨是哪一种:
   - 用 `deploy/tts-server/` 搭起来的服务器(Qwen3-TTS,声音是 Serena)。其他同样是 OpenAI 语音接口的引擎过不了 **Test**,因为请求里点名要 Serena 这个声音
   - Cloudflare Workers AI 的 MeloTTS,在 Cloudflare 每天的免费额度内不花钱。地址填 `https://api.cloudflare.com/client/v4/accounts/<account id>/ai/run/@cf/myshell-ai/melotts`,Key 填 Workers AI 的 API token(在 Cloudflare 后台打开 Workers AI → **REST API** → **Create a Workers AI API Token**)。每种语言只有一个声音,也不能调语气
