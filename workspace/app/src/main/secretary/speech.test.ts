@@ -81,6 +81,12 @@ describe("synthesize", () => {
     });
   });
 
+  it("speaks an underscore as a space on this server too", async () => {
+    const f = fakeFetch({ "/v1/audio/speech": audio });
+    await synthesize(server, "Run MEMBER_SYNC first.", "English", { fetch: f });
+    expect(JSON.parse(String(f.mock.calls[0][1]?.body)).input).toBe("Run MEMBER SYNC first.");
+  });
+
   it("uses the English tone for an English brief, and leaves the language to the server", async () => {
     const f = fakeFetch({ "/v1/audio/speech": audio });
     await synthesize(server, "Shop just finished.", "English", { fetch: f });
@@ -443,6 +449,13 @@ describe("Cloudflare MeloTTS", () => {
     expect(authOf(init)).toBe(`Bearer ${KEY}`);
     // No voice, no tone: MeloTTS takes neither.
     expect(JSON.parse(String(init?.body))).toEqual({ prompt: "Shop 那边做完了。", lang: "zh" });
+  });
+
+  it("never sends an underscore, which MeloTTS refuses as invalid input", async () => {
+    const f = fakeFetch({ [MODEL_PATH]: cfAudio });
+    const res = await synthesize(cf, "先用 GONE_SEARCH 来做，再开 MAIL__CHIMP。", "Chinese", { fetch: f });
+    expect(res.ok).toBe(true);
+    expect(JSON.parse(String(f.mock.calls[0][1]?.body)).prompt).toBe("先用 GONE SEARCH 来做，再开 MAIL CHIMP。");
   });
 
   it("says en for an English brief", async () => {

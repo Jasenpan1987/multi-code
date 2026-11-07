@@ -148,6 +148,16 @@ function engineOf(base: string): Engine | string {
 // is not told the language: it detects it itself (`Auto`), which the builder chose on
 // 2026-10-08 for Chinese briefs full of English terms, and kept after an A/B listen of
 // 11 real briefs. MeloTTS has no detection, so Cloudflare is told it.
+//
+// What is spoken is the brief with every underscore made a space (`spokenText`).
+// The brief writer's prompt bans one inside a word, but at `low` and `medium` effort
+// a job name such as GONE_SEARCH sometimes stays (3 of 51 eval briefs, none of 47 at
+// `high` or above), and MeloTTS refuses any text that holds one: "AiError: Invalid
+// input". Of 43 characters probed on 2026-11-08 the underscore was the only one.
+export function spokenText(text: string): string {
+  return text.replace(/_+/g, " ");
+}
+
 export async function synthesize(
   server: SpeechServer,
   text: string,
@@ -161,11 +171,12 @@ export async function synthesize(
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (server.key) headers.Authorization = `Bearer ${server.key}`;
+  const spoken = spokenText(text);
   const payload =
     engine.kind === "cloudflare"
-      ? { prompt: text, lang: CLOUDFLARE_LANG[language] }
+      ? { prompt: spoken, lang: CLOUDFLARE_LANG[language] }
       : {
-          input: text,
+          input: spoken,
           voice: VOICE,
           instructions: BRIEFING_INSTRUCTIONS[language],
           response_format: "wav",

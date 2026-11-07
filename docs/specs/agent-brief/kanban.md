@@ -2,7 +2,7 @@
 
 **Generated:** 2026-11-07
 **PRD Version:** 1.1 (`docs/specs/agent-brief/prd.md`)
-**Total Tasks:** 12
+**Total Tasks:** 13
 **Milestones:** M1 Effort fix (ships alone) · M2 Measure the unknowns · M3 Agent brief for Finished · M4 Agent brief for Needs you
 **Evidence:** `docs/timeline/2026-11-07_agent-brief-spike.md`; probe scripts and raw results stay local in `.omt/probes/fork-brief/` (git-ignored: the repo is public, and they hold real session text)
 
@@ -77,6 +77,22 @@ ships first.
 - **Blocks:** the 0.10.9 patch
 - **Blocked by:** T-1101
 - **Notes:** Builder, 2026-11-07: fix this before 0.10.9, then show the result.
+
+### T-1113: Speech never sends an underscore
+- **Type:** feature
+- **Status:** done (2026-11-08; GPT review: no findings)
+- **Story:** Story 5 (briefs at `low`), voice-secretary Story 8
+- **Description:** With Cloudflare MeloTTS as the speech server, a brief holding
+  `GONE_SEARCH` got no voice: MeloTTS answers `HTTP 400: AiError: AiError: Invalid input`
+  to any text with an underscore (of 43 characters probed, only `_`). The prompt bans one
+  inside a word, but briefs at `low` and `medium` effort sometimes keep job names like it
+  (3 of 51 eval briefs; none of 47 at `high` or `xhigh`). `main/secretary/speech.ts`
+  `synthesize` now speaks `spokenText(text)`, each run of underscores made one space, for
+  both engines. The text on the bar is unchanged.
+- **Acceptance:** tests for both engines in `speech.test.ts`; the failing brief sent to the
+  real MeloTTS gives audio in all 7 variants that failed or passed before.
+- **Blocks:** the 0.10.10 patch
+- **Blocked by:** none
 
 ## Milestone 2: Measure the unknowns (no app code)
 
@@ -304,3 +320,4 @@ in about 15 s, and today's writer covers everything else.
 - 2026-11-07: T-1101 done. Its rerun found `low` misspeaking multi-part versions; added
   T-1112 (builder: fix before 0.10.9).
 - 2026-11-08: T-1101 and T-1112 released in 0.10.9. Next: T-1102.
+- 2026-11-08: Added and finished T-1113 after the builder's first MeloTTS brief got no voice.
