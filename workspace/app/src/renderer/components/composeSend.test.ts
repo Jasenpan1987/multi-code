@@ -11,18 +11,23 @@ describe("buildComposePayload", () => {
 
   it("appends image refs as @<path> tokens after the text", () => {
     expect(buildComposePayload("look at this", ["/tmp/a.png"])).toBe(
-      "look at this @/tmp/a.png"
+      "look at this @/tmp/a.png "
     );
   });
 
   it("joins multiple image refs with spaces", () => {
     expect(
       buildComposePayload("two", ["/tmp/a.png", "/tmp/b.png"])
-    ).toBe("two @/tmp/a.png @/tmp/b.png");
+    ).toBe("two @/tmp/a.png @/tmp/b.png ");
   });
 
   it("emits only the refs when there is no text (image-only draft)", () => {
-    expect(buildComposePayload("", ["/tmp/a.png"])).toBe("@/tmp/a.png");
+    expect(buildComposePayload("", ["/tmp/a.png"])).toBe("@/tmp/a.png ");
+  });
+
+  it("closes a last @ token with a space, so the Enter after it sends", () => {
+    expect(buildComposePayload("explain @src/app.ts")).toBe("explain @src/app.ts ");
+    expect(buildComposePayload("mail me@example.com later")).toBe("mail me@example.com later");
   });
 });
 
@@ -58,7 +63,7 @@ describe("sendComposed", () => {
     expect(write).toHaveBeenNthCalledWith(
       1,
       "inst-1",
-      `${PASTE_START}what color @/tmp/probe.png${PASTE_END}`
+      `${PASTE_START}what color @/tmp/probe.png ${PASTE_END}`
     );
     expect(write).toHaveBeenNthCalledWith(2, "inst-1", "\r");
   });

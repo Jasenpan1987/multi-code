@@ -15,13 +15,101 @@ import {
 } from "../../shared/replyStart";
 import type { OpencodeViewCommand } from "../../shared/replyStart";
 import type { BackendName } from "../../shared/types";
+import { findPromptBox } from "./promptBox";
+import type { PromptBox } from "./promptBox";
+import { asTyping, mayType, typingChunks, TYPING_GAP_MS, wouldFold } from "./typedPaste";
+import { arrowsBetween } from "./promptClick";
+import type { InputRows } from "./promptClick";
 
 interface TerminalViewProps {
   instanceId: string;
   active: boolean;
+  // Whose input box to look for on the screen (promptBox.ts).
+  backend: BackendName;
 }
 
-const terminals = new Map<string, { terminal: Terminal; fitAddon: FitAddon }>();
+const terminals = new Map<string, { terminal: Terminal; fitAddon: FitAddon; backend: BackendName }>();
+
+/**
+ * The screen as rows of text, top to bottom, wherever the view is scrolled to
+ * (unlike screenRows, the view). Dim text is blanked: an empty input's
+ * placeholder is drawn dim, and must not count as typed.
+ */
+function promptRows(terminal: Terminal): string[] {
+  const buffer = terminal.buffer.active;
+  const cell = buffer.getNullCell();
+  const rows: string[] = [];
+  for (let y = 0; y < terminal.rows; y++) {
+    const line = buffer.getLine(buffer.baseY + y);
+    let text = "";
+    if (line) {
+      for (let x = 0; x < line.length; x++) {
+        const c = line.getCell(x, cell);
+        if (!c) break;
+        const width = c.getWidth();
+        // The second half of a wide character (CJK) is part of the first.
+        if (width === 0) continue;
+        text += c.isDim() ? " ".repeat(width) : c.getChars() || " ";
+      }
+    }
+    rows.push(text.replace(/\s+$/, ""));
+  }
+  return rows;
+}
+
+/** The CLI's own input box on the screen now, or null when it isn't there. */
+export function readPromptBox(instanceId: string): PromptBox | null {
+  const entry = terminals.get(instanceId);
+  if (!entry) return null;
+  return findPromptBox(entry.backend, promptRows(entry.terminal));
+}
+
+// Each terminal's typing in progress, so a second long paste waits for the first.
+const typingQueues = new Map<string, Promise<void>>();
+
+/**
+ * A long paste typed into the CLI's input instead, in writes it reads apart
+ * (typedPaste.ts): shown in full, never folded to a placeholder.
+ */
+function typeIntoInput(instanceId: string, text: string): void {
+  const chunks = typingChunks(asTyping(text));
+  const previous = typingQueues.get(instanceId) ?? Promise.resolve();
+  const done = previous.then(async () => {
+    for (const [i, chunk] of chunks.entries()) {
+      if (i > 0) await new Promise((resolve) => setTimeout(resolve, TYPING_GAP_MS));
+      window.electronAPI.writeToInstance(instanceId, chunk);
+    }
+  });
+  typingQueues.set(instanceId, done);
+  void done.finally(() => {
+    if (typingQueues.get(instanceId) === done) typingQueues.delete(instanceId);
+  });
+}
+
+/**
+ * Claude's input rows as the screen columns their characters start at, from
+ * column 2 (after "❯ " or the indent), trailing blanks left out.
+ */
+function claudeInputRows(terminal: Terminal, box: PromptBox): InputRows {
+  const buffer = terminal.buffer.active;
+  const cell = buffer.getNullCell();
+  const rows: InputRows = [];
+  for (let y = box.top + 1; y < box.bottom; y++) {
+    const line = buffer.getLine(buffer.baseY + y);
+    const starts: number[] = [];
+    let lastText = -1;
+    if (line) {
+      for (let x = 2; x < line.length; x++) {
+        const c = line.getCell(x, cell);
+        if (!c || c.getWidth() === 0) continue;
+        starts.push(x);
+        if (c.getChars().trim() !== "") lastText = starts.length;
+      }
+    }
+    rows.push(starts.slice(0, Math.max(0, lastText)));
+  }
+  return rows;
+}
 
 // Lines kept above the screen. xterm's default, 1000, is less than one long turn
 // in Claude Code's classic renderer, and the builder scrolls up through the steps
@@ -320,7 +408,7 @@ export function forwardToSession(
   return terminal.onData((data) => write(instanceId, data));
 }
 
-export function TerminalView({ instanceId, active }: TerminalViewProps) {
+export function TerminalView({ instanceId, active, backend }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
   const { theme } = useTheme();
@@ -380,7 +468,7 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
       },
     });
 
-    terminals.set(instanceId, { terminal, fitAddon });
+    terminals.set(instanceId, { terminal, fitAddon, backend });
 
     // macOS terminal emulators (Terminal.app, iTerm2) translate a few Cmd+
     // shortcuts to readline-equivalent control bytes before forwarding to the
@@ -435,6 +523,72 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
     // Send terminal input to main process
     forwardToSession(terminal, instanceId);
 
+    // A paste that the CLI would fold is typed into its input instead, so every
+    // line shows and stays editable (typedPaste.ts). Only at the CLI's own input:
+    // a question's free-text answer, a menu or anything else gets the paste as
+    // before, and so does a short paste, which no CLI folds. Image pastes carry no
+    // text and are left to the CLI (Claude reads its clipboard on Ctrl+V).
+    const typeLongPaste = (e: ClipboardEvent) => {
+      const text = e.clipboardData?.getData("text/plain") ?? "";
+      if (!text || !wouldFold(text)) return;
+      const box = readPromptBox(instanceId);
+      if (!box || !mayType(text, box.typed)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      cancelReplyJump(instanceId);
+      typeIntoInput(instanceId, text);
+    };
+    container.addEventListener("paste", typeLongPaste, true);
+
+    // A click on a character in Claude's own input moves its caret there
+    // (promptClick.ts). OpenCode reads the mouse itself. Only a plain click: a drag
+    // selects text, a double click a word, Cmd+click opens a link.
+    let pressedAt: { x: number; y: number } | null = null;
+    const notePress = (e: MouseEvent) => {
+      pressedAt = e.button === 0 ? { x: e.clientX, y: e.clientY } : null;
+    };
+    const clickToCaret = (e: MouseEvent) => {
+      const press = pressedAt;
+      pressedAt = null;
+      if (backend !== "claude" || !press || e.button !== 0 || e.detail !== 1) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (Math.abs(e.clientX - press.x) > 3 || Math.abs(e.clientY - press.y) > 3) return;
+      if (terminal.hasSelection()) return;
+      const buffer = terminal.buffer.active;
+      // Scrolled up to read: the input isn't where the screen shows it.
+      if (buffer.viewportY !== buffer.baseY) return;
+      const screen = terminal.element?.querySelector<HTMLElement>(".xterm-screen");
+      if (!screen) return;
+      const rect = screen.getBoundingClientRect();
+      const row = Math.floor(((e.clientY - rect.top) / rect.height) * terminal.rows);
+      const col = Math.floor(((e.clientX - rect.left) / rect.width) * terminal.cols);
+      const box = readPromptBox(instanceId);
+      if (!box || row <= box.top || row >= box.bottom) return;
+      const target = { row: row - box.top - 1, col };
+      void moveCaret(box, target);
+    };
+    // Pressed, then looked at: where the count assumed one hidden character
+    // between rows and there was none, the second count makes up the difference.
+    const moveCaret = async (box: PromptBox, target: { row: number; col: number }) => {
+      for (let round = 0; round < 3; round++) {
+        const buffer = terminal.buffer.active;
+        const caret = { row: buffer.cursorY - box.top - 1, col: buffer.cursorX };
+        const rows = claudeInputRows(terminal, box);
+        if (caret.row < 0 || caret.row >= rows.length) return;
+        const presses = arrowsBetween(rows, caret, target);
+        if (presses === 0) return;
+        const app = terminal.modes.applicationCursorKeysMode;
+        const key = presses > 0 ? (app ? "\x1bOC" : "\x1b[C") : app ? "\x1bOD" : "\x1b[D";
+        window.electronAPI.writeToInstance(instanceId, key.repeat(Math.abs(presses)));
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        // The input changed shape meanwhile (a send, a dialog): leave it.
+        const now = readPromptBox(instanceId);
+        if (!now || now.top !== box.top || now.bottom !== box.bottom) return;
+      }
+    };
+    container.addEventListener("mousedown", notePress, true);
+    container.addEventListener("mouseup", clickToCaret);
+
     // Handle resize
     terminal.onResize(({ cols, rows }) => {
       window.electronAPI.resizeInstance(instanceId, cols, rows);
@@ -453,7 +607,11 @@ export function TerminalView({ instanceId, active }: TerminalViewProps) {
       window.removeEventListener("pty-data", handlePtyData);
       container.removeEventListener("mousedown", builderAtWork, true);
       container.removeEventListener("wheel", builderAtWork, true);
+      container.removeEventListener("paste", typeLongPaste, true);
+      container.removeEventListener("mousedown", notePress, true);
+      container.removeEventListener("mouseup", clickToCaret);
     };
+    // The backend never changes for a contact, so it isn't a dependency.
   }, [instanceId]);
 
   // Re-apply theme to this instance's terminal when the app theme changes.
