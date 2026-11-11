@@ -28,10 +28,13 @@ export function buildComposePayload(
   imagePaths: string[] = []
 ): string {
   const refs = imagePaths.map((p) => `@${p}`).join(" ");
-  if (!refs) return text;
-  if (!text) return refs;
   // Separate the text from the first ref with a space so the token is parsed.
-  return `${text} ${refs}`;
+  const payload = !refs ? text : !text ? refs : `${text} ${refs}`;
+  // With the cursor still in a last `@` token, both CLIs open their file
+  // completion, and the Enter that follows picks a completion instead of sending
+  // (2026-11-11, Claude Code 2.1.322: a screenshot's message stayed in Claude's
+  // input). A space after it closes the token.
+  return /(^|\s)@\S+$/.test(payload) ? `${payload} ` : payload;
 }
 
 /**

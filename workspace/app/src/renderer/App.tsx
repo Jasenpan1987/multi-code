@@ -978,6 +978,7 @@ export function App() {
                     key={inst.id}
                     instanceId={inst.id}
                     active={inst.id === selectedId}
+                    backend={inst.backend}
                   />
                 ))
             ) : (
