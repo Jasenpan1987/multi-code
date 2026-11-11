@@ -177,15 +177,15 @@ export function registerIpcHandlers() {
 
   // Since Electron 43 the picker opens in Downloads unless given a folder, and
   // macOS no longer remembers the last one. So it starts beside the last project
-  // picked, or else beside the newest contact's, where the next project most
-  // likely lives too. Its New Folder button is how a new project is made (epic
+  // picked, or else beside the newest contact's (the top one: new contacts go
+  // first), where the next project most likely lives too. Its New Folder button is how a new project is made (epic
   // new-project). Given a start folder ("Clone into"'s Browse), it opens there and
   // leaves the next plain call's start alone.
   ipcMain.handle("select-directory", async (_event, startFolder?: unknown, title?: unknown) => {
     const win = BrowserWindow.getFocusedWindow();
     if (!win) return null;
     const given = typeof startFolder === "string" && startFolder.trim() !== "";
-    const newest = processManager.listInstances().at(-1);
+    const newest = processManager.listInstances().at(0);
     const result = await dialog.showOpenDialog(win, {
       properties: ["openDirectory", "createDirectory"],
       title: typeof title === "string" && title !== "" ? title : "Select project directory",
@@ -218,7 +218,7 @@ export function registerIpcHandlers() {
   // login-shell env git runs with, so Clone doesn't wait for it.
   ipcMain.handle("clone-default-parent", () => {
     void warmOpencodeShellEnv();
-    const newest = processManager.listInstances().at(-1);
+    const newest = processManager.listInstances().at(0);
     return lastClonedInto() ?? lastPickedParent ?? (newest ? dirname(newest.cwd) : homedir());
   });
 

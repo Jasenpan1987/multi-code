@@ -771,14 +771,21 @@ export class ProcessManager {
       backend,
       this.sessionStartFor(id, cwd, backend)
     );
-    this.instances.set(id, instance);
+    this.addFirst(instance);
     this.persist();
     remoteServer.broadcastInstances();
     return this.toInfo(instance);
   }
 
+  // A new contact goes to the top of the stored order, where the builder looks
+  // first (asked for on 2026-11-10). Duplicates too. The Map's insertion order is
+  // the stored order, so this rebuilds it.
+  private addFirst(instance: ManagedInstance) {
+    this.instances = new Map([[instance.id, instance], ...this.instances]);
+  }
+
   // A second contact on the same project and backend, running a fresh session of
-  // its own, placed right below the one it came from. Nothing of the original's
+  // its own, at the top like any new contact. Nothing of the original's
   // conversation comes along.
   duplicateInstance(sourceId: string): InstanceInfo | null {
     const source = this.instances.get(sourceId);
@@ -792,12 +799,7 @@ export class ProcessManager {
       source.backend,
       { kind: "fresh" }
     );
-    const rebuilt = new Map<string, ManagedInstance>();
-    for (const [key, value] of this.instances) {
-      rebuilt.set(key, value);
-      if (key === sourceId) rebuilt.set(id, instance);
-    }
-    this.instances = rebuilt;
+    this.addFirst(instance);
     this.persist();
     remoteServer.broadcastInstances();
     return this.toInfo(instance);

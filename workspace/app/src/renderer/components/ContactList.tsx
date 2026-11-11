@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { ContextMenu } from "./ContextMenu";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { Avatar } from "./Avatar";
 import { RenameSessionDialog } from "./RenameSessionDialog";
 import { getTerminal } from "./TerminalView";
 import { contextFillHue, formatContextPercent, formatTokens } from "./formatTokens";
 import { dropsBefore } from "./contactOrder";
 import { hotkeyTargets, listenForContactHotkeys, nextUnread } from "./contactHotkeys";
+import { aliveFirst } from "../../shared/reorder";
 import type { ContextUsage, Instance } from "../../shared/types";
 
 // The row shows an abbreviated count, plus a percentage **only when the window size
@@ -93,6 +95,11 @@ export function ContactList({
     instanceId: string;
   } | null>(null);
   const [renameId, setRenameId] = useState<string | null>(null);
+  // The context-menu action waiting for the builder to confirm it.
+  const [confirm, setConfirm] = useState<{
+    action: "duplicate" | "remove";
+    instanceId: string;
+  } | null>(null);
   // Which row is being dragged, and where it would land. `drop` drives the insertion
   // line, so the user can see the result before letting go.
   const [dragId, setDragId] = useState<string | null>(null);
@@ -105,13 +112,17 @@ export function ContactList({
     top: number;
   } | null>(null);
 
+  // Running contacts first, then stopped ones, each in stored order (aliveFirst).
+  // Only the view: `instances` stays in stored order, which drags change.
+  const shown = aliveFirst(instances);
+
   // Cmd+1…9 and the digits shown while Cmd is held, and Option+Shift+Up/Down;
   // see contactHotkeys.
   const [showHotkeys, setShowHotkeys] = useState(false);
-  const hotkeyIds = hotkeyTargets(instances);
+  const hotkeyIds = hotkeyTargets(shown);
   // For the key listener, subscribed once.
-  const hotkeyRef = useRef({ hotkeyIds, instances, unreadCounts, selectedId, onSelect });
-  hotkeyRef.current = { hotkeyIds, instances, unreadCounts, selectedId, onSelect };
+  const hotkeyRef = useRef({ hotkeyIds, shown, unreadCounts, selectedId, onSelect });
+  hotkeyRef.current = { hotkeyIds, shown, unreadCounts, selectedId, onSelect };
 
   // Before the folded return: the keys still switch with the list folded away.
   useEffect(
@@ -119,11 +130,11 @@ export function ContactList({
       listenForContactHotkeys(window, {
         targets: () => hotkeyRef.current.hotkeyIds,
         unreadTarget: (step) => {
-          const { instances: all, unreadCounts: unread, selectedId: shown } =
+          const { shown: rows, unreadCounts: unread, selectedId: current } =
             hotkeyRef.current;
           // The order the list draws.
-          const order = all.map((i) => i.id);
-          return nextUnread(order, unread, shown, step);
+          const order = rows.map((i) => i.id);
+          return nextUnread(order, unread, current, step);
         },
         select: (id) => {
           hotkeyRef.current.onSelect(id);
@@ -176,6 +187,12 @@ export function ContactList({
   const renameInstance = renameId
     ? instances.find((i) => i.id === renameId)
     : null;
+  const confirmInstance = confirm
+    ? instances.find((i) => i.id === confirm.instanceId)
+    : null;
+  const dragStatus = dragId
+    ? instances.find((i) => i.id === dragId)?.status
+    : undefined;
 
   return (
     <aside className="sidebar">
@@ -191,12 +208,12 @@ export function ContactList({
       </button>
       {/* A scrolled row leaves its bubble behind, so scrolling drops it. */}
       <div className="contact-list" onScroll={() => setNameTip(null)}>
-        {/* Stored order. Status changes never reorder anything: online vs offline
-            is the avatar's job, not position's. */}
-        {instances.length === 0 ? (
+        {/* Running first, then stopped (aliveFirst). A contact that starts
+            again goes back to its place among the running ones. */}
+        {shown.length === 0 ? (
           <div className="sidebar-placeholder">No instances</div>
         ) : (
-          instances.map((inst) => (
+          shown.map((inst) => (
             <div
               key={inst.id}
               className={`contact-item ${selectedId === inst.id ? "selected" : ""} ${inst.status === "stopped" ? "stopped" : ""} ${unreadCounts.has(inst.id) ? "unread" : ""}`}
@@ -231,6 +248,9 @@ export function ContactList({
               }}
               onDragOver={(e) => {
                 if (!dragId || dragId === inst.id) return;
+                // Only among rows of its own group: a running row dropped among
+                // stopped ones would go back up to the running group at once.
+                if (inst.status !== dragStatus) return;
                 // Without preventDefault the drop event never fires at all.
                 e.preventDefault();
                 e.dataTransfer.dropEffect = "move";
@@ -333,8 +353,9 @@ export function ContactList({
               onClick: () => setRenameId(contextMenu.instanceId),
             },
             {
-              label: "Duplicate",
-              onClick: () => onDuplicate(contextMenu.instanceId),
+              label: "Duplicate…",
+              onClick: () =>
+                setConfirm({ action: "duplicate", instanceId: contextMenu.instanceId }),
             },
             {
               label: "Restart",
@@ -342,10 +363,34 @@ export function ContactList({
               disabled: contextInstance.status === "running",
             },
             {
-              label: "Remove",
-              onClick: () => onRemove(contextMenu.instanceId),
+              label: "Remove…",
+              onClick: () =>
+                setConfirm({ action: "remove", instanceId: contextMenu.instanceId }),
             },
           ]}
+        />
+      )}
+
+      {confirm && confirmInstance && (
+        <ConfirmDialog
+          {...(confirm.action === "remove"
+            ? {
+                title: `Remove “${confirmInstance.name}”?`,
+                message:
+                  confirmInstance.status === "running"
+                    ? "Its session stops and it leaves the list. The conversation itself is not deleted."
+                    : "It leaves the list. The conversation itself is not deleted.",
+                confirmLabel: "Remove",
+                danger: true,
+                onConfirm: () => onRemove(confirmInstance.id),
+              }
+            : {
+                title: `Duplicate “${confirmInstance.name}”?`,
+                message: `A second contact on ${confirmInstance.cwd} starts a new session, at the top of the list.`,
+                confirmLabel: "Duplicate",
+                onConfirm: () => onDuplicate(confirmInstance.id),
+              })}
+          onClose={() => setConfirm(null)}
         />
       )}
 

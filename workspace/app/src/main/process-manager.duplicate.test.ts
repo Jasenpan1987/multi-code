@@ -106,8 +106,23 @@ beforeEach(() => {
   };
 });
 
+describe("createInstance", () => {
+  it("puts a new contact at the top, above the saved ones", () => {
+    state.saved = [
+      { id: "old-1", cwd: "/Users/x/code/a" },
+      { id: "old-2", cwd: "/Users/x/code/b" },
+    ];
+    const manager = new ProcessManager();
+    manager.loadSavedContacts();
+    const added = manager.createInstance("/Users/x/code/c");
+
+    expect(manager.listInstances().map((i) => i.id)).toEqual([added.id, "old-1", "old-2"]);
+    expect(state.saved.map((c) => c.id)).toEqual([added.id, "old-1", "old-2"]);
+  });
+});
+
 describe("duplicateInstance", () => {
-  it("adds a contact on the same project, in a fresh session, right below the original", () => {
+  it("adds a contact on the same project, in a fresh session, at the top", () => {
     const manager = new ProcessManager();
     const first = manager.createInstance(CWD, "Billing");
     const other = manager.createInstance("/Users/x/code/other");
@@ -117,9 +132,9 @@ describe("duplicateInstance", () => {
     expect(copy.backend).toBe(first.backend);
     expect(copy.status).toBe("running");
     expect(state.spawns.at(-1)?.session).toEqual({ kind: "fresh" });
-    expect(manager.listInstances().map((i) => i.id)).toEqual([first.id, copy.id, other.id]);
+    expect(manager.listInstances().map((i) => i.id)).toEqual([copy.id, other.id, first.id]);
     // Saved in that order too: contacts.json is the list's layout.
-    expect(state.saved.map((c) => c.id)).toEqual([first.id, copy.id, other.id]);
+    expect(state.saved.map((c) => c.id)).toEqual([copy.id, other.id, first.id]);
   });
 
   it("names the copy with the first free number", () => {

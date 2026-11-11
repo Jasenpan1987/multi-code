@@ -37,6 +37,7 @@ import {
 } from "../secretary/dialog";
 import { replyConclusion } from "../../shared/replyStart";
 import { briefSentence } from "../../shared/briefSentence";
+import { aliveFirst } from "../../shared/reorder";
 import type {
   RemoteChoice,
   RemoteDialog,
@@ -368,7 +369,9 @@ export function createRemoteHost(
 
   return {
     listInstances(): RemoteInstance[] {
-      const infos = pm.listInstances();
+      // In the desktop list's order, so each group on the phone has running
+      // sessions above stopped ones too.
+      const infos = aliveFirst(pm.listInstances());
       const ids = new Set(infos.map((i) => i.id));
       for (const map of [lines, linesSession, seen, stopping, listed, fresh, freshEvents, restatements]) {
         for (const id of map.keys()) if (!ids.has(id)) map.delete(id);

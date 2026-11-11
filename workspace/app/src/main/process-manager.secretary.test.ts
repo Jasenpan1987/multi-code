@@ -520,9 +520,10 @@ describe("the subscription", () => {
     manager.writeToInstance(c, "x");
 
     const live = manager.liveSecretaryEvents();
+    // In stored order, where each new contact goes first.
     expect(live.map((l) => [l.instanceId, l.event.kind])).toEqual([
-      [a, "finished"],
       [b, "needs-you"],
+      [a, "finished"],
     ]);
   });
 });

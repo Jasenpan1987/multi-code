@@ -4,7 +4,7 @@
 // lands one slot short.
 
 import { describe, expect, it } from "vitest";
-import { moveInOrder } from "./reorder";
+import { aliveFirst, moveInOrder } from "./reorder";
 
 const ids = ["a", "b", "c", "d"];
 
@@ -77,5 +77,44 @@ describe("moveInOrder — edges", () => {
         }
       }
     }
+  });
+});
+
+// The builder's example (2026-11-10), with neutral names: web, billing and api stored in
+// that order, billing stopped; then search added; then billing started again.
+describe("aliveFirst", () => {
+  type Row = { id: string; status: "running" | "stopped" };
+  const ids = (rows: Row[]) => aliveFirst(rows).map((r) => r.id);
+  const run = (id: string): Row => ({ id, status: "running" });
+  const stop = (id: string): Row => ({ id, status: "stopped" });
+
+  it("puts running contacts above stopped ones, each in stored order", () => {
+    expect(ids([run("web"), stop("billing"), run("api")])).toEqual([
+      "web",
+      "api",
+      "billing",
+    ]);
+  });
+
+  it("shows a new running contact (stored first) at the top", () => {
+    expect(ids([run("search"), run("web"), stop("billing"), run("api")])).toEqual([
+      "search",
+      "web",
+      "api",
+      "billing",
+    ]);
+  });
+
+  it("puts a contact that starts again back where it was among the running ones", () => {
+    expect(ids([run("search"), run("web"), run("billing"), run("api")])).toEqual([
+      "search",
+      "web",
+      "billing",
+      "api",
+    ]);
+  });
+
+  it("keeps stored order inside the stopped group", () => {
+    expect(ids([stop("a"), run("b"), stop("c"), stop("d")])).toEqual(["b", "a", "c", "d"]);
   });
 });

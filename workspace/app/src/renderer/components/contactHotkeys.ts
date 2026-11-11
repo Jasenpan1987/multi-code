@@ -10,8 +10,9 @@
 export const HINT_DELAY_MS = 250;
 
 /**
- * The ids Cmd+1…9 select, first to ninth, in the order the list draws them: the
- * stored order.
+ * The ids Cmd+1…9 select, first to ninth, in the order given. ContactList gives the
+ * order it draws: running contacts first (aliveFirst), so a digit can point at
+ * another contact after a session starts or stops.
  */
 export function hotkeyTargets<T extends { id: string }>(instances: T[]): string[] {
   return instances.slice(0, 9).map((i) => i.id);

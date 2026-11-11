@@ -1875,9 +1875,33 @@ button.secretary-bar-title:hover .secretary-bar-name {
   background: linear-gradient(180deg, #7bb4e2 0%, #5a9ad4 100%);
 }
 
+.dialog-btn.danger {
+  background: linear-gradient(180deg, #e06b6b 0%, #c84a4a 100%);
+  color: #fff;
+  border-color: #b33d3d;
+  font-weight: bold;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+.dialog-btn.danger:hover {
+  background: linear-gradient(180deg, #ea7b7b 0%, #d45a5a 100%);
+}
+
 .dialog-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ConfirmDialog: the sentence under the title. */
+.confirm-dialog .dialog-title {
+  overflow-wrap: anywhere;
+}
+
+.confirm-message {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #444;
 }
 
 /* Context Menu */

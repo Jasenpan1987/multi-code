@@ -500,7 +500,8 @@ export function App() {
         alias,
         backend
       );
-      setInstances((prev) => [...prev, instance]);
+      // First, as the main process stores it.
+      setInstances((prev) => [instance, ...prev]);
       setSelectedId(instance.id);
       setDialogOpen(false);
       playCoughSound();
@@ -542,17 +543,12 @@ export function App() {
     }
   }, []);
 
-  // Right below the original, and shown, like a contact just made with + New.
+  // First and shown, like a contact just made with + New.
   const handleDuplicate = useCallback(async (id: string) => {
     try {
       const instance = await window.electronAPI.duplicateInstance(id);
       if (!instance) return;
-      setInstances((prev) => {
-        const at = prev.findIndex((inst) => inst.id === id);
-        const next = [...prev];
-        next.splice(at < 0 ? next.length : at + 1, 0, instance);
-        return next;
-      });
+      setInstances((prev) => [instance, ...prev]);
       setSelectedId(instance.id);
       playCoughSound();
     } catch (err) {

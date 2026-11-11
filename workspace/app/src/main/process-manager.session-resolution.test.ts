@@ -238,11 +238,12 @@ describe("the lookup is cached", () => {
 // the order it has stored, so a renderer whose list is stale can misplace one row but
 // can never rewrite the whole order.
 describe("moveInstance", () => {
+  // Listed a, b, c, d. Made from d up, because each new contact goes first.
   function four() {
     disk.latestByCwd.set(CWD, "ses-disk");
-    return ["a", "b", "c", "d"].map(
-      (name) => manager.createInstance(`/Users/x/code/${name}`, name).id
-    );
+    return ["d", "c", "b", "a"]
+      .map((name) => manager.createInstance(`/Users/x/code/${name}`, name).id)
+      .reverse();
   }
   const order = () => manager.listInstances().map((i) => i.name);
 

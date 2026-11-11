@@ -1,8 +1,9 @@
-// Where a dragged item lands in a list.
+// Where a dragged item lands in a list, and the order the contact list shows.
 //
 // In `shared/` because both sides need the same answer: the renderer to draw the
 // insertion line, the main process to apply it. Duplicating the arithmetic would let
-// the preview and the result disagree.
+// the preview and the result disagree. The same goes for the shown order, which the
+// desktop list and the phone's list both use.
 
 /**
  * Move `dragId` so it sits immediately before or after `targetId`.
@@ -34,4 +35,19 @@ export function moveInOrder(
   // Dropping just below the row above you, or just above the row below you, means
   // "stay put" — returning a new array there would persist and re-render for nothing.
   return next.every((id, i) => id === ids[i]) ? ids : next;
+}
+
+/**
+ * The order the contact list shows: running contacts first, then stopped ones,
+ * each group in stored order.
+ *
+ * Only a view of `items`. The stored order (contacts.json, drags) never changes
+ * when a session starts or stops, so a contact that stops and starts again goes
+ * back to where it was among the running ones.
+ */
+export function aliveFirst<T extends { status: "running" | "stopped" }>(items: T[]): T[] {
+  return [
+    ...items.filter((i) => i.status === "running"),
+    ...items.filter((i) => i.status !== "running"),
+  ];
 }
