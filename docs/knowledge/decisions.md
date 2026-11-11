@@ -4,6 +4,17 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-11-11 — Keep the CLIs' own input; Multi-Code types long pastes and turns a click into arrow keys
+
+**Decision:** The builder types and dictates into Claude Code's and OpenCode's own input, as before. A paste either CLI would fold (more than three lines or 800 characters), aimed at its own input, is typed in instead: LF between lines, in writes of 150 characters 25 ms apart. A plain click on a character in Claude's input sends the Left or Right presses from the caret to it; OpenCode reads the mouse itself. An always-on input bar of Multi-Code's own was built and tried first; it is parked on branch `feat/input-bar`, not merged.
+
+**Why:** The builder works by voice and fixes misheard words by clicking them. Measured on Claude Code 2.1.322 and OpenCode 2.2.2: both fold only what arrives as a paste (2,400 typed characters in 25 lines showed in full; 1,200 characters in one write were still taken for a paste), and Claude's terminal cursor follows its input caret, so arrow presses land where counted. Keeping the CLIs' input keeps their dialogs, menus, completion, history and inline `[Image #N]` screenshots without Multi-Code standing in for them. Claude also marks a folded paste as text from elsewhere, to be followed only where the typed message asks; typed text is the builder's own. The builder tried both and chose this one ("我比较喜欢这一版").
+
+**Source:** builder, 2026-11-11, in session.
+**Affects:** `renderer/components/TerminalView.tsx`, `typedPaste.ts`, `promptClick.ts`, `promptBox.ts`.
+
+---
+
 ## 2026-11-07 — The working agent writes its own brief, in a fork, and accuracy comes before speed
 
 **Decision:** A Claude session's brief comes from a fork of that session (`claude -p --resume <id> --fork-session --no-session-persistence`), started the moment the turn ends, on the session's own model, effort and tools, with every tool call blocked by a hook. The agent sums up what it did since the builder's last message. The agent brief is in the first person and 30 to 45 seconds long, as today. Today's outsider writer stays as the fallback: a cold cache, OpenCode sessions, a fork that fails. Its effort is named in its flags and was set by an accuracy eval, not by speed: `low` for Finished briefs, `high` for Needs-you briefs.
