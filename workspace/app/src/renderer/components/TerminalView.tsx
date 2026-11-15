@@ -68,11 +68,13 @@ export function readPromptBox(instanceId: string): PromptBox | null {
 const typingQueues = new Map<string, Promise<void>>();
 
 /**
- * A long paste typed into the CLI's input instead, in writes it reads apart
- * (typedPaste.ts): shown in full, never folded to a placeholder.
+ * A long text typed into the CLI's input instead, in writes it reads apart
+ * (typedPaste.ts): shown in full, never folded to a placeholder. `submit` adds
+ * the Enter that sends it, as one more write after the text.
  */
-function typeIntoInput(instanceId: string, text: string): void {
+function typeIntoInput(instanceId: string, text: string, submit: boolean): void {
   const chunks = typingChunks(asTyping(text));
+  if (submit) chunks.push("\r");
   const previous = typingQueues.get(instanceId) ?? Promise.resolve();
   const done = previous.then(async () => {
     for (const [i, chunk] of chunks.entries()) {
@@ -84,6 +86,22 @@ function typeIntoInput(instanceId: string, text: string): void {
   void done.finally(() => {
     if (typingQueues.get(instanceId) === done) typingQueues.delete(instanceId);
   });
+}
+
+/**
+ * Types `text` into the CLI's own input when the CLI would fold it as a paste and
+ * the input is on the screen; `submit` sends it after. False when it isn't typed:
+ * a text no CLI folds, a question or menu in the input's place, a text that would
+ * open one (typedPaste.ts). The caller then pastes it as before.
+ */
+export function typeIfFolded(instanceId: string, text: string, submit = false): boolean {
+  const entry = terminals.get(instanceId);
+  if (!entry || !wouldFold(text, entry.backend)) return false;
+  const box = findPromptBox(entry.backend, promptRows(entry.terminal));
+  if (!box || !mayType(text, box.typed)) return false;
+  cancelReplyJump(instanceId);
+  typeIntoInput(instanceId, text, submit);
+  return true;
 }
 
 /**
@@ -530,13 +548,9 @@ export function TerminalView({ instanceId, active, backend }: TerminalViewProps)
     // text and are left to the CLI (Claude reads its clipboard on Ctrl+V).
     const typeLongPaste = (e: ClipboardEvent) => {
       const text = e.clipboardData?.getData("text/plain") ?? "";
-      if (!text || !wouldFold(text)) return;
-      const box = readPromptBox(instanceId);
-      if (!box || !mayType(text, box.typed)) return;
+      if (!text || !typeIfFolded(instanceId, text)) return;
       e.preventDefault();
       e.stopImmediatePropagation();
-      cancelReplyJump(instanceId);
-      typeIntoInput(instanceId, text);
     };
     container.addEventListener("paste", typeLongPaste, true);
 

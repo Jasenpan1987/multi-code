@@ -70,6 +70,24 @@ describe("findPromptBox: Claude", () => {
     expect(findPromptBox("claude", [RULE, "❯ 1. Yes", "  2. No", RULE])).toBeNull();
   });
 
+  // Claude Code 2.1.325 with `-n`, 2026-11-15.
+  it("finds a named session's input, the name on its top rule", () => {
+    const named = ["─".repeat(106) + " login-fix ─", "❯", "─".repeat(120), "  ⏵⏵ auto mode on"];
+    expect(findPromptBox("claude", named)).toEqual({ top: 0, bottom: 2, typed: false });
+    const cjk = ["─".repeat(49) + " 中文名字 ─", "❯ 修一下", "─".repeat(60)];
+    expect(findPromptBox("claude", cjk)).toEqual({ top: 0, bottom: 2, typed: true });
+  });
+
+  it("finds it when the name is cut and leaves no rule before it", () => {
+    const cut = [" a-very-long-session-name-for-testing-how-the-rule-trunca… ─", "❯", "─".repeat(60)];
+    expect(findPromptBox("claude", cut)).toEqual({ top: 0, bottom: 2, typed: false });
+  });
+
+  it("never takes a named rule for the one that closes the input", () => {
+    const named = RULE.slice(0, 50) + " login-fix ─";
+    expect(findPromptBox("claude", [named, "❯ fix it", named])).toBeNull();
+  });
+
   it("finds nothing on a blank screen", () => {
     expect(findPromptBox("claude", ["", "", ""])).toBeNull();
   });

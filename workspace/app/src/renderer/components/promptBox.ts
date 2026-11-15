@@ -1,14 +1,14 @@
 // Where the CLI's own input box is on its screen (compose-box v2, Stories 6 and 8).
 //
-// The compose box sends only while this finds the box: a question, a menu, a
-// permission prompt or the trust dialog at start all take its place, and text with
-// an Enter written into one of those can answer it. It also says which rows to
-// cover, so the builder sees one input, not two.
+// A long text is typed instead of pasted (typedPaste.ts), and a click moves Claude's
+// caret, only while this finds the box: a question, a menu, a permission prompt or
+// the trust dialog at start all take its place, and keys typed into one of those can
+// answer it.
 //
 // Read from the screen as the CLI draws it (Claude Code 2.1.322's classic renderer,
 // OpenCode 2.2.2), one string per row, with dim text blanked by the caller so a
 // placeholder doesn't count as typed. A CLI that changes its look makes this find
-// nothing, and the box then sends nothing: it fails closed.
+// nothing, and the text then goes as a paste, folded: it fails closed.
 
 import type { BackendName } from "../../shared/types";
 
@@ -34,12 +34,18 @@ export interface PromptBox {
 // A question's options also start with ❯ ("❯ 1. Red"), but never right under a rule
 // and always with a number; the trust dialog's (" ❯ No, exit") is indented.
 const CLAUDE_RULE = /^─{8,}\s*$/;
+// A session with a name (`/rename`, `-n`, kept across /clear) has it at the right
+// end of the top rule, "────── login-fix ─"; a name too long for the width is cut
+// and leaves no rule before it, " a-very-long-sess… ─" (Claude Code 2.1.325,
+// 2026-11-15). Read as a plain rule, every paste into a named session was left to
+// fold.
+const CLAUDE_TOP_RULE = /^(?:─{8,}|─* \S.* ─)\s*$/;
 const CLAUDE_INPUT = /^❯(?:\s|$)/;
 const CLAUDE_OPTION = /^❯\s*\d+\./;
 
 function findClaudePrompt(rows: string[]): PromptBox | null {
   for (let top = rows.length - 1; top >= 0; top--) {
-    if (!CLAUDE_RULE.test(rows[top])) continue;
+    if (!CLAUDE_TOP_RULE.test(rows[top])) continue;
     const first = rows[top + 1];
     if (first === undefined || !CLAUDE_INPUT.test(first) || CLAUDE_OPTION.test(first)) continue;
     // Its continuation rows are indented, up to the rule that closes it.

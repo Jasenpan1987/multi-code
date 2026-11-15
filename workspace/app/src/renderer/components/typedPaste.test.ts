@@ -1,16 +1,34 @@
 import { describe, expect, it } from "vitest";
 import { asTyping, mayType, typingChunks, wouldFold } from "./typedPaste";
 
-describe("wouldFold", () => {
+describe("wouldFold: Claude", () => {
   it("is false for up to three lines and 800 characters", () => {
-    expect(wouldFold("one\ntwo\nthree")).toBe(false);
-    expect(wouldFold("x".repeat(800))).toBe(false);
+    expect(wouldFold("one\ntwo\nthree", "claude")).toBe(false);
+    expect(wouldFold("x".repeat(800), "claude")).toBe(false);
   });
 
   it("is true past three lines or 800 characters", () => {
-    expect(wouldFold("one\ntwo\nthree\nfour")).toBe(true);
-    expect(wouldFold("one\r\ntwo\r\nthree\r\nfour")).toBe(true);
-    expect(wouldFold("x".repeat(801))).toBe(true);
+    expect(wouldFold("one\ntwo\nthree\nfour", "claude")).toBe(true);
+    expect(wouldFold("one\r\ntwo\r\nthree\r\nfour", "claude")).toBe(true);
+    expect(wouldFold("x".repeat(801), "claude")).toBe(true);
+  });
+});
+
+describe("wouldFold: OpenCode", () => {
+  it("is false for up to two lines and 150 characters", () => {
+    expect(wouldFold("one\ntwo", "opencode")).toBe(false);
+    expect(wouldFold("说".repeat(150), "opencode")).toBe(false);
+  });
+
+  it("is true from three lines, or past 150 characters on one line", () => {
+    expect(wouldFold("one\ntwo\nthree", "opencode")).toBe(true);
+    expect(wouldFold("one\r\ntwo\rthree", "opencode")).toBe(true);
+    expect(wouldFold("说".repeat(151), "opencode")).toBe(true);
+  });
+
+  it("counts the text as OpenCode does, trimmed", () => {
+    expect(wouldFold(`\n\n${"x".repeat(150)}\n\n`, "opencode")).toBe(false);
+    expect(wouldFold("one\ntwo\n\n", "opencode")).toBe(false);
   });
 });
 
