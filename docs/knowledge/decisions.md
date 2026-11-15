@@ -4,6 +4,17 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-11-15 — Each CLI's own fold test, named sessions, and a typed compose box
+
+**Decision:** A long text is typed instead of pasted by each CLI's own test: Claude Code folds more than three lines or 800 characters, OpenCode three lines or more than 150 characters of the trimmed text. A named Claude session's input is found by its top rule, which carries the name. The Cmd+L compose box types a message the CLI would fold, then Enter, whenever the CLI's input is on screen, and pastes it as before otherwise. The phone's answer box still pastes: the main process has no screen to check that the input, not a dialog, would get the keys.
+
+**Why:** The builder dictated a 597-character, 12-line message with Typeless into a session named by `/rename` and saw `[Pasted text #2 +11 lines]` on 0.10.11. Typeless pastes with Cmd+V, so the paste reached Multi-Code's handler, but the named top rule (`────── name ─`, or ` cut-name… ─` with no rule before it) didn't read as a rule, so no input was found and the paste went through. OpenCode's numbers were read from its 2.2.2 binary; with Claude's, a spoken paragraph of 151 to 800 characters folded to `[Pasted ~1 lines]`. Tried in a dev build against Claude Code 2.1.325.
+
+**Source:** builder, 2026-11-15, in session.
+**Affects:** `renderer/components/promptBox.ts`, `typedPaste.ts`, `TerminalView.tsx`, `ComposeBox.tsx`, `composeSend.ts`.
+
+---
+
 ## 2026-11-11 — Keep the CLIs' own input; Multi-Code types long pastes and turns a click into arrow keys
 
 **Decision:** The builder types and dictates into Claude Code's and OpenCode's own input, as before. A paste either CLI would fold (more than three lines or 800 characters), aimed at its own input, is typed in instead: LF between lines, in writes of 150 characters 25 ms apart. A plain click on a character in Claude's input sends the Left or Right presses from the caret to it; OpenCode reads the mouse itself. An always-on input bar of Multi-Code's own was built and tried first; it is parked on branch `feat/input-bar`, not merged.
