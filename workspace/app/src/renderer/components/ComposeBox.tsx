@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { sendComposed } from "./composeSend";
-import { cancelReplyJump, getTerminal } from "./TerminalView";
+import { buildComposePayload, sendComposed } from "./composeSend";
+import { cancelReplyJump, getTerminal, typeIfFolded } from "./TerminalView";
 import type { SavedClipboardImage } from "../../shared/types";
 
 interface ComposeBoxProps {
@@ -98,11 +98,13 @@ export function ComposeBox({ instanceId, onClose, seed }: ComposeBoxProps) {
     sentRef.current = true; // temp images must survive the send
     // sendComposed's contract is paths-only — map the image objects to their
     // temp-file paths (the `@<path>` splice is unchanged).
-    sendComposed(
-      instanceId,
-      text,
-      images.map((i) => i.path)
-    );
+    const paths = images.map((i) => i.path);
+    // A message the CLI would fold is typed into its input and then sent, so it
+    // arrives in full, as the builder's own words (typedPaste.ts). Anything else,
+    // or with a question or menu in the input's place, goes as a paste.
+    if (!typeIfFolded(instanceId, buildComposePayload(text, paths), true)) {
+      sendComposed(instanceId, text, paths);
+    }
     // As typing in the terminal does: what comes next is the reply to this, not
     // wherever the screen was left (the last conclusion, say), and a jump to the
     // last one still waiting for the screen must not land after it.

@@ -6,7 +6,10 @@
 // opencode's TUI accepts the same bracketed paste + `@` file refs:
 //   - `\n` (0x0A) inserts a newline and NEVER submits; only `\r` (0x0D) submits.
 //   - Wrap the payload in bracketed-paste markers (\x1b[200~ … \x1b[201~) so
-//     long content folds into the native `[Pasted text #N]` placeholder.
+//     multi-line text doesn't submit early. Long content folds into the native
+//     `[Pasted text #N]` placeholder, so the compose box types a message the CLI
+//     would fold instead, whenever the CLI's input is on screen
+//     (TerminalView.typeIfFolded); this is the path for everything else.
 //   - Send the submitting `\r` as a SEPARATE write, NOT inside the markers.
 //   - Image refs are spliced into the payload as ` @<path>` tokens; the CLI
 //     reads `@<path>` as a real file/vision attachment, not text.
