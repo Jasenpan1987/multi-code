@@ -75,10 +75,15 @@ const typingQueues = new Map<string, Promise<void>>();
 function typeIntoInput(instanceId: string, text: string, submit: boolean): void {
   const chunks = typingChunks(asTyping(text));
   if (submit) chunks.push("\r");
+  // The terminal it was aimed at. A restart or a stop meanwhile replaces or drops
+  // it (cleanupTerminal), and the rest, its Enter among them, must not reach the
+  // next process under the same id.
+  const aimedAt = terminals.get(instanceId);
   const previous = typingQueues.get(instanceId) ?? Promise.resolve();
   const done = previous.then(async () => {
     for (const [i, chunk] of chunks.entries()) {
       if (i > 0) await new Promise((resolve) => setTimeout(resolve, TYPING_GAP_MS));
+      if (terminals.get(instanceId) !== aimedAt) return;
       window.electronAPI.writeToInstance(instanceId, chunk);
     }
   });
