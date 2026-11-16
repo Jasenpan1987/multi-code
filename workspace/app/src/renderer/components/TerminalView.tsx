@@ -431,6 +431,39 @@ export function forwardToSession(
   return terminal.onData((data) => write(instanceId, data));
 }
 
+/**
+ * Keeps the caret of xterm's hidden textarea at the end of its text, except while
+ * the IME is composing a word. xterm 5.5 takes a composed word to be the text added
+ * at the end (CompositionHelper: `start = value.length` at compositionstart). Keys
+ * xterm leaves to the browser move that caret: Cmd+Left/Right/Up/Down, and Cmd+A
+ * selects all of it. The next word then went in at the caret, and what reached the
+ * CLI was the textarea's last characters ("看" picked, "试" sent) or nothing (after
+ * Cmd+A). Wrong until the next Enter or loss of focus, which empty it. Exported for
+ * the tests; returns the removal.
+ */
+export function keepImeCaretAtEnd(textarea: HTMLTextAreaElement): () => void {
+  let composing = false;
+  const onStart = () => {
+    composing = true;
+  };
+  const onEnd = () => {
+    composing = false;
+  };
+  const toEnd = () => {
+    const end = textarea.value.length;
+    if (composing || (textarea.selectionStart === end && textarea.selectionEnd === end)) return;
+    textarea.setSelectionRange(end, end);
+  };
+  textarea.addEventListener("compositionstart", onStart);
+  textarea.addEventListener("compositionend", onEnd);
+  textarea.addEventListener("selectionchange", toEnd);
+  return () => {
+    textarea.removeEventListener("compositionstart", onStart);
+    textarea.removeEventListener("compositionend", onEnd);
+    textarea.removeEventListener("selectionchange", toEnd);
+  };
+}
+
 export function TerminalView({ instanceId, active, backend }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
@@ -531,6 +564,7 @@ export function TerminalView({ instanceId, active, backend }: TerminalViewProps)
     });
 
     terminal.open(containerRef.current);
+    const releaseImeCaret = terminal.textarea ? keepImeCaretAtEnd(terminal.textarea) : undefined;
     // The builder clicking or scrolling here; mouse motion alone isn't them at work.
     const container = containerRef.current;
     const builderAtWork = () => cancelReplyJump(instanceId);
@@ -624,6 +658,7 @@ export function TerminalView({ instanceId, active, backend }: TerminalViewProps)
 
     return () => {
       window.removeEventListener("pty-data", handlePtyData);
+      releaseImeCaret?.();
       container.removeEventListener("mousedown", builderAtWork, true);
       container.removeEventListener("wheel", builderAtWork, true);
       container.removeEventListener("paste", typeLongPaste, true);

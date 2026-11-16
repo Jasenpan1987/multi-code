@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { Terminal } from "@xterm/xterm";
-import { TERMINAL_URL_REGEX, forwardToSession } from "./TerminalView";
+import { TERMINAL_URL_REGEX, forwardToSession, keepImeCaretAtEnd } from "./TerminalView";
 import { holdInput } from "./dropFlow";
 
 // Their bundles need a browser (`self`); nothing here uses them.
@@ -60,5 +60,54 @@ describe("TERMINAL_URL_REGEX", () => {
     );
     expect(link("http://[::1]:8080/a b")).toBe("http://[::1]:8080/a");
     expect(link("no link here")).toBeNull();
+  });
+});
+
+// xterm's hidden textarea, as far as the IME guard uses it: its text, its
+// selection, and the events. No DOM here.
+class FakeTextarea extends EventTarget {
+  value = "";
+  selectionStart = 0;
+  selectionEnd = 0;
+  setSelectionRange(start: number, end: number) {
+    this.selectionStart = start;
+    this.selectionEnd = end;
+  }
+  // What the browser does: move the caret, then tell the page.
+  moveCaret(start: number, end = start) {
+    this.setSelectionRange(start, end);
+    this.dispatchEvent(new Event("selectionchange"));
+  }
+}
+
+describe("keepImeCaretAtEnd", () => {
+  it("puts the caret back at the end after Cmd+Left or Cmd+A moves it", () => {
+    const ta = new FakeTextarea();
+    ta.value = "测试";
+    ta.setSelectionRange(2, 2);
+    keepImeCaretAtEnd(ta as unknown as HTMLTextAreaElement);
+
+    ta.moveCaret(0); // Cmd+Left
+    expect([ta.selectionStart, ta.selectionEnd]).toEqual([2, 2]);
+    ta.moveCaret(0, 2); // Cmd+A
+    expect([ta.selectionStart, ta.selectionEnd]).toEqual([2, 2]);
+  });
+
+  it("leaves the caret alone while a word is being composed, and after the guard is removed", () => {
+    const ta = new FakeTextarea();
+    ta.value = "测试kan";
+    const release = keepImeCaretAtEnd(ta as unknown as HTMLTextAreaElement);
+
+    ta.dispatchEvent(new Event("compositionstart"));
+    ta.moveCaret(3); // the IME's own caret inside the word
+    expect(ta.selectionStart).toBe(3);
+    ta.dispatchEvent(new Event("compositionend"));
+    ta.value = "测试看";
+    ta.moveCaret(1);
+    expect(ta.selectionStart).toBe(3);
+
+    release();
+    ta.moveCaret(0);
+    expect(ta.selectionStart).toBe(0);
   });
 });
