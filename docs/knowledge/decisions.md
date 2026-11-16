@@ -4,6 +4,17 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-11-16 — Keep xterm's hidden textarea caret at its end for the IME
+
+**Decision:** Each terminal puts the caret of xterm's hidden textarea back at the end of its text on every `selectionchange`, except between `compositionstart` and `compositionend`. Nothing in xterm is patched, and no key is cancelled or changed on its way to the CLI.
+
+**Why:** The builder picked words in a pinyin IME and got other text, often the last characters of what they had typed before ("好的" again). xterm 5.5 takes a composed word to be what was added at the end of its textarea (`start = value.length`). Cmd+Left/Right/Up/Down are left to the browser and move that caret, and Cmd+A selects all of it, so the next word went in mid-text and xterm sent the textarea's tail, or nothing after Cmd+A. It stayed wrong until Enter or a loss of focus emptied the textarea, which is why only some messages showed it. Reproduced in a dev build over CDP (`Input.imeSetComposition`, then `Input.insertText`): "试测试" before, "看测试" after. The builder then tried a real IME in the dev build. The CLIs were not the cause: Claude Code 2.1.322 and 2.1.325 placed typed and arrowed text correctly in a headless terminal.
+
+**Source:** builder, 2026-11-16, in session.
+**Affects:** `renderer/components/TerminalView.tsx`.
+
+---
+
 ## 2026-11-15 — Each CLI's own fold test, named sessions, and a typed compose box
 
 **Decision:** A long text is typed instead of pasted by each CLI's own test: Claude Code folds more than three lines or 800 characters, OpenCode three lines or more than 150 characters of the trimmed text. A named Claude session's input is found by its top rule, which carries the name. The Cmd+L compose box types a message the CLI would fold, then Enter, whenever the CLI's input is on screen, and pastes it as before otherwise. The phone's answer box still pastes: the main process has no screen to check that the input, not a dialog, would get the keys.
