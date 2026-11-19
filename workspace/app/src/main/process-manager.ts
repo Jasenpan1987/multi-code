@@ -22,7 +22,8 @@ import type {
 } from "./backends";
 import type { PromptDetail } from "./remote/promptExtract";
 import { remoteServer } from "./remote/ws-server";
-import type { ContextUsage } from "../shared/types";
+import type { ContextUsage, SessionNote } from "../shared/types";
+import { NOTE_MAX_LENGTH } from "../shared/types";
 import { moveInOrder } from "../shared/reorder";
 import { OPENCODE_VIEW_KEYS } from "../shared/replyStart";
 import type { OpencodeViewCommand } from "../shared/replyStart";
@@ -57,6 +58,8 @@ export interface InstanceInfo {
   alertsDegradedReason?: AlertsDegradedReason;
   // Why the last start launched nothing (SpawnConfig.refusal).
   startError?: string;
+  // The builder's note on the contact (epic session-notes).
+  note?: SessionNote;
 }
 
 /**
@@ -268,6 +271,12 @@ const LIVE_SESSION_POLL_MS = 4000;
 
 export class ProcessManager {
   private instances = new Map<string, ManagedInstance>();
+  // The builder's notes, by contact id (epic session-notes). Apart from the
+  // records because start and restart replace a contact's record with a new one,
+  // and a note must outlive every process the contact runs.
+  private notes = new Map<string, SessionNote>();
+  // Whether the startup bar has had its list in this run (takeStartupNotes).
+  private startupNotesTaken = false;
   private mainWindow: BrowserWindow | null = null;
   private secretaryListeners = new Set<SecretaryEventListener>();
   private readListeners = new Set<(id: string) => void>();
@@ -692,6 +701,8 @@ export class ProcessManager {
     }
     for (const contact of saved) {
       if (!this.instances.has(contact.id)) {
+        const note = validNote(contact.note);
+        if (note) this.notes.set(contact.id, note);
         this.instances.set(contact.id, {
           id: contact.id,
           cwd: contact.cwd,
@@ -753,6 +764,7 @@ export class ProcessManager {
         alias: i.alias,
         backend: i.backend,
         sessionId: i.ownSessionId,
+        note: this.notes.get(i.id),
       })
     );
     saveContacts(contacts);
@@ -1351,6 +1363,7 @@ export class ProcessManager {
       this.teardownObservers(instance);
     }
     this.instances.delete(id);
+    this.notes.delete(id);
     this.persist();
     remoteServer.broadcastInstances();
   }
@@ -1478,6 +1491,38 @@ export class ProcessManager {
     return this.toInfo(instance);
   }
 
+  // The builder's note on a contact. Blank text removes it, as Got it does; text
+  // past NOTE_MAX_LENGTH is refused whole rather than cut. The phone isn't told:
+  // notes don't go there.
+  setNote(id: string, text: string): InstanceInfo | null {
+    const instance = this.instances.get(id);
+    if (!instance) return null;
+    const kept = noteText(text);
+    if (kept === null) return null;
+    const before = this.notes.get(id);
+    if (kept) this.notes.set(id, { text: kept, writtenAt: Date.now() });
+    else this.notes.delete(id);
+    try {
+      this.persist();
+    } catch (err) {
+      // Not saved, so not shown either, and no later save of something else
+      // writes it after all.
+      if (before) this.notes.set(id, before);
+      else this.notes.delete(id);
+      throw err;
+    }
+    return this.toInfo(instance);
+  }
+
+  // For the startup bar, once per run: the contacts with a note at the first ask.
+  // A reloaded window asks again and gets nothing, so the bar shows once per start
+  // of Multi-Code, not once per window.
+  takeStartupNotes(): string[] {
+    if (this.startupNotesTaken) return [];
+    this.startupNotesTaken = true;
+    return [...this.instances.keys()].filter((id) => this.notes.has(id));
+  }
+
   // Instances a quit would cut off mid-task: a turn still running, or a dialog
   // waiting on the user. Idle ones are left out: they lose nothing, since the next
   // start reopens their session, and counting them would mean asking on every quit.
@@ -1530,8 +1575,26 @@ export class ProcessManager {
       alertsDegraded: instance.ptyProcess ? instance.alertsDegraded : undefined,
       alertsDegradedReason: instance.ptyProcess ? instance.alertsDegradedReason : undefined,
       startError: instance.startError,
+      note: this.notes.get(instance.id),
     };
   }
+}
+
+// A note's text as kept: trimmed, "" for none, null past NOTE_MAX_LENGTH.
+function noteText(text: string): string | null {
+  const kept = text.trim();
+  return kept.length > NOTE_MAX_LENGTH ? null : kept;
+}
+
+// A note as read from contacts.json, kept only if setNote would have kept it.
+function validNote(note: unknown): SessionNote | undefined {
+  if (typeof note !== "object" || note === null) return undefined;
+  const { text, writtenAt } = note as Partial<SessionNote>;
+  if (typeof text !== "string") return undefined;
+  const kept = noteText(text);
+  if (!kept) return undefined;
+  if (typeof writtenAt !== "number" || !Number.isFinite(writtenAt)) return undefined;
+  return { text: kept, writtenAt };
 }
 
 export const processManager = new ProcessManager();

@@ -4,6 +4,17 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-11-18 — Session notes: the builder's own note, cleared only by "Got it"
+
+**Decision:** To know the next morning where each session stopped, the builder leaves a note on a session in Multi-Code's UI. The note stays until the builder clicks "Got it"; opening the session does not clear it. Each time Multi-Code starts, a bar lists the sessions with notes, once. No model writes or reads the notes, and nothing goes to the session.
+
+**Why:** The builder runs several sessions on one project and, after a stop for the day, opens them one by one to find where each stopped. Status cards written by a fork of each session were offered first; the builder set cost aside and chose their own note. Clearing on open was offered and not chosen. The builder chose the startup bar knowing it does not show when Multi-Code stays open overnight. The status cards are parked, not rejected.
+
+**Source:** builder, 2026-11-18, in session (`docs/timeline/2026-11-18_session-notes-ideation.md`).
+**Affects:** new epic `docs/specs/session-notes/`.
+
+---
+
 ## 2026-11-16 — Keep xterm's hidden textarea caret at its end for the IME
 
 **Decision:** Each terminal puts the caret of xterm's hidden textarea back at the end of its text on every `selectionchange`, except between `compositionstart` and `compositionend`. Nothing in xterm is patched, and no key is cancelled or changed on its way to the CLI.

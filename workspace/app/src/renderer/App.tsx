@@ -10,6 +10,9 @@ import {
 } from "./components/TerminalView";
 import { ComposeBox } from "./components/ComposeBox";
 import { SecretaryBar } from "./components/SecretaryBar";
+import { NoteDialog } from "./components/NoteDialog";
+import { NoteBar, StartupNotesBar } from "./components/NoteBars";
+import { aliveFirst } from "../shared/reorder";
 import {
   applyBriefUpdate,
   isReadableBrief,
@@ -63,6 +66,12 @@ export function App() {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  // Session notes (docs/specs/session-notes): whose note the dialog edits, and the
+  // contacts the startup bar lists, from main once per start.
+  const [noteEditId, setNoteEditId] = useState<string | null>(null);
+  const [startupNoteIds, setStartupNoteIds] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
   // Unread alerts per contact; a contact with none is absent. See useNotifications.
   const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(
     new Map()
@@ -140,6 +149,10 @@ export function App() {
       if (saved.length > 0) {
         setInstances(saved);
       }
+      // After the load, which is what gives main its notes.
+      void window.electronAPI.takeStartupNotes().then((ids) => {
+        if (ids.length > 0) setStartupNoteIds(new Set(ids));
+      });
     });
   }, []);
 
@@ -570,6 +583,44 @@ export function App() {
     );
   }, []);
 
+  // Saves, replaces or (blank) clears a contact's note, and says whether it did:
+  // main refuses (null) or its write fails (a rejection). Only the note is merged
+  // in: the rest of the contact is owned by the event handlers.
+  const handleSetNote = useCallback(async (id: string, text: string): Promise<boolean> => {
+    let updated: Instance | null;
+    try {
+      updated = await window.electronAPI.setNote(id, text);
+    } catch {
+      return false;
+    }
+    if (!updated) return false;
+    const note = updated.note;
+    setInstances((prev) =>
+      prev.map((inst) => (inst.id === id ? { ...inst, note } : inst))
+    );
+    // Cleared: it leaves the startup bar for good, so a note written later in the
+    // run doesn't bring it back there.
+    if (!note) {
+      setStartupNoteIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+    return true;
+  }, []);
+
+  // Back to the shown session's terminal once a note button or the dialog is done
+  // with, so the next keys go where they went before. A key still held from the
+  // dialog (Enter on Save) would repeat into it, where an Enter can answer a
+  // question, so its repeats are swallowed first, as after a file drop.
+  const refocusShownTerminal = useCallback(() => {
+    swallowHeldKeyRepeats(window);
+    const id = selectedIdRef.current;
+    if (id) requestAnimationFrame(() => getTerminal(id)?.focus());
+  }, []);
+
   const handleRemove = useCallback(
     (id: string) => {
       cleanupTerminal(id);
@@ -659,6 +710,16 @@ export function App() {
   const selectedInstance = selectedId
     ? instances.find((i) => i.id === selectedId)
     : null;
+  const noteEditInstance = noteEditId
+    ? instances.find((i) => i.id === noteEditId)
+    : null;
+  // In the order the list draws. A contact drops out once its note is cleared, and
+  // the bar goes when none is left.
+  const startupNotes = aliveFirst(instances).flatMap((inst) =>
+    startupNoteIds.has(inst.id) && inst.note
+      ? [{ id: inst.id, name: inst.name, note: inst.note }]
+      : []
+  );
 
   // Files dragged onto the window go into the selected contact's project (epic
   // file-drop): through the picker while the project has no default folder, else
@@ -863,9 +924,12 @@ export function App() {
 
   // Folding or unfolding a pane resizes the others, and terminals only refit
   // when told to. So does the secretary bar coming or going with the mode.
+  // The note bar and the startup bar change the terminal's height too.
+  const shownNote = selectedInstance?.note?.text;
+  const startupNotesShown = startupNotes.length;
   useEffect(() => {
     window.dispatchEvent(new Event("layout-resize"));
-  }, [sidebarFolded, folded, secretaryMode]);
+  }, [sidebarFolded, folded, secretaryMode, shownNote, startupNotesShown]);
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme }}>
@@ -884,6 +948,17 @@ export function App() {
           onRead={handleBriefRead}
         />
       ) : null}
+      {startupNotes.length > 0 && (
+        <StartupNotesBar
+          notes={startupNotes}
+          onOpen={(id) => {
+            // An Enter held on the item would repeat into the session's terminal.
+            swallowHeldKeyRepeats(window);
+            handleOpenFromBar(id);
+          }}
+          onClose={() => setStartupNoteIds(new Set())}
+        />
+      )}
       <div className="app-body">
         <ContactList
           instances={instances}
@@ -897,6 +972,7 @@ export function App() {
           onRemove={handleRemove}
           onDuplicate={handleDuplicate}
           onRename={handleRename}
+          onEditNote={setNoteEditId}
           folded={sidebarFolded}
           onToggleFolded={() => setSidebarFolded((f) => !f)}
         />
@@ -915,10 +991,35 @@ export function App() {
                   ? "OpenCode"
                   : "Claude Code"}
               </span>
+              <button
+                type="button"
+                className="content-header-note"
+                onClick={() => setNoteEditId(selectedInstance.id)}
+                title={
+                  selectedInstance.note
+                    ? "Edit your note on this session"
+                    : "Leave a note on this session for later"
+                }
+              >
+                ✎ {selectedInstance.note ? "Edit note" : "Note"}
+              </button>
               <span className="content-header-status">
                 {selectedInstance.status === "running" ? "Online" : "Offline"}
               </span>
             </div>
+          )}
+          {selectedInstance?.note && (
+            <NoteBar
+              note={selectedInstance.note}
+              onEdit={() => setNoteEditId(selectedInstance.id)}
+              onDone={() => {
+                const id = selectedInstance.id;
+                void handleSetNote(id, "").then((cleared) => {
+                  if (!cleared) window.alert("Could not clear the note. It is still there.");
+                });
+                refocusShownTerminal();
+              }}
+            />
           )}
           {selectedInstance?.status === "running" && selectedInstance.alertsDegraded && (
             // PRD Story 6: say so rather than go quiet. No fallback guesses at the
@@ -1164,6 +1265,27 @@ export function App() {
           );
         })()}
       </div>
+
+      {/* Mounted only while open, so each opening starts from the saved text. */}
+      {noteEditInstance && (
+        <NoteDialog
+          key={noteEditInstance.id}
+          sessionName={noteEditInstance.name}
+          initialText={noteEditInstance.note?.text ?? ""}
+          onClose={() => {
+            setNoteEditId(null);
+            refocusShownTerminal();
+          }}
+          onSave={async (text) => {
+            const saved = await handleSetNote(noteEditInstance.id, text);
+            if (saved) {
+              setNoteEditId(null);
+              refocusShownTerminal();
+            }
+            return saved;
+          }}
+        />
+      )}
 
       <NewInstanceDialog
         open={dialogOpen}

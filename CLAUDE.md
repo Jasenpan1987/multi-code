@@ -83,7 +83,9 @@ once, they read the same contacts and overwrite each other's spawn files. Never 
 
 - `contacts.json` — the instance list. Each entry: id, cwd (project directory),
   alias (display name), backend, sessionId (the session its next start resumes, so
-  two contacts on one project stay apart)
+  two contacts on one project stay apart), note (the builder's own note on it, text
+  and time, kept until they click Got it; epic `session-notes`; never sent to the
+  agent or the phone)
 - `settings.json` — theme, phone-link enabled, Secretary Mode, speech server address,
   each project's default drop folder
 - `remote-identity.json`, `remote-devices.json` — phone-link keys and paired devices (each

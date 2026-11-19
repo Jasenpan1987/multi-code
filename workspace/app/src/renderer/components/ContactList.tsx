@@ -7,6 +7,8 @@ import { getTerminal } from "./TerminalView";
 import { contextFillHue, formatContextPercent, formatTokens } from "./formatTokens";
 import { dropsBefore } from "./contactOrder";
 import { hotkeyTargets, listenForContactHotkeys, nextUnread } from "./contactHotkeys";
+import { clip, firstLine, formatNoteTime, nextNoted, notesLabel } from "./sessionNotes";
+import { swallowHeldKeyRepeats } from "./dropFlow";
 import { aliveFirst } from "../../shared/reorder";
 import type { ContextUsage, Instance } from "../../shared/types";
 
@@ -48,6 +50,12 @@ function fillBand(usage: ContextUsage): string | undefined {
   return "low";
 }
 
+// The note mark's tooltip: when, and the start of the note.
+function noteTitle(inst: Instance): string {
+  if (!inst.note) return "";
+  return `Your note, ${formatNoteTime(inst.note.writtenAt)}:\n${clip(inst.note.text, 200)}`;
+}
+
 // Two digits at most, so the badge stays a small circle.
 function formatUnread(count: number): string {
   return count > 99 ? "99+" : String(count);
@@ -67,6 +75,8 @@ interface ContactListProps {
   onDuplicate: (id: string) => void;
   // The name this list shows; blank goes back to the folder name.
   onRename: (id: string, name: string) => void;
+  // Opens the note dialog for this contact (epic session-notes).
+  onEditNote: (id: string) => void;
   // One drag, as an intent: put `dragId` before or after `targetId`.
   onMove: (dragId: string, targetId: string, placeBefore: boolean) => void;
   // Folded to a thin strip that unfolds it again; see the fold rules in App.
@@ -85,6 +95,7 @@ export function ContactList({
   onRemove,
   onDuplicate,
   onRename,
+  onEditNote,
   onMove,
   folded,
   onToggleFolded,
@@ -193,6 +204,22 @@ export function ContactList({
   const dragStatus = dragId
     ? instances.find((i) => i.id === dragId)?.status
     : undefined;
+  const noted = new Set(shown.filter((i) => i.note).map((i) => i.id));
+
+  // The "N notes" line: the next noted session after the shown one, in the order
+  // the list draws. Takes the focus to its terminal, as the unread keys do; an
+  // Enter held on the line would repeat into it, so its repeats are swallowed.
+  const openNextNoted = () => {
+    const id = nextNoted(
+      shown.map((i) => i.id),
+      noted,
+      selectedId
+    );
+    if (!id) return;
+    onSelect(id);
+    swallowHeldKeyRepeats(window);
+    requestAnimationFrame(() => getTerminal(id)?.focus());
+  };
 
   return (
     <aside className="sidebar">
@@ -206,6 +233,16 @@ export function ContactList({
       >
         ‹
       </button>
+      {noted.size > 0 && (
+        <button
+          type="button"
+          className="notes-jump"
+          onClick={openNextNoted}
+          title="Open the next session with a note"
+        >
+          ✎ {notesLabel(noted.size)}
+        </button>
+      )}
       {/* A scrolled row leaves its bubble behind, so scrolling drops it. */}
       <div className="contact-list" onScroll={() => setNameTip(null)}>
         {/* Running first, then stopped (aliveFirst). A contact that starts
@@ -281,6 +318,16 @@ export function ContactList({
                 alert={unreadCounts.has(inst.id)}
               />
               <span className="contact-name">{inst.name}</span>
+              {inst.note && (
+                <span
+                  className="contact-note"
+                  title={noteTitle(inst)}
+                  role="img"
+                  aria-label="Has a note"
+                >
+                  ✎
+                </span>
+              )}
               {showHotkeys && hotkeyIds.includes(inst.id) && (
                 <span className="contact-hotkey">
                   {hotkeyIds.indexOf(inst.id) + 1}
@@ -353,6 +400,10 @@ export function ContactList({
               onClick: () => setRenameId(contextMenu.instanceId),
             },
             {
+              label: contextInstance.note ? "Edit note…" : "Leave a note…",
+              onClick: () => onEditNote(contextMenu.instanceId),
+            },
+            {
               label: "Duplicate…",
               onClick: () =>
                 setConfirm({ action: "duplicate", instanceId: contextMenu.instanceId }),
@@ -377,9 +428,12 @@ export function ContactList({
             ? {
                 title: `Remove “${confirmInstance.name}”?`,
                 message:
-                  confirmInstance.status === "running"
+                  (confirmInstance.status === "running"
                     ? "Its session stops and it leaves the list. The conversation itself is not deleted."
-                    : "It leaves the list. The conversation itself is not deleted.",
+                    : "It leaves the list. The conversation itself is not deleted.") +
+                  (confirmInstance.note
+                    ? ` Your note on it goes too: “${clip(firstLine(confirmInstance.note.text), 80)}”`
+                    : ""),
                 confirmLabel: "Remove",
                 danger: true,
                 onConfirm: () => onRemove(confirmInstance.id),

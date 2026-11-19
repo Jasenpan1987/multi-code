@@ -156,6 +156,19 @@ export interface ContextUsage {
   contextWindow?: number;
 }
 
+// A note the builder left on a contact for themselves (epic session-notes): what
+// to do next there. Only the builder writes and clears it. It never goes to the
+// agent, the project or the phone.
+export interface SessionNote {
+  text: string;
+  // When it was last saved.
+  writtenAt: number;
+}
+
+// The longest note main keeps, in UTF-16 code units (what a textarea's maxLength
+// counts).
+export const NOTE_MAX_LENGTH = 2000;
+
 export interface Instance {
   id: string;
   cwd: string;
@@ -189,6 +202,8 @@ export interface Instance {
   // Why the last start launched nothing (OpenCode 1.x), as one line for its page.
   // Cleared by the next start that runs.
   startError?: string;
+  // The builder's note on this contact, until they click Got it.
+  note?: SessionNote;
 }
 
 export type AlertsDegradedReason = "hooks" | "plugin" | "service";
@@ -366,6 +381,12 @@ export interface ElectronAPI {
   hasRunningInstanceAt: (cwd: string, backend?: BackendName) => Promise<boolean>;
   // Blank resets the name to the folder's. Resolves to the renamed contact.
   setAlias: (id: string, alias: string) => Promise<Instance | null>;
+  // The contact's note (epic session-notes). Empty or blank text removes it; text
+  // past NOTE_MAX_LENGTH is refused. Resolves to the contact, or null when refused.
+  setNote: (id: string, text: string) => Promise<Instance | null>;
+  // The ids of the contacts that had a note when this run of Multi-Code first
+  // asked, for the startup bar. Every later call in the same run gets [].
+  takeStartupNotes: () => Promise<string[]>;
   // The project picker, able to make a new folder. With `startFolder` it opens
   // there (with `title` above it) and leaves where the next plain call opens alone.
   selectDirectory: (startFolder?: string, title?: string) => Promise<string | null>;

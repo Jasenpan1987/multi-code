@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("has-running-instance-at", cwd, backend),
   setAlias: (id: string, alias: string) =>
     ipcRenderer.invoke("set-alias", id, alias),
+  setNote: (id: string, text: string) => ipcRenderer.invoke("set-note", id, text),
+  takeStartupNotes: () => ipcRenderer.invoke("take-startup-notes"),
   selectDirectory: (startFolder?: string, title?: string) =>
     ipcRenderer.invoke("select-directory", startFolder, title),
   checkFolder: (path: string) => ipcRenderer.invoke("check-folder", path),

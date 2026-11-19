@@ -58,6 +58,14 @@
   --phone-code-fg: #2d5a8a;
   --phone-code-bg: rgba(0, 0, 0, 0.04);
   --phone-panel-bg: rgba(0, 0, 0, 0.03);
+  /* Session notes: a warm yellow of their own, with a left edge, so a note doesn't
+     read as the alerts-degraded warning. */
+  --note-bg: #fff9e0;
+  --note-fg: #3d3000;
+  --note-border: #ecd27a;
+  --note-accent: #e0a800;
+  --note-muted-fg: #8a7a4a;
+  --note-hover-bg: rgba(0, 0, 0, 0.05);
 }
 
 [data-theme="dark"] {
@@ -110,6 +118,12 @@
   --phone-code-fg: #9cc4e4;
   --phone-code-bg: rgba(255, 255, 255, 0.05);
   --phone-panel-bg: rgba(255, 255, 255, 0.04);
+  --note-bg: #2f2a1a;
+  --note-fg: #ecdcaa;
+  --note-border: #5c4f25;
+  --note-accent: #d9a400;
+  --note-muted-fg: #a89a70;
+  --note-hover-bg: rgba(255, 255, 255, 0.06);
 }
 
 [data-theme="dark"] .alerts-degraded-bar {
@@ -215,6 +229,12 @@
   --phone-code-fg: #5a4a30;
   --phone-code-bg: rgba(90, 74, 48, 0.08);
   --phone-panel-bg: rgba(90, 74, 48, 0.06);
+  --note-bg: #f9efc9;
+  --note-fg: #3a2f1d;
+  --note-border: #d9c487;
+  --note-accent: #c08f10;
+  --note-muted-fg: #8a7855;
+  --note-hover-bg: rgba(90, 74, 48, 0.08);
 }
 
 * {
@@ -3462,4 +3482,233 @@ button.secretary-bar-title:hover .secretary-bar-name {
 .drop-message-line[data-tone="more"] {
   padding-left: 16px;
   font-size: 11px;
+}
+
+/* Session notes (epic session-notes). */
+
+/* On the row, right after the name: the session has a note. The sidebar's chrome is
+   the same in every theme, so is this. */
+.contact-note {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-left: -6px;
+  border-radius: 3px;
+  background: #ffd54f;
+  color: #5c3d00;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+/* "N notes" at the top of the sidebar: opens the next noted session. */
+.notes-jump {
+  flex-shrink: 0;
+  width: 100%;
+  padding: 5px 12px;
+  text-align: left;
+  background: #fff3c4;
+  color: #5c3d00;
+  border: none;
+  border-bottom: 1px solid #e6c860;
+  font-size: 11px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.notes-jump:hover {
+  background: #ffe89a;
+}
+
+.content-header-note {
+  margin-right: 12px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 3px;
+  text-shadow: 0 1px 1px rgba(30, 74, 122, 0.5);
+  cursor: pointer;
+}
+
+.content-header-note:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Above the terminal while the shown session has a note. */
+.note-bar,
+.startup-notes-bar {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 12px 5px 9px;
+  background: var(--note-bg);
+  color: var(--note-fg);
+  border-bottom: 1px solid var(--note-border);
+  border-left: 3px solid var(--note-accent);
+  font-size: 12px;
+  min-width: 0;
+}
+
+.note-bar-head,
+.startup-notes-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 20px;
+  min-width: 0;
+}
+
+.note-bar-title,
+.startup-notes-title {
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.note-bar-time,
+.startup-notes-time {
+  flex: none;
+  font-size: 11px;
+  color: var(--note-muted-fg);
+  white-space: nowrap;
+}
+
+.note-bar-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+
+.note-bar-btn {
+  padding: 1px 10px;
+  font-size: 11px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--note-border);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.note-bar-btn:hover {
+  background: var(--note-hover-bg);
+}
+
+.note-bar-btn.primary {
+  color: #3d2e00;
+  background: var(--note-accent);
+  border-color: var(--note-accent);
+  font-weight: bold;
+}
+
+.note-bar-btn.primary:hover {
+  filter: brightness(1.08);
+}
+
+/* A few lines, then its own scroll, so a long note leaves the terminal room. */
+.note-bar-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+  max-height: calc(1.4em * 4);
+  overflow-y: auto;
+  user-select: text;
+}
+
+/* Once per start, across the window, under the secretary bar. */
+.startup-notes-close {
+  margin-left: auto;
+  padding: 0 4px;
+  background: none;
+  border: none;
+  color: var(--note-muted-fg);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.startup-notes-close:hover {
+  color: var(--note-fg);
+}
+
+.startup-notes-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: calc(22px * 5);
+  overflow-y: auto;
+}
+
+.startup-notes-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  height: 22px;
+  padding: 2px 4px;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.startup-notes-item:hover {
+  background: var(--note-hover-bg);
+}
+
+.startup-notes-name {
+  flex: 0 1 auto;
+  max-width: 30%;
+  font-weight: bold;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.startup-notes-line {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-dialog {
+  width: 480px;
+}
+
+.note-dialog-text {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 110px;
+  resize: vertical;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.note-dialog-error {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #c62828;
+}
+
+.note-dialog-count {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #8a6d00;
+  text-align: right;
+}
+
+.note-dialog-hint {
+  margin-right: auto;
+  align-self: center;
+  font-size: 11px;
+  color: #889;
 }

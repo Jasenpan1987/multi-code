@@ -175,6 +175,13 @@ export function registerIpcHandlers() {
     return processManager.setAlias(id, alias);
   });
 
+  ipcMain.handle("set-note", (_event, id: unknown, text: unknown) => {
+    if (typeof id !== "string" || typeof text !== "string") return null;
+    return processManager.setNote(id, text);
+  });
+
+  ipcMain.handle("take-startup-notes", () => processManager.takeStartupNotes());
+
   // Since Electron 43 the picker opens in Downloads unless given a folder, and
   // macOS no longer remembers the last one. So it starts beside the last project
   // picked, or else beside the newest contact's (the top one: new contacts go
