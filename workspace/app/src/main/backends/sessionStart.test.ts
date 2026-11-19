@@ -105,3 +105,40 @@ describe("claude spawn: which session", () => {
     expect(sessionId).toBe(args[1]);
   });
 });
+
+// Duplicate → Fork (epic duplicate-options): the CLI's own fork, into an id of ours.
+describe("claude spawn: a fork", () => {
+  it("resumes the source as a copy under a new id it names up front", () => {
+    const cwd = project(OWN);
+    const { args, sessionId } = claudeBackend.spawn(cwd, undefined, {
+      kind: "fork",
+      fromSessionId: OWN,
+    });
+    expect(args.slice(0, 4)).toEqual(["--resume", OWN, "--fork-session", "--session-id"]);
+    expect(args[4]).toMatch(UUID);
+    expect(args[4]).not.toBe(OWN);
+    expect(sessionId).toBe(args[4]);
+  });
+
+  it("refuses, rather than start a blank session, when the source's transcript has gone", () => {
+    const { args, sessionId, refusal } = claudeBackend.spawn(project(), undefined, {
+      kind: "fork",
+      fromSessionId: OWN,
+    });
+    expect(refusal).toMatch(/gone/);
+    expect(args).toEqual([]);
+    expect(sessionId).toBeUndefined();
+  });
+
+  it("forkSession says what to spawn, and refuses with nothing to copy", async () => {
+    const cwd = project(OWN);
+    await expect(claudeBackend.forkSession(cwd, OWN)).resolves.toEqual({
+      kind: "fork",
+      fromSessionId: OWN,
+    });
+    await expect(claudeBackend.forkSession(project(), OWN)).rejects.toThrow(
+      "no conversation to fork"
+    );
+    await expect(claudeBackend.forkSession(cwd, "../escape")).rejects.toThrow();
+  });
+});

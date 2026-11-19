@@ -61,7 +61,7 @@ export function NoteDialog({ sessionName, initialText, onClose, onSave }: NoteDi
 
   return (
     <div
-      className="dialog-overlay"
+      className="dialog-overlay above-diff"
       // A stray click outside doesn't throw away what was typed: it closes only
       // while nothing has changed.
       onClick={() => {

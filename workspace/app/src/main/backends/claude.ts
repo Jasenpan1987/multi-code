@@ -54,6 +54,10 @@ function hasExistingSession(cwd: string): boolean {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function transcriptPath(cwd: string, sessionId: string): string {
+  return path.join(PROJECTS_DIR, encodeProjectDir(cwd), `${sessionId}.jsonl`);
+}
+
 // The session flags for one spawn, and the session they open when that is known.
 //
 // A session the CLI has no transcript for can't be resumed (`--resume` fails), but
@@ -66,11 +70,7 @@ function sessionArgs(
   session: SessionStart
 ): { args: string[]; sessionId?: string } {
   if (session.kind === "own") {
-    const transcript = path.join(
-      PROJECTS_DIR,
-      encodeProjectDir(cwd),
-      `${session.sessionId}.jsonl`
-    );
+    const transcript = transcriptPath(cwd, session.sessionId);
     if (fs.existsSync(transcript)) {
       return { args: ["--resume", session.sessionId], sessionId: session.sessionId };
     }
@@ -80,6 +80,15 @@ function sessionArgs(
   }
   if (session.kind === "latest" && hasExistingSession(cwd)) {
     return { args: ["--continue"] };
+  }
+  // The CLI's own fork, into an id of ours (`--session-id` with `--resume` and
+  // `--fork-session`), so the new contact owns its session from the first moment.
+  if (session.kind === "fork") {
+    const sessionId = crypto.randomUUID();
+    return {
+      args: ["--resume", session.fromSessionId, "--fork-session", "--session-id", sessionId],
+      sessionId,
+    };
   }
   const sessionId = crypto.randomUUID();
   return { args: ["--session-id", sessionId], sessionId };
@@ -97,12 +106,10 @@ function sessionArgs(
 // Keyed on the pty child's pid, verified to be the pid the registry uses. The
 // cwd is checked as well, because pids are recycled and a stale entry from a
 // dead process would otherwise point every read at an unrelated session.
-export function findClaudeLiveSessionId(
-  cwd: string,
-  pid: number
-): string | null {
-  const target = resolvePath(cwd);
-
+// The session this one process has on screen, from its own registry entry only:
+// null when that entry is missing or unreadable, never another process's entry for
+// the same directory. What Duplicate → Fork copies, as the CLI's own `/fork` would.
+export function findClaudeOwnSessionId(cwd: string, pid: number): string | null {
   try {
     const data = JSON.parse(
       fs.readFileSync(path.join(SESSIONS_DIR, `${pid}.json`), "utf8")
@@ -110,15 +117,26 @@ export function findClaudeLiveSessionId(
     if (
       typeof data.sessionId === "string" &&
       typeof data.cwd === "string" &&
-      resolvePath(data.cwd) === target
+      resolvePath(data.cwd) === resolvePath(cwd)
     ) {
       return data.sessionId;
     }
   } catch {
-    // No entry for this pid. Falls through to the cwd scan below, which covers a
-    // CLI that ever keys the registry on something other than the process we
-    // spawned.
+    // No entry for this pid, or one mid-write.
   }
+  return null;
+}
+
+export function findClaudeLiveSessionId(
+  cwd: string,
+  pid: number
+): string | null {
+  const target = resolvePath(cwd);
+
+  // No entry for this pid falls through to the cwd scan below, which covers a CLI
+  // that ever keys the registry on something other than the process we spawned.
+  const own = findClaudeOwnSessionId(cwd, pid);
+  if (own) return own;
 
   // Fallback: a single entry for this directory is unambiguous. Two or more and
   // there is no way to tell which process is ours, so nothing is returned —
@@ -420,6 +438,16 @@ export const claudeBackend: Backend = {
   keepsSecretaryEvents: true,
 
   spawn(cwd: string, opts?: SpawnOptions, session?: SessionStart): SpawnConfig {
+    // forkSession checked the transcript; gone since, the fork is refused rather than
+    // started as a blank session that would pass for the copy.
+    if (session?.kind === "fork" && !fs.existsSync(transcriptPath(cwd, session.fromSessionId))) {
+      return {
+        command: "claude",
+        args: [],
+        env: {},
+        refusal: "The conversation to fork is gone, so no fork was started.",
+      };
+    }
     const { args, sessionId } = sessionArgs(cwd, session ?? { kind: "latest" });
 
     // Additive: the CLI merges this on top of the user's own settings files rather
@@ -493,8 +521,21 @@ export const claudeBackend: Backend = {
     return findClaudeLiveSessionId(cwd, pid);
   },
 
+  shownSessionId(cwd: string, pid: number): string | null {
+    return findClaudeOwnSessionId(cwd, pid);
+  },
+
   buildResumeCommand(sessionId: string): string {
     return `claude --resume ${sessionId}`;
+  },
+
+  // The fork itself happens at launch (sessionArgs); here only the check that there
+  // is a conversation to copy.
+  async forkSession(cwd: string, sessionId: string): Promise<SessionStart> {
+    if (!UUID.test(sessionId) || !fs.existsSync(transcriptPath(cwd, sessionId))) {
+      throw new Error("This session has no conversation to fork yet.");
+    }
+    return { kind: "fork", fromSessionId: sessionId };
   },
 };
 

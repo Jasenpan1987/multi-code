@@ -149,6 +149,11 @@ class FakeService implements OpencodeService {
     return this.replyResult;
   }
 
+  // Attention never forks.
+  async forkSession(): Promise<string | null> {
+    return null;
+  }
+
   publish(event: ServiceEvent) {
     this.record(event);
     for (const listener of Array.from(this.listeners)) listener.onEvent(event);

@@ -23,7 +23,7 @@ import {
   readOpencodeContextUsage,
   readOpencodeRecentTurns,
 } from "./opencodeDb";
-import { registrationPath } from "./opencodeService";
+import { getOpencodeService, registrationPath } from "./opencodeService";
 import { cachedOpencodeShellEnv, opencodeShellEnv, warmOpencodeShellEnv } from "./opencodeShellEnv";
 
 const HOME = process.env.HOME || "";
@@ -278,7 +278,8 @@ export const defaultOpencodeSpawnHost: OpencodeSpawnHost = {
 };
 
 // The session a spawn opens. Always named, so the contact owns it from its first
-// moment and discovery never has to guess:
+// moment and discovery never has to guess (a "fork" never reaches here: OpenCode
+// forks through its service first and starts the copy as "own"):
 //   - own: the contact's id. Resumed, or created under that id by the first prompt
 //     when it is gone or was never typed in (OpenCode allows both).
 //   - latest: the directory's newest root session, read after the env (so from the
@@ -399,6 +400,20 @@ export const opencodeBackend: Backend = {
   // `packages/tui/src/util/presentation.ts:32`); it works from any directory.
   buildResumeCommand(sessionId: string): string {
     return `opencode -s ${sessionId}`;
+  },
+
+  // Through the shared service's own fork (`POST /api/session/:id/fork`), the one
+  // write Multi-Code makes there besides answering dialogs (decisions.md,
+  // 2026-11-20): OpenCode 2 has no fork on its command line. The copy is then
+  // opened like any session of the contact's own.
+  async forkSession(_cwd: string, sessionId: string): Promise<SessionStart> {
+    const forked = await getOpencodeService().forkSession(sessionId);
+    if (!forked) {
+      throw new Error(
+        "OpenCode's background service didn't fork the session. Check that OpenCode is running, then try again."
+      );
+    }
+    return { kind: "own", sessionId: forked };
   },
 };
 

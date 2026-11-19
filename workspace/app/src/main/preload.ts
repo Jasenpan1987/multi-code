@@ -11,7 +11,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   killInstance: (id: string) => ipcRenderer.invoke("kill-instance", id),
   removeInstance: (id: string) => ipcRenderer.invoke("remove-instance", id),
   restartInstance: (id: string) => ipcRenderer.invoke("restart-instance", id),
-  duplicateInstance: (id: string) => ipcRenderer.invoke("duplicate-instance", id),
+  duplicateInstance: (id: string, backend?: string) =>
+    ipcRenderer.invoke("duplicate-instance", id, backend),
+  forkInstance: (id: string) => ipcRenderer.invoke("fork-instance", id),
+  canFork: (id: string) => ipcRenderer.invoke("can-fork", id),
   listInstances: () => ipcRenderer.invoke("list-instances"),
   loadContacts: () => ipcRenderer.invoke("load-contacts"),
   moveContact: (dragId: string, targetId: string, placeBefore: boolean) =>

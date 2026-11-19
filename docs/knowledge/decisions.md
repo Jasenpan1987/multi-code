@@ -4,6 +4,17 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-11-20 — Duplicate asks: fork, new, or new with the other tool; OpenCode forks through its API
+
+**Decision:** Right-click → Duplicate… opens a dialog: "Fork this session" (a new contact whose session starts as a copy of this one's conversation), "New session" (Duplicate as before), "New session with OpenCode / Claude Code" (a fresh session on the same project in the other tool), and Cancel. Claude Code forks at launch with `--resume <id> --fork-session --session-id <new>`. OpenCode forks through its shared service's `POST /api/session/{id}/fork`, once per click, and the new terminal attaches to the copy with `opencode --session <copy>`. This is the second write Multi-Code makes into OpenCode's service, after answering dialogs. The session copied is the one the terminal shows, as the CLI's own fork would copy it: for Claude Code, read from the source process's own registry entry, never from the directory's fallback.
+
+**Why:** The builder mostly wants to branch a session with its context, and still wants a clean session and the other tool now and then. OpenCode 2.3.0 has no fork on its command line (probed 2026-11-20). The builder approved the API call as a second exception, since it is what they would do by hand.
+
+**Source:** builder, 2026-11-20, in session (AskUserQuestion; `docs/timeline/2026-11-20_duplicate-options-ideation.md`).
+**Affects:** `backends/claude.ts`, `backends/opencode.ts`, `backends/opencodeService.ts`, `process-manager.ts`, `renderer/components/DuplicateDialog.tsx`, CLAUDE.md "Architecture".
+
+---
+
 ## 2026-11-18 — Session notes: the builder's own note, cleared only by "Got it"
 
 **Decision:** To know the next morning where each session stopped, the builder leaves a note on a session in Multi-Code's UI. The note stays until the builder clicks "Got it"; opening the session does not clear it. Each time Multi-Code starts, a bar lists the sessions with notes, once. No model writes or reads the notes, and nothing goes to the session.

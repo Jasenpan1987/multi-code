@@ -796,21 +796,90 @@ export class ProcessManager {
     this.instances = new Map([[instance.id, instance], ...this.instances]);
   }
 
-  // A second contact on the same project and backend, running a fresh session of
-  // its own, at the top like any new contact. Nothing of the original's
-  // conversation comes along.
-  duplicateInstance(sourceId: string): InstanceInfo | null {
+  // A second contact on the same project, running a fresh session of its own, at
+  // the top like any new contact. Nothing of the original's conversation comes
+  // along. On the source's backend, or the other one (duplicate-options Story 4).
+  duplicateInstance(sourceId: string, backend?: BackendName): InstanceInfo | null {
     const source = this.instances.get(sourceId);
     if (!source) return null;
+    return this.addDuplicate(source, backend ?? source.backend, { kind: "fresh" });
+  }
 
+  // A second contact on the same project and backend whose session starts as a
+  // copy of the source's (duplicate-options Story 2). The source's session, process
+  // and record are left alone. Rejects with a message for the builder.
+  async forkInstance(sourceId: string): Promise<InstanceInfo> {
+    const source = this.instances.get(sourceId);
+    if (!source) throw new Error("That session is no longer in the list.");
+    const from = this.forkableSession(source);
+    if (!from) throw new Error("This session has no conversation to fork yet.");
+    const start = await getBackend(source.backend).forkSession(source.cwd, from);
+    // The copy gets its contact even if the source was removed meanwhile: OpenCode
+    // has made it by now, and the builder asked for it.
     const id = crypto.randomUUID();
     const instance = this.spawnProcess(
       id,
       source.cwd,
       this.duplicateAlias(source),
       source.backend,
-      { kind: "fresh" }
+      start
     );
+    // Claude refused the fork at launch (its transcript went after the check): no
+    // contact, rather than one in a blank session posing as the copy. An OpenCode
+    // copy already exists in the service, so a refused start (a 1.x binary on the
+    // PATH) still gets its contact, stopped with the reason, and Start opens it.
+    if (instance.startError && start.kind === "fork") throw new Error(instance.startError);
+    const info = this.addSpawned(instance);
+    debugTrace(`[fork] ${sourceId.slice(0, 8)} -> ${info.id.slice(0, 8)} (${source.backend})`);
+    return info;
+  }
+
+  // Whether Fork can be offered: the contact has a session of its own with a
+  // conversation in it. Never the directory's latest, which may be another
+  // contact's.
+  canFork(id: string): boolean {
+    const instance = this.instances.get(id);
+    return instance ? this.forkableSession(instance) !== undefined : false;
+  }
+
+  // The session the terminal shows now, as the CLI's own fork would copy it: read
+  // from the process's own record rather than waiting for the next poll, so a fork
+  // just after `/clear` or `/resume` copies the session on screen. Only that
+  // process's record, never a guess from the directory, and nothing is changed on
+  // the contact. Something the model saw must be in it: a session holding only the
+  // `/clear` it opened with has nothing to copy.
+  private forkableSession(instance: ManagedInstance): string | undefined {
+    let shown: string | null | undefined;
+    try {
+      shown = instance.ptyProcess
+        ? getBackend(instance.backend).shownSessionId?.(instance.cwd, instance.ptyProcess.pid)
+        : undefined;
+    } catch {
+      shown = undefined;
+    }
+    if (shown && this.isSessionClaimedBy(shown, instance.id)) shown = undefined;
+    const sessionId = shown ?? instance.sessionId ?? instance.ownSessionId;
+    if (!sessionId) return undefined;
+    try {
+      const { entries } = getBackend(instance.backend).readRecentTurns(sessionId, 1);
+      return entries.some((e) => !e.local) ? sessionId : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private addDuplicate(
+    source: ManagedInstance,
+    backend: BackendName,
+    session: SessionStart
+  ): InstanceInfo {
+    const id = crypto.randomUUID();
+    return this.addSpawned(
+      this.spawnProcess(id, source.cwd, this.duplicateAlias(source), backend, session)
+    );
+  }
+
+  private addSpawned(instance: ManagedInstance): InstanceInfo {
     this.addFirst(instance);
     this.persist();
     remoteServer.broadcastInstances();

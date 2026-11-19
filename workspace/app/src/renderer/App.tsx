@@ -12,6 +12,8 @@ import { ComposeBox } from "./components/ComposeBox";
 import { SecretaryBar } from "./components/SecretaryBar";
 import { NoteDialog } from "./components/NoteDialog";
 import { NoteBar, StartupNotesBar } from "./components/NoteBars";
+import { otherBackend } from "./components/duplicateOptions";
+import type { DuplicateChoice } from "./components/duplicateOptions";
 import { aliveFirst } from "../shared/reorder";
 import {
   applyBriefUpdate,
@@ -97,6 +99,11 @@ export function App() {
   // directories. This is what marks which is which.
   const [isDev, setIsDev] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  // For a Duplicate that finishes later (handleDuplicate): whether the builder has
+  // moved, or started writing, since they picked it.
+  const composeOpenRef = useRef(composeOpen);
+  composeOpenRef.current = composeOpen;
+  const selectionMovesRef = useRef(0);
   // The file the diff window is showing, or null when it's closed. Not
   // per-instance: a diff belongs to a moment, so switching instances closes it
   // rather than remembering one per contact.
@@ -465,6 +472,7 @@ export function App() {
   // plays nothing, red dot or not: briefs play from the secretary bar's Play.
   const handleSelect = useCallback(
     (id: string) => {
+      selectionMovesRef.current++;
       setSelectedId(id);
       stopMessageSound(id);
       markRead(id);
@@ -557,17 +565,35 @@ export function App() {
   }, []);
 
   // First and shown, like a contact just made with + New.
-  const handleDuplicate = useCallback(async (id: string) => {
+  // Duplicate's choice (epic duplicate-options). The dialog's Enter would repeat
+  // into the new contact's terminal once it has the focus, so held keys are
+  // swallowed first.
+  // An OpenCode fork waits on the service: if the builder has gone to another
+  // session meanwhile (even and back), or opened the compose box, it joins the list
+  // without taking them away from what they are doing there.
+  const handleDuplicate = useCallback(async (id: string, choice: DuplicateChoice) => {
+    swallowHeldKeyRepeats(window);
+    const source = instancesRef.current.find((i) => i.id === id);
+    const shownBefore = selectedIdRef.current;
+    const movesBefore = selectionMovesRef.current;
     try {
-      const instance = await window.electronAPI.duplicateInstance(id);
+      const instance =
+        choice === "fork"
+          ? await window.electronAPI.forkInstance(id)
+          : await window.electronAPI.duplicateInstance(
+              id,
+              choice === "other" && source ? otherBackend(source.backend) : undefined
+            );
       if (!instance) return;
       setInstances((prev) => [instance, ...prev]);
-      setSelectedId(instance.id);
+      const stayed =
+        selectedIdRef.current === shownBefore &&
+        selectionMovesRef.current === movesBefore &&
+        !composeOpenRef.current;
+      if (stayed) setSelectedId(instance.id);
       playCoughSound();
     } catch (err) {
-      window.alert(
-        err instanceof Error ? err.message : "Could not duplicate the session."
-      );
+      window.alert(ipcErrorMessage(err) || "Could not duplicate the session.");
     }
   }, []);
 

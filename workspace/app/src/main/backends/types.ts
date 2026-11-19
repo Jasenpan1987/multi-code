@@ -63,7 +63,11 @@ export type AnswerResult = { ok: true } | { ok: false; reason: "gone" | "failed"
 export type SessionStart =
   | { kind: "own"; sessionId: string }
   | { kind: "fresh" }
-  | { kind: "latest"; isClaimed?: (sessionId: string) => boolean };
+  | { kind: "latest"; isClaimed?: (sessionId: string) => boolean }
+  // A new session that starts as a copy of `fromSessionId`'s conversation, for a CLI
+  // that forks at launch (Claude Code). One that forks through an API (OpenCode)
+  // gets the copy's id from forkSession and starts it as "own".
+  | { kind: "fork"; fromSessionId: string };
 
 /**
  * Extra spawn wiring: each backend's alert wiring, `settingsPath` for Claude and
@@ -240,6 +244,14 @@ export interface Backend {
   spawn(cwd: string, opts?: SpawnOptions, session?: SessionStart): SpawnConfig;
 
   /**
+   * How to start a fork of `sessionId` (epic duplicate-options): what to pass to
+   * `spawn` for a new session that begins with that session's conversation. The
+   * original is left as it is. Rejects with a message for the builder when it
+   * can't. Only run when the builder picks Fork.
+   */
+  forkSession(cwd: string, sessionId: string): Promise<SessionStart>;
+
+  /**
    * Start preparing, in the background, what this backend's first spawn will need,
    * so `spawn` (which is synchronous) doesn't wait for it. Called when contacts of
    * this backend are loaded. Optional: OpenCode reads the builder's login-shell
@@ -385,6 +397,15 @@ export interface Backend {
    * another session's transcript.
    */
   findLiveSessionId(cwd: string, pid: number, startedAt: number): string | null;
+
+  /**
+   * The session this one process has on screen, by the process's own record only,
+   * with no guess from the directory; null when that record can't be read. For
+   * Duplicate → Fork, which copies what the terminal shows, as the CLI's own fork
+   * would. Absent where the contact's session already follows the screen (OpenCode,
+   * through its TUI plugin).
+   */
+  shownSessionId?(cwd: string, pid: number): string | null;
 
   buildResumeCommand(sessionId: string): string;
 }

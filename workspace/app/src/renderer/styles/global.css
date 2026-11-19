@@ -1247,6 +1247,12 @@ body,
   z-index: 1000;
 }
 
+/* The note and Duplicate dialogs sit above an open diff window (.diff-window, 1100),
+   so the diff can neither hide their buttons nor take their clicks. */
+.dialog-overlay.above-diff {
+  z-index: 1200;
+}
+
 .dialog {
   background: #f0f4fa;
   border: 2px solid #7b9cc7;
@@ -3711,4 +3717,56 @@ button.secretary-bar-title:hover .secretary-bar-name {
   align-self: center;
   font-size: 11px;
   color: #889;
+}
+
+/* Duplicate's choices (epic duplicate-options): one button per row, its line under it. */
+.duplicate-dialog {
+  width: 420px;
+}
+
+.duplicate-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.duplicate-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 7px 10px;
+  text-align: left;
+  background: linear-gradient(180deg, #ffffff 0%, #eef3fa 100%);
+  border: 1px solid #aabbd4;
+  border-radius: 4px;
+  color: #1a1a1a;
+  font: inherit;
+  cursor: pointer;
+}
+
+.duplicate-option:hover:not(:disabled),
+.duplicate-option:focus-visible {
+  border-color: #4a8ac4;
+  background: linear-gradient(180deg, #ffffff 0%, #e2ecf8 100%);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(74, 138, 196, 0.3);
+}
+
+.duplicate-option:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.duplicate-option-label {
+  font-size: 12px;
+  font-weight: bold;
+  color: #2d5a8a;
+}
+
+.duplicate-option-detail {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #556;
 }

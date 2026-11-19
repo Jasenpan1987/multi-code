@@ -981,12 +981,25 @@ describe("replies", () => {
     expect(await service.cancelForm("s", "f")).toEqual(expected);
   });
 
+  it("forks a session and gives the copy's id", async () => {
+    const { fake, env, home } = await setup();
+    fake.route("POST /api/session/ses_1/fork", json(200, { data: { id: "ses_copy", title: "x" } }));
+    fake.route("POST /api/session/ses_gone/fork", json(404, { name: "SessionNotFound" }));
+    fake.route("POST /api/session/ses_odd/fork", json(200, { data: { title: "no id" } }));
+    const service = client({ env, home });
+    expect(await service.forkSession("ses_1")).toBe("ses_copy");
+    expect(JSON.parse(fake.requests[0].body)).toEqual({});
+    expect(await service.forkSession("ses_gone")).toBeNull();
+    expect(await service.forkSession("ses_odd")).toBeNull();
+  });
+
   it("maps a network error to failed", async () => {
     const s = scratch();
     writeReg(s.state, { url: await deadUrl(), pid: 16, password: PASSWORD });
     const service = client({ env: s.env, home: s.home });
     expect(await service.replyPermission("s", "p", "once")).toEqual({ ok: false, reason: "failed" });
     expect(await service.replyForm("s", "f", { q0: "A" })).toEqual({ ok: false, reason: "failed" });
+    expect(await service.forkSession("s")).toBeNull();
   });
 });
 

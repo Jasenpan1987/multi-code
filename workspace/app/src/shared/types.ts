@@ -367,8 +367,14 @@ export interface ElectronAPI {
   killInstance: (id: string) => Promise<void>;
   removeInstance: (id: string) => Promise<void>;
   restartInstance: (id: string) => Promise<Instance | null>;
-  // A new contact on the same project, in a fresh session.
-  duplicateInstance: (id: string) => Promise<Instance | null>;
+  // A new contact on the same project, in a fresh session, on the contact's backend
+  // or the one named (epic duplicate-options).
+  duplicateInstance: (id: string, backend?: BackendName) => Promise<Instance | null>;
+  // A new contact whose session starts as a copy of this contact's. Rejects with a
+  // message for the builder.
+  forkInstance: (id: string) => Promise<Instance>;
+  // Whether the contact has a conversation of its own to fork.
+  canFork: (id: string) => Promise<boolean>;
   listInstances: () => Promise<Instance[]>;
   loadContacts: () => Promise<Instance[]>;
   // Drag-to-reorder: one move, applied against the stored order. Returns the list as

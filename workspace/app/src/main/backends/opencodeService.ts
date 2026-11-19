@@ -105,6 +105,9 @@ export interface OpencodeService {
     answer: Record<string, string | string[]>
   ): Promise<AnswerResult>;
   cancelForm(sessionId: string, formId: string, message?: string): Promise<AnswerResult>;
+  // A copy of the session, up to its latest message, in a new session the service
+  // names. Its id, or null when the service refused or couldn't be reached.
+  forkSession(sessionId: string): Promise<string | null>;
 }
 
 export interface ServiceTiming {
@@ -576,6 +579,12 @@ class ServiceClient implements OpencodeService {
     const route = `/api/session/${encodeURIComponent(sessionId)}/form/${encodeURIComponent(formId)}`;
     const query = message === undefined ? "" : `?message=${encodeURIComponent(message)}`;
     return this.reply("DELETE", route, undefined, query);
+  }
+
+  async forkSession(sessionId: string): Promise<string | null> {
+    const got = await this.request("POST", `/api/session/${encodeURIComponent(sessionId)}/fork`, {});
+    const data = this.dataOf(got);
+    return isRecord(data) && typeof data.id === "string" && data.id !== "" ? data.id : null;
   }
 
   // ── Requests ──────────────────────────────────────────────────────────────

@@ -130,10 +130,29 @@ export function registerIpcHandlers() {
     secretary.forget(id);
   });
 
-  ipcMain.handle("duplicate-instance", (_event, id: string) => {
+  // Duplicate's choices (epic duplicate-options): a fresh session on this backend or
+  // the other one, or a fork of the contact's session.
+  ipcMain.handle("duplicate-instance", (_event, id: unknown, backend?: unknown) => {
     if (typeof id !== "string") return null;
-    return processManager.duplicateInstance(id);
+    if (backend !== undefined && backend !== "claude" && backend !== "opencode") return null;
+    return processManager.duplicateInstance(id, backend);
   });
+
+  ipcMain.handle("fork-instance", async (_event, id: unknown) => {
+    if (typeof id !== "string") throw new Error("No session to fork.");
+    try {
+      return await processManager.forkInstance(id);
+    } catch (err) {
+      // The builder sees it in an alert; the trace keeps it for after the fact.
+      // Only Multi-Code's own messages and spawn errors, no session content.
+      debugTrace(`[fork] ${id.slice(0, 8)} failed: ${err instanceof Error ? err.message : String(err)}`);
+      throw err;
+    }
+  });
+
+  ipcMain.handle("can-fork", (_event, id: unknown) =>
+    typeof id === "string" ? processManager.canFork(id) : false
+  );
 
   ipcMain.handle("restart-instance", (_event, id: string) => {
     return processManager.restartInstance(id);

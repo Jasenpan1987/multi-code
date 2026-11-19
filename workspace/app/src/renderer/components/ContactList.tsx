@@ -3,6 +3,8 @@ import { ContextMenu } from "./ContextMenu";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Avatar } from "./Avatar";
 import { RenameSessionDialog } from "./RenameSessionDialog";
+import { DuplicateDialog } from "./DuplicateDialog";
+import type { DuplicateChoice } from "./duplicateOptions";
 import { getTerminal } from "./TerminalView";
 import { contextFillHue, formatContextPercent, formatTokens } from "./formatTokens";
 import { dropsBefore } from "./contactOrder";
@@ -71,8 +73,9 @@ interface ContactListProps {
   onStart: (id: string) => void;
   onRestart: (id: string) => void;
   onRemove: (id: string) => void;
-  // A new contact on the same project, in a fresh session.
-  onDuplicate: (id: string) => void;
+  // A new contact on the same project: a fork of this one's session, a fresh session,
+  // or a fresh session with the other tool (epic duplicate-options).
+  onDuplicate: (id: string, choice: DuplicateChoice) => void;
   // The name this list shows; blank goes back to the folder name.
   onRename: (id: string, name: string) => void;
   // Opens the note dialog for this contact (epic session-notes).
@@ -106,9 +109,10 @@ export function ContactList({
     instanceId: string;
   } | null>(null);
   const [renameId, setRenameId] = useState<string | null>(null);
-  // The context-menu action waiting for the builder to confirm it.
+  const [duplicateId, setDuplicateId] = useState<string | null>(null);
+  // The Remove waiting for the builder to confirm it.
   const [confirm, setConfirm] = useState<{
-    action: "duplicate" | "remove";
+    action: "remove";
     instanceId: string;
   } | null>(null);
   // Which row is being dragged, and where it would land. `drop` drives the insertion
@@ -200,6 +204,9 @@ export function ContactList({
     : null;
   const confirmInstance = confirm
     ? instances.find((i) => i.id === confirm.instanceId)
+    : null;
+  const duplicateInstance = duplicateId
+    ? instances.find((i) => i.id === duplicateId)
     : null;
   const dragStatus = dragId
     ? instances.find((i) => i.id === dragId)?.status
@@ -405,8 +412,7 @@ export function ContactList({
             },
             {
               label: "Duplicate…",
-              onClick: () =>
-                setConfirm({ action: "duplicate", instanceId: contextMenu.instanceId }),
+              onClick: () => setDuplicateId(contextMenu.instanceId),
             },
             {
               label: "Restart",
@@ -424,27 +430,31 @@ export function ContactList({
 
       {confirm && confirmInstance && (
         <ConfirmDialog
-          {...(confirm.action === "remove"
-            ? {
-                title: `Remove “${confirmInstance.name}”?`,
-                message:
-                  (confirmInstance.status === "running"
-                    ? "Its session stops and it leaves the list. The conversation itself is not deleted."
-                    : "It leaves the list. The conversation itself is not deleted.") +
-                  (confirmInstance.note
-                    ? ` Your note on it goes too: “${clip(firstLine(confirmInstance.note.text), 80)}”`
-                    : ""),
-                confirmLabel: "Remove",
-                danger: true,
-                onConfirm: () => onRemove(confirmInstance.id),
-              }
-            : {
-                title: `Duplicate “${confirmInstance.name}”?`,
-                message: `A second contact on ${confirmInstance.cwd} starts a new session, at the top of the list.`,
-                confirmLabel: "Duplicate",
-                onConfirm: () => onDuplicate(confirmInstance.id),
-              })}
+          title={`Remove “${confirmInstance.name}”?`}
+          message={
+            (confirmInstance.status === "running"
+              ? "Its session stops and it leaves the list. The conversation itself is not deleted."
+              : "It leaves the list. The conversation itself is not deleted.") +
+            (confirmInstance.note
+              ? ` Your note on it goes too: “${clip(firstLine(confirmInstance.note.text), 80)}”`
+              : "")
+          }
+          confirmLabel="Remove"
+          danger
+          onConfirm={() => onRemove(confirmInstance.id)}
           onClose={() => setConfirm(null)}
+        />
+      )}
+
+      {/* Mounted only while open, so each opening asks main afresh. */}
+      {duplicateInstance && (
+        <DuplicateDialog
+          source={duplicateInstance}
+          onPick={(choice) => {
+            setDuplicateId(null);
+            onDuplicate(duplicateInstance.id, choice);
+          }}
+          onClose={() => setDuplicateId(null)}
         />
       )}
 

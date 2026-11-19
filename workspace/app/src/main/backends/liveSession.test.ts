@@ -27,7 +27,7 @@ process.env.HOME = home;
 
 const sessionsDir = path.join(home, ".claude/sessions");
 
-const { findClaudeLiveSessionId } = await import("./claude");
+const { findClaudeLiveSessionId, findClaudeOwnSessionId } = await import("./claude");
 
 const CWD = "/Users/x/code/portals";
 const BEFORE_NEW = "89f7d163-85fa-4f21-bbc6-a865fbfb8ed9";
@@ -131,3 +131,24 @@ describe("findClaudeLiveSessionId", () => {
 
 // Restore, so a later file in the same worker doesn't inherit the temp HOME.
 process.env.HOME = realHome;
+
+// Duplicate → Fork reads only the process's own entry (duplicate-options).
+describe("findClaudeOwnSessionId", () => {
+  it("reads the process's own entry", () => {
+    writeEntry(60891, { sessionId: AFTER_NEW, cwd: CWD });
+    expect(findClaudeOwnSessionId(CWD, 60891)).toBe(AFTER_NEW);
+  });
+
+  it("never falls back to another process's entry for the directory", () => {
+    writeEntry(99999, { sessionId: AFTER_NEW, cwd: CWD });
+    expect(findClaudeLiveSessionId(CWD, 12345)).toBe(AFTER_NEW);
+    expect(findClaudeOwnSessionId(CWD, 12345)).toBeNull();
+  });
+
+  it("is null for an unreadable or foreign entry", () => {
+    writeEntry(60891, { raw: "{ half" });
+    expect(findClaudeOwnSessionId(CWD, 60891)).toBeNull();
+    writeEntry(60892, { sessionId: AFTER_NEW, cwd: "/somewhere/else" });
+    expect(findClaudeOwnSessionId(CWD, 60892)).toBeNull();
+  });
+});
