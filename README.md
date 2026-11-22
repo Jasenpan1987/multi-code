@@ -43,7 +43,7 @@ When working with multiple coding-agent sessions across different projects simul
   - **Resume Elsewhere** — Copy the backend's resume command to clipboard for handoff to a standalone terminal (`claude --resume <id>` or `opencode -s <id>`)
   - **Rename Session** — Give the current session a name, using each backend's own `/rename`
 - **Terminal section** — Embedded real shell (your default `$SHELL`) running in the project's directory. Persists in background across collapses and instance switches
-- **View section** — Render a Markdown file inline: paste a `.md` path (or click a `.md` path in the terminal output, or the "View" affordance on a changed `.md` in the Git section). Supports GitHub-flavored Markdown, math (KaTeX), Mermaid diagrams, and local/remote images
+- **View section** — Read a file inline: paste the path of any text file. Markdown is rendered, with GitHub-flavored Markdown, math (KaTeX), Mermaid diagrams, and local/remote images; code, JSON, SQL and other text show as they are. A `.md` path clicked in the terminal output, or the **MD** tag on a changed `.md` in the Git section, opens here too
 - **Phone section** — Turn the phone link on, see what it still needs (Tailscale, HTTPS, Push) and how to fix it, pair a phone, and send a test notification to or revoke each paired phone (see [Phone Link](#phone-link) below)
 - **Secretary section** — The Secretary Mode switch and the speech server settings (see [Voice Secretary](#voice-secretary-1) below)
 
@@ -293,10 +293,10 @@ The agent's own input shows long pastes in full and takes a click to move its cu
 | Rename Session | Asks for a name and renames the session through the backend's own `/rename` |
 
 #### View
-- Renders a Markdown file inline in the toolbox column
-- Open a file three ways: paste its path into the input and press Enter, **click a `.md` path in the terminal output**, or click the **MD** tag next to a changed `.md` file in the Git section
-- Supports GitHub-flavored Markdown, math (`$…$` / `$$…$$` via KaTeX), Mermaid diagrams, and images (local images resolve relative to the file; remote `https://` images load directly)
-- Only `.md` / `.markdown` files, capped at 2 MB; anything else shows a plain inline message. Raw HTML in the Markdown is not executed
+- Shows a file inline in the toolbox column: Markdown rendered, any other text file as it is (monospace, long lines scroll sideways, no syntax highlighting)
+- Open a file three ways: paste its path into the input and press Enter (any text file), **click a `.md` path in the terminal output**, or click the **MD** tag next to a changed `.md` file in the Git section
+- Markdown supports GitHub-flavored Markdown, math (`$…$` / `$$…$$` via KaTeX), Mermaid diagrams, and images (local images resolve relative to the file; remote `https://` images load directly)
+- Text files up to 2 MB. A binary file (one with a NUL byte) or a folder shows "Not a text file". Raw HTML in the Markdown is not executed
 
 #### Terminal
 - Real shell PTY (uses your `$SHELL`), black background and white text like Terminal.app

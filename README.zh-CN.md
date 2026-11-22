@@ -43,7 +43,7 @@
   - **Resume Elsewhere** — 复制该后端的续接命令到剪贴板,方便交接给独立终端(`claude --resume <id>` 或 `opencode -s <id>`)
   - **Rename Session** — 给当前会话起个名字,走各后端自己的 `/rename`
 - **Terminal section** — 嵌入式真实 shell(用你的默认 `$SHELL`),在项目目录下运行。后台保活,折叠或切实例都不杀进程
-- **View section** — 内联渲染 Markdown 文件:粘贴一个 `.md` 路径(或点终端输出里的 `.md` 路径,或点 Git section 里某个变更 `.md` 旁边的 MD 标签)。支持 GitHub 风格 Markdown、数学公式(KaTeX)、Mermaid 图、本地和远程图片
+- **View section** — 在工具箱里直接看文件:粘贴任意文本文件的路径。Markdown 会渲染,支持 GitHub 风格 Markdown、数学公式(KaTeX)、Mermaid 图、本地和远程图片;代码、JSON、SQL 等其他文本按原样显示。点终端输出里的 `.md` 路径,或点 Git section 里某个变更 `.md` 旁边的 MD 标签,也会在这里打开
 - **Phone section** — 打开手机互联,看还缺什么(Tailscale、HTTPS、Push)以及怎么补,配对手机,给每台已配对的手机发测试通知或吊销它(见下面的[手机互联](#手机互联))
 - **Secretary section** — 小秘书模式开关和语音服务器设置(见下面的[语音小秘书](#语音小秘书-1))
 
@@ -293,10 +293,10 @@ agent 自己的输入框现在能完整显示长粘贴,也能点字移光标(见
 | Rename Session | 弹框输入名字,通过该后端自己的 `/rename` 给会话改名 |
 
 #### View
-- 在工具箱这一栏内联渲染 Markdown 文件
-- 三种打开方式:在输入框粘贴路径回车、**点终端输出里的 `.md` 路径**、点 Git section 里某个变更 `.md` 旁边的 **MD** 标签
-- 支持 GitHub 风格 Markdown、数学公式(`$…$` / `$$…$$`,走 KaTeX)、Mermaid 图、图片(本地图片相对文件解析,远程 `https://` 图片直接加载)
-- 只支持 `.md` / `.markdown`,上限 2 MB,其他类型显示一条纯文本提示。Markdown 里的原始 HTML 不会被执行
+- 在工具箱这一栏直接看文件:Markdown 会渲染,其他文本文件按原样显示(等宽字体,长行左右滚动,没有语法高亮)
+- 三种打开方式:在输入框粘贴路径回车(任意文本文件)、**点终端输出里的 `.md` 路径**、点 Git section 里某个变更 `.md` 旁边的 **MD** 标签
+- Markdown 支持 GitHub 风格 Markdown、数学公式(`$…$` / `$$…$$`,走 KaTeX)、Mermaid 图、图片(本地图片相对文件解析,远程 `https://` 图片直接加载)
+- 文本文件上限 2 MB。二进制文件(含 NUL 字节)或文件夹会显示 "Not a text file"。Markdown 里的原始 HTML 不会被执行
 
 #### Terminal
 - 真实 shell PTY(用 `$SHELL`),黑底白字,跟 Terminal.app 一样
