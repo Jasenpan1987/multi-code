@@ -4,6 +4,17 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-11-22 — OpenCode repaints after its terminal got shorter
+
+**Decision:** When an OpenCode terminal gets shorter, the main process waits until the size holds for 200 ms, then sets the PTY one row shorter and, 250 ms later, back. Only the PTY changes: xterm keeps its size, and a paired phone isn't told. Claude Code's terminals are left as they are.
+
+**Why:** After a night's sleep, every long paste into one OpenCode session folded to `[Pasted ~N lines]` again, for the rest of the day; the same session had shown them in full the evening before. OpenCode 2.3.0 had not changed its input or its fold test. When xterm gets shorter it drops the rows below the cursor, and it adds blank rows when it grows back, so the input's bottom edge and the footer went blank. OpenCode repaints everything on a size it sees, but a shorter size and the old one back at once looked to it like no change, and it never drew those rows again. `promptBox.ts` needs that edge to find the input, so each long paste went through as a paste. Measured in a headless terminal: two resizes 5 ms apart are both seen; two at once are not. Reproduced in a dev build (two refits in one task), and fixed there: the edge comes back within seconds, and five pasted lines show in full.
+
+**Source:** builder, 2026-11-22, in session (screenshot; OpenCode's own prompt history showed which pastes folded and when).
+**Affects:** `main/process-manager.ts`.
+
+---
+
 ## 2026-11-20 — Duplicate asks: fork, new, or new with the other tool; OpenCode forks through its API
 
 **Decision:** Right-click → Duplicate… opens a dialog: "Fork this session" (a new contact whose session starts as a copy of this one's conversation), "New session" (Duplicate as before), "New session with OpenCode / Claude Code" (a fresh session on the same project in the other tool), and Cancel. Claude Code forks at launch with `--resume <id> --fork-session --session-id <new>`. OpenCode forks through its shared service's `POST /api/session/{id}/fork`, once per click, and the new terminal attaches to the copy with `opencode --session <copy>`. This is the second write Multi-Code makes into OpenCode's service, after answering dialogs. The session copied is the one the terminal shows, as the CLI's own fork would copy it: for Claude Code, read from the source process's own registry entry, never from the directory's fallback.

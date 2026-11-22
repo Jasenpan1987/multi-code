@@ -137,6 +137,10 @@ interface ManagedInstance {
   // The PTY's size, as last set: what a paired phone's terminal is drawn at.
   cols: number;
   rows: number;
+  // OpenCode's terminal got shorter since its last repaint, and the timer that
+  // repaints it once the size holds (repaintAfterShrink).
+  shrankSinceRepaint?: boolean;
+  repaintTimer?: ReturnType<typeof setTimeout>;
   // The terminal shows no session (AttentionContext.onHomeShown), so the contact
   // shows no context figure: the one it had is the session it left. Cleared when
   // it shows a session again, and when the process exits.
@@ -254,6 +258,12 @@ const DEFAULT_BACKEND: BackendName = "claude";
 // The size every PTY starts at, until the desktop's terminal fits it.
 const SPAWN_COLS = 120;
 const SPAWN_ROWS = 30;
+
+// OpenCode's repaint after its terminal got shorter (repaintAfterShrink): how long
+// the size must hold first, and how long the PTY stays a row shorter. Measured on
+// OpenCode 2.3.0: two resizes 5 ms apart are both seen, two at once are not.
+const REPAINT_SETTLE_MS = 200;
+const REPAINT_STEP_MS = 250;
 
 // How long a disk-resolved session id is trusted before looking again. Long,
 // because it only changes when a session is created or resumed in that directory,
@@ -1399,6 +1409,7 @@ export class ProcessManager {
   resizeInstance(id: string, cols: number, rows: number) {
     const instance = this.instances.get(id);
     if (instance?.ptyProcess) {
+      if (instance.backend === "opencode") this.repaintAfterShrink(instance, rows);
       instance.ptyProcess.resize(cols, rows);
       // A phone's terminal is drawn at the PTY's width, so it is told when that
       // changes. The resize itself goes through either way, as it always has.
@@ -1407,6 +1418,37 @@ export class ProcessManager {
       instance.rows = rows;
       remoteServer.broadcastResize(id, cols, rows);
     }
+  }
+
+  /**
+   * Makes OpenCode repaint its whole screen once its terminal got shorter and the
+   * size holds again. xterm drops the rows below the cursor when it gets shorter
+   * and adds blank ones when it grows back, so the rows under OpenCode's input
+   * go blank: its bottom edge and its footer. OpenCode repaints everything on a
+   * size it sees, but a shorter size and the old one back within a few
+   * milliseconds (two resizes in one go, or a busy moment, as on waking from
+   * sleep) look to it like no change, and it never draws those rows again. With
+   * the edge gone, promptBox.ts found no input, and every long paste folded to
+   * `[Pasted ~N lines]` for the rest of the day (OpenCode 2.3.0, 2026-11-22).
+   *
+   * So the PTY goes one row shorter and back, far enough apart that OpenCode sees
+   * both and repaints. Only the PTY: xterm keeps its size, and a phone isn't told.
+   */
+  private repaintAfterShrink(instance: ManagedInstance, rows: number) {
+    if (rows < instance.rows) instance.shrankSinceRepaint = true;
+    if (instance.repaintTimer) clearTimeout(instance.repaintTimer);
+    instance.repaintTimer = undefined;
+    if (!instance.shrankSinceRepaint) return;
+    const shown = instance.ptyProcess;
+    instance.repaintTimer = setTimeout(() => {
+      instance.shrankSinceRepaint = false;
+      if (instance.ptyProcess !== shown || !shown || instance.rows < 2) return;
+      shown.resize(instance.cols, instance.rows - 1);
+      instance.repaintTimer = setTimeout(() => {
+        instance.repaintTimer = undefined;
+        if (instance.ptyProcess === shown) shown.resize(instance.cols, instance.rows);
+      }, REPAINT_STEP_MS);
+    }, REPAINT_SETTLE_MS);
   }
 
   // The PTY's size, for a paired phone's terminal. Null when it isn't running.
