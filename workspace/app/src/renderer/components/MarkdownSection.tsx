@@ -6,7 +6,7 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import type { Instance, ReadFileResult } from "../../shared/types";
 import { shouldOpenExternally } from "./markdownLinks";
-import { readFileErrorMessage } from "./markdownErrors";
+import { isMarkdownPath, readFileErrorMessage } from "./markdownErrors";
 import { resolveImageSrc } from "./markdownImages";
 import { MermaidBlock } from "./MermaidBlock";
 import { extractMermaid } from "./mermaidExtract";
@@ -81,7 +81,7 @@ export function MarkdownSection({
         <input
           type="text"
           className="markdown-path-input"
-          placeholder="Paste a .md path, Enter to open"
+          placeholder="Paste a file path, Enter to open"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -95,13 +95,17 @@ export function MarkdownSection({
       <div className="markdown-body">
         {!openPath && (
           <span className="markdown-section-placeholder">
-            Paste a .md path above and press Enter.
+            Paste a file path above and press Enter. Markdown is rendered; code and
+            other text show as they are.
           </span>
         )}
         {openPath && loading && (
           <span className="markdown-section-placeholder">Loading…</span>
         )}
-        {openPath && !loading && result?.ok && (
+        {openPath && !loading && result?.ok && !isMarkdownPath(result.path) && (
+          <pre className="text-file-body">{result.content}</pre>
+        )}
+        {openPath && !loading && result?.ok && isMarkdownPath(result.path) && (
           <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkMath]}
             rehypePlugins={[rehypeKatex]}

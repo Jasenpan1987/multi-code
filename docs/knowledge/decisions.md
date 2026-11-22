@@ -4,6 +4,17 @@ Append-only log of architectural and product decisions. Each entry: date, decisi
 
 ---
 
+## 2026-11-22 — View opens any text file, not only Markdown
+
+**Decision:** The View section opens any text file. A `.md` or `.markdown` file is rendered as before; any other text (code, JSON, SQL, logs, a file with no extension) shows as it is, in a monospace block whose long lines scroll. A file with a NUL byte is taken for binary, as git does, and is refused with "Not a text file", as is a folder. The 2 MB cap stays. The Git section's `MD` tag and the clickable paths in the terminal are still for Markdown only. No syntax highlighting. Supersedes "Markdown View renders `.md`/`.markdown` only" (2026-07-09).
+
+**Why:** The builder pasted a `.sql` path and got "Only .md files can be viewed". They expect to read any text file there, code included. The 2026-07-09 entry cut plain text because the trigger was always an agent's Markdown file; that is no longer the only use.
+
+**Source:** builder, 2026-11-22, in session.
+**Affects:** `read-file` IPC handler (`main/ipc-handlers.ts`), `renderer/components/MarkdownSection.tsx`, `markdownErrors.ts`, `GitSection.tsx`, `global.css`.
+
+---
+
 ## 2026-11-22 — OpenCode repaints after its terminal got shorter
 
 **Decision:** When an OpenCode terminal gets shorter, the main process waits until the size holds for 200 ms, then sets the PTY one row shorter and, 250 ms later, back. Only the PTY changes: xterm keeps its size, and a paired phone isn't told. Claude Code's terminals are left as they are.

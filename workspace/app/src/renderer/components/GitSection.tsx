@@ -4,6 +4,7 @@ import type {
   GitStatus,
   GitFileEntry,
 } from "../../shared/types";
+import { isMarkdownPath } from "./markdownErrors";
 
 const POLL_INTERVAL_MS = 5000;
 const MAX_FILES = 50;
@@ -19,12 +20,6 @@ interface GitSectionProps {
   onViewDiff: (relPath: string, side: DiffSide, oldPath?: string) => void;
 }
 
-// A file is previewable in the Markdown View if it's a markdown document.
-// Case-insensitive, mirrors the read-file IPC's extension gate.
-function isMarkdown(path: string): boolean {
-  const lower = path.toLowerCase();
-  return lower.endsWith(".md") || lower.endsWith(".markdown");
-}
 
 // Which comparison a group's rows are about: a New row has nothing to compare
 // against, Modified is the unstaged change, Staged is what's in the index.
@@ -204,7 +199,8 @@ function FileRow({
   const name = slashIdx >= 0 ? file.path.slice(slashIdx + 1) : file.path;
   const codeLetter = displayCode(file.code);
   const absPath = `${cwd}/${file.path}`;
-  const previewable = isMarkdown(file.path);
+  // Markdown gets its rendered preview in the View section as `MD`.
+  const previewable = isMarkdownPath(file.path);
 
   return (
     <div className="git-file-row" title={file.path}>

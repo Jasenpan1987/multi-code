@@ -2240,6 +2240,23 @@ button.secretary-bar-title:hover .secretary-bar-name {
   white-space: pre;
 }
 
+/* Any text file other than markdown, as it is: code, JSON, SQL, logs. Long lines
+   scroll inside the block instead of wrapping, so code keeps its shape. */
+.markdown-body .text-file-body {
+  margin: 0;
+  padding: 8px 10px;
+  background: rgba(128, 128, 128, 0.12);
+  border-radius: 4px;
+  overflow-x: auto;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+  tab-size: 4;
+}
+
 .markdown-body table {
   border-collapse: collapse;
   margin: 6px 0;

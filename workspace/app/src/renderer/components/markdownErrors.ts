@@ -12,8 +12,13 @@ export function readFileErrorMessage(
     case "not-found":
       return `⚠ File not found: ${path}`;
     case "unsupported":
-      return `⚠ Only .md files can be viewed: ${path}`;
+      return `⚠ Not a text file: ${path}`;
     case "too-large":
       return `⚠ File too large to preview (>2MB): ${path}`;
   }
+}
+
+/** Whether the View renders this file as markdown; any other text shows as it is. */
+export function isMarkdownPath(path: string): boolean {
+  return /\.(md|markdown)$/i.test(path);
 }

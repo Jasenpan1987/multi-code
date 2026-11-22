@@ -11,7 +11,7 @@ import { spawn } from "child_process";
 import { writeFileSync, rmSync, statSync, readFileSync } from "fs";
 import { stat } from "fs/promises";
 import { tmpdir, homedir } from "os";
-import { join, resolve, dirname, basename, extname } from "path";
+import { join, resolve, dirname, basename } from "path";
 import { processManager } from "./process-manager";
 import { shellManager } from "./shell-manager";
 import { getGitStatus } from "./git-status";
@@ -314,13 +314,14 @@ export function registerIpcHandlers() {
     return read ? replyConclusion(read.turn) : null;
   });
 
-  // Markdown view: read a markdown file for the renderer, which has no fs
-  // access. The path may be absolute (POSIX or Windows), `~`-relative to the
-  // home dir, or relative to the instance's cwd. Returns a discriminated-union
-  // result — never throws — so any bad input (missing file, wrong extension,
-  // directory, oversized file) degrades to an { ok: false } error the renderer
-  // can render. Only .md/.markdown are allowed; the extension is checked before
-  // touching fs, and a 2 MB size cap guards against huge files.
+  // View section: read a text file for the renderer, which has no fs access. It
+  // renders markdown and shows any other text as it is: code, JSON, SQL, logs.
+  // The path may be absolute (POSIX or Windows), `~`-relative to the home dir,
+  // or relative to the instance's cwd. Returns a discriminated-union result,
+  // never throws, so any bad input (missing file, directory, binary file,
+  // oversized file) degrades to an { ok: false } error the renderer can show.
+  // A file with a NUL byte is taken for binary, as git does; a 2 MB size cap
+  // guards against huge files.
   ipcMain.handle(
     "read-file",
     (_event, instanceId: string, rawPath: string): ReadFileResult => {
@@ -346,11 +347,6 @@ export function registerIpcHandlers() {
           resolved = resolve(instance.cwd, rawPath);
         }
 
-        const ext = extname(resolved).toLowerCase();
-        if (ext !== ".md" && ext !== ".markdown") {
-          return { ok: false, path: resolved, error: "unsupported" };
-        }
-
         let stats;
         try {
           stats = statSync(resolved);
@@ -365,8 +361,11 @@ export function registerIpcHandlers() {
         }
 
         try {
-          const content = readFileSync(resolved, "utf8");
-          return { ok: true, path: resolved, content };
+          const bytes = readFileSync(resolved);
+          if (bytes.includes(0)) {
+            return { ok: false, path: resolved, error: "unsupported" };
+          }
+          return { ok: true, path: resolved, content: bytes.toString("utf8") };
         } catch {
           return { ok: false, path: resolved, error: "not-found" };
         }
